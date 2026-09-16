@@ -1,0 +1,98 @@
+import { computed, ref } from 'vue'
+import { defineStore } from 'pinia'
+import { getProgress, loadAnnotations, loadDocumentSnapshots, saveAnnotation, saveDocument, saveDocumentSnapshot, saveProgress } from '../persistence'
+import { openMarkdownFile, openMarkdownFolder, type OpenedFile } from '../fileService'
+import { builtInThemes, cssVariables, defaultTokens } from '../themes'
+import { parseMarkdown } from '../parser'
+import type { Annotation, MoyueTheme, ReaderDocument, ReaderMode, ReaderSelection, ReadingProgress, ViewerState } from '../types'
+
+const sample = `# 一次安静的阅读\n\n墨阅把 Markdown 变成一个可以停留的空间。点击任意段落，进入区域聚焦。\n\n> 阅读不是把文字扫过去，而是给一个想法足够的时间。\n\n## Region Focus\n\n当你点击一个内容区域，其他内容会退到背景里。你可以用方向键在区域之间移动，按 Escape 回到整篇文档。\n\n\`\u0060\u0060typescript\ninterface ReadingRegion {\n  id: string\n  focus(): void\n}\n\`\u0060\u0060\n\n## 一张图表\n\n\`\u0060\u0060mermaid\nflowchart LR\n  A[打开文档] --> B[选择区域]\n  B --> C[沉浸阅读]\n  C --> D[回到正文]\n\`\u0060\u0060\n\n![一块留白](https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=1200&q=80)\n\n## 最后\n\n主题、图表和辅助信息都应该在需要时出现，不需要时安静地退场。`
+
+export const useReaderStore = defineStore('reader', () => {
+  const documents = ref<ReaderDocument[]>([])
+  const currentDocumentId = ref<string | null>(null)
+  const mode = ref<ReaderMode>('normal')
+  const activeRegionId = ref<string | null>(null)
+  const focusedRegionId = ref<string | null>(null)
+  const activeHeadingId = ref<string | null>(null)
+  const selection = ref<ReaderSelection | null>(null)
+  const progress = ref<Record<string, ReadingProgress>>({})
+  const annotations = ref<Annotation[]>([])
+  const themes = ref<MoyueTheme[]>([...builtInThemes])
+  const activeThemeId = ref(localStorage.getItem('moyue:theme') || 'ember-paper')
+  const savedSettings = readSettings()
+  const readerSettings = ref({ fontSize: savedSettings.fontSize, lineHeight: savedSettings.lineHeight, width: savedSettings.width, fontFamily: savedSettings.fontFamily })
+  const currentDocument = computed(() => documents.value.find((document) => document.id === currentDocumentId.value) ?? null)
+  const activeTheme = computed(() => themes.value.find((theme) => theme.manifest.id === activeThemeId.value) ?? themes.value[0])
+
+  function applyTheme(theme: MoyueTheme) {
+    activeThemeId.value = theme.manifest.id
+    localStorage.setItem('moyue:theme', theme.manifest.id)
+    for (const [name, value] of Object.entries(cssVariables(theme))) document.documentElement.style.setProperty(name, value)
+    readerSettings.value = { fontSize: theme.tokens.reader.fontSize, lineHeight: theme.tokens.reader.lineHeight, width: theme.tokens.reader.width, fontFamily: theme.tokens.reader.fontFamily }
+  }
+
+  async function addOpenedFiles(files: OpenedFile[]) {
+    if (!files.length) return 0
+    let firstOpenedDocumentId: string | null = null
+    for (const file of files) {
+      const document = parseMarkdown(file.path, file.source)
+      firstOpenedDocumentId ??= document.id
+      documents.value = [...documents.value.filter((item) => item.id !== document.id), document]
+      await saveDocumentSnapshot(document)
+      await saveDocument({ id: document.id, path: document.path, title: document.title, sourceHash: document.sourceHash, updatedAt: document.updatedAt, source: document.source })
+    }
+    if (firstOpenedDocumentId) await openDocument(firstOpenedDocumentId)
+    return files.length
+  }
+
+  async function bootstrap() {
+    const saved = loadDocumentSnapshots()
+    if (saved.length) documents.value = saved
+    else documents.value.push(parseMarkdown('欢迎开始 · Moyue.md', sample))
+    applyTheme(activeTheme.value)
+    if (!currentDocumentId.value) await openDocument(documents.value[0].id)
+  }
+
+  async function importFiles() { return addOpenedFiles(await openMarkdownFile()) }
+  async function importFolder() { return addOpenedFiles(await openMarkdownFolder()) }
+
+  async function openDocument(id: string) {
+    const document = documents.value.find((item) => item.id === id)
+    if (!document) return
+    currentDocumentId.value = id
+    mode.value = 'normal'
+    focusedRegionId.value = null
+    annotations.value = loadAnnotations(id)
+    const saved = await getProgress(id)
+    if (saved) progress.value[id] = saved
+  }
+
+  async function setProgress(scrollPercent: number, regionId: string | null, headingId: string | null) {
+    if (!currentDocumentId.value) return
+    const value = { documentId: currentDocumentId.value, regionId, headingId, scrollPercent, readingTime: progress.value[currentDocumentId.value]?.readingTime ?? 0, updatedAt: Date.now() }
+    progress.value[currentDocumentId.value] = value
+    await saveProgress(value)
+  }
+
+  function focusRegion(id: string) { focusedRegionId.value = id; activeRegionId.value = id; mode.value = 'region-focus' }
+  function clearFocus() { focusedRegionId.value = null; activeRegionId.value = null; mode.value = 'normal' }
+  function setMode(value: ReaderMode) { mode.value = value; if (value !== 'region-focus') focusedRegionId.value = null }
+  async function addAnnotation(annotation: Annotation) { annotations.value.push(annotation); await saveAnnotation(annotation) }
+  function installTheme(theme: MoyueTheme) { themes.value = [...themes.value.filter((item) => item.manifest.id !== theme.manifest.id), theme] }
+  function updateSettings(settings: Partial<typeof readerSettings.value>) {
+    readerSettings.value = { ...readerSettings.value, ...settings }
+    localStorage.setItem('moyue:reader-settings', JSON.stringify(readerSettings.value))
+  }
+
+  return { documents, currentDocumentId, currentDocument, mode, activeRegionId, focusedRegionId, activeHeadingId, selection, progress, annotations, themes, activeThemeId, activeTheme, readerSettings, bootstrap, importFiles, importFolder, addOpenedFiles, openDocument, setProgress, focusRegion, clearFocus, setMode, addAnnotation, applyTheme, installTheme, updateSettings }
+})
+
+function readSettings() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('moyue:reader-settings') ?? '{}') as Partial<typeof defaultTokens.reader>
+    return { ...defaultTokens.reader, ...saved }
+  } catch {
+    return { ...defaultTokens.reader }
+  }
+}
