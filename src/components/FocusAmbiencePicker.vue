@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { FocusAmbienceId } from '../types'
+import AppIcon from './AppIcon.vue'
 
 const props = defineProps<{ modelValue: FocusAmbienceId }>()
 const emit = defineEmits<{ 'update:modelValue': [value: FocusAmbienceId] }>()
@@ -37,7 +38,7 @@ function select(id: FocusAmbienceId) {
       >
         <span class="ambience-preview" aria-hidden="true"><i /><i /><i /></span>
         <span class="ambience-copy"><b>{{ item.name }}</b><small>{{ item.hint }}</small></span>
-        <span class="ambience-check" aria-hidden="true">✓</span>
+        <span class="ambience-check" aria-hidden="true"><AppIcon name="check" :size="10" /></span>
       </button>
     </div>
   </div>

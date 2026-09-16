@@ -180,6 +180,36 @@ button:disabled { cursor: wait; opacity: .58; transform: none !important; }
 
 @keyframes ambience-float { 0%, 100% { transform: translateY(0); opacity: .82; } 50% { transform: translateY(-4px); opacity: 1; } }
 
+/* Unified icon layer: compact, keyboard-friendly controls with Semi-like states. */
+.app-icon { display: inline-block; flex: 0 0 auto; vertical-align: middle; }
+.icon-button { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; padding: 0; border: 1px solid transparent; line-height: 1; transition: background-color .18s ease, border-color .18s ease, color .18s ease, box-shadow .18s ease, transform .18s ease; }
+.icon-button-md { width: 34px; height: 34px; border-radius: 9px; }
+.icon-button-sm { width: 28px; height: 28px; border-radius: 7px; }
+.icon-button-ghost { background: transparent; color: var(--muted); }
+.icon-button-ghost:hover, .icon-button-ghost.active { border-color: color-mix(in srgb, var(--accent) 35%, transparent); background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--ink); }
+.icon-button-surface { border-color: var(--border); background: var(--surface-raised); color: var(--muted); box-shadow: 0 2px 7px rgba(0, 0, 0, .08); }
+.icon-button-surface:hover { border-color: color-mix(in srgb, var(--accent) 60%, var(--border)); background: color-mix(in srgb, var(--accent) 13%, var(--surface-raised)); color: var(--ink); transform: translateY(-1px); }
+.icon-button:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 75%, transparent); outline-offset: 2px; }
+.icon-button:disabled { cursor: wait; opacity: .55; transform: none; }
+.nav-icon { display: inline-grid; place-items: center; width: 20px; height: 20px; }
+.nav-icon .app-icon { width: 17px; height: 17px; }
+.brand-mark > span { display: grid; place-items: center; }
+.ghost-button, .primary-button, .context-actions button, .translation-card button, .diagram-link, .inline-view-action, .viewer-shell footer button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.ghost-button .app-icon, .primary-button .app-icon, .context-actions button .app-icon, .translation-card button .app-icon, .diagram-link .app-icon, .inline-view-action .app-icon, .viewer-shell footer button .app-icon { margin-top: -1px; }
+.reader-tab-status span { display: inline-flex; align-items: center; gap: 4px; }
+.reader-tab .icon-button { margin-left: 8px; }
+.viewer-actions { gap: 6px; }
+.viewer-actions .icon-button { min-width: 28px; }
+.viewer-zoom-value { min-width: 44px !important; padding: 0 6px; font: 10px var(--mono); }
+.extension-filter .app-icon { color: var(--accent); }
+.extension-icon .app-icon { display: block; }
+.theme-empty-state > span, .create-theme > span { display: grid; place-items: center; }
+.ambience-check .app-icon { display: block; }
+.brand-mark > span { width: 38px; height: 38px; border-radius: 12px; background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 22%, var(--surface)), color-mix(in srgb, var(--accent) 7%, var(--surface))); box-shadow: 0 8px 18px color-mix(in srgb, var(--accent) 18%, transparent); }
+.brand-mark > span .app-icon { width: 22px; height: 22px; }
+.app-shell:not(.is-focus) .brand-mark > span { border-color: color-mix(in srgb, var(--accent) 62%, var(--border)); background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 22%, var(--surface)), color-mix(in srgb, var(--accent) 8%, var(--surface))); color: var(--accent); }
+.brand-mark small { font-weight: 700; letter-spacing: .12em; }
+
 /* Theme switching components: one picker is reused by the reader sidebar and the full theme center. */
 .theme-picker-gallery { display: contents; }
 .theme-picker-compact { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
@@ -654,4 +684,390 @@ html, body, #app { background: var(--app-bg, #070d22); }
   color: var(--muted);
   background: color-mix(in srgb, var(--surface) 68%, transparent);
   font: 11px var(--ui-font);
+}
+
+/* Reading polish: calm motion, stable scroll containers, and clear keyboard focus. */
+.app-shell:not(.is-focus),
+.app-shell:not(.is-focus) .global-nav,
+.app-shell:not(.is-focus) .topbar,
+.app-shell:not(.is-focus) .reader-page,
+.app-shell:not(.is-focus) .reader-tabbar,
+.app-shell:not(.is-focus) .outline-panel,
+.app-shell:not(.is-focus) .context-panel,
+.app-shell:not(.is-focus) .reader-viewport,
+.app-shell:not(.is-focus) .context-card,
+.app-shell:not(.is-focus) .settings-card,
+.app-shell:not(.is-focus) .theme-card {
+  transition: background .38s ease, background-color .38s ease, border-color .32s ease, box-shadow .38s ease, color .24s ease;
+}
+.reader-viewport,
+.outline-list,
+.context-panel,
+.focus-sidebar {
+  overscroll-behavior: contain;
+  scroll-padding-block: 34px;
+}
+.region-block {
+  scroll-margin-block: 34px;
+  transition: opacity .32s ease, filter .32s ease, background .24s ease, transform .32s cubic-bezier(.2, .8, .2, 1), border-color .24s ease, box-shadow .24s ease;
+}
+.region-block:focus-visible {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 62%, transparent), 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.region-content p:last-child,
+.region-content ul:last-child,
+.region-content ol:last-child,
+.region-content blockquote:last-child,
+.region-content .table-scroll:last-child,
+.region-content .code-frame:last-child {
+  margin-bottom: 0;
+}
+.reader-content .code-frame pre {
+  transition: border-color .24s ease, box-shadow .24s ease, transform .24s ease;
+}
+.reader-content .code-frame:hover pre {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  box-shadow: 0 16px 34px color-mix(in srgb, var(--app-bg) 17%, transparent);
+  transform: translateY(-1px);
+}
+.reader-content .table-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--accent) 42%, transparent) transparent;
+}
+.reader-content .region-content img {
+  transition: transform .28s cubic-bezier(.2, .8, .2, 1), box-shadow .28s ease, border-color .24s ease;
+}
+.reader-content .region-content img:hover {
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--border));
+  box-shadow: 0 20px 42px color-mix(in srgb, var(--app-bg) 22%, transparent);
+  transform: translateY(-2px);
+}
+.overlay {
+  animation: overlay-in .2s ease both;
+}
+.viewer-shell,
+.search-dialog,
+.note-dialog {
+  animation: surface-in .28s cubic-bezier(.2, .8, .2, 1) both;
+}
+.selection-toolbar {
+  animation: selection-pop .18s cubic-bezier(.2, .8, .2, 1) both;
+}
+.selection-toolbar button,
+.focus-hud button,
+.text-button {
+  transition: background-color .18s ease, color .18s ease, transform .18s ease;
+}
+.selection-toolbar button:hover,
+.focus-hud button:hover,
+.text-button:hover {
+  transform: translateY(-1px);
+}
+@keyframes overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes surface-in {
+  from { opacity: 0; transform: translateY(8px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes selection-pop {
+  from { opacity: 0; transform: translateY(5px) scale(.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+/* Settings must be a first-class surface of the active reader theme. */
+.app-shell:not(.is-focus) .settings-page {
+  color: var(--ink);
+  background: radial-gradient(ellipse at 72% 0%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 32%), var(--app-bg);
+}
+.app-shell:not(.is-focus) .settings-page .page-heading h1 {
+  color: var(--ink);
+  text-shadow: none;
+}
+.app-shell:not(.is-focus) .settings-tabs {
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--surface) 82%, var(--app-bg));
+  box-shadow: 0 10px 25px color-mix(in srgb, var(--app-bg) 12%, transparent);
+}
+.app-shell:not(.is-focus) .settings-tabs button {
+  color: var(--muted);
+  transition: background .2s ease, color .2s ease, box-shadow .2s ease;
+}
+.app-shell:not(.is-focus) .settings-tabs button.active,
+.app-shell:not(.is-focus) .settings-tabs button:hover {
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface-raised));
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.app-shell:not(.is-focus) .settings-card {
+  border-color: var(--border);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--surface-raised) 95%, transparent), color-mix(in srgb, var(--surface) 92%, var(--app-bg)));
+  box-shadow: 0 14px 30px color-mix(in srgb, var(--app-bg) 15%, transparent);
+  color: var(--muted);
+}
+.app-shell:not(.is-focus) .settings-card h2,
+.app-shell:not(.is-focus) .settings-card .extension-item b {
+  color: var(--ink);
+}
+.app-shell:not(.is-focus) .setting-toggle-row,
+.app-shell:not(.is-focus) .shortcut-row,
+.app-shell:not(.is-focus) .muted-copy,
+.app-shell:not(.is-focus) .setting-input,
+.app-shell:not(.is-focus) .setting-row {
+  color: var(--muted);
+}
+.app-shell:not(.is-focus) .setting-row b,
+.app-shell:not(.is-focus) .shortcut-row kbd {
+  color: var(--accent);
+}
+.app-shell:not(.is-focus) .setting-input input {
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--surface-raised) 92%, var(--app-bg));
+  color: var(--ink);
+}
+.app-shell:not(.is-focus) .setting-input input::placeholder {
+  color: color-mix(in srgb, var(--muted) 78%, transparent);
+}
+.app-shell:not(.is-focus) .settings-page input[type="range"] {
+  accent-color: var(--accent);
+}
+.app-shell:not(.is-focus) .settings-page kbd {
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--surface-raised) 74%, transparent);
+}
+.app-shell:not(.is-focus) .settings-page .primary-button {
+  background: var(--accent);
+  color: var(--app-bg);
+}
+.app-shell:not(.is-focus) .extensions-card {
+  background: linear-gradient(145deg, color-mix(in srgb, var(--surface-raised) 96%, transparent), color-mix(in srgb, var(--surface) 90%, var(--app-bg)));
+}
+.app-shell:not(.is-focus) .extension-filter,
+.app-shell:not(.is-focus) .extension-item {
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--surface) 64%, var(--surface-raised));
+  color: var(--muted);
+}
+.app-shell:not(.is-focus) .extension-filter .app-icon,
+.app-shell:not(.is-focus) .extension-item button {
+  color: var(--accent);
+}
+.app-shell:not(.is-focus) .extension-item small {
+  color: var(--muted);
+}
+.app-shell:not(.is-focus) .extension-item button {
+  border-color: var(--border);
+}
+.app-shell:not(.is-focus) .extension-item button:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--ink);
+}
+.app-shell:not(.is-focus) .extension-icon {
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+  background: color-mix(in srgb, var(--accent) 22%, var(--surface));
+  color: var(--accent);
+}
+.app-shell:not(.is-focus) .extension-icon.purple,
+.app-shell:not(.is-focus) .extension-icon.green,
+.app-shell:not(.is-focus) .extension-icon.pink {
+  background: color-mix(in srgb, var(--accent) 22%, var(--surface));
+}
+
+/* Reader surface theme bridge: keep the center pane from falling back to the old blue shell. */
+.app-shell:not(.is-focus) .reader-page {
+  background: radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 38%), linear-gradient(115deg, color-mix(in srgb, var(--app-bg) 76%, var(--surface)), var(--app-bg));
+}
+.app-shell:not(.is-focus) .reader-page::before {
+  opacity: .2;
+  background: radial-gradient(ellipse at 48% 4%, color-mix(in srgb, var(--accent) 15%, transparent), transparent 38%), radial-gradient(ellipse at 88% 88%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 34%);
+}
+.app-shell:not(.is-focus) .reader-viewport {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 17%, transparent), transparent 38%);
+}
+.app-shell:not(.is-focus) .reader-content {
+  color: var(--ink);
+}
+.app-shell:not(.is-focus) .region-block:hover {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  border-left-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+}
+.app-shell:not(.is-focus) .region-block.active,
+.app-shell:not(.is-focus) .is-region-focus .region-block.focused {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 13%, transparent), color-mix(in srgb, var(--accent) 4%, transparent));
+  border-left-color: var(--accent);
+}
+.app-shell:not(.is-focus) .reader-content .region-content h1,
+.app-shell:not(.is-focus) .reader-content .region-content h2,
+.app-shell:not(.is-focus) .reader-content .region-content h3,
+.app-shell:not(.is-focus) .reader-content .region-content h4 {
+  color: var(--ink);
+}
+.app-shell:not(.is-focus) .reader-content .reader-rule {
+  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 8%, transparent));
+}
+.app-shell:not(.is-focus) .reader-content .region-content blockquote {
+  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--surface-raised) 42%, transparent);
+  color: color-mix(in srgb, var(--ink) 82%, var(--accent));
+}
+.app-shell:not(.is-focus) .reader-content .region-content pre,
+.app-shell:not(.is-focus) .reader-content .region-content > code,
+.app-shell:not(.is-focus) .reader-content .region-content p code,
+.app-shell:not(.is-focus) .reader-content .region-content li code,
+.app-shell:not(.is-focus) .reader-content .region-content td code {
+  border-color: color-mix(in srgb, var(--accent) 18%, var(--border));
+  background: color-mix(in srgb, var(--code-bg) 94%, var(--surface));
+  color: color-mix(in srgb, var(--accent) 88%, var(--ink));
+}
+.app-shell:not(.is-focus) .reader-content .region-content th {
+  color: var(--accent);
+}
+
+/* Code reading: a quiet toolbar, stable line gutter, and one predictable scroll surface. */
+.reader-content .code-frame {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border));
+  border-radius: 14px;
+  background: var(--code-bg);
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--app-bg) 12%, transparent);
+  transition: border-color .24s ease, box-shadow .24s ease, transform .24s ease;
+}
+.reader-content .code-frame::before {
+  display: none;
+}
+.reader-content .code-frame:hover {
+  border-color: color-mix(in srgb, var(--accent) 46%, var(--border));
+  box-shadow: 0 18px 38px color-mix(in srgb, var(--app-bg) 18%, transparent);
+  transform: translateY(-1px);
+}
+.reader-content .code-frame:hover pre {
+  border-color: transparent;
+  box-shadow: none;
+  transform: none;
+}
+.code-toolbar,
+.code-viewer-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 38px;
+  padding: 0 13px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  background: color-mix(in srgb, var(--surface-raised) 30%, var(--code-bg));
+  color: var(--muted);
+  font: 10px var(--ui-font);
+}
+.code-language,
+.code-viewer-toolbar > span {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 7px;
+}
+.code-language b {
+  overflow: hidden;
+  color: var(--ink);
+  font: 10px var(--mono);
+  letter-spacing: .04em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.code-language small {
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 9px;
+}
+.code-copy,
+.code-viewer-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 6px;
+  min-height: 26px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font: 10px var(--ui-font);
+  transition: background .2s ease, border-color .2s ease, color .2s ease, transform .2s ease;
+}
+.code-copy:hover,
+.code-viewer-toolbar button:hover {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
+  background: color-mix(in srgb, var(--accent-soft) 75%, transparent);
+  color: var(--ink);
+}
+.code-copy:active,
+.code-viewer-toolbar button:active {
+  transform: scale(.97);
+}
+.code-body,
+.code-viewer-content {
+  overflow: auto;
+  scrollbar-color: color-mix(in srgb, var(--accent) 46%, transparent) transparent;
+  scrollbar-width: thin;
+}
+.reader-content .code-body pre,
+.code-viewer-content pre {
+  min-width: max-content;
+  margin: 0;
+  padding: 16px 22px 19px 64px;
+  border: 0;
+  border-radius: 0;
+  background: var(--code-bg);
+  font-size: 13px;
+  line-height: 1.78;
+}
+.reader-content .code-body pre code,
+.code-viewer-content pre code {
+  display: block;
+  min-width: max-content;
+  tab-size: 2;
+}
+.reader-content .code-body pre code .line {
+  position: relative;
+  display: block;
+  min-height: 1.78em;
+  padding-right: 24px;
+}
+.reader-content .code-body pre code .line::before {
+  position: absolute;
+  right: calc(100% + 17px);
+  width: 30px;
+  color: color-mix(in srgb, var(--muted) 72%, transparent);
+  content: counter(code-line);
+  counter-increment: code-line;
+  font: 10px/1.78 var(--mono);
+  text-align: right;
+  user-select: none;
+}
+.reader-content .code-body pre code {
+  counter-reset: code-line;
+}
+.code-viewer {
+  width: min(900px, 100%);
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--code-bg);
+  box-shadow: 0 14px 34px color-mix(in srgb, var(--app-bg) 16%, transparent);
+}
+.code-viewer-content pre {
+  max-height: 100%;
+  overflow: auto;
 }
