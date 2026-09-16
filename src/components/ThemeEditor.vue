@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import type { MoyueTheme } from '../types'
+import AppIcon from './AppIcon.vue'
 
 const props = defineProps<{ modelValue: MoyueTheme }>()
 const emit = defineEmits<{
@@ -38,16 +39,16 @@ function apply() { emit('apply', clone(draft.value)) }
         <small class="editor-subtitle">{{ draft.manifest.description || '为你的长文阅读调一层自己的光。' }}</small>
       </div>
       <div class="toolbar-actions">
-        <button class="ghost-button" type="button" @click="preview">预览</button>
-        <button class="primary-button" type="button" @click="apply">应用主题</button>
+        <button class="ghost-button" type="button" @click="preview"><AppIcon name="eye" :size="14" />预览</button>
+        <button class="primary-button" type="button" @click="apply"><AppIcon name="check" :size="14" />应用主题</button>
       </div>
     </div>
 
     <nav class="editor-section-nav" aria-label="主题编辑分区">
-      <button :class="{ active: section === 'base' }" type="button" @click="section = 'base'"><span>◈</span>基础信息</button>
-      <button :class="{ active: section === 'color' }" type="button" @click="section = 'color'"><span>◌</span>颜色变量</button>
-      <button :class="{ active: section === 'type' }" type="button" @click="section = 'type'"><span>⌗</span>排版系统</button>
-      <button :class="{ active: section === 'component' }" type="button" @click="section = 'component'"><span>▧</span>组件样式</button>
+      <button :class="{ active: section === 'base' }" type="button" @click="section = 'base'"><span><AppIcon name="info" :size="14" /></span>基础信息</button>
+      <button :class="{ active: section === 'color' }" type="button" @click="section = 'color'"><span><AppIcon name="palette" :size="14" /></span>颜色变量</button>
+      <button :class="{ active: section === 'type' }" type="button" @click="section = 'type'"><span><AppIcon name="type" :size="14" /></span>排版系统</button>
+      <button :class="{ active: section === 'component' }" type="button" @click="section = 'component'"><span><AppIcon name="components" :size="14" /></span>组件样式</button>
     </nav>
 
     <div class="editor-fields">

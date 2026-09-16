@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useReaderStore } from '../stores/reader'
+import AppIcon from './AppIcon.vue'
 
 const props = defineProps<{ code: string; large?: boolean; themeKey?: string }>()
 const emit = defineEmits<{ click: [] }>()
@@ -43,6 +44,6 @@ watch(() => [props.code, store.activeThemeId, store.mode, props.themeKey], rende
     <div v-if="svg" class="mermaid-svg" v-html="svg" />
     <pre v-else-if="error"><code>{{ error }}\n\n{{ code }}</code></pre>
     <div v-else class="mermaid-loading"><span class="pulse-dot" /> 正在绘制图表</div>
-    <span class="diagram-action">独立查看 ↗</span>
+    <span class="diagram-action">独立查看 <AppIcon name="external" :size="12" /></span>
   </button>
 </template>

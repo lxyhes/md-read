@@ -4,6 +4,7 @@ import { exportTheme, importTheme } from '../themes'
 import type { MoyueTheme } from '../types'
 import ThemeEditor from './ThemeEditor.vue'
 import ThemePicker from './ThemePicker.vue'
+import AppIcon from './AppIcon.vue'
 
 const props = defineProps<{
   themes: MoyueTheme[]
@@ -72,8 +73,8 @@ async function onThemeFile(event: Event) {
       <div><p class="section-kicker">THEME PACKAGE SYSTEM</p><h1>主题，让阅读<br /><em>拥有自己的气候。</em></h1></div>
       <div class="toolbar-actions">
         <input ref="themeInput" type="file" accept=".moyue-theme,.zip" hidden @change="onThemeFile" />
-        <button class="ghost-button" type="button" @click="themeInput?.click()">导入主题包</button>
-        <button class="primary-button" type="button" :disabled="!themeDraft" @click="downloadTheme">导出当前主题</button>
+        <button class="ghost-button" type="button" @click="themeInput?.click()"><AppIcon name="download" :size="14" />导入主题包</button>
+        <button class="primary-button" type="button" :disabled="!themeDraft" @click="downloadTheme"><AppIcon name="download" :size="14" />导出当前主题</button>
       </div>
     </div>
     <div class="theme-center-toolbar">
@@ -82,16 +83,16 @@ async function onThemeFile(event: Event) {
         <button type="button" @click="emit('notify', '社区主题市场暂未开放')">社区主题</button>
         <button :class="{ active: themeTab === 'mine' }" type="button" @click="themeTab = 'mine'">我的主题</button>
       </div>
-      <label class="theme-search"><span>⌕</span><input v-model="themeSearch" placeholder="搜索主题、风格、作者…" /></label>
+      <label class="theme-search"><AppIcon name="search" :size="14" /><input v-model="themeSearch" placeholder="搜索主题、风格、作者…" /></label>
       <select class="theme-filter" aria-label="主题风格"><option>全部风格</option><option>深色阅读</option><option>浅色阅读</option></select>
     </div>
     <div class="theme-layout">
       <div class="theme-gallery">
         <ThemePicker :themes="filteredThemes" :selected-theme-id="themeDraft?.manifest.id ?? props.activeThemeId" @select="startThemeEdit" />
-        <button class="theme-card create-theme" type="button" @click="createCustomTheme"><span>＋</span><small>创建新主题</small></button>
+        <button class="theme-card create-theme" type="button" @click="createCustomTheme"><span><AppIcon name="plus" :size="22" /></span><small>创建新主题</small></button>
       </div>
       <ThemeEditor v-if="themeDraft" v-model="themeDraft" @preview="applyDraft" @apply="saveDraft" />
-      <div v-else class="theme-empty-state"><span>✦</span><strong>选择一个主题开始编辑</strong><small>颜色、宽度、字号和阅读气候都会实时预览</small></div>
+      <div v-else class="theme-empty-state"><span><AppIcon name="sparkle" :size="30" /></span><strong>选择一个主题开始编辑</strong><small>颜色、宽度、字号和阅读气候都会实时预览</small></div>
     </div>
   </section>
 </template>
