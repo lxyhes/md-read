@@ -9,7 +9,11 @@ export interface WorkspaceFile { path: string; name: string }
 
 export async function watchMarkdownPath(path: string, onChange: () => void): Promise<(() => void) | null> {
   if (!isTauri()) return null
-  return watch(path, () => onChange(), { delayMs: 700 })
+  const target = comparablePath(path)
+  const directory = dirnameOf(path)
+  return watch(directory || path, (event) => {
+    if (!event.paths.length || event.paths.some((changedPath) => comparablePath(changedPath) === target)) onChange()
+  }, { delayMs: 700 })
 }
 
 export function resolveMarkdownAssetUrl(markdownPath: string, url: string): string {
@@ -108,6 +112,10 @@ function normalizeLocalPath(path: string) {
     result.push(segment)
   }
   return `${prefix}${result.join('/')}`
+}
+
+function comparablePath(path: string) {
+  return normalizeLocalPath(path.replace(/^file:\/\/?/i, '')).replace(/\/$/, '').toLowerCase()
 }
 
 async function scanDirectory(path: string): Promise<OpenedFile[]> {
