@@ -845,6 +845,7 @@ html, body, #app { background: var(--app-bg, #070d22); }
   border-bottom: 0;
 }
 .reader-content .region-content img {
+  max-width: 100%;
   max-height: 520px;
   object-fit: contain;
   border: 1px solid var(--border);
@@ -852,6 +853,27 @@ html, body, #app { background: var(--app-bg, #070d22); }
   background: color-mix(in srgb, var(--surface-raised) 72%, transparent);
   box-shadow: 0 16px 38px color-mix(in srgb, var(--app-bg) 16%, transparent);
   cursor: zoom-in;
+}
+.reader-content .region-content {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.reader-content .region-content p,
+.reader-content .region-content li,
+.reader-content .region-content blockquote,
+.reader-content .region-content th,
+.reader-content .region-content td {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.reader-content .code-frame pre {
+  max-width: 100%;
+  overflow: auto;
+  white-space: pre;
+}
+.reader-content .code-frame pre code {
+  overflow-wrap: normal;
+  word-break: normal;
 }
 .reader-content .region-content hr {
   height: 1px;
