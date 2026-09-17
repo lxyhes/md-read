@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { getProgress, loadAnnotations, loadDocumentSnapshots, saveAnnotation, saveDocument, saveDocumentSnapshot, saveProgress } from '../persistence'
-import { openMarkdownFile, openMarkdownFolder, type OpenedFile } from '../fileService'
+import { openMarkdownFile, openMarkdownFolder, resolveMarkdownAssetUrl, type OpenedFile } from '../fileService'
 import { builtInThemes, cssVariables, defaultTokens } from '../themes'
 import { parseMarkdown } from '../parser'
 import type { Annotation, MoyueTheme, ReaderDocument, ReaderMode, ReaderSelection, ReadingProgress, ViewerState } from '../types'
@@ -37,7 +37,7 @@ export const useReaderStore = defineStore('reader', () => {
     if (!files.length) return 0
     const openedIds: string[] = []
     for (const file of files) {
-      const document = parseMarkdown(file.path, file.source)
+      const document = parseMarkdown(file.path, file.source, (url) => resolveMarkdownAssetUrl(file.path, url))
       documents.value = [...documents.value.filter((item) => item.id !== document.id), document]
       openedIds.push(document.id)
       await saveDocumentSnapshot(document)

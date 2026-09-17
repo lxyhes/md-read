@@ -26,4 +26,10 @@ describe('Moyue markdown region parser', () => {
     const document = parseMarkdown('notes/redis.md', '详情：RedisKeyUserPrefix + "aiTask:detail:{id}"\n任务列表：RedisKeyUserPrefix + "aiTask:list:{userId}:{page}"')
     expect(document.regions[0].html).toContain('<br />')
   })
+
+  it('resolves relative assets without changing external URLs', () => {
+    const document = parseMarkdown('notes/readme.md', '![local](assets/cover.png)\n\n[remote](https://example.com)', (url) => url.startsWith('assets/') ? `asset://${url}` : url)
+    expect(document.regions[0].html).toContain('src="asset://assets/cover.png"')
+    expect(document.regions[1].html).toContain('href="https://example.com"')
+  })
 })

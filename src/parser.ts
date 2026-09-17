@@ -43,25 +43,27 @@ function nodeText(node: MdastNode): string {
   return (node.children ?? []).map(nodeText).join('')
 }
 
-function inlineHtml(node: MdastNode, preserveSoftBreaks = false): string {
-  const children = () => (node.children ?? []).map((child) => inlineHtml(child, preserveSoftBreaks)).join('')
+export type MarkdownUrlResolver = (url: string) => string
+
+function inlineHtml(node: MdastNode, preserveSoftBreaks = false, resolveUrl: MarkdownUrlResolver = (url) => url): string {
+  const children = () => (node.children ?? []).map((child) => inlineHtml(child, preserveSoftBreaks, resolveUrl)).join('')
   switch (node.type) {
     case 'text': return escapeHtml(node.value ?? '').replace(preserveSoftBreaks ? /\r?\n/g : /$^/g, '<br />')
     case 'emphasis': return `<em>${children()}</em>`
     case 'strong': return `<strong>${children()}</strong>`
     case 'delete': return `<del>${children()}</del>`
     case 'inlineCode': return `<code>${escapeHtml(node.value ?? '')}</code>`
-    case 'link': return `<a href="${safeUrl(node.url ?? '')}" target="_blank" rel="noreferrer">${children()}</a>`
-    case 'image': return `<img src="${safeUrl(node.url ?? '')}" alt="${escapeHtml(node.title ?? nodeText(node))}" loading="lazy" />`
+    case 'link': return `<a href="${safeUrl(resolveUrl(node.url ?? ''))}" target="_blank" rel="noreferrer">${children()}</a>`
+    case 'image': return `<img src="${safeUrl(resolveUrl(node.url ?? ''))}" alt="${escapeHtml(node.title ?? nodeText(node))}" loading="lazy" />`
     case 'break': return '<br />'
     case 'html': return '<span class="unsafe-inline">HTML 已隐藏</span>'
     default: return children()
   }
 }
 
-function blockHtml(node: MdastNode): string {
-  const children = () => (node.children ?? []).map((child) => blockHtml(child)).join('')
-  const inlineChildren = (preserveSoftBreaks = false) => (node.children ?? []).map((child) => inlineHtml(child, preserveSoftBreaks)).join('')
+function blockHtml(node: MdastNode, resolveUrl: MarkdownUrlResolver = (url) => url): string {
+  const children = () => (node.children ?? []).map((child) => blockHtml(child, resolveUrl)).join('')
+  const inlineChildren = (preserveSoftBreaks = false) => (node.children ?? []).map((child) => inlineHtml(child, preserveSoftBreaks, resolveUrl)).join('')
   switch (node.type) {
     case 'heading': return `<h${node.depth ?? 1}>${inlineChildren()}</h${node.depth ?? 1}>`
     case 'paragraph': return `<p>${inlineChildren(true)}</p>`
@@ -74,11 +76,11 @@ function blockHtml(node: MdastNode): string {
       return `<li${taskClass}>${checkbox}${children()}</li>`
     }
     case 'code': return `<pre><code data-language="${escapeHtml(node.lang ?? 'text')}">${escapeHtml(node.value ?? '')}</code></pre>`
-    case 'image': return `<img src="${safeUrl(node.url ?? '')}" alt="${escapeHtml(node.title ?? '')}" loading="lazy" />`
+    case 'image': return `<img src="${safeUrl(resolveUrl(node.url ?? ''))}" alt="${escapeHtml(node.title ?? '')}" loading="lazy" />`
     case 'thematicBreak': return '<hr />'
     case 'table': {
       const rows = node.children ?? []
-      return `<div class="table-scroll"><table>${rows.map((row, rowIndex) => `<${rowIndex === 0 ? 'thead' : 'tbody'}><tr>${(row.children ?? []).map((cell) => `<${rowIndex === 0 ? 'th' : 'td'}>${(cell.children ?? []).map((child) => inlineHtml(child)).join('')}</${rowIndex === 0 ? 'th' : 'td'}>`).join('')}</tr></${rowIndex === 0 ? 'thead' : 'tbody'}>`).join('')}</table></div>`
+      return `<div class="table-scroll"><table>${rows.map((row, rowIndex) => `<${rowIndex === 0 ? 'thead' : 'tbody'}><tr>${(row.children ?? []).map((cell) => `<${rowIndex === 0 ? 'th' : 'td'}>${(cell.children ?? []).map((child) => inlineHtml(child, false, resolveUrl)).join('')}</${rowIndex === 0 ? 'th' : 'td'}>`).join('')}</tr></${rowIndex === 0 ? 'thead' : 'tbody'}>`).join('')}</table></div>`
     }
     case 'html': return '<div class="unsafe-html">HTML 内容已隐藏，确保阅读安全。</div>'
     case 'yaml':
@@ -95,7 +97,7 @@ function regionType(node: MdastNode): ReaderRegionType {
   return node.type as ReaderRegionType
 }
 
-export function parseMarkdown(path: string, source: string): ReaderDocument {
+export function parseMarkdown(path: string, source: string, resolveUrl: MarkdownUrlResolver = (url) => url): ReaderDocument {
   const tree = processor.parse(source) as unknown as MdastNode
   const documentId = `doc_${hashText(path)}`
   const regions: ReaderRegion[] = []
@@ -112,10 +114,10 @@ export function parseMarkdown(path: string, source: string): ReaderDocument {
     const metadata: Record<string, unknown> = {}
     if (node.lang) metadata.language = node.lang
     if (type === 'mermaid') metadata.code = node.value ?? ''
-    if (type === 'image') metadata.url = node.url ?? ''
+    if (type === 'image') metadata.url = resolveUrl(node.url ?? '')
     const region: ReaderRegion = {
       id, documentId, type, index: regions.length, textContent, sourceStart: start, sourceEnd: end,
-      html: blockHtml(node), metadata
+      html: blockHtml(node, resolveUrl), metadata
     }
     regions.push(region)
     if (type === 'heading') headings.push({ id: `heading_${hashText(`${id}:${textContent}`)}`, text: textContent, depth: node.depth ?? 1, regionId: id })

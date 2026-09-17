@@ -1,3 +1,4 @@
+import { convertFileSrc } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
 import { readDir, readTextFile } from '@tauri-apps/plugin-fs'
 
@@ -5,6 +6,17 @@ const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in 
 
 export interface OpenedFile { path: string; source: string }
 export interface WorkspaceFile { path: string; name: string }
+
+export function resolveMarkdownAssetUrl(markdownPath: string, url: string): string {
+  if (!isTauri() || !url.trim() || url.startsWith('#') || /^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(url)) return url
+  const match = url.match(/^([^?#]*)(.*)$/)
+  const relativePath = match?.[1]
+  if (!relativePath) return url
+  const directory = dirnameOf(markdownPath)
+  if (!directory) return url
+  const absolutePath = normalizeLocalPath(`${directory}/${relativePath}`)
+  return `${convertFileSrc(absolutePath)}${match?.[2] ?? ''}`
+}
 
 export async function openMarkdownFile(): Promise<OpenedFile[]> {
   if (isTauri()) {
@@ -77,6 +89,20 @@ function dirnameOf(path: string) {
   const normalized = path.replace(/\\/g, '/')
   const separator = normalized.lastIndexOf('/')
   return separator > 0 ? normalized.slice(0, separator) : ''
+}
+
+function normalizeLocalPath(path: string) {
+  const normalized = path.replace(/\\/g, '/')
+  const drive = normalized.match(/^[A-Za-z]:/)?.[0] ?? ''
+  const prefix = drive || (normalized.startsWith('/') ? '/' : '')
+  const segments = normalized.slice(prefix.length).split('/')
+  const result: string[] = []
+  for (const segment of segments) {
+    if (!segment || segment === '.') continue
+    if (segment === '..') { if (result.length && result[result.length - 1] !== '..') result.pop(); continue }
+    result.push(segment)
+  }
+  return `${prefix}${result.join('/')}`
 }
 
 async function scanDirectory(path: string): Promise<OpenedFile[]> {
