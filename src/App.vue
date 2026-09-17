@@ -37,6 +37,7 @@ const annotationColor = ref('#e1a85b')
 const viewerZoom = ref(1)
 const viewerPan = ref({ x: 0, y: 0 })
 const viewerDragging = ref(false)
+const viewerStage = ref<HTMLElement | null>(null)
 let viewerPointer = { x: 0, y: 0 }
 const customProvider = ref('')
 const busyAction = ref<BusyAction>(null)
@@ -375,6 +376,46 @@ function setViewerZoom(value: number) { viewerZoom.value = Math.min(3, Math.max(
 function resetViewerView() { viewerZoom.value = 1; viewerPan.value = { x: 0, y: 0 } }
 function openViewer(region: ReaderRegion) { viewer.value = { type: region.type === 'code' ? 'code' : region.type === 'image' ? 'image' : region.type === 'table' ? 'table' : 'mermaid', region }; resetViewerView(); viewerTab.value = 'preview'; viewerFullscreen.value = false }
 function closeViewer() { viewer.value = null; viewerDragging.value = false; resetViewerView(); viewerFullscreen.value = false }
+function fitViewer() {
+  if (!viewerCanPan.value) return
+  viewerPan.value = { x: 0, y: 0 }
+  requestAnimationFrame(() => {
+    const stage = viewerStage.value
+    const diagram = stage?.querySelector<HTMLElement>('.mermaid-block')
+    if (!stage || !diagram) return
+    const availableWidth = Math.max(stage.clientWidth - 80, 160)
+    const availableHeight = Math.max(stage.clientHeight - 80, 160)
+    const naturalWidth = Math.max(diagram.scrollWidth, 1)
+    const naturalHeight = Math.max(diagram.scrollHeight, 1)
+    setViewerZoom(Math.min(1, Math.max(.5, Math.min(availableWidth / naturalWidth, availableHeight / naturalHeight))))
+  })
+}
+function toggleViewerFullscreen() {
+  viewerFullscreen.value = !viewerFullscreen.value
+  if (viewerFullscreen.value) requestAnimationFrame(fitViewer)
+}
+function mermaidSource() {
+  return viewer.value?.region.type === 'mermaid' ? String(viewer.value.region.metadata?.code ?? viewer.value.region.textContent) : ''
+}
+async function copyViewerSource() {
+  const source = mermaidSource()
+  if (!source) return
+  try {
+    await navigator.clipboard.writeText(source)
+    notify('Mermaid 源码已复制')
+  } catch {
+    notify('复制失败，请检查剪贴板权限')
+  }
+}
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(url)
+}
 function onViewerWheel(event: WheelEvent) {
   if (!viewerCanPan.value) return
   event.preventDefault()
@@ -401,13 +442,43 @@ function onViewerPointerUp(event: PointerEvent) {
   if (stage.hasPointerCapture(event.pointerId)) stage.releasePointerCapture(event.pointerId)
 }
 function onViewerDoubleClick() { if (viewerCanPan.value) resetViewerView() }
-function exportViewer() {
+function exportViewer(format: 'svg' | 'png' = 'svg') {
   if (!viewer.value) return
-  const source = viewer.value.region.type === 'mermaid' ? document.querySelector('.viewer-stage svg')?.outerHTML : viewer.value.region.textContent
+  const svg = viewer.value.region.type === 'mermaid' ? document.querySelector<SVGSVGElement>('.viewer-stage svg') : null
+  const source = svg?.outerHTML ?? viewer.value.region.textContent
   if (!source) { notify('当前内容暂时没有可导出的数据'); return }
+  if (format === 'png' && svg) {
+    const svgText = source.includes('xmlns=') ? source : source.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"')
+    const svgUrl = URL.createObjectURL(new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' }))
+    const image = new Image()
+    image.onload = () => {
+      const viewBox = svg.viewBox.baseVal
+      const width = Math.max(1, viewBox.width || Number.parseFloat(svg.getAttribute('width') ?? '') || svg.clientWidth)
+      const height = Math.max(1, viewBox.height || Number.parseFloat(svg.getAttribute('height') ?? '') || svg.clientHeight)
+      const scale = 2
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.ceil(width * scale)
+      canvas.height = Math.ceil(height * scale)
+      const context = canvas.getContext('2d')
+      if (!context) { URL.revokeObjectURL(svgUrl); notify('PNG 导出失败'); return }
+      const shell = document.querySelector<HTMLElement>('.app-shell')
+      context.fillStyle = getComputedStyle(shell ?? document.documentElement).getPropertyValue('--surface').trim() || '#ffffff'
+      context.fillRect(0, 0, canvas.width, canvas.height)
+      context.drawImage(image, 0, 0, canvas.width, canvas.height)
+      canvas.toBlob((blob) => {
+        URL.revokeObjectURL(svgUrl)
+        if (!blob) { notify('PNG 导出失败'); return }
+        downloadBlob(blob, 'moyue-mermaid.png')
+        notify('PNG 已导出')
+      }, 'image/png')
+    }
+    image.onerror = () => { URL.revokeObjectURL(svgUrl); notify('PNG 导出失败') }
+    image.src = svgUrl
+    return
+  }
   const extension = viewer.value.region.type === 'mermaid' ? 'svg' : 'txt'
-  const blob = new Blob([source], { type: extension === 'svg' ? 'image/svg+xml' : 'text/plain' })
-  const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = `moyue-${viewer.value.region.type}.${extension}`; anchor.click(); URL.revokeObjectURL(url); notify('内容已导出')
+  downloadBlob(new Blob([source], { type: extension === 'svg' ? 'image/svg+xml' : 'text/plain' }), `moyue-${viewer.value.region.type}.${extension}`)
+  notify('内容已导出')
 }
 function scrollToHeading(regionId: string) {
   syncActiveHeading(regionId, true)
@@ -588,7 +659,52 @@ async function requestFullscreen() {
 
     <div v-if="searchOpen" class="overlay search-overlay" @click.self="searchOpen = false"><div class="search-dialog"><div class="search-input-row"><AppIcon name="search" :size="17" /><input v-model="query" autofocus placeholder="搜索文档、标题、内容…" @keydown.esc="searchOpen = false" /><kbd>ESC</kbd></div><div v-if="searchResults.length" class="search-results"><button v-for="(result, index) in searchResults" :key="`${result.document.id}-${result.region.id}`" type="button" :class="{ selected: searchIndex === index }" @click="chooseSearchResult(result.document.id, result.region.id)"><span class="result-kind">{{ result.region.type }}</span><span><b>{{ result.document.title }}</b><small>{{ result.region.textContent.slice(0, 100) }}</small></span><AppIcon name="external" :size="14" /></button></div><div v-else class="empty-search">{{ query ? '没有找到相关内容' : '输入关键词，搜索你的阅读空间' }}</div></div></div>
 
-    <div v-if="viewer" class="overlay viewer-overlay" @click.self="closeViewer"><div class="viewer-shell" :class="{ 'is-fullscreen': viewerFullscreen }"><header><div><span class="section-kicker">FOCUS VIEWER</span><strong>{{ viewer.region.type === 'mermaid' ? 'Mermaid 图表' : viewer.region.type === 'image' ? '图片查看' : '内容查看' }}</strong></div><div class="viewer-actions"><IconButton icon="minus" size="sm" variant="surface" label="缩小" @click="setViewerZoom(viewerZoom - .1)" /><button class="viewer-zoom-value" type="button" title="重置视图" @click="resetViewerView">{{ Math.round(viewerZoom * 100) }}%</button><IconButton icon="plus" size="sm" variant="surface" label="放大" @click="setViewerZoom(viewerZoom + .1)" /><IconButton icon="fullscreen" size="sm" variant="surface" :label="viewerFullscreen ? '退出全屏' : '全屏查看'" @click="viewerFullscreen = !viewerFullscreen" /><IconButton icon="close" size="sm" variant="surface" label="关闭查看器" @click="closeViewer" /></div></header><nav v-if="viewer.type === 'mermaid'" class="viewer-tabs"><button type="button" :class="{ active: viewerTab === 'preview' }" @click="viewerTab = 'preview'">图表预览</button><button type="button" :class="{ active: viewerTab === 'source' }" @click="viewerTab = 'source'">源代码</button><button type="button" :class="{ active: viewerTab === 'data' }" @click="viewerTab = 'data'">数据</button></nav><div class="viewer-stage" :class="{ 'is-pan-enabled': viewerCanPan, 'is-dragging': viewerDragging }" :style="viewerStageStyle" @wheel="onViewerWheel" @pointerdown="onViewerPointerDown" @pointermove="onViewerPointerMove" @pointerup="onViewerPointerUp" @pointercancel="onViewerPointerUp" @dblclick="onViewerDoubleClick"><MermaidBlock v-if="viewer.type === 'mermaid' && viewerTab === 'preview'" :code="String(viewer.region.metadata?.code ?? viewer.region.textContent)" large /><pre v-else-if="viewer.type === 'mermaid' && viewerTab === 'source'" class="viewer-source">{{ String(viewer.region.metadata?.code ?? viewer.region.textContent) }}</pre><pre v-else-if="viewer.type === 'mermaid'" class="viewer-source">{{ JSON.stringify(viewer.region.metadata ?? {}, null, 2) }}</pre><div v-else-if="viewer.type === 'image'" class="image-viewer"><img :src="String(viewer.region.metadata?.url ?? '')" :alt="viewer.region.textContent" /></div><div v-else class="code-viewer" v-html="viewer.region.html" /></div><footer><span>{{ viewerCanPan ? '滚轮缩放 · 拖动查看 · 双击还原 · Esc 返回正文' : 'Esc 返回正文' }}</span><button type="button" @click="exportViewer"><AppIcon name="download" :size="14" />导出 {{ viewer.region.type === 'mermaid' ? 'SVG' : '文本' }}</button></footer></div></div>
+<div v-if="viewer" class="overlay viewer-overlay" @click.self="closeViewer">
+      <div class="viewer-shell" :class="{ 'is-fullscreen': viewerFullscreen }">
+        <header>
+          <div>
+            <span class="section-kicker">FOCUS VIEWER</span>
+            <strong>{{ viewer.region.type === 'mermaid' ? 'Mermaid 图表' : viewer.region.type === 'image' ? '图片查看' : '内容查看' }}</strong>
+          </div>
+          <div class="viewer-actions">
+            <button v-if="viewer.type === 'mermaid' && viewerTab === 'preview'" class="viewer-fit-button" type="button" title="适应窗口" @click="fitViewer"><AppIcon name="expand" :size="13" />适应</button>
+            <IconButton icon="minus" size="sm" variant="surface" label="缩小" @click="setViewerZoom(viewerZoom - .1)" />
+            <input v-if="viewer.type === 'mermaid' && viewerTab === 'preview'" v-model.number="viewerZoom" class="viewer-zoom-slider" type="range" min=".5" max="3" step=".05" aria-label="图表缩放" />
+            <button class="viewer-zoom-value" type="button" title="还原到 100%" @click="resetViewerView">{{ Math.round(viewerZoom * 100) }}%</button>
+            <IconButton icon="plus" size="sm" variant="surface" label="放大" @click="setViewerZoom(viewerZoom + .1)" />
+            <IconButton icon="fullscreen" size="sm" variant="surface" :label="viewerFullscreen ? '退出全屏' : '全屏查看'" @click="toggleViewerFullscreen" />
+            <IconButton icon="close" size="sm" variant="surface" label="关闭查看器" @click="closeViewer" />
+          </div>
+        </header>
+        <nav v-if="viewer.type === 'mermaid'" class="viewer-tabs">
+          <button type="button" :class="{ active: viewerTab === 'preview' }" @click="viewerTab = 'preview'">图表预览</button>
+          <button type="button" :class="{ active: viewerTab === 'source' }" @click="viewerTab = 'source'">源代码</button>
+          <button type="button" :class="{ active: viewerTab === 'data' }" @click="viewerTab = 'data'">结构</button>
+        </nav>
+        <div ref="viewerStage" class="viewer-stage" :class="{ 'is-pan-enabled': viewerCanPan, 'is-dragging': viewerDragging }" :style="viewerStageStyle" @wheel="onViewerWheel" @pointerdown="onViewerPointerDown" @pointermove="onViewerPointerMove" @pointerup="onViewerPointerUp" @pointercancel="onViewerPointerUp" @dblclick="onViewerDoubleClick">
+          <MermaidBlock v-if="viewer.type === 'mermaid' && viewerTab === 'preview'" :code="String(viewer.region.metadata?.code ?? viewer.region.textContent)" large @rendered="fitViewer" />
+          <div v-else-if="viewer.type === 'mermaid' && viewerTab === 'source'" class="viewer-source-panel">
+            <div class="viewer-source-toolbar"><span>Mermaid 源码</span><button type="button" @click="copyViewerSource"><AppIcon name="copy" :size="13" />复制源码</button></div>
+            <pre class="viewer-source">{{ mermaidSource() }}</pre>
+          </div>
+          <div v-else-if="viewer.type === 'mermaid'" class="viewer-source-panel">
+            <div class="viewer-source-toolbar"><span>图表结构</span></div>
+            <pre class="viewer-source">{{ JSON.stringify(viewer.region.metadata ?? {}, null, 2) }}</pre>
+          </div>
+          <div v-else-if="viewer.type === 'image'" class="image-viewer"><img :src="String(viewer.region.metadata?.url ?? '')" :alt="viewer.region.textContent" /></div>
+          <div v-else class="code-viewer" v-html="viewer.region.html" />
+        </div>
+        <footer>
+          <span>{{ viewerCanPan ? '滚轮缩放 · 拖动查看 · 双击还原 · +/- 调整' : 'Esc 返回正文' }}</span>
+          <div class="viewer-footer-actions">
+            <button v-if="viewer.type === 'mermaid'" type="button" @click="copyViewerSource"><AppIcon name="copy" :size="14" />复制源码</button>
+            <button v-if="viewer.type === 'mermaid'" type="button" @click="exportViewer('svg')"><AppIcon name="download" :size="14" />导出 SVG</button>
+            <button v-if="viewer.type === 'mermaid'" type="button" @click="exportViewer('png')"><AppIcon name="download" :size="14" />导出 PNG</button>
+            <button v-else type="button" @click="exportViewer()"><AppIcon name="download" :size="14" />导出文本</button>
+          </div>
+        </footer>
+      </div>
+    </div>
     <div v-if="annotationEditor" class="overlay note-overlay" @click.self="annotationEditor = null"><div class="note-dialog"><span class="section-kicker">ANNOTATION</span><h2>留下一个记号</h2><blockquote>{{ annotationEditor.text }}</blockquote><textarea v-model="annotationNote" autofocus placeholder="记录你的思考……" /><div class="note-colors"><button v-for="color in ['#e1a85b', '#a78bfa', '#76c893', '#75b7d5', '#e98282']" :key="color" type="button" :class="{ selected: annotationColor === color }" :style="{ background: color }" @click="annotationColor = color" /></div><div class="note-actions"><button class="ghost-button" type="button" @click="annotationEditor = null">取消</button><button class="primary-button" type="button" @click="saveCurrentAnnotation">保存批注</button></div></div></div>
     <div v-if="booting" class="app-loading" role="status" aria-live="polite"><span class="loading-orbit" /><strong>正在恢复阅读空间</strong><small>正在载入最近文档与阅读位置</small></div>
     <div v-if="draggingFiles" class="drop-overlay" aria-live="polite"><span><AppIcon name="plus" :size="26" /></span><strong>释放以导入 Markdown</strong><small>支持 .md / .markdown 文件</small></div>
