@@ -12,6 +12,12 @@ describe('Moyue markdown region parser', () => {
     expect(first.regions.map((region) => region.type)).toEqual(['heading', 'paragraph', 'mermaid'])
   })
 
+  it('previews Mermaid wrapped inside a generic fenced code block', () => {
+    const document = parseMarkdown('notes/nested.md', '~~~~text\n~~~mermaid\nflowchart TD\nA --> B\n~~~\n~~~~')
+    expect(document.regions[0].type).toBe('mermaid')
+    expect(document.regions[0].metadata?.code).toBe('flowchart TD\nA --> B')
+  })
+
   it('does not emit executable raw HTML', () => {
     const document = parseMarkdown('unsafe.md', '<script>alert(1)</script>\n\n[bad](javascript:alert(1))')
     expect(document.regions[0].html).not.toContain('<script>')

@@ -89,8 +89,16 @@ function blockHtml(node: MdastNode, resolveUrl: MarkdownUrlResolver = (url) => u
   }
 }
 
+function mermaidCode(node: MdastNode): string | null {
+  if (node.type !== 'code') return null
+  if (node.lang?.trim().toLowerCase() === 'mermaid') return node.value ?? ''
+  const value = (node.value ?? '').trim()
+  const match = value.match(/^(?:`{3}|~~~)\s*mermaid[^\r\n]*\r?\n([\s\S]*?)\r?\n(?:`{3}|~~~)$/i)
+  return match?.[1] ?? null
+}
+
 function regionType(node: MdastNode): ReaderRegionType {
-  if (node.type === 'code' && node.lang === 'mermaid') return 'mermaid'
+  if (mermaidCode(node) !== null) return 'mermaid'
   if (node.type === 'image') return 'image'
   if (node.type === 'table') return 'table'
   if (node.type === 'thematicBreak') return 'thematic-break'
@@ -106,14 +114,15 @@ export function parseMarkdown(path: string, source: string, resolveUrl: Markdown
 
   children.forEach((node, index) => {
     if (node.type === 'yaml' || node.type === 'toml') return
-    const textContent = nodeText(node).trim()
+    const type = regionType(node)
+    const diagramCode = type === 'mermaid' ? mermaidCode(node) ?? '' : null
+    const textContent = (diagramCode ?? nodeText(node)).trim()
     const start = node.position?.start?.offset ?? 0
     const end = node.position?.end?.offset ?? start + textContent.length
     const id = `reg_${hashText(`${path}:${node.type}:${start}:${end}:${textContent.slice(0, 120)}`)}`
-    const type = regionType(node)
     const metadata: Record<string, unknown> = {}
     if (node.lang) metadata.language = node.lang
-    if (type === 'mermaid') metadata.code = node.value ?? ''
+    if (type === 'mermaid') metadata.code = diagramCode ?? ''
     if (type === 'image') metadata.url = resolveUrl(node.url ?? '')
     const region: ReaderRegion = {
       id, documentId, type, index: regions.length, textContent, sourceStart: start, sourceEnd: end,

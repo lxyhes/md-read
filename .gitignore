@@ -31,3 +31,6 @@ src-tauri/target/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Local convenience scripts may contain machine-specific paths
+本地阅读md.bat
