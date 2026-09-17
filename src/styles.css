@@ -197,6 +197,8 @@ button:disabled { cursor: wait; opacity: .58; transform: none !important; }
 .ghost-button, .primary-button, .context-actions button, .translation-card button, .diagram-link, .inline-view-action, .viewer-shell footer button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .ghost-button .app-icon, .primary-button .app-icon, .context-actions button .app-icon, .translation-card button .app-icon, .diagram-link .app-icon, .inline-view-action .app-icon, .viewer-shell footer button .app-icon { margin-top: -1px; }
 .reader-tab-status span { display: inline-flex; align-items: center; gap: 4px; }
+.reader-tab { cursor: pointer; }
+.reader-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .reader-tab .icon-button { margin-left: 8px; }
 .viewer-actions { gap: 6px; }
 .viewer-actions .icon-button { min-width: 28px; }
@@ -356,6 +358,27 @@ html, body, #app { background: var(--app-bg, #070d22); }
 .reader-layout > .context-panel,
 .reader-layout > .focus-sidebar {
   min-height: 0;
+  min-width: 0;
+}
+.reader-content,
+.reader-content .regions-stack,
+.reader-content .region-block,
+.reader-content .region-content {
+  min-width: 0;
+  max-width: 100%;
+}
+.reader-content .region-content p,
+.reader-content .region-content li,
+.reader-content .region-content blockquote,
+.reader-content .region-content th,
+.reader-content .region-content td {
+  overflow-wrap: break-word;
+}
+.reader-content .region-content p code,
+.reader-content .region-content li code,
+.reader-content .region-content td code {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .reader-layout > .outline-panel {
   overflow-y: auto;
@@ -406,6 +429,167 @@ html, body, #app { background: var(--app-bg, #070d22); }
 }
 .reader-layout > .outline-panel .panel-heading {
   flex: 0 0 auto;
+}
+.panel-switcher {
+  align-items: center;
+  gap: 10px;
+}
+.panel-tabs {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+.panel-tabs button {
+  position: relative;
+  padding: 0 0 8px;
+  background: transparent;
+  color: var(--muted);
+  font: 10px var(--ui-font);
+}
+.panel-tabs button::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  content: "";
+  opacity: 0;
+  transform: scaleX(.45);
+  transition: opacity .2s ease, transform .2s ease;
+}
+.panel-tabs button:hover,
+.panel-tabs button.active {
+  color: var(--ink);
+}
+.panel-tabs button.active::after {
+  opacity: 1;
+  transform: scaleX(1);
+}
+.panel-tabs button span {
+  margin-left: 4px;
+  color: var(--accent);
+  font: 9px var(--mono);
+}
+.file-browser-panel {
+  min-height: 0;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  margin-top: 22px;
+}
+.file-location {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 0 3px 11px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font: 10px var(--ui-font);
+}
+.file-location .app-icon {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+.file-location span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-location small {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--muted);
+  font: 9px var(--mono);
+  opacity: .72;
+}
+.file-list {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 10px 0 18px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent-soft) transparent;
+}
+.file-item {
+  position: relative;
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 10px;
+  border-left: 2px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  text-align: left;
+  transition: color .18s ease, background .18s ease, border-color .18s ease, transform .18s ease;
+}
+.file-item:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--ink);
+  transform: translateX(2px);
+}
+.file-item.active {
+  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  color: var(--ink);
+}
+.file-item.is-unloaded .file-item-copy small {
+  color: var(--accent);
+}
+.file-item.is-unloaded > .app-icon {
+  opacity: .72;
+}
+.file-item > .app-icon {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--accent);
+}
+.file-item-copy {
+  min-width: 0;
+  flex: 1;
+}
+.file-item-copy strong,
+.file-item-copy small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-item-copy strong {
+  color: inherit;
+  font: 11px/1.35 var(--ui-font);
+}
+.file-item-copy small {
+  margin-top: 4px;
+  color: var(--muted);
+  font: 9px var(--ui-font);
+}
+.file-active-mark {
+  width: 5px;
+  height: 5px;
+  flex: 0 0 5px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent);
+}
+.file-browser-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: auto 2px 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font: 9px/1.5 var(--ui-font);
+}
+.file-browser-note .app-icon {
+  flex: 0 0 auto;
+  color: var(--accent);
 }
 .reader-layout > .outline-panel .outline-list {
   min-height: 0;

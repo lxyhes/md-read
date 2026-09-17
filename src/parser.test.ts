@@ -21,4 +21,9 @@ describe('Moyue markdown region parser', () => {
   it('keeps the hash deterministic', () => {
     expect(hashText('moyue')).toBe(hashText('moyue'))
   })
+
+  it('preserves soft line breaks in prose paragraphs', () => {
+    const document = parseMarkdown('notes/redis.md', '详情：RedisKeyUserPrefix + "aiTask:detail:{id}"\n任务列表：RedisKeyUserPrefix + "aiTask:list:{userId}:{page}"')
+    expect(document.regions[0].html).toContain('<br />')
+  })
 })

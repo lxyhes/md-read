@@ -10,6 +10,7 @@ const sample = `# 一次安静的阅读\n\n墨阅把 Markdown 变成一个可以
 
 export const useReaderStore = defineStore('reader', () => {
   const documents = ref<ReaderDocument[]>([])
+  const openDocumentIds = ref<string[]>([])
   const currentDocumentId = ref<string | null>(null)
   const mode = ref<ReaderMode>('normal')
   const activeRegionId = ref<string | null>(null)
@@ -34,15 +35,16 @@ export const useReaderStore = defineStore('reader', () => {
 
   async function addOpenedFiles(files: OpenedFile[]) {
     if (!files.length) return 0
-    let firstOpenedDocumentId: string | null = null
+    const openedIds: string[] = []
     for (const file of files) {
       const document = parseMarkdown(file.path, file.source)
-      firstOpenedDocumentId ??= document.id
       documents.value = [...documents.value.filter((item) => item.id !== document.id), document]
+      openedIds.push(document.id)
       await saveDocumentSnapshot(document)
       await saveDocument({ id: document.id, path: document.path, title: document.title, sourceHash: document.sourceHash, updatedAt: document.updatedAt, source: document.source })
     }
-    if (firstOpenedDocumentId) await openDocument(firstOpenedDocumentId)
+    openDocumentIds.value = [...new Set([...openDocumentIds.value, ...openedIds])]
+    await openDocument(openedIds[openedIds.length - 1])
     return files.length
   }
 
@@ -60,12 +62,36 @@ export const useReaderStore = defineStore('reader', () => {
   async function openDocument(id: string) {
     const document = documents.value.find((item) => item.id === id)
     if (!document) return
+    if (!openDocumentIds.value.includes(id)) openDocumentIds.value.push(id)
     currentDocumentId.value = id
     mode.value = 'normal'
+    activeRegionId.value = null
+    activeHeadingId.value = null
     focusedRegionId.value = null
+    selection.value = null
     annotations.value = loadAnnotations(id)
     const saved = await getProgress(id)
-    if (saved) progress.value[id] = saved
+    if (saved) {
+      progress.value[id] = saved
+      activeRegionId.value = saved.regionId
+      activeHeadingId.value = saved.headingId
+    }
+  }
+
+  async function closeDocument(id: string) {
+    const index = openDocumentIds.value.indexOf(id)
+    if (index < 0) return
+    const wasCurrent = currentDocumentId.value === id
+    openDocumentIds.value = openDocumentIds.value.filter((item) => item !== id)
+    if (!wasCurrent) return
+    const nextId = openDocumentIds.value[index] ?? openDocumentIds.value[index - 1] ?? null
+    if (nextId) await openDocument(nextId)
+    else {
+      currentDocumentId.value = null
+      mode.value = 'normal'
+      focusedRegionId.value = null
+      annotations.value = []
+    }
   }
 
   async function setProgress(scrollPercent: number, regionId: string | null, headingId: string | null) {
@@ -85,7 +111,9 @@ export const useReaderStore = defineStore('reader', () => {
     localStorage.setItem('moyue:reader-settings', JSON.stringify(readerSettings.value))
   }
 
-  return { documents, currentDocumentId, currentDocument, mode, activeRegionId, focusedRegionId, activeHeadingId, selection, progress, annotations, themes, activeThemeId, activeTheme, readerSettings, bootstrap, importFiles, importFolder, addOpenedFiles, openDocument, setProgress, focusRegion, clearFocus, setMode, addAnnotation, applyTheme, installTheme, updateSettings }
+  const openDocuments = computed(() => openDocumentIds.value.map((id) => documents.value.find((document) => document.id === id)).filter((document): document is ReaderDocument => Boolean(document)))
+
+  return { documents, openDocuments, openDocumentIds, currentDocumentId, currentDocument, mode, activeRegionId, focusedRegionId, activeHeadingId, selection, progress, annotations, themes, activeThemeId, activeTheme, readerSettings, bootstrap, importFiles, importFolder, addOpenedFiles, openDocument, closeDocument, setProgress, focusRegion, clearFocus, setMode, addAnnotation, applyTheme, installTheme, updateSettings }
 })
 
 function readSettings() {
