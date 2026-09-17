@@ -1310,6 +1310,12 @@ html, body, #app { background: var(--app-bg, #070d22); }
 .reader-tab-status.is-error {
   color: #e98282;
 }
+.reader-tab-status.is-syncing {
+  color: var(--accent);
+}
+.reader-tab-status.is-syncing span:first-child {
+  animation: loading-spin .9s linear infinite;
+}
 .reader-content .region-block {
   content-visibility: auto;
   contain-intrinsic-size: auto 150px;

@@ -14,6 +14,7 @@ import type { Annotation, FocusAmbienceId, ReaderRegion, ViewerType } from './ty
 
 type View = 'library' | 'reader' | 'themes' | 'settings'
 type BusyAction = 'file' | 'folder' | 'drop' | null
+type FileSyncState = 'idle' | 'syncing' | 'updated' | 'error'
 const store = useReaderStore()
 const view = ref<View>('library')
 const libraryTab = ref<'home' | 'all'>('all')
@@ -25,6 +26,7 @@ const searchIndex = ref(0)
 const toast = ref('')
 const booting = ref(true)
 const saveFailed = ref(false)
+const fileSyncState = ref<FileSyncState>('idle')
 const fullscreenActive = ref(typeof document !== 'undefined' && Boolean(document.fullscreenElement))
 const settingsTab = ref('reading')
 const viewer = ref<{ type: ViewerType; region: ReaderRegion } | null>(null)
@@ -56,7 +58,8 @@ let focusTimer: number | null = null
 let scrollFrame: number | null = null
 let progressTimer: number | null = null
 let searchTimer: number | null = null
-let stopDocumentWatch: (() => void) | null = null
+const documentWatchers = new Map<string, () => void>()
+const documentReloadTimers = new Map<string, number>()
 let documentWatchRequest = 0
 let pendingProgress: { documentId: string; scrollPercent: number; regionId: string | null; headingId: string | null } | null = null
 const focusThemeStyles = computed<Record<string, string>>(() => {
@@ -163,7 +166,7 @@ onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown)
   document.removeEventListener('fullscreenchange', onFullscreenChange)
   stopFocusTimer()
-  stopDocumentWatch?.()
+  stopAllDocumentWatchers()
   if (searchTimer !== null) window.clearTimeout(searchTimer)
   if (scrollFrame !== null) window.cancelAnimationFrame(scrollFrame)
   if (progressTimer !== null) window.clearTimeout(progressTimer)
@@ -174,7 +177,8 @@ watch(query, () => {
   searchTimer = window.setTimeout(() => { searchNeedle.value = query.value.trim().toLowerCase(); searchTimer = null }, 90)
 })
 watch(() => store.mode, (mode) => { if (mode !== 'focus') stopFocusTimer() })
-watch(() => store.currentDocument?.path, () => { void refreshFileTree(); void startDocumentWatch() }, { immediate: true })
+watch(() => store.currentDocument?.path, () => { fileSyncState.value = 'idle'; void refreshFileTree() }, { immediate: true })
+watch(() => store.openDocuments.map((document) => document.path).join('\n'), () => { void syncDocumentWatchers() }, { immediate: true })
 watch(() => [store.activeHeadingId, leftPanelTab.value], () => {
   if (leftPanelTab.value !== 'outline' || !store.activeHeadingId) return
   nextTick(() => document.querySelector<HTMLElement>(`[data-outline-id="${store.activeHeadingId}"]`)?.scrollIntoView({ behavior: 'auto', block: 'nearest' }))
@@ -290,30 +294,60 @@ async function refreshFileTree() {
     if (request === fileTreeRequest) filesystemFiles.value = []
   }
 }
-async function startDocumentWatch() {
-  stopDocumentWatch?.()
-  stopDocumentWatch = null
-  const path = store.currentDocument?.path
-  const request = ++documentWatchRequest
-  if (!path || path === '欢迎开始 · Moyue.md' || path === '当前工作区') return
+function filePathKey(path: string) { return normalizedPath(path).replace(/\/$/, '').toLowerCase() }
+function setFileSyncState(state: FileSyncState) { if (store.currentDocument) fileSyncState.value = state }
+function scheduleDocumentReload(path: string) {
+  const key = filePathKey(path)
+  const previous = documentReloadTimers.get(key)
+  if (previous) window.clearTimeout(previous)
+  documentReloadTimers.set(key, window.setTimeout(() => {
+    documentReloadTimers.delete(key)
+    void reloadDocumentFromDisk(path)
+  }, 320))
+}
+async function reloadDocumentFromDisk(path: string) {
+  const current = store.documents.find((document) => filePathKey(document.path) === filePathKey(path))
+  if (!current) return
+  const isCurrent = store.currentDocumentId === current.id
+  if (isCurrent) setFileSyncState('syncing')
   try {
-    const unwatch = await watchMarkdownPath(path, async () => {
-      if (request !== documentWatchRequest || store.currentDocument?.path !== path) return
-      try {
-        const source = await readMarkdownPath(path)
-        if (source === store.currentDocument?.source) return
-        await store.reloadDocument({ path, source })
-        await nextTick()
-        restoreScroll()
-        notify('文件已更新，阅读位置已保留')
-      } catch {
-        notify('文件已变化，但重新读取失败，请重新打开')
-      }
-    })
-    if (request === documentWatchRequest) stopDocumentWatch = unwatch
-    else unwatch?.()
+    const source = await readMarkdownPath(path)
+    if (source === current.source) { if (isCurrent) setFileSyncState('idle'); return }
+    await store.reloadDocument({ path, source })
+    if (isCurrent && store.currentDocumentId === current.id) {
+      await nextTick()
+      restoreScroll()
+      setFileSyncState('updated')
+      notify('文件已自动更新，阅读位置已保留')
+      window.setTimeout(() => { if (fileSyncState.value === 'updated') fileSyncState.value = 'idle' }, 2600)
+    }
   } catch {
-    stopDocumentWatch = null
+    if (isCurrent) { setFileSyncState('error'); notify('文件自动更新失败，请检查文件是否仍存在') }
+  }
+}
+function stopAllDocumentWatchers() {
+  for (const stop of documentWatchers.values()) stop()
+  documentWatchers.clear()
+  for (const timer of documentReloadTimers.values()) window.clearTimeout(timer)
+  documentReloadTimers.clear()
+}
+async function syncDocumentWatchers() {
+  const request = ++documentWatchRequest
+  const documents = store.openDocuments.filter((document) => !['欢迎开始 · Moyue.md', '当前工作区'].includes(document.path))
+  const paths = new Map(documents.map((document) => [filePathKey(document.path), document.path]))
+  for (const [key, stop] of documentWatchers) {
+    if (!paths.has(key)) { stop(); documentWatchers.delete(key) }
+  }
+  for (const [key, path] of paths) {
+    if (documentWatchers.has(key)) continue
+    try {
+      const unwatch = await watchMarkdownPath(path, () => scheduleDocumentReload(path))
+      if (!unwatch) continue
+      if (request !== documentWatchRequest || !paths.has(key)) unwatch()
+      else documentWatchers.set(key, unwatch)
+    } catch {
+      // Browser preview and documents without a local path do not support filesystem watching.
+    }
   }
 }
 function fileStatus(file: { documentId?: string }) {
@@ -619,7 +653,7 @@ async function requestFullscreen() {
       </section>
 
       <section v-else-if="view === 'reader'" class="reader-page">
-        <div class="reader-tabbar"><div v-for="document in store.openDocuments" :key="document.id" class="reader-tab" :class="{ active: store.currentDocumentId === document.id }" role="tab" :aria-selected="store.currentDocumentId === document.id" tabindex="0" @click="chooseDocument(document.id)" @keydown.enter="chooseDocument(document.id)" @keydown.space.prevent="chooseDocument(document.id)"><span><AppIcon name="reader" :size="15" /></span><strong>{{ document.title }}</strong><small>本地文档</small><IconButton icon="close" size="sm" :label="`关闭 ${document.title}`" @click.stop="closeDocument(document.id)" /></div><IconButton class="reader-new-tab" icon="plus" size="sm" label="打开新文档" :disabled="busyAction !== null" @click="openFile" /><div class="reader-tab-status" :class="{ 'is-error': saveFailed }"><span><AppIcon :name="saveFailed ? 'info' : 'sync'" :size="13" /></span><span>{{ store.currentDocument?.wordCount }} 字</span><span><AppIcon name="history" :size="13" /> {{ saveFailed ? '保存失败' : '自动保存' }}</span></div></div>
+        <div class="reader-tabbar"><div v-for="document in store.openDocuments" :key="document.id" class="reader-tab" :class="{ active: store.currentDocumentId === document.id }" role="tab" :aria-selected="store.currentDocumentId === document.id" tabindex="0" @click="chooseDocument(document.id)" @keydown.enter="chooseDocument(document.id)" @keydown.space.prevent="chooseDocument(document.id)"><span><AppIcon name="reader" :size="15" /></span><strong>{{ document.title }}</strong><small>本地文档</small><IconButton icon="close" size="sm" :label="`关闭 ${document.title}`" @click.stop="closeDocument(document.id)" /></div><IconButton class="reader-new-tab" icon="plus" size="sm" label="打开新文档" :disabled="busyAction !== null" @click="openFile" /><div class="reader-tab-status" :class="{ 'is-error': saveFailed || fileSyncState === 'error', 'is-syncing': fileSyncState === 'syncing' }"><span><AppIcon :name="saveFailed || fileSyncState === 'error' ? 'info' : fileSyncState === 'updated' ? 'check' : 'sync'" :size="13" /></span><span>{{ store.currentDocument?.wordCount }} 字</span><span><AppIcon name="history" :size="13" /> {{ fileSyncState === 'syncing' ? '正在同步' : fileSyncState === 'updated' ? '已自动更新' : saveFailed ? '保存失败' : '自动保存' }}</span></div></div>
         <div class="reader-layout" :class="{ 'focus-layout': store.mode === 'focus' }">
           <aside v-if="store.mode !== 'focus'" class="outline-panel">
             <div class="panel-heading panel-switcher">
