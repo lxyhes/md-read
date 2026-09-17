@@ -9,6 +9,7 @@ import ThemeCenter from './components/ThemeCenter.vue'
 import ThemePicker from './components/ThemePicker.vue'
 import AppIcon from './components/AppIcon.vue'
 import IconButton from './components/IconButton.vue'
+import { listMarkdownFiles, readMarkdownPath, type WorkspaceFile } from './fileService'
 import type { Annotation, FocusAmbienceId, ReaderRegion, ViewerType } from './types'
 
 type View = 'library' | 'reader' | 'themes' | 'settings'
@@ -36,6 +37,9 @@ let viewerPointer = { x: 0, y: 0 }
 const customProvider = ref('')
 const busyAction = ref<BusyAction>(null)
 const draggingFiles = ref(false)
+const leftPanelTab = ref<'files' | 'outline'>('files')
+const filesystemFiles = ref<WorkspaceFile[]>([])
+let fileTreeRequest = 0
 const focusRemaining = ref(25 * 60)
 const focusRunning = ref(false)
 function readFocusAmbience(): FocusAmbienceId {
@@ -77,6 +81,28 @@ const viewerStageStyle = computed<Record<string, string>>(() => ({
 const currentProgress = computed(() => store.currentDocument ? store.progress[store.currentDocument.id] : undefined)
 const currentAnnotations = computed(() => store.annotations.slice().sort((a, b) => b.createdAt - a.createdAt))
 const currentHeading = computed(() => store.currentDocument?.headings.find((heading) => heading.id === store.activeHeadingId))
+function normalizedPath(path: string) { return path.replace(/\\/g, '/') }
+function directoryOf(path: string) {
+  const normalized = normalizedPath(path)
+  const separator = normalized.lastIndexOf('/')
+  return separator >= 0 ? normalized.slice(0, separator) || '/' : '当前工作区'
+}
+function fileNameOf(path: string) { return normalizedPath(path).split('/').pop() || path }
+const currentDirectory = computed(() => directoryOf(store.currentDocument?.path ?? ''))
+const currentDirectoryLabel = computed(() => currentDirectory.value === '当前工作区' ? currentDirectory.value : currentDirectory.value.split('/').filter(Boolean).pop() || currentDirectory.value)
+const currentDirectoryFiles = computed(() => {
+  const files = new Map<string, { path: string; name: string; documentId?: string }>()
+  for (const document of store.documents) {
+    if (directoryOf(document.path) !== currentDirectory.value) continue
+    files.set(normalizedPath(document.path), { path: document.path, name: fileNameOf(document.path), documentId: document.id })
+  }
+  for (const file of filesystemFiles.value) {
+    const key = normalizedPath(file.path)
+    if (!files.has(key)) files.set(key, file)
+  }
+  const result = [...files.values()].sort((left, right) => left.name.localeCompare(right.name, 'zh-CN'))
+  return result.length || !store.currentDocument ? result : [{ path: store.currentDocument.path, name: fileNameOf(store.currentDocument.path), documentId: store.currentDocument.id }]
+})
 const focusTimeLabel = computed(() => `${String(Math.floor(focusRemaining.value / 60)).padStart(2, '0')}:${String(focusRemaining.value % 60).padStart(2, '0')}`)
 const focusProgress = computed(() => 1 - focusRemaining.value / (25 * 60))
 
@@ -105,6 +131,7 @@ onUnmounted(() => {
 })
 watch(query, () => { searchIndex.value = 0 })
 watch(() => store.mode, (mode) => { if (mode !== 'focus') stopFocusTimer() })
+watch(() => store.currentDocument?.path, () => { void refreshFileTree() }, { immediate: true })
 
 function onKeydown(event: KeyboardEvent) {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); searchOpen.value = true; return }
@@ -195,6 +222,40 @@ async function onDrop(event: DragEvent) {
 }
 
 async function chooseDocument(id: string) { await store.openDocument(id); view.value = 'reader'; await nextTick(); restoreScroll() }
+async function refreshFileTree() {
+  const path = store.currentDocument?.path
+  const request = ++fileTreeRequest
+  if (!path) { filesystemFiles.value = []; return }
+  try {
+    const files = await listMarkdownFiles(path)
+    if (request === fileTreeRequest) filesystemFiles.value = files
+  } catch {
+    if (request === fileTreeRequest) filesystemFiles.value = []
+  }
+}
+function fileStatus(file: { documentId?: string }) {
+  if (!file.documentId) return '点击打开'
+  if (store.currentDocumentId === file.documentId) return '正在阅读'
+  return `${store.documents.find((document) => document.id === file.documentId)?.regions.length ?? 0} 个阅读区域`
+}
+async function openFileTreeEntry(file: { path: string; name: string; documentId?: string }) {
+  if (file.documentId) { await chooseDocument(file.documentId); return }
+  if (busyAction.value) return
+  busyAction.value = 'file'
+  try {
+    const source = await readMarkdownPath(file.path)
+    const count = await store.addOpenedFiles([{ path: file.path, source }])
+    if (count) { view.value = 'reader'; await nextTick(); restoreScroll(); notify(`已打开 ${file.name}`) }
+  } catch (error) {
+    notify(error instanceof Error ? error.message : '打开文件失败')
+  } finally { busyAction.value = null }
+}
+async function closeDocument(id: string) {
+  await store.closeDocument(id)
+  if (!store.currentDocument) { view.value = 'library'; return }
+  await nextTick()
+  restoreScroll()
+}
 function restoreScroll() { if (readerViewport.value && currentProgress.value) readerViewport.value.scrollTop = currentProgress.value.scrollPercent * (readerViewport.value.scrollHeight - readerViewport.value.clientHeight) }
 function onReaderScroll() {
   if (scrollFrame !== null) return
@@ -370,9 +431,28 @@ function requestFullscreen() { void document.documentElement.requestFullscreen?.
       </section>
 
       <section v-else-if="view === 'reader'" class="reader-page">
-        <div class="reader-tabbar"><div class="reader-tab active"><span><AppIcon name="reader" :size="15" /></span><strong>{{ store.currentDocument?.title }}</strong><small>本地文档</small><IconButton icon="close" size="sm" label="关闭当前文档" @click="openLibrary('all')" /></div><IconButton class="reader-new-tab" icon="plus" size="sm" label="打开新文档" :disabled="busyAction !== null" @click="openFile" /><div class="reader-tab-status"><span><AppIcon name="sync" :size="13" /></span><span>{{ store.currentDocument?.wordCount }} 字</span><span><AppIcon name="history" :size="13" /> 自动保存</span></div></div>
+        <div class="reader-tabbar"><div v-for="document in store.openDocuments" :key="document.id" class="reader-tab" :class="{ active: store.currentDocumentId === document.id }" tabindex="0" @click="chooseDocument(document.id)" @keydown.enter="chooseDocument(document.id)" @keydown.space.prevent="chooseDocument(document.id)"><span><AppIcon name="reader" :size="15" /></span><strong>{{ document.title }}</strong><small>本地文档</small><IconButton icon="close" size="sm" :label="`关闭 ${document.title}`" @click.stop="closeDocument(document.id)" /></div><IconButton class="reader-new-tab" icon="plus" size="sm" label="打开新文档" :disabled="busyAction !== null" @click="openFile" /><div class="reader-tab-status"><span><AppIcon name="sync" :size="13" /></span><span>{{ store.currentDocument?.wordCount }} 字</span><span><AppIcon name="history" :size="13" /> 自动保存</span></div></div>
         <div class="reader-layout" :class="{ 'focus-layout': store.mode === 'focus' }">
-          <aside v-if="store.mode !== 'focus'" class="outline-panel"><div class="panel-heading"><span class="section-kicker">CONTENTS</span><button class="text-button" type="button" @click="store.setMode(store.mode === 'clean' ? 'normal' : 'clean')">{{ store.mode === 'clean' ? '展开' : '收起' }}</button></div><nav class="outline-list"><button v-for="heading in store.currentDocument?.headings" :key="heading.id" type="button" :class="{ active: store.activeHeadingId === heading.id }" :style="{ paddingLeft: `${12 + (heading.depth - 1) * 14}px` }" @click="scrollToHeading(heading.regionId)">{{ heading.text }}</button></nav><div class="outline-footer"><span class="progress-ring" :style="{ '--progress': `${(currentProgress?.scrollPercent ?? 0) * 360}deg` }" /> <span>{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}% 已读</span></div></aside>
+          <aside v-if="store.mode !== 'focus'" class="outline-panel">
+            <div class="panel-heading panel-switcher">
+              <div class="panel-tabs" role="tablist" aria-label="阅读侧栏">
+            <button type="button" :class="{ active: leftPanelTab === 'files' }" @click="leftPanelTab = 'files'">文件 <span>{{ currentDirectoryFiles.length }}</span></button>
+                <button type="button" :class="{ active: leftPanelTab === 'outline' }" @click="leftPanelTab = 'outline'">大纲</button>
+              </div>
+              <button class="text-button" type="button" @click="store.setMode(store.mode === 'clean' ? 'normal' : 'clean')">{{ store.mode === 'clean' ? '展开' : '收起' }}</button>
+            </div>
+            <div v-if="leftPanelTab === 'files'" class="file-browser-panel">
+              <div class="file-location" :title="currentDirectory"><AppIcon name="library" :size="13" /><span>{{ currentDirectoryLabel }}</span><small>所在目录</small></div>
+              <nav class="file-list" aria-label="当前文件夹中的 Markdown 文件">
+                <button v-for="file in currentDirectoryFiles" :key="file.path" type="button" class="file-item" :class="{ active: store.currentDocumentId === file.documentId, 'is-unloaded': !file.documentId }" :aria-label="file.documentId ? `打开 ${file.name}` : `载入 ${file.name}`" @click="openFileTreeEntry(file)">
+                  <AppIcon name="file" :size="14" /><span class="file-item-copy"><strong>{{ file.name }}</strong><small>{{ fileStatus(file) }}</small></span><i v-if="store.currentDocumentId === file.documentId" class="file-active-mark" />
+                </button>
+              </nav>
+              <p class="file-browser-note"><AppIcon name="info" :size="13" />当前目录的 Markdown 文件，点击即可打开</p>
+            </div>
+            <nav v-else class="outline-list" aria-label="当前文档大纲"><button v-for="heading in store.currentDocument?.headings" :key="heading.id" type="button" :class="{ active: store.activeHeadingId === heading.id }" :style="{ paddingLeft: `${12 + (heading.depth - 1) * 14}px` }" @click="scrollToHeading(heading.regionId)">{{ heading.text }}</button></nav>
+            <div v-if="leftPanelTab === 'outline'" class="outline-footer"><span class="progress-ring" :style="{ '--progress': `${(currentProgress?.scrollPercent ?? 0) * 360}deg` }" /> <span>{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}% 已读</span></div>
+          </aside>
           <div ref="readerViewport" class="reader-viewport" @scroll="onReaderScroll" @mouseup="captureSelection"><div class="reader-content"><div class="reader-meta"><span class="section-kicker">{{ store.currentDocument?.path }}</span><span>{{ store.currentDocument?.wordCount }} 字 · 约 {{ store.currentDocument?.estimatedReadMinutes }} 分钟</span></div><h1 class="reader-title">{{ store.currentDocument?.title }}</h1><p class="reader-deck">在文字、图表和一块留白之间，找到你自己的阅读速度。</p><div class="reader-rule" />
             <div class="regions-stack"><RegionBlock v-for="region in store.currentDocument?.regions" :key="region.id" :region="region" :focused="store.focusedRegionId === region.id" :active="store.activeRegionId === region.id" :theme-mode="store.mode === 'focus' ? 'dark' : store.activeTheme?.manifest.mode" :theme-key="`${store.mode}-${focusAmbience}`" @focus="focusRegion(region)" @open-viewer="openViewer(region)" @code-copied="notify('代码已复制')" /></div>
             <footer class="reader-footer"><span>墨阅 · Moyue Reader</span><span>Read → Focus → Understand</span></footer>

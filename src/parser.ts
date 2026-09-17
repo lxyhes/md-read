@@ -43,10 +43,10 @@ function nodeText(node: MdastNode): string {
   return (node.children ?? []).map(nodeText).join('')
 }
 
-function inlineHtml(node: MdastNode): string {
-  const children = () => (node.children ?? []).map(inlineHtml).join('')
+function inlineHtml(node: MdastNode, preserveSoftBreaks = false): string {
+  const children = () => (node.children ?? []).map((child) => inlineHtml(child, preserveSoftBreaks)).join('')
   switch (node.type) {
-    case 'text': return escapeHtml(node.value ?? '')
+    case 'text': return escapeHtml(node.value ?? '').replace(preserveSoftBreaks ? /\r?\n/g : /$^/g, '<br />')
     case 'emphasis': return `<em>${children()}</em>`
     case 'strong': return `<strong>${children()}</strong>`
     case 'delete': return `<del>${children()}</del>`
@@ -61,10 +61,10 @@ function inlineHtml(node: MdastNode): string {
 
 function blockHtml(node: MdastNode): string {
   const children = () => (node.children ?? []).map((child) => blockHtml(child)).join('')
-  const inlineChildren = () => (node.children ?? []).map(inlineHtml).join('')
+  const inlineChildren = (preserveSoftBreaks = false) => (node.children ?? []).map((child) => inlineHtml(child, preserveSoftBreaks)).join('')
   switch (node.type) {
     case 'heading': return `<h${node.depth ?? 1}>${inlineChildren()}</h${node.depth ?? 1}>`
-    case 'paragraph': return `<p>${inlineChildren()}</p>`
+    case 'paragraph': return `<p>${inlineChildren(true)}</p>`
     case 'blockquote': return `<blockquote>${children()}</blockquote>`
     case 'list': return `<${node.ordered ? 'ol' : 'ul'}>${children()}</${node.ordered ? 'ol' : 'ul'}>`
     case 'listItem': {
@@ -78,7 +78,7 @@ function blockHtml(node: MdastNode): string {
     case 'thematicBreak': return '<hr />'
     case 'table': {
       const rows = node.children ?? []
-      return `<div class="table-scroll"><table>${rows.map((row, rowIndex) => `<${rowIndex === 0 ? 'thead' : 'tbody'}><tr>${(row.children ?? []).map((cell) => `<${rowIndex === 0 ? 'th' : 'td'}>${(cell.children ?? []).map(inlineHtml).join('')}</${rowIndex === 0 ? 'th' : 'td'}>`).join('')}</tr></${rowIndex === 0 ? 'thead' : 'tbody'}>`).join('')}</table></div>`
+      return `<div class="table-scroll"><table>${rows.map((row, rowIndex) => `<${rowIndex === 0 ? 'thead' : 'tbody'}><tr>${(row.children ?? []).map((cell) => `<${rowIndex === 0 ? 'th' : 'td'}>${(cell.children ?? []).map((child) => inlineHtml(child)).join('')}</${rowIndex === 0 ? 'th' : 'td'}>`).join('')}</tr></${rowIndex === 0 ? 'thead' : 'tbody'}>`).join('')}</table></div>`
     }
     case 'html': return '<div class="unsafe-html">HTML 内容已隐藏，确保阅读安全。</div>'
     case 'yaml':
