@@ -1,11 +1,16 @@
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
-import { readDir, readTextFile } from '@tauri-apps/plugin-fs'
+import { readDir, readTextFile, watch } from '@tauri-apps/plugin-fs'
 
 const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
 export interface OpenedFile { path: string; source: string }
 export interface WorkspaceFile { path: string; name: string }
+
+export async function watchMarkdownPath(path: string, onChange: () => void): Promise<(() => void) | null> {
+  if (!isTauri()) return null
+  return watch(path, () => onChange(), { delayMs: 700 })
+}
 
 export function resolveMarkdownAssetUrl(markdownPath: string, url: string): string {
   if (!isTauri() || !url.trim() || url.startsWith('#') || /^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(url)) return url

@@ -7,6 +7,7 @@
     "core:default",
     "dialog:default",
     "fs:default",
+    "fs:allow-watch",
     "sql:default",
     "sql:allow-load",
     "sql:allow-execute",

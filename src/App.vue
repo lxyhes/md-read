@@ -9,7 +9,7 @@ import ThemeCenter from './components/ThemeCenter.vue'
 import ThemePicker from './components/ThemePicker.vue'
 import AppIcon from './components/AppIcon.vue'
 import IconButton from './components/IconButton.vue'
-import { listMarkdownFiles, readMarkdownPath, type WorkspaceFile } from './fileService'
+import { listMarkdownFiles, readMarkdownPath, watchMarkdownPath, type WorkspaceFile } from './fileService'
 import type { Annotation, FocusAmbienceId, ReaderRegion, ViewerType } from './types'
 
 type View = 'library' | 'reader' | 'themes' | 'settings'
@@ -20,8 +20,12 @@ const libraryTab = ref<'home' | 'all'>('all')
 const readerViewport = ref<HTMLElement | null>(null)
 const searchOpen = ref(false)
 const query = ref('')
+const searchNeedle = ref('')
 const searchIndex = ref(0)
 const toast = ref('')
+const booting = ref(true)
+const saveFailed = ref(false)
+const fullscreenActive = ref(typeof document !== 'undefined' && Boolean(document.fullscreenElement))
 const settingsTab = ref('reading')
 const viewer = ref<{ type: ViewerType; region: ReaderRegion } | null>(null)
 const viewerTab = ref<'preview' | 'source' | 'data'>('preview')
@@ -50,6 +54,9 @@ const focusAmbience = ref<FocusAmbienceId>(readFocusAmbience())
 let focusTimer: number | null = null
 let scrollFrame: number | null = null
 let progressTimer: number | null = null
+let searchTimer: number | null = null
+let stopDocumentWatch: (() => void) | null = null
+let documentWatchRequest = 0
 let pendingProgress: { documentId: string; scrollPercent: number; regionId: string | null; headingId: string | null } | null = null
 const focusThemeStyles = computed<Record<string, string>>(() => {
   const themes: Record<FocusAmbienceId, Record<string, string>> = {
@@ -67,9 +74,9 @@ const focusThemeStyles = computed<Record<string, string>>(() => {
 })
 const isDark = computed(() => store.activeTheme?.manifest.mode !== 'light')
 const searchResults = computed(() => {
-  const needle = query.value.trim().toLowerCase()
+  const needle = searchNeedle.value
   if (!needle) return []
-  return store.documents.flatMap((document) => document.regions.filter((region) => `${document.title} ${region.textContent}`.toLowerCase().includes(needle)).map((region) => ({ document, region }))).slice(0, 18)
+  return store.documents.flatMap((document) => document.regions.filter((region) => `${document.title} ${document.path} ${region.textContent}`.toLowerCase().includes(needle)).map((region) => ({ document, region }))).slice(0, 18)
 })
 const activeViewerRegion = computed(() => viewer.value?.region ?? null)
 const viewerCanPan = computed(() => viewer.value?.type === 'mermaid' && viewerTab.value === 'preview')
@@ -123,24 +130,60 @@ function isTypingTarget(target: EventTarget | null) {
   return !!element && (element.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(element.tagName))
 }
 
-async function boot() {
-  await store.bootstrap()
-  store.clearFocus()
-  if (store.currentDocument) view.value = 'reader'
+function onFullscreenChange() {
+  fullscreenActive.value = Boolean(document.fullscreenElement)
 }
-onMounted(() => { void boot(); window.addEventListener('keydown', onKeydown) })
+
+function switchDocument(delta: number) {
+  const ids = store.openDocumentIds
+  if (ids.length < 2 || !store.currentDocumentId) return
+  const index = ids.indexOf(store.currentDocumentId)
+  const next = ids[(index + delta + ids.length) % ids.length]
+  if (next) void chooseDocument(next)
+}
+
+async function boot() {
+  try {
+    await store.bootstrap()
+    store.clearFocus()
+    if (store.currentDocument) view.value = 'reader'
+  } catch (error) {
+    notify(error instanceof Error ? error.message : '阅读空间初始化失败')
+  } finally {
+    booting.value = false
+  }
+}
+onMounted(() => {
+  void boot()
+  window.addEventListener('keydown', onKeydown)
+  document.addEventListener('fullscreenchange', onFullscreenChange)
+})
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown)
+  document.removeEventListener('fullscreenchange', onFullscreenChange)
   stopFocusTimer()
+  stopDocumentWatch?.()
+  if (searchTimer !== null) window.clearTimeout(searchTimer)
   if (scrollFrame !== null) window.cancelAnimationFrame(scrollFrame)
   if (progressTimer !== null) window.clearTimeout(progressTimer)
 })
-watch(query, () => { searchIndex.value = 0 })
+watch(query, () => {
+  searchIndex.value = 0
+  if (searchTimer !== null) window.clearTimeout(searchTimer)
+  searchTimer = window.setTimeout(() => { searchNeedle.value = query.value.trim().toLowerCase(); searchTimer = null }, 90)
+})
 watch(() => store.mode, (mode) => { if (mode !== 'focus') stopFocusTimer() })
-watch(() => store.currentDocument?.path, () => { void refreshFileTree() }, { immediate: true })
+watch(() => store.currentDocument?.path, () => { void refreshFileTree(); void startDocumentWatch() }, { immediate: true })
+watch(() => [store.activeHeadingId, leftPanelTab.value], () => {
+  if (leftPanelTab.value !== 'outline' || !store.activeHeadingId) return
+  nextTick(() => document.querySelector<HTMLElement>(`[data-outline-id="${store.activeHeadingId}"]`)?.scrollIntoView({ behavior: 'auto', block: 'nearest' }))
+})
 
 function onKeydown(event: KeyboardEvent) {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); searchOpen.value = true; return }
+  if ((event.ctrlKey || event.metaKey) && event.key === 'Tab' && view.value === 'reader') { event.preventDefault(); switchDocument(event.shiftKey ? -1 : 1); return }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'w' && view.value === 'reader' && store.currentDocumentId && !isTypingTarget(event.target)) { event.preventDefault(); void closeDocument(store.currentDocumentId); return }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'o' && !isTypingTarget(event.target)) { event.preventDefault(); void openFile(); return }
   if (searchOpen.value && ['ArrowDown', 'ArrowUp', 'Enter'].includes(event.key)) {
     event.preventDefault()
     if (event.key === 'ArrowDown') searchIndex.value = Math.min(Math.max(0, searchResults.value.length - 1), searchIndex.value + 1)
@@ -231,6 +274,7 @@ async function chooseDocument(id: string) { await store.openDocument(id); view.v
 async function chooseSearchResult(documentId: string, regionId: string) {
   await chooseDocument(documentId)
   searchOpen.value = false
+  leftPanelTab.value = 'outline'
   await nextTick()
   scrollToHeading(regionId)
 }
@@ -243,6 +287,32 @@ async function refreshFileTree() {
     if (request === fileTreeRequest) filesystemFiles.value = files
   } catch {
     if (request === fileTreeRequest) filesystemFiles.value = []
+  }
+}
+async function startDocumentWatch() {
+  stopDocumentWatch?.()
+  stopDocumentWatch = null
+  const path = store.currentDocument?.path
+  const request = ++documentWatchRequest
+  if (!path || path === '欢迎开始 · Moyue.md' || path === '当前工作区') return
+  try {
+    const unwatch = await watchMarkdownPath(path, async () => {
+      if (request !== documentWatchRequest || store.currentDocument?.path !== path) return
+      try {
+        const source = await readMarkdownPath(path)
+        if (source === store.currentDocument?.source) return
+        await store.reloadDocument({ path, source })
+        await nextTick()
+        restoreScroll()
+        notify('文件已更新，阅读位置已保留')
+      } catch {
+        notify('文件已变化，但重新读取失败，请重新打开')
+      }
+    })
+    if (request === documentWatchRequest) stopDocumentWatch = unwatch
+    else unwatch?.()
+  } catch {
+    stopDocumentWatch = null
   }
 }
 function fileStatus(file: { documentId?: string }) {
@@ -282,16 +352,19 @@ function onReaderScroll() {
     const probeX = viewport.left + element.clientWidth / 2
     const active = window.document.elementsFromPoint(probeX, probeY).map((node) => (node as HTMLElement).closest?.('[data-region-id]')).find(Boolean) as HTMLElement | undefined
     const regionId = active?.dataset.regionId ?? store.activeRegionId
-    const heading = document.headings.find((item) => item.regionId === regionId)
     store.activeRegionId = regionId ?? store.activeRegionId
-    store.activeHeadingId = heading?.id ?? store.activeHeadingId
-    pendingProgress = { documentId: document.id, scrollPercent: percent, regionId: regionId ?? null, headingId: heading?.id ?? null }
+    syncActiveHeading(regionId)
+    pendingProgress = { documentId: document.id, scrollPercent: percent, regionId: regionId ?? null, headingId: headingIdForRegion(regionId) }
     if (progressTimer === null) {
       progressTimer = window.setTimeout(() => {
         progressTimer = null
         const next = pendingProgress
         pendingProgress = null
-        if (next && store.currentDocumentId === next.documentId) void store.setProgress(next.scrollPercent, next.regionId, next.headingId)
+        if (next && store.currentDocumentId === next.documentId) {
+          void store.setProgress(next.scrollPercent, next.regionId, next.headingId)
+            .then(() => { saveFailed.value = false })
+            .catch(() => { saveFailed.value = true; notify('阅读位置保存失败，请检查本地存储权限') })
+        }
       }, 180)
     }
   })
@@ -337,9 +410,11 @@ function exportViewer() {
   const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = `moyue-${viewer.value.region.type}.${extension}`; anchor.click(); URL.revokeObjectURL(url); notify('内容已导出')
 }
 function scrollToHeading(regionId: string) {
+  syncActiveHeading(regionId, true)
+  const readerDocument = store.currentDocument
   const element = document.querySelector(`[data-region-id="${regionId}"]`)
   if (element) { element.scrollIntoView({ behavior: 'smooth', block: 'start' }); return }
-  const first = store.currentDocument?.regions[0]
+  const first = readerDocument?.regions[0]
   if (first?.id === regionId && readerRegions.value[0]?.id !== regionId) readerViewport.value?.scrollTo({ top: 0, behavior: 'smooth' })
 }
 function stopFocusTimer() { if (focusTimer !== null) { window.clearInterval(focusTimer); focusTimer = null }; focusRunning.value = false }
@@ -354,7 +429,25 @@ function toggleFocusTimer() {
 }
 function resetFocusTimer() { stopFocusTimer(); focusRemaining.value = 25 * 60 }
 function exitFocusMode() { store.setMode('normal') }
-function focusHeading(regionId: string) { scrollToHeading(regionId); store.activeHeadingId = store.currentDocument?.headings.find((heading) => heading.regionId === regionId)?.id ?? store.activeHeadingId }
+function headingIdForRegion(regionId: string | null) {
+  const readerDocument = store.currentDocument
+  const targetIndex = readerDocument?.regions.findIndex((region) => region.id === regionId) ?? -1
+  if (!readerDocument || targetIndex < 0) return null
+  let headingId: string | null = null
+  for (const heading of readerDocument.headings) {
+    if (readerDocument.regions.findIndex((region) => region.id === heading.regionId) > targetIndex) break
+    headingId = heading.id
+  }
+  return headingId
+}
+function syncActiveHeading(regionId: string | null, ensureVisible = false) {
+  const headingId = headingIdForRegion(regionId)
+  const changed = store.activeHeadingId !== headingId
+  store.activeHeadingId = headingId
+  if (!headingId || (!changed && !ensureVisible)) return
+  nextTick(() => document.querySelector<HTMLElement>(`[data-outline-id="${headingId}"]`)?.scrollIntoView({ behavior: ensureVisible ? 'smooth' : 'auto', block: 'nearest' }))
+}
+function focusHeading(regionId: string) { scrollToHeading(regionId) }
 
 async function captureSelection(event: MouseEvent) {
   await nextTick()
@@ -400,11 +493,18 @@ async function saveCurrentAnnotation() {
 function applyReaderTheme(theme: Parameters<typeof store.applyTheme>[0]) { store.applyTheme(theme); notify(`已切换到「${theme.manifest.name}」`) }
 
 function changeSetting(key: 'fontSize' | 'lineHeight' | 'width', value: number) { store.updateSettings({ [key]: value }); document.documentElement.style.setProperty(`--reader-${key === 'fontSize' ? 'size' : key === 'lineHeight' ? 'leading' : 'width'}`, key === 'width' ? `${value}px` : String(value)) }
-function requestFullscreen() { void document.documentElement.requestFullscreen?.() }
+async function requestFullscreen() {
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen()
+    else await document.documentElement.requestFullscreen?.()
+  } catch {
+    notify('当前窗口不支持全屏操作')
+  }
+}
 </script>
 
 <template>
-  <div class="app-shell" :class="{ 'is-focus': store.mode === 'focus', 'is-region-focus': store.mode === 'region-focus', 'is-dragging': draggingFiles, [`theme-${store.activeThemeId}`]: true, [`focus-${focusAmbience}`]: store.mode === 'focus' }" :style="store.mode === 'focus' ? focusThemeStyles : undefined" @dragover.prevent @dragenter.prevent="onDragEnter" @dragleave.prevent="onDragLeave" @drop.prevent="onDrop">
+  <div class="app-shell" :aria-busy="booting || busyAction !== null" :class="{ 'is-focus': store.mode === 'focus', 'is-region-focus': store.mode === 'region-focus', 'is-dragging': draggingFiles, [`theme-${store.activeThemeId}`]: true, [`focus-${focusAmbience}`]: store.mode === 'focus' }" :style="store.mode === 'focus' ? focusThemeStyles : undefined" @dragover.prevent @dragenter.prevent="onDragEnter" @dragleave.prevent="onDragLeave" @drop.prevent="onDrop">
     <aside class="global-nav">
       <div class="brand-mark"><span><AppIcon name="logo" :size="18" /></span><small>墨阅 · MOYUE</small></div>
       <nav>
@@ -433,7 +533,7 @@ function requestFullscreen() { void document.documentElement.requestFullscreen?.
         <div class="top-actions">
           <IconButton icon="focus" label="专注阅读" :active="store.mode === 'focus'" @click="store.setMode(store.mode === 'focus' ? 'normal' : 'focus'); view = 'reader'" />
           <IconButton icon="palette" label="切换主题" @click="view = 'themes'" />
-          <IconButton icon="fullscreen" label="全屏" @click="requestFullscreen" />
+          <IconButton icon="fullscreen" :active="fullscreenActive" :label="fullscreenActive ? '退出全屏' : '全屏'" @click="requestFullscreen" />
         </div>
       </header>
 
@@ -448,7 +548,7 @@ function requestFullscreen() { void document.documentElement.requestFullscreen?.
       </section>
 
       <section v-else-if="view === 'reader'" class="reader-page">
-        <div class="reader-tabbar"><div v-for="document in store.openDocuments" :key="document.id" class="reader-tab" :class="{ active: store.currentDocumentId === document.id }" tabindex="0" @click="chooseDocument(document.id)" @keydown.enter="chooseDocument(document.id)" @keydown.space.prevent="chooseDocument(document.id)"><span><AppIcon name="reader" :size="15" /></span><strong>{{ document.title }}</strong><small>本地文档</small><IconButton icon="close" size="sm" :label="`关闭 ${document.title}`" @click.stop="closeDocument(document.id)" /></div><IconButton class="reader-new-tab" icon="plus" size="sm" label="打开新文档" :disabled="busyAction !== null" @click="openFile" /><div class="reader-tab-status"><span><AppIcon name="sync" :size="13" /></span><span>{{ store.currentDocument?.wordCount }} 字</span><span><AppIcon name="history" :size="13" /> 自动保存</span></div></div>
+        <div class="reader-tabbar"><div v-for="document in store.openDocuments" :key="document.id" class="reader-tab" :class="{ active: store.currentDocumentId === document.id }" role="tab" :aria-selected="store.currentDocumentId === document.id" tabindex="0" @click="chooseDocument(document.id)" @keydown.enter="chooseDocument(document.id)" @keydown.space.prevent="chooseDocument(document.id)"><span><AppIcon name="reader" :size="15" /></span><strong>{{ document.title }}</strong><small>本地文档</small><IconButton icon="close" size="sm" :label="`关闭 ${document.title}`" @click.stop="closeDocument(document.id)" /></div><IconButton class="reader-new-tab" icon="plus" size="sm" label="打开新文档" :disabled="busyAction !== null" @click="openFile" /><div class="reader-tab-status" :class="{ 'is-error': saveFailed }"><span><AppIcon :name="saveFailed ? 'info' : 'sync'" :size="13" /></span><span>{{ store.currentDocument?.wordCount }} 字</span><span><AppIcon name="history" :size="13" /> {{ saveFailed ? '保存失败' : '自动保存' }}</span></div></div>
         <div class="reader-layout" :class="{ 'focus-layout': store.mode === 'focus' }">
           <aside v-if="store.mode !== 'focus'" class="outline-panel">
             <div class="panel-heading panel-switcher">
@@ -467,7 +567,7 @@ function requestFullscreen() { void document.documentElement.requestFullscreen?.
               </nav>
               <p class="file-browser-note"><AppIcon name="info" :size="13" />当前目录的 Markdown 文件，点击即可打开</p>
             </div>
-            <nav v-else class="outline-list" aria-label="当前文档大纲"><button v-for="heading in store.currentDocument?.headings" :key="heading.id" type="button" :class="{ active: store.activeHeadingId === heading.id }" :style="{ paddingLeft: `${12 + (heading.depth - 1) * 14}px` }" @click="scrollToHeading(heading.regionId)">{{ heading.text }}</button></nav>
+            <nav v-else class="outline-list" aria-label="当前文档大纲"><button v-for="heading in store.currentDocument?.headings" :key="heading.id" :data-outline-id="heading.id" type="button" :class="{ active: store.activeHeadingId === heading.id }" :style="{ paddingLeft: `${12 + (heading.depth - 1) * 14}px` }" @click="scrollToHeading(heading.regionId)">{{ heading.text }}</button></nav>
             <div v-if="leftPanelTab === 'outline'" class="outline-footer"><span class="progress-ring" :style="{ '--progress': `${(currentProgress?.scrollPercent ?? 0) * 360}deg` }" /> <span>{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}% 已读</span></div>
           </aside>
           <div ref="readerViewport" class="reader-viewport" @scroll="onReaderScroll" @mouseup="captureSelection"><div class="reader-content"><div class="reader-meta"><span class="section-kicker">{{ store.currentDocument?.path }}</span><span>{{ store.currentDocument?.wordCount }} 字 · 约 {{ store.currentDocument?.estimatedReadMinutes }} 分钟</span></div><h1 class="reader-title">{{ store.currentDocument?.title }}</h1><p class="reader-deck">在文字、图表和一块留白之间，找到你自己的阅读速度。</p><div class="reader-rule" />
@@ -490,6 +590,7 @@ function requestFullscreen() { void document.documentElement.requestFullscreen?.
 
     <div v-if="viewer" class="overlay viewer-overlay" @click.self="closeViewer"><div class="viewer-shell" :class="{ 'is-fullscreen': viewerFullscreen }"><header><div><span class="section-kicker">FOCUS VIEWER</span><strong>{{ viewer.region.type === 'mermaid' ? 'Mermaid 图表' : viewer.region.type === 'image' ? '图片查看' : '内容查看' }}</strong></div><div class="viewer-actions"><IconButton icon="minus" size="sm" variant="surface" label="缩小" @click="setViewerZoom(viewerZoom - .1)" /><button class="viewer-zoom-value" type="button" title="重置视图" @click="resetViewerView">{{ Math.round(viewerZoom * 100) }}%</button><IconButton icon="plus" size="sm" variant="surface" label="放大" @click="setViewerZoom(viewerZoom + .1)" /><IconButton icon="fullscreen" size="sm" variant="surface" :label="viewerFullscreen ? '退出全屏' : '全屏查看'" @click="viewerFullscreen = !viewerFullscreen" /><IconButton icon="close" size="sm" variant="surface" label="关闭查看器" @click="closeViewer" /></div></header><nav v-if="viewer.type === 'mermaid'" class="viewer-tabs"><button type="button" :class="{ active: viewerTab === 'preview' }" @click="viewerTab = 'preview'">图表预览</button><button type="button" :class="{ active: viewerTab === 'source' }" @click="viewerTab = 'source'">源代码</button><button type="button" :class="{ active: viewerTab === 'data' }" @click="viewerTab = 'data'">数据</button></nav><div class="viewer-stage" :class="{ 'is-pan-enabled': viewerCanPan, 'is-dragging': viewerDragging }" :style="viewerStageStyle" @wheel="onViewerWheel" @pointerdown="onViewerPointerDown" @pointermove="onViewerPointerMove" @pointerup="onViewerPointerUp" @pointercancel="onViewerPointerUp" @dblclick="onViewerDoubleClick"><MermaidBlock v-if="viewer.type === 'mermaid' && viewerTab === 'preview'" :code="String(viewer.region.metadata?.code ?? viewer.region.textContent)" large /><pre v-else-if="viewer.type === 'mermaid' && viewerTab === 'source'" class="viewer-source">{{ String(viewer.region.metadata?.code ?? viewer.region.textContent) }}</pre><pre v-else-if="viewer.type === 'mermaid'" class="viewer-source">{{ JSON.stringify(viewer.region.metadata ?? {}, null, 2) }}</pre><div v-else-if="viewer.type === 'image'" class="image-viewer"><img :src="String(viewer.region.metadata?.url ?? '')" :alt="viewer.region.textContent" /></div><div v-else class="code-viewer" v-html="viewer.region.html" /></div><footer><span>{{ viewerCanPan ? '滚轮缩放 · 拖动查看 · 双击还原 · Esc 返回正文' : 'Esc 返回正文' }}</span><button type="button" @click="exportViewer"><AppIcon name="download" :size="14" />导出 {{ viewer.region.type === 'mermaid' ? 'SVG' : '文本' }}</button></footer></div></div>
     <div v-if="annotationEditor" class="overlay note-overlay" @click.self="annotationEditor = null"><div class="note-dialog"><span class="section-kicker">ANNOTATION</span><h2>留下一个记号</h2><blockquote>{{ annotationEditor.text }}</blockquote><textarea v-model="annotationNote" autofocus placeholder="记录你的思考……" /><div class="note-colors"><button v-for="color in ['#e1a85b', '#a78bfa', '#76c893', '#75b7d5', '#e98282']" :key="color" type="button" :class="{ selected: annotationColor === color }" :style="{ background: color }" @click="annotationColor = color" /></div><div class="note-actions"><button class="ghost-button" type="button" @click="annotationEditor = null">取消</button><button class="primary-button" type="button" @click="saveCurrentAnnotation">保存批注</button></div></div></div>
+    <div v-if="booting" class="app-loading" role="status" aria-live="polite"><span class="loading-orbit" /><strong>正在恢复阅读空间</strong><small>正在载入最近文档与阅读位置</small></div>
     <div v-if="draggingFiles" class="drop-overlay" aria-live="polite"><span><AppIcon name="plus" :size="26" /></span><strong>释放以导入 Markdown</strong><small>支持 .md / .markdown 文件</small></div>
     <div v-if="toast" class="toast" role="status" aria-live="polite">{{ toast }}</div>
   </div>

@@ -4,6 +4,15 @@ import { getProgress, loadAnnotations, loadDocumentSnapshots, saveAnnotation, sa
 import { openMarkdownFile, openMarkdownFolder, resolveMarkdownAssetUrl, type OpenedFile } from '../fileService'
 import { builtInThemes, cssVariables, defaultTokens } from '../themes'
 import { parseMarkdown } from '../parser'
+const SESSION_KEY = 'moyue:reader-session'
+
+function readSession() {
+  try {
+    return JSON.parse(localStorage.getItem(SESSION_KEY) ?? '{}') as { openDocumentIds?: string[]; currentDocumentId?: string | null }
+  } catch {
+    return {}
+  }
+}
 import type { Annotation, MoyueTheme, ReaderDocument, ReaderMode, ReaderSelection, ReadingProgress, ViewerState } from '../types'
 
 const sample = `# 一次安静的阅读\n\n墨阅把 Markdown 变成一个可以停留的空间。点击任意段落，进入区域聚焦。\n\n> 阅读不是把文字扫过去，而是给一个想法足够的时间。\n\n## Region Focus\n\n当你点击一个内容区域，其他内容会退到背景里。你可以用方向键在区域之间移动，按 Escape 回到整篇文档。\n\n\`\u0060\u0060typescript\ninterface ReadingRegion {\n  id: string\n  focus(): void\n}\n\`\u0060\u0060\n\n## 一张图表\n\n\`\u0060\u0060mermaid\nflowchart LR\n  A[打开文档] --> B[选择区域]\n  B --> C[沉浸阅读]\n  C --> D[回到正文]\n\`\u0060\u0060\n\n![一块留白](https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=1200&q=80)\n\n## 最后\n\n主题、图表和辅助信息都应该在需要时出现，不需要时安静地退场。`
@@ -26,11 +35,19 @@ export const useReaderStore = defineStore('reader', () => {
   const currentDocument = computed(() => documents.value.find((document) => document.id === currentDocumentId.value) ?? null)
   const activeTheme = computed(() => themes.value.find((theme) => theme.manifest.id === activeThemeId.value) ?? themes.value[0])
 
+  function persistSession() {
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ openDocumentIds: openDocumentIds.value, currentDocumentId: currentDocumentId.value }))
+  }
+
   function applyTheme(theme: MoyueTheme) {
     activeThemeId.value = theme.manifest.id
     localStorage.setItem('moyue:theme', theme.manifest.id)
-    for (const [name, value] of Object.entries(cssVariables(theme))) document.documentElement.style.setProperty(name, value)
-    readerSettings.value = { fontSize: theme.tokens.reader.fontSize, lineHeight: theme.tokens.reader.lineHeight, width: theme.tokens.reader.width, fontFamily: theme.tokens.reader.fontFamily }
+    const variables = cssVariables(theme)
+    variables['--reader-width'] = `${readerSettings.value.width}px`
+    variables['--reader-size'] = `${readerSettings.value.fontSize}px`
+    variables['--reader-leading'] = String(readerSettings.value.lineHeight)
+    variables['--reader-font'] = readerSettings.value.fontFamily
+    for (const [name, value] of Object.entries(variables)) document.documentElement.style.setProperty(name, value)
   }
 
   async function addOpenedFiles(files: OpenedFile[]) {
@@ -48,12 +65,29 @@ export const useReaderStore = defineStore('reader', () => {
     return files.length
   }
 
+  async function reloadDocument(file: OpenedFile) {
+    const document = parseMarkdown(file.path, file.source, (url) => resolveMarkdownAssetUrl(file.path, url))
+    documents.value = [...documents.value.filter((item) => item.id !== document.id), document]
+    await saveDocumentSnapshot(document)
+    await saveDocument({ id: document.id, path: document.path, title: document.title, sourceHash: document.sourceHash, updatedAt: document.updatedAt, source: document.source })
+    if (currentDocumentId.value === document.id) {
+      activeRegionId.value = progress.value[document.id]?.regionId ?? null
+      activeHeadingId.value = progress.value[document.id]?.headingId ?? null
+    }
+    return document
+  }
+
   async function bootstrap() {
     const saved = loadDocumentSnapshots()
     if (saved.length) documents.value = saved
     else documents.value.push(parseMarkdown('欢迎开始 · Moyue.md', sample))
+    const session = readSession()
+    const availableIds = new Set(documents.value.map((document) => document.id))
+    openDocumentIds.value = (session.openDocumentIds ?? []).filter((id) => availableIds.has(id))
+    if (!openDocumentIds.value.length) openDocumentIds.value = [documents.value[0].id]
     applyTheme(activeTheme.value)
-    if (!currentDocumentId.value) await openDocument(documents.value[0].id)
+    const initialId = session.currentDocumentId && openDocumentIds.value.includes(session.currentDocumentId) ? session.currentDocumentId : openDocumentIds.value[0]
+    await openDocument(initialId)
   }
 
   async function importFiles() { return addOpenedFiles(await openMarkdownFile()) }
@@ -64,6 +98,7 @@ export const useReaderStore = defineStore('reader', () => {
     if (!document) return
     if (!openDocumentIds.value.includes(id)) openDocumentIds.value.push(id)
     currentDocumentId.value = id
+    persistSession()
     mode.value = 'normal'
     activeRegionId.value = null
     activeHeadingId.value = null
@@ -83,7 +118,7 @@ export const useReaderStore = defineStore('reader', () => {
     if (index < 0) return
     const wasCurrent = currentDocumentId.value === id
     openDocumentIds.value = openDocumentIds.value.filter((item) => item !== id)
-    if (!wasCurrent) return
+    if (!wasCurrent) { persistSession(); return }
     const nextId = openDocumentIds.value[index] ?? openDocumentIds.value[index - 1] ?? null
     if (nextId) await openDocument(nextId)
     else {
@@ -91,6 +126,7 @@ export const useReaderStore = defineStore('reader', () => {
       mode.value = 'normal'
       focusedRegionId.value = null
       annotations.value = []
+      persistSession()
     }
   }
 
@@ -113,7 +149,7 @@ export const useReaderStore = defineStore('reader', () => {
 
   const openDocuments = computed(() => openDocumentIds.value.map((id) => documents.value.find((document) => document.id === id)).filter((document): document is ReaderDocument => Boolean(document)))
 
-  return { documents, openDocuments, openDocumentIds, currentDocumentId, currentDocument, mode, activeRegionId, focusedRegionId, activeHeadingId, selection, progress, annotations, themes, activeThemeId, activeTheme, readerSettings, bootstrap, importFiles, importFolder, addOpenedFiles, openDocument, closeDocument, setProgress, focusRegion, clearFocus, setMode, addAnnotation, applyTheme, installTheme, updateSettings }
+  return { documents, openDocuments, openDocumentIds, currentDocumentId, currentDocument, mode, activeRegionId, focusedRegionId, activeHeadingId, selection, progress, annotations, themes, activeThemeId, activeTheme, readerSettings, bootstrap, importFiles, importFolder, addOpenedFiles, reloadDocument, openDocument, closeDocument, setProgress, focusRegion, clearFocus, setMode, addAnnotation, applyTheme, installTheme, updateSettings }
 })
 
 function readSettings() {
