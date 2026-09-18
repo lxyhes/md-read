@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useReaderStore } from '../stores/reader'
 import AppIcon from './AppIcon.vue'
 
@@ -10,9 +10,26 @@ const svg = ref('')
 const error = ref('')
 const errorDetail = ref('')
 const root = ref<HTMLElement | null>(null)
+const diagramRatio = ref(1)
 const shouldRender = ref(Boolean(props.large))
 let shellObserver: MutationObserver | null = null
 let visibilityObserver: IntersectionObserver | null = null
+
+const diagramVariant = computed(() => {
+  if (diagramRatio.value >= 2.1) return 'wide'
+  if (diagramRatio.value >= 1.4) return 'landscape'
+  return 'compact'
+})
+const diagramHint = computed(() => diagramVariant.value === 'compact' ? '点击放大阅读' : '完整预览 · 点击查看细节')
+
+function measureDiagram() {
+  const element = root.value?.querySelector<SVGSVGElement>('.mermaid-svg svg')
+  if (!element) return
+  const viewBox = element.getAttribute('viewBox')?.trim().split(/\s+/).map(Number)
+  const width = viewBox?.[2] || Number.parseFloat(element.getAttribute('width') || '')
+  const height = viewBox?.[3] || Number.parseFloat(element.getAttribute('height') || '')
+  diagramRatio.value = width > 0 && height > 0 ? width / height : 1
+}
 
 function normalizeMermaidCode(code: string) {
   return code.split(/\r?\n/).map((line) => line.replace(/([A-Za-z_]\w*)\{([^{}\r\n]*\([^{}\r\n]*\)[^{}\r\n]*)\}/g, (_, id: string, label: string) => id + '{"' + label + '"}')).join('\n')
@@ -21,6 +38,7 @@ function normalizeMermaidCode(code: string) {
 async function render() {
   error.value = ''
   errorDetail.value = ''
+  diagramRatio.value = 1
   try {
     const mermaid = (await import('mermaid')).default
     const shell = document.querySelector<HTMLElement>('.app-shell')
@@ -37,7 +55,10 @@ async function render() {
     errorDetail.value = rawMessage.split('\n')[0] ?? rawMessage
   }
   await nextTick()
-  if (svg.value) emit('rendered')
+  if (svg.value) {
+    measureDiagram()
+    emit('rendered')
+  }
 }
 
 onMounted(() => {
@@ -65,11 +86,11 @@ watch(() => [props.code, store.activeThemeId, store.mode, props.themeKey], () =>
 </script>
 
 <template>
-  <button ref="root" class="mermaid-block" :class="{ large }" type="button" aria-label="点击放大 Mermaid 图表" title="点击放大图表" @click="emit('click')">
+  <button ref="root" class="mermaid-block" :class="[{ large }, `diagram-${diagramVariant}`]" type="button" :aria-label="diagramHint" :title="diagramHint" @click="emit('click')">
     <div v-if="svg" class="mermaid-svg" v-html="svg" />
     <pre v-else-if="error" class="mermaid-error"><strong>{{ error }}</strong><small>{{ errorDetail }}</small><code>{{ code }}</code></pre>
     <div v-else-if="!shouldRender" class="mermaid-loading"><span class="pulse-dot" /> 靠近图表后绘制</div>
     <div v-else class="mermaid-loading"><span class="pulse-dot" /> 正在绘制图表</div>
-    <span class="diagram-action">点击放大阅读 <AppIcon name="external" :size="12" /></span>
+    <span class="diagram-action">{{ diagramHint }} <AppIcon name="external" :size="12" /></span>
   </button>
 </template>

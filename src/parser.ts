@@ -80,7 +80,9 @@ function blockHtml(node: MdastNode, resolveUrl: MarkdownUrlResolver = (url) => u
     case 'thematicBreak': return '<hr />'
     case 'table': {
       const rows = node.children ?? []
-      return `<div class="table-scroll"><table>${rows.map((row, rowIndex) => `<${rowIndex === 0 ? 'thead' : 'tbody'}><tr>${(row.children ?? []).map((cell) => `<${rowIndex === 0 ? 'th' : 'td'}>${(cell.children ?? []).map((child) => inlineHtml(child, false, resolveUrl)).join('')}</${rowIndex === 0 ? 'th' : 'td'}>`).join('')}</tr></${rowIndex === 0 ? 'thead' : 'tbody'}>`).join('')}</table></div>`
+      const renderRow = (row: MdastNode, cellTag: 'th' | 'td') => `<tr>${(row.children ?? []).map((cell) => `<${cellTag}>${(cell.children ?? []).map((child) => inlineHtml(child, false, resolveUrl)).join('')}</${cellTag}>`).join('')}</tr>`
+      const [header, ...body] = rows
+      return `<div class="table-scroll"><table>${header ? `<thead>${renderRow(header, 'th')}</thead>` : ''}${body.length ? `<tbody>${body.map((row) => renderRow(row, 'td')).join('')}</tbody>` : ''}</table></div>`
     }
     case 'html': return '<div class="unsafe-html">HTML 内容已隐藏，确保阅读安全。</div>'
     case 'yaml':
