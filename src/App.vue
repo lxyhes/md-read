@@ -1,16 +1,17 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { computePosition, flip, offset, shift } from '@floating-ui/dom'
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useReaderStore } from './stores/reader'
 import RegionBlock from './components/RegionBlock.vue'
 import MermaidBlock from './components/MermaidBlock.vue'
-import FocusAmbiencePicker from './components/FocusAmbiencePicker.vue'
-import ThemeCenter from './components/ThemeCenter.vue'
 import ThemePicker from './components/ThemePicker.vue'
 import AppIcon from './components/AppIcon.vue'
 import IconButton from './components/IconButton.vue'
 import { listMarkdownFiles, readMarkdownPath, watchMarkdownPath, type WorkspaceFile } from './fileService'
 import type { Annotation, FocusAmbienceId, ReaderRegion, ViewerType } from './types'
+
+const FocusAmbiencePicker = defineAsyncComponent(() => import('./components/FocusAmbiencePicker.vue'))
+const ThemeCenter = defineAsyncComponent(() => import('./components/ThemeCenter.vue'))
+const ViewerCode = defineAsyncComponent(() => import('./components/ViewerCode.vue'))
 
 type View = 'library' | 'reader' | 'themes' | 'settings'
 type BusyAction = 'file' | 'folder' | 'drop' | null
@@ -58,6 +59,11 @@ let focusTimer: number | null = null
 let scrollFrame: number | null = null
 let progressTimer: number | null = null
 let searchTimer: number | null = null
+let regionLayoutObserver: ResizeObserver | null = null
+let regionLayoutDocumentId: string | null = null
+let regionLayoutStateKey: string | null = null
+let regionLayoutCache: Array<{ id: string; top: number; bottom: number }> = []
+let focusScrollTargetId: string | null = null
 const documentWatchers = new Map<string, () => void>()
 const documentReloadTimers = new Map<string, number>()
 let documentWatchRequest = 0
@@ -83,7 +89,8 @@ const searchResults = computed(() => {
   return store.documents.flatMap((document) => document.regions.filter((region) => `${document.title} ${document.path} ${region.textContent}`.toLowerCase().includes(needle)).map((region) => ({ document, region }))).slice(0, 18)
 })
 const activeViewerRegion = computed(() => viewer.value?.region ?? null)
-const viewerCanPan = computed(() => viewer.value?.type === 'mermaid' && viewerTab.value === 'preview')
+const viewerCanZoom = computed(() => (viewer.value?.type === 'mermaid' || viewer.value?.type === 'image') && viewerTab.value === 'preview')
+const viewerCanPan = computed(() => viewerCanZoom.value)
 const viewerStageStyle = computed<Record<string, string>>(() => ({
   '--viewer-zoom': String(viewerZoom.value),
   '--viewer-pan-x': `${viewerPan.value.x}px`,
@@ -97,6 +104,14 @@ const readerRegions = computed(() => {
   if (!document) return []
   const first = document.regions[0]
   return first?.type === 'heading' && first.textContent.trim() === document.title.trim() ? document.regions.slice(1) : document.regions
+})
+const focusDistanceByRegion = computed(() => {
+  const focusedIndex = readerRegions.value.findIndex((region) => region.id === store.focusedRegionId)
+  return new Map(readerRegions.value.map((region, index) => [region.id, focusedIndex < 0 ? 0 : Math.abs(index - focusedIndex)]))
+})
+const focusPosition = computed(() => {
+  const index = readerRegions.value.findIndex((region) => region.id === store.focusedRegionId)
+  return index < 0 ? '' : `${index + 1} / ${readerRegions.value.length}`
 })
 function normalizedPath(path: string) { return path.replace(/\\/g, '/') }
 function directoryOf(path: string) {
@@ -170,6 +185,7 @@ onUnmounted(() => {
   if (searchTimer !== null) window.clearTimeout(searchTimer)
   if (scrollFrame !== null) window.cancelAnimationFrame(scrollFrame)
   if (progressTimer !== null) window.clearTimeout(progressTimer)
+  regionLayoutObserver?.disconnect()
 })
 watch(query, () => {
   searchIndex.value = 0
@@ -177,40 +193,50 @@ watch(query, () => {
   searchTimer = window.setTimeout(() => { searchNeedle.value = query.value.trim().toLowerCase(); searchTimer = null }, 90)
 })
 watch(() => store.mode, (mode) => { if (mode !== 'focus') stopFocusTimer() })
-watch(() => store.currentDocument?.path, () => { fileSyncState.value = 'idle'; void refreshFileTree() }, { immediate: true })
+watch(() => store.currentDocument?.path, () => { fileSyncState.value = 'idle'; focusScrollTargetId = null; invalidateRegionLayout(); void refreshFileTree() }, { immediate: true })
+watch(() => store.currentDocumentId, () => nextTick(observeReaderLayout))
 watch(() => store.openDocuments.map((document) => document.path).join('\n'), () => { void syncDocumentWatchers() }, { immediate: true })
-watch(() => [store.activeHeadingId, leftPanelTab.value], () => {
-  if (leftPanelTab.value !== 'outline' || !store.activeHeadingId) return
-  nextTick(() => document.querySelector<HTMLElement>(`[data-outline-id="${store.activeHeadingId}"]`)?.scrollIntoView({ behavior: 'auto', block: 'nearest' }))
+watch(() => [store.activeHeadingId, leftPanelTab.value, store.mode], () => {
+  if (!store.activeHeadingId) return
+  nextTick(() => document.querySelector<HTMLElement>(`[data-outline-id="${store.activeHeadingId}"], [data-focus-outline-id="${store.activeHeadingId}"]`)?.scrollIntoView({ behavior: 'auto', block: 'nearest' }))
 })
 
 function onKeydown(event: KeyboardEvent) {
+  if (annotationEditor.value || viewer.value) {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      if (annotationEditor.value) annotationEditor.value = null
+      else closeViewer()
+      selectionToolbar.value = null
+      return
+    }
+    if (viewer.value && viewerCanPan.value && ['+', '=', '-', '0'].includes(event.key)) {
+      event.preventDefault()
+      if (event.key === '+' || event.key === '=') setViewerZoom(viewerZoom.value + .1)
+      else if (event.key === '-') setViewerZoom(viewerZoom.value - .1)
+      else resetViewerView()
+    }
+    return
+  }
+  if (searchOpen.value) {
+    if (event.key === 'Escape') { event.preventDefault(); searchOpen.value = false; return }
+    if (['ArrowDown', 'ArrowUp', 'Enter'].includes(event.key)) {
+      event.preventDefault()
+      if (event.key === 'ArrowDown') searchIndex.value = Math.min(Math.max(0, searchResults.value.length - 1), searchIndex.value + 1)
+      if (event.key === 'ArrowUp') searchIndex.value = Math.max(0, searchIndex.value - 1)
+      if (event.key === 'Enter' && searchResults.value[searchIndex.value]) {
+        const result = searchResults.value[searchIndex.value]
+        void chooseSearchResult(result.document.id, result.region.id)
+      }
+    }
+    return
+  }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); searchOpen.value = true; return }
   if ((event.ctrlKey || event.metaKey) && event.key === 'Tab' && view.value === 'reader') { event.preventDefault(); switchDocument(event.shiftKey ? -1 : 1); return }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'w' && view.value === 'reader' && store.currentDocumentId && !isTypingTarget(event.target)) { event.preventDefault(); void closeDocument(store.currentDocumentId); return }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'o' && !isTypingTarget(event.target)) { event.preventDefault(); void openFile(); return }
-  if (searchOpen.value && ['ArrowDown', 'ArrowUp', 'Enter'].includes(event.key)) {
-    event.preventDefault()
-    if (event.key === 'ArrowDown') searchIndex.value = Math.min(Math.max(0, searchResults.value.length - 1), searchIndex.value + 1)
-    if (event.key === 'ArrowUp') searchIndex.value = Math.max(0, searchIndex.value - 1)
-    if (event.key === 'Enter' && searchResults.value[searchIndex.value]) {
-      const result = searchResults.value[searchIndex.value]
-      void chooseSearchResult(result.document.id, result.region.id)
-    }
-    return
-  }
-  if (viewer.value && viewerCanPan.value && ['+', '=', '-', '0'].includes(event.key)) {
-    event.preventDefault()
-    if (event.key === '+' || event.key === '=') setViewerZoom(viewerZoom.value + .1)
-    else if (event.key === '-') setViewerZoom(viewerZoom.value - .1)
-    else resetViewerView()
-    return
-  }
   if (event.key === 'Escape') {
-    if (annotationEditor.value) annotationEditor.value = null
-    else if (viewer.value) viewer.value = null
-    else if (store.mode === 'region-focus') store.clearFocus()
-    else searchOpen.value = false
+    if (store.mode === 'region-focus' || store.mode === 'focus') exitFocusMode()
     selectionToolbar.value = null
     return
   }
@@ -220,8 +246,12 @@ function onKeydown(event: KeyboardEvent) {
     if (id) store.focusRegion(id)
     return
   }
-  if (event.key.toLowerCase() === 'f' && !isTypingTarget(event.target)) { store.setMode(store.mode === 'focus' ? 'normal' : 'focus'); view.value = 'reader' }
-  if (view.value === 'reader' && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) moveFocus(event.key === 'ArrowDown' ? 1 : -1)
+  if (event.key.toLowerCase() === 'f' && !isTypingTarget(event.target)) { event.preventDefault(); store.setMode(store.mode === 'focus' ? 'normal' : 'focus'); view.value = 'reader'; return }
+  if (view.value === 'reader' && store.mode === 'region-focus' && !isTypingTarget(event.target) && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+    event.preventDefault()
+    if (event.repeat) return
+    moveFocus(event.key === 'ArrowDown' ? 1 : -1)
+  }
 }
 
 function moveFocus(delta: number) {
@@ -229,10 +259,25 @@ function moveFocus(delta: number) {
   if (!regions.length) return
   const focusedIndex = regions.findIndex((region) => region.id === store.focusedRegionId)
   const activeIndex = regions.findIndex((region) => region.id === store.activeRegionId)
-  const current = focusedIndex >= 0 ? focusedIndex : Math.max(0, activeIndex)
-  const next = regions[(current + delta + regions.length) % regions.length]
+  const current = focusedIndex >= 0 ? focusedIndex : activeIndex >= 0 ? activeIndex : delta > 0 ? -1 : regions.length
+  const nextIndex = Math.min(regions.length - 1, Math.max(0, current + delta))
+  if (nextIndex === current) return
+  const next = regions[nextIndex]
   store.focusRegion(next.id)
-  document.querySelector(`[data-region-id="${next.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  focusScrollTargetId = next.id
+  void nextTick(() => {
+    if (focusScrollTargetId !== next.id) return
+    const viewport = readerViewport.value
+    const target = viewport ? [...viewport.querySelectorAll<HTMLElement>('[data-region-id]')].find((element) => element.dataset.regionId === next.id) : null
+    if (!viewport || !target) return
+    const viewportRect = viewport.getBoundingClientRect()
+    const targetRect = target.getBoundingClientRect()
+    const probeOffset = Math.min(viewport.clientHeight * .34, 280)
+    const targetCenter = viewport.scrollTop + targetRect.top - viewportRect.top + targetRect.height / 2
+    const targetTop = targetCenter - probeOffset
+    const maxScroll = Math.max(0, viewport.scrollHeight - viewport.clientHeight)
+    viewport.scrollTo({ top: Math.min(maxScroll, Math.max(0, targetTop)), behavior: 'auto' })
+  })
 }
 
 async function openFile() {
@@ -275,7 +320,16 @@ async function onDrop(event: DragEvent) {
   } finally { busyAction.value = null }
 }
 
-async function chooseDocument(id: string) { await store.openDocument(id); view.value = 'reader'; await nextTick(); restoreScroll() }
+async function chooseDocument(id: string) {
+  const keepFocusMode = store.mode === 'focus'
+  await store.openDocument(id)
+  if (keepFocusMode) store.setMode('focus')
+  view.value = 'reader'
+  await nextTick()
+  invalidateRegionLayout()
+  observeReaderLayout()
+  restoreScroll()
+}
 async function chooseSearchResult(documentId: string, regionId: string) {
   await chooseDocument(documentId)
   searchOpen.value = false
@@ -373,7 +427,52 @@ async function closeDocument(id: string) {
   await nextTick()
   restoreScroll()
 }
+function invalidateRegionLayout() {
+  regionLayoutDocumentId = null
+  regionLayoutStateKey = null
+  regionLayoutCache = []
+}
+function observeReaderLayout() {
+  const content = readerViewport.value?.querySelector<HTMLElement>('.reader-content')
+  regionLayoutObserver?.disconnect()
+  if (!content || typeof ResizeObserver === 'undefined') return
+  regionLayoutObserver = new ResizeObserver(invalidateRegionLayout)
+  regionLayoutObserver.observe(content)
+}
+function refreshRegionLayout(element: HTMLElement, documentId: string) {
+  const viewportRect = element.getBoundingClientRect()
+  regionLayoutCache = [...element.querySelectorAll<HTMLElement>('[data-region-id]')].map((region) => {
+    const rect = region.getBoundingClientRect()
+    const top = rect.top - viewportRect.top + element.scrollTop
+    return { id: region.dataset.regionId ?? '', top, bottom: top + rect.height }
+  }).filter((region) => region.id)
+  regionLayoutDocumentId = documentId
+  regionLayoutStateKey = `${documentId}:${store.mode}:${store.focusedRegionId ?? ''}`
+}
+function regionAtScrollPosition(element: HTMLElement, documentId: string) {
+  const stateKey = `${documentId}:${store.mode}:${store.focusedRegionId ?? ''}`
+  if (regionLayoutDocumentId !== documentId || regionLayoutStateKey !== stateKey || !regionLayoutCache.length) refreshRegionLayout(element, documentId)
+  if (!regionLayoutCache.length) return store.activeRegionId
+  const target = element.scrollTop + Math.min(element.clientHeight * .34, 280)
+  let low = 0
+  let high = regionLayoutCache.length - 1
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2)
+    if (regionLayoutCache[middle].top <= target) low = middle
+    else high = middle - 1
+  }
+  const containingRegion = regionLayoutCache[low]
+  if (containingRegion && target >= containingRegion.top && target <= containingRegion.bottom) return containingRegion.id
+  const candidates = [low - 1, low, low + 1].filter((index) => index >= 0 && index < regionLayoutCache.length)
+  const bestIndex = candidates.sort((left, right) => {
+    const leftRegion = regionLayoutCache[left]
+    const rightRegion = regionLayoutCache[right]
+    return Math.abs((leftRegion.top + leftRegion.bottom) / 2 - target) - Math.abs((rightRegion.top + rightRegion.bottom) / 2 - target)
+  })[0]
+  return bestIndex === undefined ? store.activeRegionId : regionLayoutCache[bestIndex].id
+}
 function restoreScroll() { if (readerViewport.value && currentProgress.value) readerViewport.value.scrollTop = currentProgress.value.scrollPercent * (readerViewport.value.scrollHeight - readerViewport.value.clientHeight) }
+function onReaderWheel() { focusScrollTargetId = null }
 function onReaderScroll() {
   if (scrollFrame !== null) return
   scrollFrame = window.requestAnimationFrame(() => {
@@ -382,14 +481,16 @@ function onReaderScroll() {
     const document = store.currentDocument
     if (!element || !document) return
     const percent = element.scrollHeight <= element.clientHeight ? 0 : element.scrollTop / (element.scrollHeight - element.clientHeight)
-    const viewport = element.getBoundingClientRect()
-    const probeY = viewport.top + Math.min(150, Math.max(50, element.clientHeight * .22))
-    const probeX = viewport.left + element.clientWidth / 2
-    const active = window.document.elementsFromPoint(probeX, probeY).map((node) => (node as HTMLElement).closest?.('[data-region-id]')).find(Boolean) as HTMLElement | undefined
-    const regionId = active?.dataset.regionId ?? store.activeRegionId
-    store.activeRegionId = regionId ?? store.activeRegionId
-    syncActiveHeading(regionId)
-    pendingProgress = { documentId: document.id, scrollPercent: percent, regionId: regionId ?? null, headingId: headingIdForRegion(regionId) }
+    const regionId = regionAtScrollPosition(element, document.id)
+    const isNavigating = store.mode === 'region-focus' && focusScrollTargetId !== null && regionId !== focusScrollTargetId
+    const effectiveRegionId = isNavigating ? store.focusedRegionId ?? regionId : regionId
+    if (!isNavigating && focusScrollTargetId === regionId) {
+      focusScrollTargetId = null
+    }
+    store.activeRegionId = effectiveRegionId ?? store.activeRegionId
+    if (!isNavigating && store.mode === 'region-focus' && effectiveRegionId && effectiveRegionId !== store.focusedRegionId) store.focusRegion(effectiveRegionId)
+    syncActiveHeading(effectiveRegionId)
+    pendingProgress = { documentId: document.id, scrollPercent: percent, regionId: effectiveRegionId ?? null, headingId: headingIdForRegion(effectiveRegionId) }
     if (progressTimer === null) {
       progressTimer = window.setTimeout(() => {
         progressTimer = null
@@ -405,7 +506,15 @@ function onReaderScroll() {
   })
 }
 
-function focusRegion(region: ReaderRegion) { store.focusRegion(region.id); selectionToolbar.value = null }
+function focusRegion(region: ReaderRegion) {
+  selectionToolbar.value = null
+  focusScrollTargetId = null
+  if (store.mode === 'focus') {
+    store.activeRegionId = region.id
+    return
+  }
+  store.focusRegion(region.id)
+}
 function setViewerZoom(value: number) { viewerZoom.value = Math.min(3, Math.max(.5, Number(value.toFixed(2)))) }
 function resetViewerView() { viewerZoom.value = 1; viewerPan.value = { x: 0, y: 0 } }
 function openViewer(region: ReaderRegion) { viewer.value = { type: region.type === 'code' ? 'code' : region.type === 'image' ? 'image' : region.type === 'table' ? 'table' : 'mermaid', region }; resetViewerView(); viewerTab.value = 'preview'; viewerFullscreen.value = false }
@@ -533,7 +642,14 @@ function toggleFocusTimer() {
   }, 1000)
 }
 function resetFocusTimer() { stopFocusTimer(); focusRemaining.value = 25 * 60 }
-function exitFocusMode() { store.setMode('normal') }
+function exitFocusMode() {
+  focusScrollTargetId = null
+  store.setMode('normal')
+}
+function clearRegionFocus() {
+  focusScrollTargetId = null
+  store.clearFocus()
+}
 function headingIdForRegion(regionId: string | null) {
   const readerDocument = store.currentDocument
   const targetIndex = readerDocument?.regions.findIndex((region) => region.id === regionId) ?? -1
@@ -567,6 +683,7 @@ async function captureSelection(event: MouseEvent) {
   await nextTick()
   const toolbar = document.querySelector('.selection-toolbar') as HTMLElement | null
   if (toolbar) {
+    const { computePosition, flip, offset, shift } = await import('@floating-ui/dom')
     const position = await computePosition(anchor, toolbar, { placement: 'top', middleware: [offset(8), flip(), shift({ padding: 12 })] })
     Object.assign(toolbar.style, { left: `${position.x}px`, top: `${position.y}px` })
   }
@@ -675,14 +792,14 @@ async function requestFullscreen() {
             <nav v-else class="outline-list" aria-label="当前文档大纲"><button v-for="heading in store.currentDocument?.headings" :key="heading.id" :data-outline-id="heading.id" type="button" :class="{ active: store.activeHeadingId === heading.id }" :style="{ paddingLeft: `${12 + (heading.depth - 1) * 14}px` }" @click="scrollToHeading(heading.regionId)">{{ heading.text }}</button></nav>
             <div v-if="leftPanelTab === 'outline'" class="outline-footer"><span class="progress-ring" :style="{ '--progress': `${(currentProgress?.scrollPercent ?? 0) * 360}deg` }" /> <span>{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}% 已读</span></div>
           </aside>
-          <div ref="readerViewport" class="reader-viewport" @scroll="onReaderScroll" @mouseup="captureSelection"><div class="reader-content"><div class="reader-meta"><span class="section-kicker">{{ store.currentDocument?.path }}</span><span>{{ store.currentDocument?.wordCount }} 字 · 约 {{ store.currentDocument?.estimatedReadMinutes }} 分钟</span></div><h1 class="reader-title">{{ store.currentDocument?.title }}</h1><p class="reader-deck">在文字、图表和一块留白之间，找到你自己的阅读速度。</p><div class="reader-rule" />
-            <div class="regions-stack"><RegionBlock v-for="region in readerRegions" :key="region.id" :region="region" :focused="store.focusedRegionId === region.id" :active="store.activeRegionId === region.id" :theme-mode="store.mode === 'focus' ? 'dark' : store.activeTheme?.manifest.mode" :theme-key="`${store.mode}-${focusAmbience}`" @focus="focusRegion(region)" @open-viewer="openViewer(region)" @code-copied="notify('代码已复制')" /></div>
+          <div ref="readerViewport" class="reader-viewport" @scroll="onReaderScroll" @wheel="onReaderWheel" @mouseup="captureSelection"><div class="reader-content"><div class="reader-meta"><span class="section-kicker">{{ store.currentDocument?.path }}</span><span>{{ store.currentDocument?.wordCount }} 字 · 约 {{ store.currentDocument?.estimatedReadMinutes }} 分钟</span></div><h1 class="reader-title">{{ store.currentDocument?.title }}</h1><p class="reader-deck">在文字、图表和一块留白之间，找到你自己的阅读速度。</p><div class="reader-rule" />
+            <div class="regions-stack"><RegionBlock v-for="region in readerRegions" :key="region.id" :region="region" :focused="store.focusedRegionId === region.id" :active="store.activeRegionId === region.id" :focus-distance="focusDistanceByRegion.get(region.id)" :theme-mode="store.mode === 'focus' ? 'dark' : store.activeTheme?.manifest.mode" :theme-key="`${store.mode}-${focusAmbience}`" @focus="focusRegion(region)" @open-viewer="openViewer(region)" @code-copied="notify('代码已复制')" /></div>
             <footer class="reader-footer"><span>墨阅 · Moyue Reader</span><span>Read → Focus → Understand</span></footer>
           </div></div>
         <aside v-if="store.mode !== 'focus'" class="context-panel"><div class="context-top"><span class="section-kicker">主题中心</span><button class="text-button" type="button" @click="view = 'themes'">更多 <AppIcon name="external" :size="12" /></button></div><div class="theme-mini-card"><ThemePicker :themes="store.themes" :selected-theme-id="store.activeThemeId" compact @select="applyReaderTheme" /><div class="theme-mini-caption"><strong>{{ store.activeTheme?.manifest.name }}</strong><small>沉浸阅读 · {{ store.activeTheme?.manifest.mode === 'light' ? '白昼' : '深色' }}</small></div></div><div class="translation-card"><div class="side-card-heading"><span>划词翻译</span><span>中 ↔ 英</span></div><strong>intelligence</strong><small>/ɪnˈtelɪdʒəns/</small><p>n. 智能；智力；理解力<br />复数：intelligences</p><button type="button" @click="assist('translate')">在适配器中打开 <AppIcon name="external" :size="12" /></button></div><div class="diagram-card"><div class="side-card-heading"><span>图表示例</span><IconButton icon="close" size="sm" label="关闭图表示例" @click="notify('图表可独立查看')" /></div><div class="mini-diagram"><span>数据收集</span><i>↓</i><div><span>数据预处理</span><span>模型训练</span></div><i>↓</i><div><span>评估与优化</span><span>预测应用</span></div></div><button class="diagram-link" type="button" @click="notify('请点击正文中的图表进入独立查看')">独立查看 <AppIcon name="external" :size="12" /></button></div><div class="context-card current-context"><span class="section-kicker">CURRENT REGION</span><strong>{{ currentHeading?.text || '开篇' }}</strong><small>{{ store.currentDocument?.regions.length ?? 0 }} 个阅读区域 · {{ currentAnnotations.length }} 条批注</small></div><div class="context-actions"><button type="button" @click="store.setMode('focus')"><AppIcon name="focus" :size="13" />进入专注</button><button type="button" @click="view = 'themes'"><AppIcon name="palette" :size="13" />切换主题</button></div><div v-if="currentAnnotations.length" class="annotation-panel"><div class="annotation-heading"><span class="section-kicker">ANNOTATIONS</span><span>{{ currentAnnotations.length }}</span></div><button v-for="annotation in currentAnnotations.slice(0, 4)" :key="annotation.id" class="annotation-item" type="button" @click="jumpToAnnotation(annotation)"><span class="annotation-dot" :style="{ background: annotation.color }" /><span><b>{{ annotation.note || '未命名批注' }}</b><small>{{ annotation.selectedText }}</small></span></button></div></aside>
-          <aside v-if="store.mode === 'focus'" class="focus-sidebar"><div class="focus-sidebar-head"><div><span class="section-kicker">FOCUS READING</span><strong>专注阅读</strong></div><button class="ghost-button" type="button" @click="exitFocusMode"><AppIcon name="close" :size="13" />退出</button></div><div class="focus-timer-card"><div class="focus-timer-ring" :style="{ '--focus-progress': `${focusProgress * 360}deg` }"><strong>{{ focusTimeLabel }}</strong><span>{{ focusRunning ? '专注中' : focusRemaining === 0 ? '已完成' : '准备开始' }}</span></div><div class="focus-timer-actions"><button type="button" @click="resetFocusTimer">重置</button><button class="primary-button" type="button" @click="toggleFocusTimer">{{ focusRunning ? '暂停' : '开始' }}</button></div></div><FocusAmbiencePicker v-model="focusAmbience" /><div class="focus-card focus-outline"><div class="focus-card-heading"><span>内容导航</span><small>{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}%</small></div><nav><button v-for="heading in store.currentDocument?.headings" :key="heading.id" type="button" :class="{ active: store.activeHeadingId === heading.id }" @click="focusHeading(heading.regionId)"><i />{{ heading.text }}</button></nav></div></aside>
+        <aside v-if="store.mode === 'focus'" class="focus-sidebar"><div class="focus-sidebar-head"><div><span class="section-kicker">FOCUS READING</span><strong>专注阅读</strong></div><button class="ghost-button" type="button" @click="exitFocusMode"><AppIcon name="close" :size="13" />退出</button></div><div class="focus-timer-card"><div class="focus-timer-ring" :style="{ '--focus-progress': `${focusProgress * 360}deg` }"><strong>{{ focusTimeLabel }}</strong><span>{{ focusRunning ? '专注中' : focusRemaining === 0 ? '已完成' : '准备开始' }}</span></div><div class="focus-timer-actions"><button type="button" @click="resetFocusTimer">重置</button><button class="primary-button" type="button" @click="toggleFocusTimer">{{ focusRunning ? '暂停' : '开始' }}</button></div></div><FocusAmbiencePicker v-model="focusAmbience" /><div class="focus-card focus-outline"><div class="focus-card-heading"><span>内容导航</span><small>{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}%</small></div><nav><button v-for="heading in store.currentDocument?.headings" :key="heading.id" :data-focus-outline-id="heading.id" type="button" :class="{ active: store.activeHeadingId === heading.id }" @click="focusHeading(heading.regionId)"><i />{{ heading.text }}</button></nav></div></aside>
         </div>
-        <div v-if="store.mode === 'region-focus'" class="focus-hud"><span>↑ ↓ 切换区域</span><span>Enter 聚焦</span><button type="button" @click="store.clearFocus">ESC 退出</button></div>
+        <div v-if="store.mode === 'region-focus'" class="focus-hud"><span v-if="focusPosition" class="focus-hud-position">{{ focusPosition }}</span><span>↑ ↓ 切换区域</span><span>Enter 聚焦</span><button type="button" @click="clearRegionFocus">ESC 退出</button></div>
         <div v-if="selectionToolbar" class="selection-toolbar"><span class="selection-label">{{ selectionToolbar.text.slice(0, 28) }}{{ selectionToolbar.text.length > 28 ? '…' : '' }}</span><button type="button" @click="assist('translate')">翻译</button><button type="button" @click="assist('explain')">解释</button><button type="button" @click="beginAnnotation">批注</button><button type="button" @click="copySelection">复制</button></div>
       </section>
 
@@ -694,7 +811,7 @@ async function requestFullscreen() {
     <div v-if="searchOpen" class="overlay search-overlay" @click.self="searchOpen = false"><div class="search-dialog"><div class="search-input-row"><AppIcon name="search" :size="17" /><input v-model="query" autofocus placeholder="搜索文档、标题、内容…" @keydown.esc="searchOpen = false" /><kbd>ESC</kbd></div><div v-if="searchResults.length" class="search-results"><button v-for="(result, index) in searchResults" :key="`${result.document.id}-${result.region.id}`" type="button" :class="{ selected: searchIndex === index }" @click="chooseSearchResult(result.document.id, result.region.id)"><span class="result-kind">{{ result.region.type }}</span><span><b>{{ result.document.title }}</b><small>{{ result.region.textContent.slice(0, 100) }}</small></span><AppIcon name="external" :size="14" /></button></div><div v-else class="empty-search">{{ query ? '没有找到相关内容' : '输入关键词，搜索你的阅读空间' }}</div></div></div>
 
 <div v-if="viewer" class="overlay viewer-overlay" @click.self="closeViewer">
-      <div class="viewer-shell" :class="{ 'is-fullscreen': viewerFullscreen }">
+      <div class="viewer-shell" role="dialog" aria-modal="true" :aria-label="viewer.region.type === 'mermaid' ? 'Mermaid 图表查看器' : '内容查看器'" :class="{ 'is-fullscreen': viewerFullscreen }">
         <header>
           <div>
             <span class="section-kicker">FOCUS VIEWER</span>
@@ -702,10 +819,10 @@ async function requestFullscreen() {
           </div>
           <div class="viewer-actions">
             <button v-if="viewer.type === 'mermaid' && viewerTab === 'preview'" class="viewer-fit-button" type="button" title="适应窗口" @click="fitViewer"><AppIcon name="expand" :size="13" />适应</button>
-            <IconButton icon="minus" size="sm" variant="surface" label="缩小" @click="setViewerZoom(viewerZoom - .1)" />
+            <IconButton v-if="viewerCanZoom" icon="minus" size="sm" variant="surface" label="缩小" @click="setViewerZoom(viewerZoom - .1)" />
             <input v-if="viewer.type === 'mermaid' && viewerTab === 'preview'" v-model.number="viewerZoom" class="viewer-zoom-slider" type="range" min=".5" max="3" step=".05" aria-label="图表缩放" />
-            <button class="viewer-zoom-value" type="button" title="还原到 100%" @click="resetViewerView">{{ Math.round(viewerZoom * 100) }}%</button>
-            <IconButton icon="plus" size="sm" variant="surface" label="放大" @click="setViewerZoom(viewerZoom + .1)" />
+            <button v-if="viewerCanZoom" class="viewer-zoom-value" type="button" title="还原到 100%" @click="resetViewerView">{{ Math.round(viewerZoom * 100) }}%</button>
+            <IconButton v-if="viewerCanZoom" icon="plus" size="sm" variant="surface" label="放大" @click="setViewerZoom(viewerZoom + .1)" />
             <IconButton icon="fullscreen" size="sm" variant="surface" :label="viewerFullscreen ? '退出全屏' : '全屏查看'" @click="toggleViewerFullscreen" />
             <IconButton icon="close" size="sm" variant="surface" label="关闭查看器" @click="closeViewer" />
           </div>
@@ -726,15 +843,16 @@ async function requestFullscreen() {
             <pre class="viewer-source">{{ JSON.stringify(viewer.region.metadata ?? {}, null, 2) }}</pre>
           </div>
           <div v-else-if="viewer.type === 'image'" class="image-viewer"><img :src="String(viewer.region.metadata?.url ?? '')" :alt="viewer.region.textContent" /></div>
-          <div v-else class="code-viewer" v-html="viewer.region.html" />
+          <ViewerCode v-else-if="viewer.type === 'code'" :region="viewer.region" :theme-mode="store.activeTheme?.manifest.mode" @copied="notify('代码已复制')" />
+          <div v-else class="code-viewer table-viewer" v-html="viewer.region.html" />
         </div>
         <footer>
-          <span>{{ viewerCanPan ? '滚轮缩放 · 拖动查看 · 双击还原 · +/- 调整' : 'Esc 返回正文' }}</span>
+          <span>{{ viewerCanPan ? (viewer.type === 'image' ? '滚轮缩放 · 拖动查看 · 双击还原' : '滚轮缩放 · 拖动查看 · 双击还原 · +/- 调整') : 'Esc 返回正文' }}</span>
           <div class="viewer-footer-actions">
             <button v-if="viewer.type === 'mermaid'" type="button" @click="copyViewerSource"><AppIcon name="copy" :size="14" />复制源码</button>
             <button v-if="viewer.type === 'mermaid'" type="button" @click="exportViewer('svg')"><AppIcon name="download" :size="14" />导出 SVG</button>
             <button v-if="viewer.type === 'mermaid'" type="button" @click="exportViewer('png')"><AppIcon name="download" :size="14" />导出 PNG</button>
-            <button v-else type="button" @click="exportViewer()"><AppIcon name="download" :size="14" />导出文本</button>
+            <button v-if="viewer.type === 'code' || viewer.type === 'table'" type="button" @click="exportViewer()"><AppIcon name="download" :size="14" />导出文本</button>
           </div>
         </footer>
       </div>
