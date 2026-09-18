@@ -6,7 +6,7 @@ import MermaidBlock from './components/MermaidBlock.vue'
 import ThemePicker from './components/ThemePicker.vue'
 import AppIcon from './components/AppIcon.vue'
 import IconButton from './components/IconButton.vue'
-import { listMarkdownFiles, readMarkdownPath, watchMarkdownPath, type WorkspaceFile } from './fileService'
+import { deleteMarkdownPath, listMarkdownFiles, openMarkdownDirectory, readMarkdownPath, watchMarkdownPath, type WorkspaceFile } from './fileService'
 import type { Annotation, FocusAmbienceId, ReaderRegion, ViewerType } from './types'
 
 const FocusAmbiencePicker = defineAsyncComponent(() => import('./components/FocusAmbiencePicker.vue'))
@@ -14,8 +14,9 @@ const ThemeCenter = defineAsyncComponent(() => import('./components/ThemeCenter.
 const ViewerCode = defineAsyncComponent(() => import('./components/ViewerCode.vue'))
 
 type View = 'library' | 'reader' | 'themes' | 'settings'
-type BusyAction = 'file' | 'folder' | 'drop' | null
+type BusyAction = 'file' | 'folder' | 'drop' | 'delete' | null
 type FileSyncState = 'idle' | 'syncing' | 'updated' | 'error'
+type FileTreeEntry = { path: string; name: string; documentId?: string }
 const store = useReaderStore()
 const view = ref<View>('library')
 const libraryTab = ref<'home' | 'all'>('all')
@@ -24,6 +25,7 @@ const searchOpen = ref(false)
 const query = ref('')
 const searchNeedle = ref('')
 const searchIndex = ref(0)
+const searchScope = ref<'all' | 'current'>('all')
 const toast = ref('')
 const booting = ref(true)
 const saveFailed = ref(false)
@@ -41,12 +43,16 @@ const viewerZoom = ref(1)
 const viewerPan = ref({ x: 0, y: 0 })
 const viewerDragging = ref(false)
 const viewerStage = ref<HTMLElement | null>(null)
+const resumePrompt = ref<{ documentId: string; percent: number } | null>(null)
 let viewerPointer = { x: 0, y: 0 }
 const customProvider = ref('')
 const busyAction = ref<BusyAction>(null)
 const draggingFiles = ref(false)
 const leftPanelTab = ref<'files' | 'outline'>('files')
 const filesystemFiles = ref<WorkspaceFile[]>([])
+const tabListOpen = ref(false)
+const tabContextMenu = ref<{ documentId: string; x: number; y: number } | null>(null)
+const fileContextMenu = ref<{ file: FileTreeEntry; x: number; y: number } | null>(null)
 let fileTreeRequest = 0
 const focusRemaining = ref(25 * 60)
 const focusRunning = ref(false)
@@ -86,7 +92,8 @@ const isDark = computed(() => store.activeTheme?.manifest.mode !== 'light')
 const searchResults = computed(() => {
   const needle = searchNeedle.value
   if (!needle) return []
-  return store.documents.flatMap((document) => document.regions.filter((region) => `${document.title} ${document.path} ${region.textContent}`.toLowerCase().includes(needle)).map((region) => ({ document, region }))).slice(0, 18)
+  const documents = searchScope.value === 'current' && store.currentDocument ? [store.currentDocument] : store.documents
+  return documents.flatMap((document) => document.regions.filter((region) => `${document.title} ${document.path} ${region.textContent}`.toLowerCase().includes(needle)).map((region) => ({ document, region }))).slice(0, 18)
 })
 const activeViewerRegion = computed(() => viewer.value?.region ?? null)
 const viewerCanZoom = computed(() => (viewer.value?.type === 'mermaid' || viewer.value?.type === 'image') && viewerTab.value === 'preview')
@@ -143,6 +150,12 @@ function notify(message: string) {
   window.setTimeout(() => { if (toast.value === message) toast.value = '' }, 2600)
 }
 
+function openSearch(scope: 'all' | 'current' = 'all') {
+  searchScope.value = scope
+  searchIndex.value = 0
+  searchOpen.value = true
+}
+
 function openLibrary(tab: 'home' | 'all') { libraryTab.value = tab; view.value = 'library' }
 function isTypingTarget(target: EventTarget | null) {
   const element = target as HTMLElement | null
@@ -161,11 +174,163 @@ function switchDocument(delta: number) {
   if (next) void chooseDocument(next)
 }
 
+function tabLabel(document: { title: string; path: string }) {
+  const duplicates = store.openDocuments.filter((item) => item.title === document.title)
+  return duplicates.length > 1 ? `${document.title} · ${fileNameOf(document.path)}` : document.title
+}
+
+function closeTabMenus() {
+  tabListOpen.value = false
+  tabContextMenu.value = null
+  fileContextMenu.value = null
+}
+
+function toggleTabList() {
+  tabListOpen.value = !tabListOpen.value
+  tabContextMenu.value = null
+}
+
+function openTabContextMenu(event: MouseEvent, documentId: string) {
+  const width = 194
+  const height = 156
+  tabListOpen.value = false
+  tabContextMenu.value = {
+    documentId,
+    x: Math.min(event.clientX, Math.max(8, window.innerWidth - width - 8)),
+    y: Math.min(event.clientY, Math.max(8, window.innerHeight - height - 8)),
+  }
+}
+
+function openFileContextMenu(event: MouseEvent, file: FileTreeEntry) {
+  const width = 228
+  const height = 270
+  closeTabMenus()
+  fileContextMenu.value = {
+    file,
+    x: Math.min(event.clientX, Math.max(8, window.innerWidth - width - 8)),
+    y: Math.min(event.clientY, Math.max(8, window.innerHeight - height - 8)),
+  }
+}
+
+function fileDirectoryPath(path: string) {
+  const normalized = normalizedPath(path)
+  const separator = normalized.lastIndexOf('/')
+  return separator > 0 ? normalized.slice(0, separator) : ''
+}
+
+async function copyFileContextValue(kind: 'name' | 'file' | 'directory') {
+  const file = fileContextMenu.value?.file
+  if (!file) return
+  const value = kind === 'name' ? file.name : kind === 'file' ? file.path : fileDirectoryPath(file.path)
+  fileContextMenu.value = null
+  if (!value) {
+    notify('当前工作区没有可复制的实际目录路径')
+    return
+  }
+  try {
+    await navigator.clipboard.writeText(value)
+    notify(kind === 'name' ? '文件名已复制' : kind === 'file' ? '文件路径已复制' : '目录路径已复制')
+  } catch {
+    notify('复制失败，请检查剪贴板权限')
+  }
+}
+
+async function openFileContextEntry() {
+  const file = fileContextMenu.value?.file
+  fileContextMenu.value = null
+  if (file) await openFileTreeEntry(file)
+}
+
+async function reloadFileContextEntry() {
+  const file = fileContextMenu.value?.file
+  fileContextMenu.value = null
+  if (!file) return
+  if (!file.documentId) {
+    await openFileTreeEntry(file)
+    return
+  }
+  if (busyAction.value) return
+  busyAction.value = 'file'
+  try {
+    const source = await readMarkdownPath(file.path)
+    const current = store.documents.find((document) => document.id === file.documentId)
+    if (!current) return
+    if (source === current.source) {
+      notify('文件没有变化')
+      return
+    }
+    await store.reloadDocument({ path: file.path, source })
+    if (store.currentDocumentId === file.documentId) {
+      await nextTick()
+      restoreScroll()
+    }
+    notify('文件已重新载入')
+  } catch (error) {
+    notify(error instanceof Error ? error.message : '重新载入失败')
+  } finally {
+    busyAction.value = null
+  }
+}
+
+async function openFileContextDirectory() {
+  const file = fileContextMenu.value?.file
+  if (!file) return
+  fileContextMenu.value = null
+  try {
+    await openMarkdownDirectory(file.path)
+    notify('已打开文件所在目录')
+  } catch (error) {
+    notify(error instanceof Error ? error.message : '打开目录失败')
+  }
+}
+
+async function deleteContextFile() {
+  const file = fileContextMenu.value?.file
+  fileContextMenu.value = null
+  if (file) await deleteFile(file)
+}
+
+function onTabAuxClick(event: MouseEvent, documentId: string) {
+  if (event.button !== 1) return
+  event.preventDefault()
+  void closeDocument(documentId)
+}
+
+function hasTabsToRight(documentId: string) {
+  const index = store.openDocumentIds.indexOf(documentId)
+  return index >= 0 && index < store.openDocumentIds.length - 1
+}
+
+async function runTabMenuAction(action: 'close' | 'close-others' | 'close-right') {
+  const documentId = tabContextMenu.value?.documentId
+  closeTabMenus()
+  if (!documentId) return
+  if (action === 'close') {
+    await closeDocument(documentId)
+    return
+  }
+  const ids = action === 'close-others'
+    ? store.openDocumentIds.filter((id) => id !== documentId)
+    : store.openDocumentIds.slice(store.openDocumentIds.indexOf(documentId) + 1)
+  for (const id of ids) await closeDocument(id)
+}
+
+function onTabOutsideClick(event: MouseEvent) {
+  const target = event.target as HTMLElement | null
+  if (!target?.closest('.reader-tab-actions, .tab-context-menu, .file-context-menu')) closeTabMenus()
+}
+
 async function boot() {
   try {
     await store.bootstrap()
     store.clearFocus()
-    if (store.currentDocument) view.value = 'reader'
+    if (store.currentDocument) {
+      view.value = 'reader'
+      await nextTick()
+      invalidateRegionLayout()
+      observeReaderLayout()
+      if (!showResumePromptIfNeeded(store.currentDocument.id)) restoreScroll()
+    }
   } catch (error) {
     notify(error instanceof Error ? error.message : '阅读空间初始化失败')
   } finally {
@@ -176,10 +341,12 @@ onMounted(() => {
   void boot()
   window.addEventListener('keydown', onKeydown)
   document.addEventListener('fullscreenchange', onFullscreenChange)
+  document.addEventListener('click', onTabOutsideClick)
 })
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown)
   document.removeEventListener('fullscreenchange', onFullscreenChange)
+  document.removeEventListener('click', onTabOutsideClick)
   stopFocusTimer()
   stopAllDocumentWatchers()
   if (searchTimer !== null) window.clearTimeout(searchTimer)
@@ -231,7 +398,15 @@ function onKeydown(event: KeyboardEvent) {
     }
     return
   }
-  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); searchOpen.value = true; return }
+  if (tabContextMenu.value || tabListOpen.value) {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      closeTabMenus()
+      return
+    }
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); openSearch('all'); return }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') { event.preventDefault(); openSearch('current'); return }
   if ((event.ctrlKey || event.metaKey) && event.key === 'Tab' && view.value === 'reader') { event.preventDefault(); switchDocument(event.shiftKey ? -1 : 1); return }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'w' && view.value === 'reader' && store.currentDocumentId && !isTypingTarget(event.target)) { event.preventDefault(); void closeDocument(store.currentDocumentId); return }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'o' && !isTypingTarget(event.target)) { event.preventDefault(); void openFile(); return }
@@ -243,11 +418,14 @@ function onKeydown(event: KeyboardEvent) {
   if (view.value === 'reader' && event.key === 'Enter' && !isTypingTarget(event.target)) {
     event.preventDefault()
     const id = store.activeRegionId ?? readerRegions.value[0]?.id
-    if (id) store.focusRegion(id)
+    if (id) {
+      if (store.mode === 'focus') store.setFocusedRegion(id)
+      else store.focusRegion(id)
+    }
     return
   }
-  if (event.key.toLowerCase() === 'f' && !isTypingTarget(event.target)) { event.preventDefault(); store.setMode(store.mode === 'focus' ? 'normal' : 'focus'); view.value = 'reader'; return }
-  if (view.value === 'reader' && store.mode === 'region-focus' && !isTypingTarget(event.target) && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+  if (event.key.toLowerCase() === 'f' && !isTypingTarget(event.target)) { event.preventDefault(); toggleFocusMode(); return }
+  if (view.value === 'reader' && (store.mode === 'region-focus' || store.mode === 'focus') && !isTypingTarget(event.target) && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
     event.preventDefault()
     if (event.repeat) return
     moveFocus(event.key === 'ArrowDown' ? 1 : -1)
@@ -263,7 +441,8 @@ function moveFocus(delta: number) {
   const nextIndex = Math.min(regions.length - 1, Math.max(0, current + delta))
   if (nextIndex === current) return
   const next = regions[nextIndex]
-  store.focusRegion(next.id)
+  if (store.mode === 'focus') store.setFocusedRegion(next.id)
+  else store.focusRegion(next.id)
   focusScrollTargetId = next.id
   void nextTick(() => {
     if (focusScrollTargetId !== next.id) return
@@ -320,7 +499,37 @@ async function onDrop(event: DragEvent) {
   } finally { busyAction.value = null }
 }
 
-async function chooseDocument(id: string) {
+function showResumePromptIfNeeded(documentId: string) {
+  const saved = store.progress[documentId]
+  const percent = saved?.scrollPercent ?? 0
+  if (percent > 0.02 && percent < 0.995) {
+    resumePrompt.value = { documentId, percent }
+    return true
+  }
+  resumePrompt.value = null
+  return false
+}
+function resumeReading() {
+  if (!resumePrompt.value || resumePrompt.value.documentId !== store.currentDocumentId) {
+    resumePrompt.value = null
+    return
+  }
+  resumePrompt.value = null
+  restoreScroll()
+}
+async function startReadingOver() {
+  if (!resumePrompt.value || resumePrompt.value.documentId !== store.currentDocumentId) {
+    resumePrompt.value = null
+    return
+  }
+  resumePrompt.value = null
+  readerViewport.value?.scrollTo({ top: 0, behavior: 'smooth' })
+  store.activeRegionId = null
+  store.activeHeadingId = null
+  await store.setProgress(0, null, null)
+}
+async function chooseDocument(id: string, options: { skipResumePrompt?: boolean } = {}) {
+  const wasCurrent = store.currentDocumentId === id
   const keepFocusMode = store.mode === 'focus'
   await store.openDocument(id)
   if (keepFocusMode) store.setMode('focus')
@@ -328,12 +537,13 @@ async function chooseDocument(id: string) {
   await nextTick()
   invalidateRegionLayout()
   observeReaderLayout()
-  restoreScroll()
+  if (options.skipResumePrompt || wasCurrent || !showResumePromptIfNeeded(id)) restoreScroll()
 }
 async function chooseSearchResult(documentId: string, regionId: string) {
-  await chooseDocument(documentId)
+  await chooseDocument(documentId, { skipResumePrompt: true })
   searchOpen.value = false
   leftPanelTab.value = 'outline'
+  store.activeRegionId = regionId
   await nextTick()
   scrollToHeading(regionId)
 }
@@ -421,11 +631,29 @@ async function openFileTreeEntry(file: { path: string; name: string; documentId?
     notify(error instanceof Error ? error.message : '打开文件失败')
   } finally { busyAction.value = null }
 }
+function isDeletableFile(file: { path: string }) {
+  return file.path !== '欢迎开始 · Moyue.md'
+}
+async function deleteFile(file: { path: string; name: string; documentId?: string }) {
+  if (!isDeletableFile(file) || busyAction.value) return
+  const workspaceOnly = currentDirectory.value === '当前工作区'
+  const action = workspaceOnly ? '从当前工作区移除' : '删除'
+  if (!window.confirm(`确定${action}“${file.name}”？此操作不可撤销。`)) return
+  busyAction.value = 'delete'
+  try {
+    if (!workspaceOnly) await deleteMarkdownPath(file.path)
+    if (file.documentId) await store.removeDocument(file.documentId)
+    await refreshFileTree()
+    notify(workspaceOnly ? `已从当前工作区移除 ${file.name}` : `已删除 ${file.name}`)
+  } catch (error) {
+    notify(error instanceof Error ? error.message : '删除文件失败')
+  } finally { busyAction.value = null }
+}
 async function closeDocument(id: string) {
   await store.closeDocument(id)
   if (!store.currentDocument) { view.value = 'library'; return }
   await nextTick()
-  restoreScroll()
+  if (!showResumePromptIfNeeded(store.currentDocument.id)) restoreScroll()
 }
 function invalidateRegionLayout() {
   regionLayoutDocumentId = null
@@ -473,6 +701,7 @@ function regionAtScrollPosition(element: HTMLElement, documentId: string) {
 }
 function restoreScroll() { if (readerViewport.value && currentProgress.value) readerViewport.value.scrollTop = currentProgress.value.scrollPercent * (readerViewport.value.scrollHeight - readerViewport.value.clientHeight) }
 function onReaderWheel() { focusScrollTargetId = null }
+function onReaderPointerDown() { focusScrollTargetId = null }
 function onReaderScroll() {
   if (scrollFrame !== null) return
   scrollFrame = window.requestAnimationFrame(() => {
@@ -482,13 +711,17 @@ function onReaderScroll() {
     if (!element || !document) return
     const percent = element.scrollHeight <= element.clientHeight ? 0 : element.scrollTop / (element.scrollHeight - element.clientHeight)
     const regionId = regionAtScrollPosition(element, document.id)
-    const isNavigating = store.mode === 'region-focus' && focusScrollTargetId !== null && regionId !== focusScrollTargetId
+    const isFocusMode = store.mode === 'region-focus' || store.mode === 'focus'
+    const isNavigating = isFocusMode && focusScrollTargetId !== null && regionId !== focusScrollTargetId
     const effectiveRegionId = isNavigating ? store.focusedRegionId ?? regionId : regionId
     if (!isNavigating && focusScrollTargetId === regionId) {
       focusScrollTargetId = null
     }
     store.activeRegionId = effectiveRegionId ?? store.activeRegionId
-    if (!isNavigating && store.mode === 'region-focus' && effectiveRegionId && effectiveRegionId !== store.focusedRegionId) store.focusRegion(effectiveRegionId)
+    if (!isNavigating && isFocusMode && effectiveRegionId && effectiveRegionId !== store.focusedRegionId) {
+      if (store.mode === 'focus') store.setFocusedRegion(effectiveRegionId)
+      else store.focusRegion(effectiveRegionId)
+    }
     syncActiveHeading(effectiveRegionId)
     pendingProgress = { documentId: document.id, scrollPercent: percent, regionId: effectiveRegionId ?? null, headingId: headingIdForRegion(effectiveRegionId) }
     if (progressTimer === null) {
@@ -510,15 +743,40 @@ function focusRegion(region: ReaderRegion) {
   selectionToolbar.value = null
   focusScrollTargetId = null
   if (store.mode === 'focus') {
-    store.activeRegionId = region.id
+    store.setFocusedRegion(region.id)
     return
   }
   store.focusRegion(region.id)
+}
+function toggleFocusMode() {
+  if (store.mode === 'focus') {
+    exitFocusMode()
+    return
+  }
+  const regionId = store.activeRegionId ?? readerRegions.value[0]?.id
+  if (regionId) store.setFocusedRegion(regionId)
+  store.setMode('focus')
+  view.value = 'reader'
 }
 function setViewerZoom(value: number) { viewerZoom.value = Math.min(3, Math.max(.5, Number(value.toFixed(2)))) }
 function resetViewerView() { viewerZoom.value = 1; viewerPan.value = { x: 0, y: 0 } }
 function openViewer(region: ReaderRegion) { viewer.value = { type: region.type === 'code' ? 'code' : region.type === 'image' ? 'image' : region.type === 'table' ? 'table' : 'mermaid', region }; resetViewerView(); viewerTab.value = 'preview'; viewerFullscreen.value = false }
 function closeViewer() { viewer.value = null; viewerDragging.value = false; resetViewerView(); viewerFullscreen.value = false }
+function viewerKind(type: ViewerType) {
+  return type === 'mermaid' ? '图表' : type === 'image' ? '图片' : type === 'code' ? '代码' : '表格'
+}
+function viewerTitle(type: ViewerType, region: ReaderRegion) {
+  if (type === 'image') return region.textContent || '原图预览'
+  if (type === 'code') return String(region.metadata?.language ?? 'text').toUpperCase()
+  if (type === 'table') return '数据表'
+  return 'Mermaid 图表'
+}
+function viewerSubtitle(type: ViewerType, region: ReaderRegion) {
+  if (type === 'image') return '原始尺寸预览 · 滚轮缩放 · 拖动查看'
+  if (type === 'code') return `${region.textContent.split(/\r?\n/).length} 行 · 可复制代码`
+  if (type === 'table') return '完整表格 · 支持横向滚动'
+  return '可缩放画布 · 支持源码与结构查看'
+}
 function fitViewer() {
   if (!viewerCanPan.value) return
   viewerPan.value = { x: 0, y: 0 }
@@ -530,12 +788,12 @@ function fitViewer() {
     const availableHeight = Math.max(stage.clientHeight - 80, 160)
     const naturalWidth = Math.max(diagram.scrollWidth, 1)
     const naturalHeight = Math.max(diagram.scrollHeight, 1)
-    setViewerZoom(Math.min(1, Math.max(.5, Math.min(availableWidth / naturalWidth, availableHeight / naturalHeight))))
+    setViewerZoom(Math.min(3, Math.max(.5, Math.min(availableWidth / naturalWidth, availableHeight / naturalHeight))))
   })
 }
 function toggleViewerFullscreen() {
   viewerFullscreen.value = !viewerFullscreen.value
-  if (viewerFullscreen.value) requestAnimationFrame(fitViewer)
+  void nextTick(() => requestAnimationFrame(fitViewer))
 }
 function mermaidSource() {
   return viewer.value?.region.type === 'mermaid' ? String(viewer.value.region.metadata?.code ?? viewer.value.region.textContent) : ''
@@ -726,7 +984,7 @@ async function requestFullscreen() {
 </script>
 
 <template>
-  <div class="app-shell" :aria-busy="booting || busyAction !== null" :class="{ 'is-focus': store.mode === 'focus', 'is-region-focus': store.mode === 'region-focus', 'is-dragging': draggingFiles, [`theme-${store.activeThemeId}`]: true, [`focus-${focusAmbience}`]: store.mode === 'focus' }" :style="store.mode === 'focus' ? focusThemeStyles : undefined" @dragover.prevent @dragenter.prevent="onDragEnter" @dragleave.prevent="onDragLeave" @drop.prevent="onDrop">
+  <div class="app-shell" :aria-busy="booting || busyAction !== null" :class="{ 'is-focus': store.mode === 'focus', 'is-region-focus': store.mode === 'region-focus', 'has-focus-region': Boolean(store.focusedRegionId), 'is-dragging': draggingFiles, [`theme-${store.activeThemeId}`]: true, [`focus-${focusAmbience}`]: store.mode === 'focus' }" :style="store.mode === 'focus' ? focusThemeStyles : undefined" @dragover.prevent @dragenter.prevent="onDragEnter" @dragleave.prevent="onDragLeave" @drop.prevent="onDrop">
     <aside class="global-nav">
       <div class="brand-mark"><span><AppIcon name="logo" :size="18" /></span><small>墨阅 · MOYUE</small></div>
       <nav>
@@ -751,9 +1009,9 @@ async function requestFullscreen() {
     <main class="main-shell">
       <header class="topbar" :class="{ faded: store.mode === 'focus' }">
         <div class="crumbs"><span class="eyebrow">阅读空间</span><span class="crumb-separator">/</span><strong>{{ view === 'reader' ? store.currentDocument?.title : view === 'themes' ? '主题空间' : view === 'settings' ? '偏好设置' : '我的文档' }}</strong></div>
-        <button class="command-trigger" type="button" @click="searchOpen = true"><span>搜索文档、标题、内容</span><kbd>⌘ K</kbd></button>
+        <button class="command-trigger" type="button" @click="openSearch('all')"><span>搜索文档、标题、内容</span><kbd>⌘ K</kbd></button>
         <div class="top-actions">
-          <IconButton icon="focus" label="专注阅读" :active="store.mode === 'focus'" @click="store.setMode(store.mode === 'focus' ? 'normal' : 'focus'); view = 'reader'" />
+          <IconButton icon="focus" label="专注阅读" :active="store.mode === 'focus'" @click="toggleFocusMode" />
           <IconButton icon="palette" label="切换主题" @click="view = 'themes'" />
           <IconButton icon="fullscreen" :active="fullscreenActive" :label="fullscreenActive ? '退出全屏' : '全屏'" @click="requestFullscreen" />
         </div>
@@ -770,7 +1028,51 @@ async function requestFullscreen() {
       </section>
 
       <section v-else-if="view === 'reader'" class="reader-page">
-        <div class="reader-tabbar"><div v-for="document in store.openDocuments" :key="document.id" class="reader-tab" :class="{ active: store.currentDocumentId === document.id }" role="tab" :aria-selected="store.currentDocumentId === document.id" tabindex="0" @click="chooseDocument(document.id)" @keydown.enter="chooseDocument(document.id)" @keydown.space.prevent="chooseDocument(document.id)"><span><AppIcon name="reader" :size="15" /></span><strong>{{ document.title }}</strong><small>本地文档</small><IconButton icon="close" size="sm" :label="`关闭 ${document.title}`" @click.stop="closeDocument(document.id)" /></div><IconButton class="reader-new-tab" icon="plus" size="sm" label="打开新文档" :disabled="busyAction !== null" @click="openFile" /><div class="reader-tab-status" :class="{ 'is-error': saveFailed || fileSyncState === 'error', 'is-syncing': fileSyncState === 'syncing' }"><span><AppIcon :name="saveFailed || fileSyncState === 'error' ? 'info' : fileSyncState === 'updated' ? 'check' : 'sync'" :size="13" /></span><span>{{ store.currentDocument?.wordCount }} 字</span><span><AppIcon name="history" :size="13" /> {{ fileSyncState === 'syncing' ? '正在同步' : fileSyncState === 'updated' ? '已自动更新' : saveFailed ? '保存失败' : '自动保存' }}</span></div></div>
+        <div class="reader-tabbar" aria-label="已打开文档">
+          <div class="reader-tab-scroll" role="tablist" aria-label="已打开文档">
+            <div v-for="document in store.openDocuments" :key="document.id" class="reader-tab" :class="{ active: store.currentDocumentId === document.id }" role="tab" :aria-selected="store.currentDocumentId === document.id" :aria-label="`打开 ${document.title}`" :title="`${document.title}\n${document.path}`" tabindex="0" @click="chooseDocument(document.id)" @contextmenu.prevent="openTabContextMenu($event, document.id)" @auxclick="onTabAuxClick($event, document.id)" @keydown.enter="chooseDocument(document.id)" @keydown.space.prevent="chooseDocument(document.id)">
+              <span><AppIcon name="reader" :size="15" /></span>
+              <strong>{{ tabLabel(document) }}</strong>
+              <IconButton icon="close" size="sm" :label="`关闭 ${document.title}`" @click.stop="closeDocument(document.id)" />
+            </div>
+          </div>
+          <div class="reader-tab-actions">
+            <IconButton class="reader-new-tab" icon="plus" size="sm" label="打开新文档" :disabled="busyAction !== null" @click="openFile" />
+            <div class="reader-tab-list-wrap">
+              <IconButton class="reader-tab-list-trigger" icon="chevron-down" size="sm" :active="tabListOpen" :label="`查看全部标签（${store.openDocuments.length}）`" :aria-expanded="tabListOpen" @click.stop="toggleTabList" />
+              <div v-if="tabListOpen" class="tab-list-popover" role="menu" @click.stop>
+                <div class="tab-list-heading"><span>已打开文档</span><small>{{ store.openDocuments.length }}</small></div>
+                <button v-for="document in store.openDocuments" :key="document.id" class="tab-list-item" :class="{ active: store.currentDocumentId === document.id }" type="button" role="menuitem" @click="chooseDocument(document.id); closeTabMenus()">
+                  <AppIcon name="reader" :size="14" />
+                  <span class="tab-list-copy"><strong>{{ tabLabel(document) }}</strong><small :title="document.path">{{ document.path }}</small></span>
+                  <AppIcon v-if="store.currentDocumentId === document.id" name="check" :size="13" />
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="reader-tab-status" :class="{ 'is-error': saveFailed || fileSyncState === 'error', 'is-syncing': fileSyncState === 'syncing' }"><span><AppIcon :name="saveFailed || fileSyncState === 'error' ? 'info' : fileSyncState === 'updated' ? 'check' : 'sync'" :size="13" /></span><span>{{ store.currentDocument?.wordCount }} 字</span><span><AppIcon name="history" :size="13" /> {{ fileSyncState === 'syncing' ? '正在同步' : fileSyncState === 'updated' ? '已自动更新' : saveFailed ? '保存失败' : '自动保存' }}</span></div>
+        </div>
+        <Teleport to="body">
+          <div v-if="tabContextMenu" class="tab-context-menu" :style="{ top: `${tabContextMenu.y}px`, left: `${tabContextMenu.x}px` }" role="menu" @click.stop>
+            <div class="tab-context-title">{{ tabLabel(store.documents.find((document) => document.id === tabContextMenu?.documentId) ?? { title: '文档', path: '' }) }}</div>
+            <button type="button" role="menuitem" @click="runTabMenuAction('close')">关闭标签</button>
+            <button type="button" role="menuitem" :disabled="store.openDocuments.length < 2" @click="runTabMenuAction('close-others')">关闭其他标签</button>
+            <button type="button" role="menuitem" :disabled="!hasTabsToRight(tabContextMenu.documentId)" @click="runTabMenuAction('close-right')">关闭右侧标签</button>
+          </div>
+        </Teleport>
+        <Teleport to="body">
+          <div v-if="fileContextMenu" class="file-context-menu" :style="{ top: `${fileContextMenu.y}px`, left: `${fileContextMenu.x}px` }" role="menu" @click.stop>
+            <div class="file-context-title">{{ fileContextMenu.file.name }}</div>
+            <button type="button" role="menuitem" @click="openFileContextEntry"><AppIcon name="reader" :size="13" />打开文件</button>
+            <button v-if="fileContextMenu.file.documentId" type="button" role="menuitem" @click="reloadFileContextEntry"><AppIcon name="sync" :size="13" />重新载入</button>
+            <div class="file-context-divider" />
+            <button type="button" role="menuitem" @click="openFileContextDirectory"><AppIcon name="library" :size="13" />打开所在目录</button>
+            <button type="button" role="menuitem" @click="copyFileContextValue('name')"><AppIcon name="copy" :size="13" />复制文件名</button>
+            <button type="button" role="menuitem" @click="copyFileContextValue('file')"><AppIcon name="copy" :size="13" />复制文件路径</button>
+            <button type="button" role="menuitem" @click="copyFileContextValue('directory')"><AppIcon name="copy" :size="13" />复制目录路径</button>
+            <button v-if="isDeletableFile(fileContextMenu.file)" type="button" role="menuitem" class="file-context-danger" @click="deleteContextFile"><AppIcon name="trash" :size="13" />删除文件</button>
+          </div>
+        </Teleport>
         <div class="reader-layout" :class="{ 'focus-layout': store.mode === 'focus' }">
           <aside v-if="store.mode !== 'focus'" class="outline-panel">
             <div class="panel-heading panel-switcher">
@@ -783,21 +1085,32 @@ async function requestFullscreen() {
             <div v-if="leftPanelTab === 'files'" class="file-browser-panel">
               <div class="file-location" :title="currentDirectory"><AppIcon name="library" :size="13" /><span>{{ currentDirectoryLabel }}</span><small>所在目录</small></div>
               <nav class="file-list" aria-label="当前文件夹中的 Markdown 文件">
-                <button v-for="file in currentDirectoryFiles" :key="file.path" type="button" class="file-item" :class="{ active: store.currentDocumentId === file.documentId, 'is-unloaded': !file.documentId }" :aria-label="file.documentId ? `打开 ${file.name}` : `载入 ${file.name}`" @click="openFileTreeEntry(file)">
-                  <AppIcon name="file" :size="14" /><span class="file-item-copy"><strong>{{ file.name }}</strong><small>{{ fileStatus(file) }}</small></span><i v-if="store.currentDocumentId === file.documentId" class="file-active-mark" />
-                </button>
+                <div v-for="file in currentDirectoryFiles" :key="file.path" class="file-item" :class="{ active: store.currentDocumentId === file.documentId, 'is-unloaded': !file.documentId }">
+                  <button type="button" class="file-item-open" :aria-label="file.documentId ? `打开 ${file.name}` : `载入 ${file.name}`" @click="openFileTreeEntry(file)" @contextmenu.prevent="openFileContextMenu($event, file)"><AppIcon name="file" :size="14" /><span class="file-item-copy"><strong>{{ file.name }}</strong><small>{{ fileStatus(file) }}</small></span><i v-if="store.currentDocumentId === file.documentId" class="file-active-mark" /></button><IconButton v-if="isDeletableFile(file)" class="file-delete" icon="trash" size="sm" :label="`删除 ${file.name}`" :disabled="busyAction !== null" @click="deleteFile(file)" />
+                </div>
               </nav>
               <p class="file-browser-note"><AppIcon name="info" :size="13" />当前目录的 Markdown 文件，点击即可打开</p>
             </div>
             <nav v-else class="outline-list" aria-label="当前文档大纲"><button v-for="heading in store.currentDocument?.headings" :key="heading.id" :data-outline-id="heading.id" type="button" :class="{ active: store.activeHeadingId === heading.id }" :style="{ paddingLeft: `${12 + (heading.depth - 1) * 14}px` }" @click="scrollToHeading(heading.regionId)">{{ heading.text }}</button></nav>
             <div v-if="leftPanelTab === 'outline'" class="outline-footer"><span class="progress-ring" :style="{ '--progress': `${(currentProgress?.scrollPercent ?? 0) * 360}deg` }" /> <span>{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}% 已读</span></div>
           </aside>
-          <div ref="readerViewport" class="reader-viewport" @scroll="onReaderScroll" @wheel="onReaderWheel" @mouseup="captureSelection"><div class="reader-content"><div class="reader-meta"><span class="section-kicker">{{ store.currentDocument?.path }}</span><span>{{ store.currentDocument?.wordCount }} 字 · 约 {{ store.currentDocument?.estimatedReadMinutes }} 分钟</span></div><h1 class="reader-title">{{ store.currentDocument?.title }}</h1><p class="reader-deck">在文字、图表和一块留白之间，找到你自己的阅读速度。</p><div class="reader-rule" />
+          <div ref="readerViewport" class="reader-viewport" @scroll="onReaderScroll" @wheel="onReaderWheel" @pointerdown="onReaderPointerDown" @mouseup="captureSelection"><div class="reader-content"><div class="reader-meta"><span class="section-kicker">{{ store.currentDocument?.path }}</span><span>{{ store.currentDocument?.wordCount }} 字 · 约 {{ store.currentDocument?.estimatedReadMinutes }} 分钟</span></div><h1 class="reader-title">{{ store.currentDocument?.title }}</h1><p class="reader-deck">在文字、图表和一块留白之间，找到你自己的阅读速度。</p><div class="reader-rule" />
             <div class="regions-stack"><RegionBlock v-for="region in readerRegions" :key="region.id" :region="region" :focused="store.focusedRegionId === region.id" :active="store.activeRegionId === region.id" :focus-distance="focusDistanceByRegion.get(region.id)" :theme-mode="store.mode === 'focus' ? 'dark' : store.activeTheme?.manifest.mode" :theme-key="`${store.mode}-${focusAmbience}`" @focus="focusRegion(region)" @open-viewer="openViewer(region)" @code-copied="notify('代码已复制')" /></div>
             <footer class="reader-footer"><span>墨阅 · Moyue Reader</span><span>Read → Focus → Understand</span></footer>
           </div></div>
-        <aside v-if="store.mode !== 'focus'" class="context-panel"><div class="context-top"><span class="section-kicker">主题中心</span><button class="text-button" type="button" @click="view = 'themes'">更多 <AppIcon name="external" :size="12" /></button></div><div class="theme-mini-card"><ThemePicker :themes="store.themes" :selected-theme-id="store.activeThemeId" compact @select="applyReaderTheme" /><div class="theme-mini-caption"><strong>{{ store.activeTheme?.manifest.name }}</strong><small>沉浸阅读 · {{ store.activeTheme?.manifest.mode === 'light' ? '白昼' : '深色' }}</small></div></div><div class="translation-card"><div class="side-card-heading"><span>划词翻译</span><span>中 ↔ 英</span></div><strong>intelligence</strong><small>/ɪnˈtelɪdʒəns/</small><p>n. 智能；智力；理解力<br />复数：intelligences</p><button type="button" @click="assist('translate')">在适配器中打开 <AppIcon name="external" :size="12" /></button></div><div class="diagram-card"><div class="side-card-heading"><span>图表示例</span><IconButton icon="close" size="sm" label="关闭图表示例" @click="notify('图表可独立查看')" /></div><div class="mini-diagram"><span>数据收集</span><i>↓</i><div><span>数据预处理</span><span>模型训练</span></div><i>↓</i><div><span>评估与优化</span><span>预测应用</span></div></div><button class="diagram-link" type="button" @click="notify('请点击正文中的图表进入独立查看')">独立查看 <AppIcon name="external" :size="12" /></button></div><div class="context-card current-context"><span class="section-kicker">CURRENT REGION</span><strong>{{ currentHeading?.text || '开篇' }}</strong><small>{{ store.currentDocument?.regions.length ?? 0 }} 个阅读区域 · {{ currentAnnotations.length }} 条批注</small></div><div class="context-actions"><button type="button" @click="store.setMode('focus')"><AppIcon name="focus" :size="13" />进入专注</button><button type="button" @click="view = 'themes'"><AppIcon name="palette" :size="13" />切换主题</button></div><div v-if="currentAnnotations.length" class="annotation-panel"><div class="annotation-heading"><span class="section-kicker">ANNOTATIONS</span><span>{{ currentAnnotations.length }}</span></div><button v-for="annotation in currentAnnotations.slice(0, 4)" :key="annotation.id" class="annotation-item" type="button" @click="jumpToAnnotation(annotation)"><span class="annotation-dot" :style="{ background: annotation.color }" /><span><b>{{ annotation.note || '未命名批注' }}</b><small>{{ annotation.selectedText }}</small></span></button></div></aside>
+        <aside v-if="store.mode !== 'focus'" class="context-panel"><div class="context-top"><span class="section-kicker">主题中心</span><button class="text-button" type="button" @click="view = 'themes'">更多 <AppIcon name="external" :size="12" /></button></div><div class="theme-mini-card"><ThemePicker :themes="store.themes" :selected-theme-id="store.activeThemeId" compact @select="applyReaderTheme" /><div class="theme-mini-caption"><strong>{{ store.activeTheme?.manifest.name }}</strong><small>沉浸阅读 · {{ store.activeTheme?.manifest.mode === 'light' ? '白昼' : '深色' }}</small></div></div><div class="translation-card"><div class="side-card-heading"><span>划词翻译</span><span>中 ↔ 英</span></div><strong>intelligence</strong><small>/ɪnˈtelɪdʒəns/</small><p>n. 智能；智力；理解力<br />复数：intelligences</p><button type="button" @click="assist('translate')">在适配器中打开 <AppIcon name="external" :size="12" /></button></div><div class="diagram-card"><div class="side-card-heading"><span>图表示例</span><IconButton icon="close" size="sm" label="关闭图表示例" @click="notify('图表可独立查看')" /></div><div class="mini-diagram"><span>数据收集</span><i>↓</i><div><span>数据预处理</span><span>模型训练</span></div><i>↓</i><div><span>评估与优化</span><span>预测应用</span></div></div><button class="diagram-link" type="button" @click="notify('请点击正文中的图表进入独立查看')">独立查看 <AppIcon name="external" :size="12" /></button></div><div class="context-card current-context"><span class="section-kicker">CURRENT REGION</span><strong>{{ currentHeading?.text || '开篇' }}</strong><small>{{ store.currentDocument?.regions.length ?? 0 }} 个阅读区域 · {{ currentAnnotations.length }} 条批注</small></div><div class="context-actions"><button type="button" @click="toggleFocusMode"><AppIcon name="focus" :size="13" />进入专注</button><button type="button" @click="view = 'themes'"><AppIcon name="palette" :size="13" />切换主题</button></div><div v-if="currentAnnotations.length" class="annotation-panel"><div class="annotation-heading"><span class="section-kicker">ANNOTATIONS</span><span>{{ currentAnnotations.length }}</span></div><button v-for="annotation in currentAnnotations.slice(0, 4)" :key="annotation.id" class="annotation-item" type="button" @click="jumpToAnnotation(annotation)"><span class="annotation-dot" :style="{ background: annotation.color }" /><span><b>{{ annotation.note || '未命名批注' }}</b><small>{{ annotation.selectedText }}</small></span></button></div></aside>
         <aside v-if="store.mode === 'focus'" class="focus-sidebar"><div class="focus-sidebar-head"><div><span class="section-kicker">FOCUS READING</span><strong>专注阅读</strong></div><button class="ghost-button" type="button" @click="exitFocusMode"><AppIcon name="close" :size="13" />退出</button></div><div class="focus-timer-card"><div class="focus-timer-ring" :style="{ '--focus-progress': `${focusProgress * 360}deg` }"><strong>{{ focusTimeLabel }}</strong><span>{{ focusRunning ? '专注中' : focusRemaining === 0 ? '已完成' : '准备开始' }}</span></div><div class="focus-timer-actions"><button type="button" @click="resetFocusTimer">重置</button><button class="primary-button" type="button" @click="toggleFocusTimer">{{ focusRunning ? '暂停' : '开始' }}</button></div></div><FocusAmbiencePicker v-model="focusAmbience" /><div class="focus-card focus-outline"><div class="focus-card-heading"><span>内容导航</span><small>{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}%</small></div><nav><button v-for="heading in store.currentDocument?.headings" :key="heading.id" :data-focus-outline-id="heading.id" type="button" :class="{ active: store.activeHeadingId === heading.id }" @click="focusHeading(heading.regionId)"><i />{{ heading.text }}</button></nav></div></aside>
+        </div>
+        <div v-if="resumePrompt?.documentId === store.currentDocumentId" class="resume-prompt" role="dialog" aria-label="继续阅读">
+          <div>
+            <span class="section-kicker">CONTINUE READING</span>
+            <strong>继续阅读到 {{ Math.round((resumePrompt?.percent ?? 0) * 100) }}%</strong>
+            <small>{{ store.currentDocument?.title }}</small>
+          </div>
+          <div class="resume-prompt-actions">
+            <button class="ghost-button" type="button" @click="startReadingOver">从头开始</button>
+            <button class="primary-button" type="button" @click="resumeReading">继续阅读</button>
+          </div>
         </div>
         <div v-if="store.mode === 'region-focus'" class="focus-hud"><span v-if="focusPosition" class="focus-hud-position">{{ focusPosition }}</span><span>↑ ↓ 切换区域</span><span>Enter 聚焦</span><button type="button" @click="clearRegionFocus">ESC 退出</button></div>
         <div v-if="selectionToolbar" class="selection-toolbar"><span class="selection-label">{{ selectionToolbar.text.slice(0, 28) }}{{ selectionToolbar.text.length > 28 ? '…' : '' }}</span><button type="button" @click="assist('translate')">翻译</button><button type="button" @click="assist('explain')">解释</button><button type="button" @click="beginAnnotation">批注</button><button type="button" @click="copySelection">复制</button></div>
@@ -805,29 +1118,33 @@ async function requestFullscreen() {
 
       <ThemeCenter v-else-if="view === 'themes'" :themes="store.themes" :active-theme-id="store.activeThemeId" :active-theme="store.activeTheme" @apply="applyReaderTheme" @install="store.installTheme" @notify="notify" />
 
-      <section v-else class="page settings-page"><div class="page-heading"><div><p class="section-kicker">PREFERENCES / EXTENSIONS</p><h1>让阅读<br /><em>顺手一点。</em></h1></div><button class="ghost-button" type="button" @click="notify('设置已保存在本地')"><AppIcon name="check" :size="14" />保存设置</button></div><div class="settings-tabs"><button :class="{ active: settingsTab === 'reading' }" type="button" @click="settingsTab = 'reading'">阅读偏好</button><button :class="{ active: settingsTab === 'shortcuts' }" type="button" @click="settingsTab = 'shortcuts'">快捷键</button><button :class="{ active: settingsTab === 'extensions' }" type="button" @click="settingsTab = 'extensions'">插件扩展</button><button type="button" @click="notify('文件关联设置将在桌面端接入')">文件关联</button><button type="button" @click="notify('同步与备份暂不启用')">同步与备份</button></div><div class="settings-grid"><div class="settings-card"><span class="section-kicker">READER</span><h2>阅读偏好</h2><label class="setting-row"><span>正文宽度 <b>{{ store.readerSettings.width }}px</b></span><input :value="store.readerSettings.width" type="range" min="620" max="980" step="10" @input="changeSetting('width', Number(($event.target as HTMLInputElement).value))" /></label><label class="setting-row"><span>字号 <b>{{ store.readerSettings.fontSize }}px</b></span><input :value="store.readerSettings.fontSize" type="range" min="15" max="24" step="1" @input="changeSetting('fontSize', Number(($event.target as HTMLInputElement).value))" /></label><label class="setting-row"><span>行距 <b>{{ store.readerSettings.lineHeight }}</b></span><input :value="store.readerSettings.lineHeight" type="range" min="1.4" max="2.2" step=".05" @input="changeSetting('lineHeight', Number(($event.target as HTMLInputElement).value))" /></label><div class="setting-toggle-row"><span>显示阅读进度</span><i class="toggle-on" /></div><div class="setting-toggle-row"><span>启用专注模式</span><i class="toggle-on" /></div></div><div class="settings-card"><span class="section-kicker">ASSISTANCE</span><h2>翻译与解释</h2><p class="muted-copy">V1 使用适配器接口，不内置固定服务。配置后，划词工具栏即可调用。</p><label class="setting-input">服务标识<input v-model="customProvider" placeholder="例如：local-llm / my-translator" /></label><button class="primary-button" type="button" @click="notify(customProvider ? '适配器标识已保存' : '保持未配置状态')"><AppIcon name="check" :size="14" />保存配置</button></div><div class="settings-card"><span class="section-kicker">SHORTCUTS</span><h2>快捷键</h2><div class="shortcut-row"><span>搜索</span><kbd>Ctrl / Cmd + K</kbd></div><div class="shortcut-row"><span>专注模式</span><kbd>F</kbd></div><div class="shortcut-row"><span>退出聚焦</span><kbd>Esc</kbd></div><div class="shortcut-row"><span>切换区域</span><kbd>↑ ↓</kbd></div></div><div class="settings-card extensions-card"><div class="extensions-head"><div><span class="section-kicker">EXTENSION CENTER</span><h2>插件扩展</h2></div><button class="ghost-button" type="button" @click="notify('插件运行时将在后续版本启用')"><AppIcon name="plugin" :size="14" />打开插件目录</button></div><div class="extension-filter"><AppIcon name="search" :size="14" /><span>探索无限可能，让阅读更强大</span></div><div class="extension-list"><div class="extension-item"><span class="extension-icon purple"><AppIcon name="sparkle" :size="17" /></span><span><b>AI 阅读助手</b><small>总结、解释与问答适配器</small></span><button type="button" @click="notify('请先在翻译与解释中配置服务')">配置</button></div><div class="extension-item"><span class="extension-icon green"><AppIcon name="download" :size="17" /></span><span><b>导出增强</b><small>为阅读内容准备更多导出格式</small></span><button type="button" @click="notify('导出增强将在下一阶段接入')">安装</button></div><div class="extension-item"><span class="extension-icon pink"><AppIcon name="components" :size="17" /></span><span><b>思维导图</b><small>把长文转换为结构化视图</small></span><button type="button" @click="notify('插件运行时暂未启用')">安装</button></div></div></div></div></section>
+      <section v-else class="page settings-page"><div class="page-heading"><div><p class="section-kicker">PREFERENCES / EXTENSIONS</p><h1>让阅读<br /><em>顺手一点。</em></h1></div><button class="ghost-button" type="button" @click="notify('设置已保存在本地')"><AppIcon name="check" :size="14" />保存设置</button></div><div class="settings-tabs"><button :class="{ active: settingsTab === 'reading' }" type="button" @click="settingsTab = 'reading'">阅读偏好</button><button :class="{ active: settingsTab === 'shortcuts' }" type="button" @click="settingsTab = 'shortcuts'">快捷键</button><button :class="{ active: settingsTab === 'extensions' }" type="button" @click="settingsTab = 'extensions'">插件扩展</button><button type="button" @click="notify('文件关联设置将在桌面端接入')">文件关联</button><button type="button" @click="notify('同步与备份暂不启用')">同步与备份</button></div><div class="settings-grid"><div class="settings-card"><span class="section-kicker">READER</span><h2>阅读偏好</h2><label class="setting-row"><span>正文宽度 <b>{{ store.readerSettings.width }}px</b></span><input :value="store.readerSettings.width" type="range" min="620" max="980" step="10" @input="changeSetting('width', Number(($event.target as HTMLInputElement).value))" /></label><label class="setting-row"><span>字号 <b>{{ store.readerSettings.fontSize }}px</b></span><input :value="store.readerSettings.fontSize" type="range" min="15" max="24" step="1" @input="changeSetting('fontSize', Number(($event.target as HTMLInputElement).value))" /></label><label class="setting-row"><span>行距 <b>{{ store.readerSettings.lineHeight }}</b></span><input :value="store.readerSettings.lineHeight" type="range" min="1.4" max="2.2" step=".05" @input="changeSetting('lineHeight', Number(($event.target as HTMLInputElement).value))" /></label><div class="setting-toggle-row"><span>显示阅读进度</span><i class="toggle-on" /></div><div class="setting-toggle-row"><span>启用专注模式</span><i class="toggle-on" /></div></div><div class="settings-card"><span class="section-kicker">ASSISTANCE</span><h2>翻译与解释</h2><p class="muted-copy">V1 使用适配器接口，不内置固定服务。配置后，划词工具栏即可调用。</p><label class="setting-input">服务标识<input v-model="customProvider" placeholder="例如：local-llm / my-translator" /></label><button class="primary-button" type="button" @click="notify(customProvider ? '适配器标识已保存' : '保持未配置状态')"><AppIcon name="check" :size="14" />保存配置</button></div><div class="settings-card"><span class="section-kicker">SHORTCUTS</span><h2>快捷键</h2><div class="shortcut-row"><span>全局搜索</span><kbd>Ctrl / Cmd + K</kbd></div><div class="shortcut-row"><span>当前文档搜索</span><kbd>Ctrl / Cmd + F</kbd></div><div class="shortcut-row"><span>专注模式</span><kbd>F</kbd></div><div class="shortcut-row"><span>退出聚焦</span><kbd>Esc</kbd></div><div class="shortcut-row"><span>切换区域</span><kbd>↑ ↓</kbd></div></div><div class="settings-card extensions-card"><div class="extensions-head"><div><span class="section-kicker">EXTENSION CENTER</span><h2>插件扩展</h2></div><button class="ghost-button" type="button" @click="notify('插件运行时将在后续版本启用')"><AppIcon name="plugin" :size="14" />打开插件目录</button></div><div class="extension-filter"><AppIcon name="search" :size="14" /><span>探索无限可能，让阅读更强大</span></div><div class="extension-list"><div class="extension-item"><span class="extension-icon purple"><AppIcon name="sparkle" :size="17" /></span><span><b>AI 阅读助手</b><small>总结、解释与问答适配器</small></span><button type="button" @click="notify('请先在翻译与解释中配置服务')">配置</button></div><div class="extension-item"><span class="extension-icon green"><AppIcon name="download" :size="17" /></span><span><b>导出增强</b><small>为阅读内容准备更多导出格式</small></span><button type="button" @click="notify('导出增强将在下一阶段接入')">安装</button></div><div class="extension-item"><span class="extension-icon pink"><AppIcon name="components" :size="17" /></span><span><b>思维导图</b><small>把长文转换为结构化视图</small></span><button type="button" @click="notify('插件运行时暂未启用')">安装</button></div></div></div></div></section>
     </main>
 
-    <div v-if="searchOpen" class="overlay search-overlay" @click.self="searchOpen = false"><div class="search-dialog"><div class="search-input-row"><AppIcon name="search" :size="17" /><input v-model="query" autofocus placeholder="搜索文档、标题、内容…" @keydown.esc="searchOpen = false" /><kbd>ESC</kbd></div><div v-if="searchResults.length" class="search-results"><button v-for="(result, index) in searchResults" :key="`${result.document.id}-${result.region.id}`" type="button" :class="{ selected: searchIndex === index }" @click="chooseSearchResult(result.document.id, result.region.id)"><span class="result-kind">{{ result.region.type }}</span><span><b>{{ result.document.title }}</b><small>{{ result.region.textContent.slice(0, 100) }}</small></span><AppIcon name="external" :size="14" /></button></div><div v-else class="empty-search">{{ query ? '没有找到相关内容' : '输入关键词，搜索你的阅读空间' }}</div></div></div>
+    <div v-if="searchOpen" class="overlay search-overlay" @click.self="searchOpen = false"><div class="search-dialog"><div class="search-input-row"><AppIcon name="search" :size="17" /><input v-model="query" autofocus :placeholder="searchScope === 'current' ? '搜索当前文档…' : '搜索文档、标题、内容…'" aria-label="搜索内容" @keydown.esc="searchOpen = false" /><kbd>ESC</kbd></div><div class="search-scope-row"><div class="search-scope-tabs" role="tablist" aria-label="搜索范围"><button type="button" :class="{ active: searchScope === 'all' }" @click="searchScope = 'all'">全部文档</button><button type="button" :class="{ active: searchScope === 'current' }" :disabled="!store.currentDocument" @click="searchScope = 'current'">当前文档</button></div><span>{{ searchResults.length }} 个结果</span><small>Ctrl/Cmd + F 搜当前文档</small></div><div v-if="searchResults.length" class="search-results"><button v-for="(result, index) in searchResults" :key="`${result.document.id}-${result.region.id}`" type="button" :class="{ selected: searchIndex === index }" @click="chooseSearchResult(result.document.id, result.region.id)"><span class="result-kind">{{ result.region.type }}</span><span><b>{{ result.document.title }}</b><small>{{ result.region.textContent.slice(0, 100) }}</small></span><AppIcon name="external" :size="14" /></button></div><div v-else class="empty-search">{{ query ? '没有找到相关内容' : searchScope === 'current' ? '输入关键词，搜索当前文档' : '输入关键词，搜索你的阅读空间' }}</div></div></div>
 
-<div v-if="viewer" class="overlay viewer-overlay" @click.self="closeViewer">
-      <div class="viewer-shell" role="dialog" aria-modal="true" :aria-label="viewer.region.type === 'mermaid' ? 'Mermaid 图表查看器' : '内容查看器'" :class="{ 'is-fullscreen': viewerFullscreen }">
-        <header>
-          <div>
-            <span class="section-kicker">FOCUS VIEWER</span>
-            <strong>{{ viewer.region.type === 'mermaid' ? 'Mermaid 图表' : viewer.region.type === 'image' ? '图片查看' : '内容查看' }}</strong>
+<div v-if="viewer" class="overlay viewer-overlay" :class="{ 'is-viewer-fullscreen': viewerFullscreen }" @click.self="closeViewer">
+      <div class="viewer-shell" role="dialog" aria-modal="true" :aria-label="`${viewerKind(viewer.type)}独立查看`" :class="{ 'is-fullscreen': viewerFullscreen }">
+        <header class="viewer-header">
+          <div class="viewer-heading">
+            <span class="viewer-kicker"><i /> INDEPENDENT VIEW <b>/</b> {{ viewerKind(viewer.type) }}</span>
+            <div class="viewer-title-row"><strong>{{ viewerTitle(viewer.type, viewer.region) }}</strong><span class="viewer-title-badge">独立查看</span></div>
+            <small>{{ viewerSubtitle(viewer.type, viewer.region) }}</small>
           </div>
           <div class="viewer-actions">
             <button v-if="viewer.type === 'mermaid' && viewerTab === 'preview'" class="viewer-fit-button" type="button" title="适应窗口" @click="fitViewer"><AppIcon name="expand" :size="13" />适应</button>
-            <IconButton v-if="viewerCanZoom" icon="minus" size="sm" variant="surface" label="缩小" @click="setViewerZoom(viewerZoom - .1)" />
-            <input v-if="viewer.type === 'mermaid' && viewerTab === 'preview'" v-model.number="viewerZoom" class="viewer-zoom-slider" type="range" min=".5" max="3" step=".05" aria-label="图表缩放" />
-            <button v-if="viewerCanZoom" class="viewer-zoom-value" type="button" title="还原到 100%" @click="resetViewerView">{{ Math.round(viewerZoom * 100) }}%</button>
-            <IconButton v-if="viewerCanZoom" icon="plus" size="sm" variant="surface" label="放大" @click="setViewerZoom(viewerZoom + .1)" />
+            <div v-if="viewerCanZoom" class="viewer-zoom-group">
+              <IconButton icon="minus" size="sm" variant="surface" label="缩小" @click="setViewerZoom(viewerZoom - .1)" />
+              <input v-if="viewer.type === 'mermaid' && viewerTab === 'preview'" v-model.number="viewerZoom" class="viewer-zoom-slider" type="range" min=".5" max="3" step=".05" aria-label="图表缩放" />
+              <button class="viewer-zoom-value" type="button" title="还原到 100%" @click="resetViewerView">{{ Math.round(viewerZoom * 100) }}%</button>
+              <IconButton icon="plus" size="sm" variant="surface" label="放大" @click="setViewerZoom(viewerZoom + .1)" />
+            </div>
+            <span class="viewer-action-divider" />
             <IconButton icon="fullscreen" size="sm" variant="surface" :label="viewerFullscreen ? '退出全屏' : '全屏查看'" @click="toggleViewerFullscreen" />
             <IconButton icon="close" size="sm" variant="surface" label="关闭查看器" @click="closeViewer" />
           </div>
         </header>
-        <nav v-if="viewer.type === 'mermaid'" class="viewer-tabs">
+        <nav v-if="viewer.type === 'mermaid'" class="viewer-tabs" aria-label="图表查看方式">
           <button type="button" :class="{ active: viewerTab === 'preview' }" @click="viewerTab = 'preview'">图表预览</button>
           <button type="button" :class="{ active: viewerTab === 'source' }" @click="viewerTab = 'source'">源代码</button>
           <button type="button" :class="{ active: viewerTab === 'data' }" @click="viewerTab = 'data'">结构</button>
@@ -846,8 +1163,8 @@ async function requestFullscreen() {
           <ViewerCode v-else-if="viewer.type === 'code'" :region="viewer.region" :theme-mode="store.activeTheme?.manifest.mode" @copied="notify('代码已复制')" />
           <div v-else class="code-viewer table-viewer" v-html="viewer.region.html" />
         </div>
-        <footer>
-          <span>{{ viewerCanPan ? (viewer.type === 'image' ? '滚轮缩放 · 拖动查看 · 双击还原' : '滚轮缩放 · 拖动查看 · 双击还原 · +/- 调整') : 'Esc 返回正文' }}</span>
+        <footer class="viewer-footer">
+          <div class="viewer-footer-hint"><kbd>ESC</kbd><span>{{ viewerCanPan ? (viewer.type === 'image' ? '滚轮缩放 · 拖动查看 · 双击还原' : '滚轮缩放 · 拖动查看 · 双击还原 · +/- 调整') : '返回正文' }}</span></div>
           <div class="viewer-footer-actions">
             <button v-if="viewer.type === 'mermaid'" type="button" @click="copyViewerSource"><AppIcon name="copy" :size="14" />复制源码</button>
             <button v-if="viewer.type === 'mermaid'" type="button" @click="exportViewer('svg')"><AppIcon name="download" :size="14" />导出 SVG</button>

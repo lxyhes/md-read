@@ -21,6 +21,11 @@ export const builtInThemes: MoyueTheme[] = [
   },
   {
     builtIn: true,
+    manifest: { schemaVersion: 1, id: 'paper-white', name: '纯净白纸', version: '1.0.0', author: 'Moyue', mode: 'light', description: '高对比、低干扰的白色长文阅读主题', entry: { tokens: 'tokens.json', reader: 'reader.css', markdown: 'markdown.css', components: 'components.css' } },
+    tokens: { color: { appBackground: '#f3f5f4', surface: '#f8faf9', surfaceRaised: '#ffffff', text: '#1d2933', textMuted: '#63717a', accent: '#2a756d', accentSoft: '#dfeeea', border: 'rgba(29,41,51,.14)', codeBackground: '#f0f3f4' }, reader: { width: 840, fontSize: 18, lineHeight: 1.78, paragraphGap: 18, fontFamily: 'Iowan Old Style, Palatino Linotype, Georgia, serif' } }
+  },
+  {
+    builtIn: true,
     manifest: { schemaVersion: 1, id: 'blue-hour', name: '蓝调时刻', version: '1.0.0', author: 'Moyue', mode: 'dark', description: '冷静、清晰的夜间技术阅读主题', entry: { tokens: 'tokens.json', reader: 'reader.css', markdown: 'markdown.css', components: 'components.css' } },
     tokens: { color: { appBackground: '#101a23', surface: '#172631', surfaceRaised: '#213746', text: '#e3eff2', textMuted: '#8ea9b0', accent: '#8dd6d0', accentSoft: '#254e52', border: 'rgba(227,239,242,.13)', codeBackground: '#0d151c' }, reader: { width: 780, fontSize: 18, lineHeight: 1.8, paragraphGap: 20, fontFamily: 'Iowan Old Style, Palatino Linotype, Georgia, serif' } }
   }

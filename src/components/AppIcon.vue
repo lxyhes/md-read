@@ -14,6 +14,7 @@ export type AppIconName =
   | 'eye'
   | 'fullscreen'
   | 'file'
+  | 'trash'
   | 'close'
   | 'plus'
   | 'minus'
@@ -114,6 +115,9 @@ withDefaults(defineProps<{ name: AppIconName; size?: number; strokeWidth?: numbe
     <template v-else-if="name === 'file'">
       <path d="M6 3.5h8l4 4v13H6v-17Z" />
       <path d="M14 3.5v4h4" />
+    </template>
+    <template v-else-if="name === 'trash'">
+      <path d="M5 7h14M10 4h4l1 3H9l1-3ZM7 7l.8 13h8.4L17 7M10 10.5v6M14 10.5v6" />
     </template>
     <template v-else-if="name === 'close'">
       <path d="m6 6 12 12M18 6 6 18" />

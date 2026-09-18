@@ -38,18 +38,17 @@ async function copyCode() {
 </script>
 
 <template>
-  <div class="code-viewer">
-    <div class="code-viewer-toolbar">
-      <span>
+  <div class="code-viewer code-frame standalone-code-frame" :data-language="language">
+    <div class="code-viewer-toolbar code-toolbar" @click.stop>
+      <span class="code-language">
         <AppIcon name="code" :size="13" />
         <b>{{ language }}</b>
         <small>{{ lineCount }} 行</small>
       </span>
-      <button type="button" @click="copyCode">
-        <AppIcon :name="copied ? 'check' : 'copy'" :size="13" />
-        {{ copied ? '已复制' : '复制代码' }}
-      </button>
+      <span class="code-toolbar-actions">
+        <button class="code-copy" type="button" @click="copyCode"><AppIcon :name="copied ? 'check' : 'copy'" :size="13" />{{ copied ? '已复制' : '复制代码' }}</button>
+      </span>
     </div>
-    <div class="code-viewer-content" v-html="highlighted" />
+    <div class="code-viewer-content code-body" v-html="highlighted" />
   </div>
 </template>
