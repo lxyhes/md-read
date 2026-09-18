@@ -417,7 +417,12 @@ html, body, #app { background: var(--app-bg, #070d22); }
   transform: translate3d(var(--viewer-pan-x, 0px), var(--viewer-pan-y, 0px), 0) scale(var(--viewer-zoom, 1));
   transition: transform .12s ease-out;
 }
-.viewer-stage.is-pan-enabled.is-dragging .mermaid-block {
+.viewer-stage.is-pan-enabled .image-viewer img {
+  transform: translate3d(var(--viewer-pan-x, 0px), var(--viewer-pan-y, 0px), 0) scale(var(--viewer-zoom, 1));
+  transition: transform .12s ease-out;
+}
+.viewer-stage.is-pan-enabled.is-dragging .mermaid-block,
+.viewer-stage.is-pan-enabled.is-dragging .image-viewer img {
   transition: none;
 }
 
@@ -1316,6 +1321,420 @@ html, body, #app { background: var(--app-bg, #070d22); }
 .reader-tab-status.is-syncing span:first-child {
   animation: loading-spin .9s linear infinite;
 }
+
+/* Reading density: readable chrome, less dead space, and a calmer focus mask. */
+.reader-tab {
+  font-size: 12px;
+}
+.reader-tab small {
+  font-size: 10px;
+}
+.reader-tab-status {
+  font-size: 10px;
+}
+.reader-meta {
+  font-size: 11px;
+}
+.outline-list button {
+  padding-top: 7px;
+  padding-bottom: 7px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.file-location {
+  font-size: 12px;
+}
+.file-item-copy strong {
+  font-size: 12px;
+}
+.file-item-copy small,
+.file-browser-note {
+  font-size: 10px;
+}
+.context-panel,
+.outline-panel {
+  padding-top: 27px;
+}
+.reader-content {
+  padding-top: 42px;
+  padding-bottom: 66px;
+}
+.regions-stack {
+  gap: 5px;
+}
+.reader-content .region-block {
+  padding-top: 9px;
+  padding-bottom: 9px;
+}
+.reader-content .region-content {
+  font-size: max(18px, var(--reader-size));
+}
+.reader-content .code-frame pre {
+  padding-top: 38px;
+  padding-bottom: 16px;
+  font-size: 14px;
+  line-height: 1.65;
+}
+.reader-content .code-frame pre code .line::before {
+  font-size: 11px;
+  line-height: 1.65;
+}
+.reader-footer {
+  margin-top: 42px;
+}
+
+.app-shell.is-region-focus .region-block:not(.focused) {
+  opacity: .10;
+  filter: blur(1.6px);
+  transform: scale(.985);
+  background: transparent !important;
+  border-left-color: transparent !important;
+}
+.app-shell.is-region-focus .region-block:not(.focused).focus-distance-1 {
+  opacity: .42;
+  filter: blur(.45px);
+  transform: scale(.998);
+}
+.app-shell.is-region-focus .region-block:not(.focused).focus-distance-2 {
+  opacity: .23;
+  filter: blur(.95px);
+  transform: scale(.992);
+}
+.app-shell.is-region-focus .region-block:not(.focused).focus-distance-3 {
+  opacity: .10;
+  filter: blur(1.45px);
+  transform: scale(.985);
+}
+.app-shell.is-region-focus .reader-content .region-block {
+  content-visibility: visible;
+  contain-intrinsic-size: none;
+  transition-duration: .18s;
+}
+.app-shell.is-region-focus .region-block.focused {
+  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  outline: 1px solid color-mix(in srgb, var(--accent) 36%, var(--border));
+  outline-offset: 3px;
+  box-shadow: 0 16px 40px color-mix(in srgb, var(--app-bg) 14%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--accent) 10%, transparent);
+  transform: none;
+}
+.focus-hud-position {
+  padding-right: 4px;
+  border-right: 1px solid var(--border);
+  color: var(--ink);
+  font-family: var(--mono);
+}
+
+/* Mermaid: use the reader column efficiently while preserving labels in wide charts. */
+.reader-content .mermaid-block {
+  min-height: 202px;
+  padding: 20px 22px 40px;
+}
+.reader-content .mermaid-svg {
+  min-height: 150px;
+  max-height: 440px;
+  padding: 4px 2px 10px;
+}
+.reader-content .mermaid-svg svg {
+  width: max(100%, 900px);
+}
+.reader-content .code-frame[data-language="text"] pre,
+.reader-content .code-frame[data-language="plaintext"] pre {
+  font-size: 14px;
+  line-height: 1.55;
+}
+.reader-content .code-frame.is-diagram {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--surface-raised) 64%, var(--code-bg));
+}
+.reader-content .code-frame.is-diagram .code-body {
+  overflow: auto;
+  background: color-mix(in srgb, var(--code-bg) 82%, transparent);
+}
+.reader-content .code-frame.is-diagram pre {
+  min-width: max-content;
+  padding: 24px 30px 28px 64px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* Tables should read like compact data surfaces, not stretched paragraphs. */
+.reader-content .table-scroll {
+  position: relative;
+  margin: 0;
+  overflow: auto;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-raised) 58%, transparent);
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--app-bg) 10%, transparent);
+  scrollbar-color: var(--accent-soft) transparent;
+}
+.reader-content .table-scroll table {
+  width: max(100%, 560px);
+  margin: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: clamp(14px, calc(var(--reader-size) * .84), 16px);
+  line-height: 1.45;
+}
+.reader-content .table-scroll th,
+.reader-content .table-scroll td {
+  padding: 8px 16px;
+  border-right: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  text-align: left;
+  vertical-align: middle;
+}
+.reader-content .table-scroll th:last-child,
+.reader-content .table-scroll td:last-child {
+  border-right: 0;
+}
+.reader-content .table-scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  min-width: 140px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  background: color-mix(in srgb, var(--surface-raised) 86%, var(--accent));
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--app-bg) 10%, transparent);
+  color: var(--accent);
+  font: 700 12px/1.35 var(--ui-font);
+  letter-spacing: .05em;
+  white-space: nowrap;
+}
+.reader-content .table-scroll thead th:first-child {
+  width: 30%;
+  min-width: 170px;
+}
+.reader-content .table-scroll tbody tr:nth-child(odd) td {
+  background: color-mix(in srgb, var(--surface) 30%, transparent);
+}
+.reader-content .table-scroll tbody tr:hover td {
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+}
+.reader-content .table-scroll tbody tr:last-child td {
+  border-bottom: 0;
+}
+.reader-content .table-scroll td {
+  color: var(--ink);
+}
+.reader-content .table-scroll td:first-child {
+  color: color-mix(in srgb, var(--ink) 88%, var(--accent));
+  font-family: var(--mono);
+  font-size: .9em;
+}
+.reader-content .table-scroll td code {
+  padding: 3px 7px;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--code-bg));
+  color: var(--accent);
+  font: .9em var(--mono);
+  white-space: nowrap;
+}
+.reader-content .region-table {
+  padding-top: 4px;
+  padding-bottom: 4px;
+  background: transparent;
+  border-left-color: transparent;
+}
+.reader-content .region-table:hover,
+.reader-content .region-table.active {
+  background: transparent;
+  border-left-color: transparent;
+}
+.table-region-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 30px;
+  padding: 0 2px 6px;
+  color: var(--muted);
+  font: 10px var(--ui-font);
+  letter-spacing: .04em;
+}
+.table-region-toolbar > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+  font-weight: 600;
+}
+.table-region-toolbar .inline-view-action {
+  margin: 0;
+  padding: 5px 8px;
+  background: color-mix(in srgb, var(--surface-raised) 55%, transparent);
+}
+.table-region-toolbar .inline-view-action:hover {
+  background: var(--accent-soft);
+}
+
+/* Reference-style markdown tables: flat grid, quiet header, compact rows. */
+.reader-content .table-scroll {
+  border: 1px solid color-mix(in srgb, var(--ink) 22%, var(--surface));
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: none;
+}
+.reader-content .table-scroll table {
+  width: 100%;
+  min-width: 620px;
+  border-collapse: collapse;
+  font-size: max(15px, calc(var(--reader-size) * .86));
+  line-height: 1.45;
+}
+.reader-content .table-scroll th,
+.reader-content .table-scroll td {
+  padding: 8px 14px;
+  border: 1px solid color-mix(in srgb, var(--ink) 17%, var(--surface));
+  vertical-align: middle;
+}
+.reader-content .table-scroll thead th {
+  position: static;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  background: color-mix(in srgb, var(--ink) 6%, var(--surface));
+  box-shadow: none;
+  color: var(--ink);
+  font: 700 13px/1.4 var(--ui-font);
+  letter-spacing: 0;
+}
+.reader-content .table-scroll thead th:first-child {
+  width: 54%;
+  min-width: 220px;
+}
+.reader-content .table-scroll tbody tr:nth-child(odd) td,
+.reader-content .table-scroll tbody tr:nth-child(even) td {
+  background: var(--surface);
+}
+.reader-content .table-scroll tbody tr:hover td {
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+}
+.reader-content .table-scroll tbody tr:last-child td {
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 17%, var(--surface));
+}
+.reader-content .table-scroll td:first-child {
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: .92em;
+}
+.reader-content .table-scroll td code {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+}
+.app-shell:not(.is-focus) .reader-content .region-table,
+.app-shell:not(.is-focus) .reader-content .region-table:hover,
+.app-shell:not(.is-focus) .reader-content .region-table.active {
+  background: transparent;
+  border-left-color: transparent;
+}
+
+/* The table itself is the surface; the surrounding region must stay invisible. */
+.app-shell .reader-content .region-table {
+  margin: 18px 0 22px;
+  padding: 0;
+  border: 0 !important;
+  border-radius: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.app-shell .reader-content .region-table:hover,
+.app-shell .reader-content .region-table.active {
+  border-left-color: transparent !important;
+  background: transparent !important;
+}
+.app-shell .reader-content .region-table .region-more {
+  display: none;
+}
+.app-shell .reader-content .table-scroll {
+  border-color: color-mix(in srgb, var(--ink) 28%, var(--surface));
+}
+.app-shell .reader-content .table-scroll th,
+.app-shell .reader-content .table-scroll td {
+  border-color: color-mix(in srgb, var(--ink) 21%, var(--surface));
+}
+.code-toolbar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+.code-view,
+.code-toolbar-actions .code-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font: 10px var(--ui-font);
+  transition: background .2s ease, border-color .2s ease, color .2s ease;
+}
+.code-view:hover,
+.code-toolbar-actions .code-copy:hover {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
+  background: color-mix(in srgb, var(--accent-soft) 75%, transparent);
+  color: var(--ink);
+}
+.reader-content .region-code,
+.reader-content .region-table {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+@media (min-width: 1500px) {
+  .app-shell:not(.is-focus) .reader-content {
+    width: min(1080px, calc(100% - 72px));
+    padding-top: 28px;
+    padding-bottom: 52px;
+  }
+  .app-shell:not(.is-focus) .reader-content .region-content p,
+  .app-shell:not(.is-focus) .reader-content .region-content li,
+  .app-shell:not(.is-focus) .reader-content .region-content blockquote {
+    max-width: 78ch;
+  }
+}
+
+@media (min-width: 1500px) {
+  .app-shell.is-focus .reader-layout.focus-layout {
+    grid-template-columns: minmax(0, 1fr) 294px;
+  }
+  .app-shell.is-focus .focus-sidebar {
+    width: 294px;
+    padding-inline: 18px;
+  }
+  .app-shell.is-focus .reader-content {
+    width: min(980px, calc(100% - 64px));
+    padding-top: 54px;
+  }
+}
+
+@media (min-width: 721px) and (max-width: 1499px) {
+  .app-shell.is-focus .reader-layout.focus-layout {
+    grid-template-columns: minmax(0, 1fr) 300px;
+  }
+  .app-shell.is-focus .focus-sidebar {
+    width: 300px;
+    padding-inline: 18px;
+  }
+  .app-shell.is-focus .reader-content {
+    width: min(920px, calc(100% - 72px));
+    padding: 54px 0 88px;
+  }
+}
 .reader-content .region-block {
   content-visibility: auto;
   contain-intrinsic-size: auto 150px;
@@ -1521,6 +1940,29 @@ button:focus-visible,
   margin: 0 auto;
 }
 
+/* Independent image viewing uses the same predictable zoom and pan model as Mermaid. */
+.viewer-stage .image-viewer {
+  width: max-content;
+  min-width: 100%;
+  min-height: 100%;
+  overflow: visible;
+}
+.viewer-stage .image-viewer img {
+  width: auto;
+  height: auto;
+  max-width: none;
+  max-height: none;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 18px 46px color-mix(in srgb, var(--app-bg) 22%, transparent);
+  transform-origin: center;
+}
+.viewer-stage .table-viewer {
+  width: min(920px, 100%);
+  max-height: 100%;
+  overflow: auto;
+}
+
 /* Reader preview: keep wide diagrams readable without widening the article column. */
 .reader-content .mermaid-block {
   min-height: 238px;
@@ -1580,5 +2022,198 @@ button:focus-visible,
   }
   .reader-content .mermaid-svg svg {
     width: max(100%, 680px);
+  }
+}
+
+/* Final desktop reading pass: compact rhythm, wide media, and quieter active state. */
+@media (min-width: 721px) {
+  .app-shell:not(.is-focus) .reader-content .region-block {
+    padding-top: 5px;
+    padding-bottom: 5px;
+  }
+  .app-shell:not(.is-focus) .reader-content .region-block.region-heading {
+    padding-top: 13px;
+    padding-bottom: 7px;
+  }
+  .app-shell:not(.is-focus) .reader-content .region-block.active {
+    background: transparent;
+    border-left-color: color-mix(in srgb, var(--accent) 72%, var(--border));
+  }
+  .app-shell:not(.is-focus) .reader-content .region-block.region-heading.active {
+    background: color-mix(in srgb, var(--accent) 4%, transparent);
+  }
+  .app-shell:not(.is-focus) .reader-content .region-content h1 {
+    margin-bottom: 8px;
+    font-size: clamp(29px, 2.75vw, 38px);
+    line-height: 1.1;
+  }
+  .app-shell:not(.is-focus) .reader-content .region-content h2 {
+    margin-bottom: 8px;
+    font-size: clamp(24px, 2.25vw, 31px);
+    line-height: 1.12;
+  }
+  .app-shell:not(.is-focus) .reader-content .region-content h3 {
+    margin-bottom: 7px;
+    font-size: clamp(20px, 1.9vw, 25px);
+    line-height: 1.16;
+  }
+  .app-shell:not(.is-focus) .reader-content .region-content h4 {
+    margin-bottom: 6px;
+    line-height: 1.2;
+  }
+  .app-shell:not(.is-focus) .reader-content .region-content p {
+    margin-bottom: 12px;
+    line-height: 1.7;
+  }
+  .app-shell:not(.is-focus) .reader-content .region-content ul,
+  .app-shell:not(.is-focus) .reader-content .region-content ol {
+    margin-top: 5px;
+    margin-bottom: 14px;
+  }
+  .app-shell:not(.is-focus) .reader-content .region-content li {
+    padding-top: 2px;
+    padding-bottom: 2px;
+    line-height: 1.58;
+  }
+  .app-shell:not(.is-focus) .reader-content .region-content li > p {
+    margin-bottom: 3px;
+  }
+  .app-shell:not(.is-focus) .reader-content .region-content blockquote {
+    margin-top: 13px;
+    margin-bottom: 15px;
+    padding: 14px 18px 14px 44px;
+  }
+  .app-shell:not(.is-focus) .reader-content .code-frame {
+    margin-top: 11px;
+    margin-bottom: 15px;
+  }
+  .app-shell:not(.is-focus) .reader-content .code-toolbar {
+    min-height: 34px;
+  }
+  .app-shell:not(.is-focus) .reader-content .code-body pre {
+    padding-top: 12px;
+    padding-bottom: 14px;
+    line-height: 1.55;
+  }
+  .app-shell:not(.is-focus) .reader-content .code-body pre code .line {
+    min-height: 1.55em;
+  }
+  .app-shell:not(.is-focus) .reader-content .region-table {
+    margin-top: 10px;
+    margin-bottom: 15px;
+  }
+  .app-shell:not(.is-focus) .reader-content .table-region-toolbar {
+    min-height: 26px;
+    padding-bottom: 4px;
+  }
+  .app-shell:not(.is-focus) .reader-content .table-scroll table {
+    font-size: max(14px, calc(var(--reader-size) * .84));
+  }
+  .app-shell:not(.is-focus) .reader-content .table-scroll th,
+  .app-shell:not(.is-focus) .reader-content .table-scroll td {
+    padding: 7px 14px;
+  }
+  .app-shell:not(.is-focus) .reader-content .mermaid-block {
+    min-height: 172px;
+    padding-top: 14px;
+  }
+  .app-shell:not(.is-focus) .reader-content .mermaid-svg {
+    min-height: 120px;
+    max-height: 390px;
+  }
+  .app-shell:not(.is-focus) .reader-content .region-content hr {
+    margin-top: 18px;
+    margin-bottom: 18px;
+  }
+}
+
+@media (min-width: 1500px) {
+  .app-shell:not(.is-focus) .reader-content {
+    width: min(1080px, calc(100% - 72px));
+    padding-top: 28px;
+    padding-bottom: 52px;
+  }
+  .app-shell:not(.is-focus) .reader-content .region-content p,
+  .app-shell:not(.is-focus) .reader-content .region-content li,
+  .app-shell:not(.is-focus) .reader-content .region-content blockquote {
+    max-width: 78ch;
+  }
+}
+
+@media (min-width: 1900px) {
+  .app-shell:not(.is-focus) .reader-content {
+    width: min(1160px, calc(100% - 64px));
+  }
+}
+
+/* Wide Mermaid diagrams: fit the complete overview in the article; details remain one click away. */
+.reader-content .mermaid-block.diagram-landscape,
+.reader-content .mermaid-block.diagram-wide {
+  padding-bottom: 48px;
+}
+.reader-content .mermaid-block.diagram-landscape .mermaid-svg,
+.reader-content .mermaid-block.diagram-wide .mermaid-svg {
+  min-height: 0;
+  max-height: none;
+  overflow: visible;
+  padding-bottom: 6px;
+  cursor: zoom-in;
+}
+.reader-content .mermaid-block.diagram-wide .diagram-action,
+.reader-content .mermaid-block.diagram-landscape .diagram-action {
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface) 78%);
+}
+.reader-content .mermaid-block.diagram-landscape .mermaid-svg svg,
+.reader-content .mermaid-block.diagram-wide .mermaid-svg svg {
+  width: 100%;
+  max-width: 100%;
+  margin-inline: auto;
+}
+@media (max-width: 720px) {
+  .reader-content .mermaid-block.diagram-landscape .mermaid-svg svg,
+  .reader-content .mermaid-block.diagram-wide .mermaid-svg svg {
+    width: 100%;
+  }
+}
+
+/* Compact rhythm: keep hierarchy, remove the empty air between short Markdown blocks. */
+@media (min-width: 721px) {
+  .app-shell:not(.is-focus) .reader-content .regions-stack {
+    gap: 1px;
+  }
+  .app-shell:not(.is-focus) .reader-content .region-block {
+    padding-top: 2px;
+    padding-bottom: 2px;
+  }
+  .app-shell:not(.is-focus) .reader-content .region-block.region-heading {
+    padding-top: 8px;
+    padding-bottom: 3px;
+  }
+  .app-shell:not(.is-focus) .reader-content .region-content p {
+    margin-bottom: 8px;
+    line-height: 1.58;
+  }
+  .app-shell:not(.is-focus) .reader-content .region-content ul,
+  .app-shell:not(.is-focus) .reader-content .region-content ol {
+    margin-top: 3px;
+    margin-bottom: 9px;
+  }
+  .app-shell:not(.is-focus) .reader-content .region-content li {
+    padding-top: 0;
+    padding-bottom: 0;
+    line-height: 1.42;
+  }
+  .app-shell:not(.is-focus) .reader-content .region-content li + li {
+    margin-top: 2px;
+  }
+  .app-shell:not(.is-focus) .reader-content .region-content li > p {
+    margin-bottom: 0;
+  }
+  .app-shell:not(.is-focus) .reader-content .region-content h1,
+  .app-shell:not(.is-focus) .reader-content .region-content h2,
+  .app-shell:not(.is-focus) .reader-content .region-content h3,
+  .app-shell:not(.is-focus) .reader-content .region-content h4 {
+    margin-top: 10px;
+    margin-bottom: 6px;
   }
 }
