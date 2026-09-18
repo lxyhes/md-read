@@ -3,7 +3,6 @@ import { defineStore } from 'pinia'
 import { getProgress, loadAnnotations, loadDocumentSnapshots, saveAnnotation, saveDocument, saveDocumentSnapshot, saveProgress } from '../persistence'
 import { openMarkdownFile, openMarkdownFolder, resolveMarkdownAssetUrl, type OpenedFile } from '../fileService'
 import { builtInThemes, cssVariables, defaultTokens } from '../themes'
-import { parseMarkdown } from '../parser'
 const SESSION_KEY = 'moyue:reader-session'
 
 function readSession() {
@@ -52,6 +51,7 @@ export const useReaderStore = defineStore('reader', () => {
 
   async function addOpenedFiles(files: OpenedFile[]) {
     if (!files.length) return 0
+    const { parseMarkdown } = await import('../parser')
     const openedIds: string[] = []
     for (const file of files) {
       const document = parseMarkdown(file.path, file.source, (url) => resolveMarkdownAssetUrl(file.path, url))
@@ -66,6 +66,7 @@ export const useReaderStore = defineStore('reader', () => {
   }
 
   async function reloadDocument(file: OpenedFile) {
+    const { parseMarkdown } = await import('../parser')
     const document = parseMarkdown(file.path, file.source, (url) => resolveMarkdownAssetUrl(file.path, url))
     documents.value = [...documents.value.filter((item) => item.id !== document.id), document]
     await saveDocumentSnapshot(document)
@@ -80,7 +81,10 @@ export const useReaderStore = defineStore('reader', () => {
   async function bootstrap() {
     const saved = loadDocumentSnapshots()
     if (saved.length) documents.value = saved
-    else documents.value.push(parseMarkdown('欢迎开始 · Moyue.md', sample))
+    else {
+      const { parseMarkdown } = await import('../parser')
+      documents.value.push(parseMarkdown('欢迎开始 · Moyue.md', sample))
+    }
     const session = readSession()
     const availableIds = new Set(documents.value.map((document) => document.id))
     openDocumentIds.value = (session.openDocumentIds ?? []).filter((id) => availableIds.has(id))
