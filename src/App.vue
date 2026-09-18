@@ -6,7 +6,8 @@ import MermaidBlock from './components/MermaidBlock.vue'
 import ThemePicker from './components/ThemePicker.vue'
 import AppIcon from './components/AppIcon.vue'
 import IconButton from './components/IconButton.vue'
-import { deleteMarkdownPath, listMarkdownFiles, openMarkdownDirectory, readMarkdownPath, watchMarkdownPath, type WorkspaceFile } from './fileService'
+import FileSystemTree, { type FileSystemTreeNode } from './components/FileSystemTree.vue'
+import { copyMarkdownPath, createMarkdownDirectory, createMarkdownFile, deleteMarkdownPath, listFileSystemEntries, listMarkdownFiles, openMarkdownDirectory, openMarkdownFile, readMarkdownPath, renameMarkdownPath, watchMarkdownPath, type WorkspaceFile } from './fileService'
 import type { Annotation, FocusAmbienceId, ReaderRegion, ViewerType } from './types'
 
 const FocusAmbiencePicker = defineAsyncComponent(() => import('./components/FocusAmbiencePicker.vue'))
@@ -49,10 +50,17 @@ const customProvider = ref('')
 const busyAction = ref<BusyAction>(null)
 const draggingFiles = ref(false)
 const leftPanelTab = ref<'files' | 'outline'>('files')
+const fileBrowserMode = ref<'list' | 'tree'>('list')
+const filesystemTree = ref<FileSystemTreeNode | null>(null)
+const filesystemTreeTarget = ref('')
+const filesystemTreeScope = ref<'system' | 'workspace'>('workspace')
 const filesystemFiles = ref<WorkspaceFile[]>([])
 const tabListOpen = ref(false)
+const tabSearchQuery = ref('')
+const recentlyClosedTabs = ref<string[]>([])
 const tabContextMenu = ref<{ documentId: string; x: number; y: number } | null>(null)
 const fileContextMenu = ref<{ file: FileTreeEntry; x: number; y: number } | null>(null)
+const fileProperties = ref<FileTreeEntry | null>(null)
 let fileTreeRequest = 0
 const focusRemaining = ref(25 * 60)
 const focusRunning = ref(false)
@@ -70,6 +78,7 @@ let regionLayoutDocumentId: string | null = null
 let regionLayoutStateKey: string | null = null
 let regionLayoutCache: Array<{ id: string; top: number; bottom: number }> = []
 let focusScrollTargetId: string | null = null
+let stopNativeFileDrop: (() => void) | null = null
 const documentWatchers = new Map<string, () => void>()
 const documentReloadTimers = new Map<string, number>()
 let documentWatchRequest = 0
@@ -105,6 +114,11 @@ const viewerStageStyle = computed<Record<string, string>>(() => ({
 }))
 const currentProgress = computed(() => store.currentDocument ? store.progress[store.currentDocument.id] : undefined)
 const currentAnnotations = computed(() => store.annotations.slice().sort((a, b) => b.createdAt - a.createdAt))
+const filteredOpenDocuments = computed(() => {
+  const needle = tabSearchQuery.value.trim().toLowerCase()
+  if (!needle) return store.openDocuments
+  return store.openDocuments.filter((document) => `${document.title} ${document.path}`.toLowerCase().includes(needle))
+})
 const currentHeading = computed(() => store.currentDocument?.headings.find((heading) => heading.id === store.activeHeadingId))
 const readerRegions = computed(() => {
   const document = store.currentDocument
@@ -120,6 +134,7 @@ const focusPosition = computed(() => {
   const index = readerRegions.value.findIndex((region) => region.id === store.focusedRegionId)
   return index < 0 ? '' : `${index + 1} / ${readerRegions.value.length}`
 })
+function isTauriRuntime() { return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window }
 function normalizedPath(path: string) { return path.replace(/\\/g, '/') }
 function directoryOf(path: string) {
   const normalized = normalizedPath(path)
@@ -181,18 +196,20 @@ function tabLabel(document: { title: string; path: string }) {
 
 function closeTabMenus() {
   tabListOpen.value = false
+  tabSearchQuery.value = ''
   tabContextMenu.value = null
   fileContextMenu.value = null
 }
 
 function toggleTabList() {
   tabListOpen.value = !tabListOpen.value
+  if (!tabListOpen.value) tabSearchQuery.value = ''
   tabContextMenu.value = null
 }
 
 function openTabContextMenu(event: MouseEvent, documentId: string) {
-  const width = 194
-  const height = 156
+  const width = 214
+  const height = 194
   tabListOpen.value = false
   tabContextMenu.value = {
     documentId,
@@ -202,14 +219,108 @@ function openTabContextMenu(event: MouseEvent, documentId: string) {
 }
 
 function openFileContextMenu(event: MouseEvent, file: FileTreeEntry) {
-  const width = 228
-  const height = 270
+  const width = 246
+  const height = 520
   closeTabMenus()
   fileContextMenu.value = {
     file,
     x: Math.min(event.clientX, Math.max(8, window.innerWidth - width - 8)),
     y: Math.min(event.clientY, Math.max(8, window.innerHeight - height - 8)),
   }
+}
+
+function joinFilePath(directory: string, name: string) {
+  return directory ? `${directory.replace(/[\\/]+$/, '')}/${name}` : name
+}
+
+function validEntryName(value: string) {
+  const name = value.trim()
+  return Boolean(name) && !['.', '..'].includes(name) && !/[\\/]/.test(name)
+}
+
+function markdownName(value: string) {
+  const name = value.trim()
+  return /\.(md|markdown)$/i.test(name) ? name : `${name}.md`
+}
+
+function hasCurrentFile(path: string) {
+  return currentDirectoryFiles.value.some((file) => normalizedPath(file.path).toLowerCase() === normalizedPath(path).toLowerCase())
+}
+
+function filesystemRoot(path: string) {
+  const normalized = normalizedPath(path)
+  return normalized.match(/^[A-Za-z]:\//)?.[0] ?? (normalized.startsWith('/') ? '/' : '')
+}
+
+function filesystemPathKey(path: string) {
+  return normalizedPath(path).replace(/\/+$/, '').toLowerCase()
+}
+
+function createFilesystemNode(path: string, name: string, isDirectory: boolean): FileSystemTreeNode {
+  return { path, name, isDirectory, expanded: false, loading: false, children: null }
+}
+
+function createWorkspaceTree(targetPath: string): FileSystemTreeNode {
+  const root = createFilesystemNode('当前工作区', '当前工作区', true)
+  root.expanded = true
+  root.children = []
+  const directories = new Map<string, FileSystemTreeNode>([['', root]])
+  for (const document of store.documents) {
+    const path = normalizedPath(document.path).replace(/^\/+/, '')
+    const parts = path.split('/').filter(Boolean)
+    if (!parts.length) continue
+    let parent = root
+    let directoryPath = ''
+    for (const part of parts.slice(0, -1)) {
+      directoryPath = directoryPath ? `${directoryPath}/${part}` : part
+      let directory = directories.get(directoryPath)
+      if (!directory) {
+        directory = { ...createFilesystemNode(`@workspace/${directoryPath}`, part, true), children: [] }
+        parent.children?.push(directory)
+        directories.set(directoryPath, directory)
+      }
+      parent = directory
+    }
+    parent.children?.push({ ...createFilesystemNode(document.path, fileNameOf(path), false), documentId: document.id })
+  }
+  const target = filesystemPathKey(targetPath)
+  function sortAndReveal(node: FileSystemTreeNode) {
+    node.children?.sort((left, right) => Number(right.isDirectory) - Number(left.isDirectory) || left.name.localeCompare(right.name, 'zh-CN'))
+    for (const child of node.children ?? []) {
+      if (child.isDirectory && target.startsWith(`${filesystemPathKey(child.path.replace('@workspace/', ''))}/`)) node.expanded = true
+      sortAndReveal(child)
+    }
+  }
+  sortAndReveal(root)
+  return root
+}
+
+async function loadFilesystemNode(node: FileSystemTreeNode) {
+  if (!node.isDirectory || node.children !== null || node.loading) return
+  node.loading = true
+  node.error = ''
+  try {
+    node.children = (await listFileSystemEntries(node.path)).map((entry) => createFilesystemNode(entry.path, entry.name, entry.isDirectory))
+  } catch (error) {
+    node.children = []
+    node.error = error instanceof Error ? error.message : '无法读取此目录'
+  } finally {
+    node.loading = false
+  }
+}
+
+async function toggleFilesystemNode(node: FileSystemTreeNode) {
+  if (!node.isDirectory) return
+  if (node.children === null) await loadFilesystemNode(node)
+  node.expanded = !node.expanded
+}
+
+async function revealFilesystemTarget(node: FileSystemTreeNode, targetPath: string) {
+  await loadFilesystemNode(node)
+  node.expanded = true
+  const target = filesystemPathKey(targetPath)
+  const child = node.children?.find((item) => target === filesystemPathKey(item.path) || target.startsWith(`${filesystemPathKey(item.path)}/`))
+  if (child && filesystemPathKey(child.path) !== target && child.isDirectory) await revealFilesystemTarget(child, targetPath)
 }
 
 function fileDirectoryPath(path: string) {
@@ -239,6 +350,185 @@ async function openFileContextEntry() {
   const file = fileContextMenu.value?.file
   fileContextMenu.value = null
   if (file) await openFileTreeEntry(file)
+}
+
+async function openFileContextNewTab() {
+  const file = fileContextMenu.value?.file
+  fileContextMenu.value = null
+  if (file) await openFileTreeEntry(file)
+}
+
+async function createFileContextFile() {
+  const file = fileContextMenu.value?.file
+  fileContextMenu.value = null
+  if (!file) return
+  const directory = fileDirectoryPath(file.path)
+  const value = window.prompt('新建 Markdown 文件', '新建文本文档.md')
+  if (value === null) return
+  const name = markdownName(value)
+  if (!validEntryName(name)) { notify('文件名不能为空，且不能包含路径分隔符'); return }
+  const path = joinFilePath(directory, name)
+  if (hasCurrentFile(path)) { notify('同名文件已存在'); return }
+  if (busyAction.value) return
+  busyAction.value = 'file'
+  try {
+    await createMarkdownFile(path, `# ${name.replace(/\.(md|markdown)$/i, '')}\n\n`)
+    await refreshFileTree()
+    notify(`已新建 ${name}`)
+  } catch (error) {
+    notify(error instanceof Error ? error.message : '新建文件失败')
+  } finally { busyAction.value = null }
+}
+
+async function createFileContextFolder() {
+  const file = fileContextMenu.value?.file
+  fileContextMenu.value = null
+  if (!file) return
+  const directory = fileDirectoryPath(file.path)
+  const name = window.prompt('新建文件夹', '新建文件夹')
+  if (name === null) return
+  if (!validEntryName(name)) { notify('文件夹名称不能为空，且不能包含路径分隔符'); return }
+  if (!directory) { notify('当前工作区没有可用的实际目录路径'); return }
+  if (busyAction.value) return
+  busyAction.value = 'file'
+  try {
+    await createMarkdownDirectory(joinFilePath(directory, name.trim()))
+    notify(`已新建文件夹 ${name.trim()}`)
+  } catch (error) {
+    notify(error instanceof Error ? error.message : '新建文件夹失败')
+  } finally { busyAction.value = null }
+}
+
+function searchFileContextEntry() {
+  const file = fileContextMenu.value?.file
+  fileContextMenu.value = null
+  if (!file) return
+  query.value = file.name.replace(/\.(md|markdown)$/i, '')
+  openSearch('all')
+}
+
+function showFileProperties() {
+  const file = fileContextMenu.value?.file
+  fileContextMenu.value = null
+  if (file) fileProperties.value = file
+}
+
+async function copyFilePropertiesPath() {
+  const file = fileProperties.value
+  if (!file) return
+  try {
+    await navigator.clipboard.writeText(file.path)
+    fileProperties.value = null
+    notify('文件路径已复制')
+  } catch {
+    notify('复制失败，请检查剪贴板权限')
+  }
+}
+
+function showDocumentList() {
+  fileContextMenu.value = null
+  fileBrowserMode.value = 'list'
+  leftPanelTab.value = 'files'
+  notify('已切换到文档列表')
+}
+
+async function openFilesystemTreeForFile(file: FileTreeEntry) {
+  const rootPath = filesystemRoot(file.path)
+  if (!rootPath) {
+    notify('当前文档没有真实系统路径，请重新选择这个文件')
+    return
+  }
+  filesystemTreeScope.value = 'system'
+  filesystemTreeTarget.value = file.path
+  const root = createFilesystemNode(rootPath, rootPath === '/' ? '/' : rootPath.replace(/\//g, '\\'), true)
+  filesystemTree.value = root
+  await revealFilesystemTarget(root, file.path)
+  notify(root.error ? '系统文件树已打开，但根目录读取受限' : '已打开当前文件所在的系统文件树')
+}
+
+async function showDocumentTree() {
+  const file = fileContextMenu.value?.file
+  fileContextMenu.value = null
+  fileBrowserMode.value = 'tree'
+  leftPanelTab.value = 'files'
+  if (!file) return
+  if (!isTauriRuntime()) {
+    filesystemTreeScope.value = 'workspace'
+    filesystemTreeTarget.value = file.path
+    filesystemTree.value = createWorkspaceTree(file.path)
+    notify('已打开已授权工作区的文件树')
+    return
+  }
+  if (!filesystemRoot(file.path) && isTauriRuntime()) {
+    const selected = await openMarkdownFile()
+    const matched = selected.find((item) => fileNameOf(item.path).toLowerCase() === file.name.toLowerCase()) ?? selected[0]
+    if (!matched) {
+      notify('未选择文件，系统文件树未打开')
+      return
+    }
+    await store.addOpenedFiles([matched])
+    await openFilesystemTreeForFile({ path: matched.path, name: fileNameOf(matched.path) })
+    return
+  }
+  await openFilesystemTreeForFile(file)
+}
+
+async function openFilesystemTreeNode(node: FileSystemTreeNode) {
+  if (node.isDirectory) {
+    await toggleFilesystemNode(node)
+    return
+  }
+  if (!/\.(md|markdown)$/i.test(node.name)) {
+    notify('当前阅读器只支持打开 Markdown 文件')
+    return
+  }
+  await openFileTreeEntry({ path: node.path, name: node.name, documentId: node.documentId })
+}
+
+async function renameFileContextEntry() {
+  const file = fileContextMenu.value?.file
+  fileContextMenu.value = null
+  if (!file) return
+  const value = window.prompt('重命名 Markdown 文件', file.name)
+  if (value === null) return
+  const name = markdownName(value)
+  if (!validEntryName(name)) { notify('文件名不能为空，且不能包含路径分隔符'); return }
+  const nextPath = joinFilePath(fileDirectoryPath(file.path), name)
+  if (normalizedPath(nextPath).toLowerCase() === normalizedPath(file.path).toLowerCase()) return
+  if (hasCurrentFile(nextPath)) { notify('同名文件已存在'); return }
+  if (busyAction.value) return
+  busyAction.value = 'file'
+  try {
+    await renameMarkdownPath(file.path, nextPath)
+    if (file.documentId) await store.renameDocument(file.documentId, nextPath)
+    await refreshFileTree()
+    notify(`已重命名为 ${name}`)
+  } catch (error) {
+    notify(error instanceof Error ? error.message : '重命名失败')
+  } finally { busyAction.value = null }
+}
+
+async function duplicateFileContextEntry() {
+  const file = fileContextMenu.value?.file
+  fileContextMenu.value = null
+  if (!file) return
+  const base = file.name.replace(/\.(md|markdown)$/i, '')
+  const extension = file.name.match(/\.(md|markdown)$/i)?.[0] ?? '.md'
+  const value = window.prompt('创建文件副本', `${base} - 副本${extension}`)
+  if (value === null) return
+  const name = markdownName(value)
+  if (!validEntryName(name)) { notify('文件名不能为空，且不能包含路径分隔符'); return }
+  const nextPath = joinFilePath(fileDirectoryPath(file.path), name)
+  if (hasCurrentFile(nextPath)) { notify('同名文件已存在'); return }
+  if (busyAction.value) return
+  busyAction.value = 'file'
+  try {
+    await copyMarkdownPath(file.path, nextPath)
+    await refreshFileTree()
+    notify(`已创建副本 ${name}`)
+  } catch (error) {
+    notify(error instanceof Error ? error.message : '创建副本失败')
+  } finally { busyAction.value = null }
 }
 
 async function reloadFileContextEntry() {
@@ -301,9 +591,13 @@ function hasTabsToRight(documentId: string) {
   return index >= 0 && index < store.openDocumentIds.length - 1
 }
 
-async function runTabMenuAction(action: 'close' | 'close-others' | 'close-right') {
+async function runTabMenuAction(action: 'close' | 'close-others' | 'close-right' | 'reopen') {
   const documentId = tabContextMenu.value?.documentId
   closeTabMenus()
+  if (action === 'reopen') {
+    await reopenLastClosedTab()
+    return
+  }
   if (!documentId) return
   if (action === 'close') {
     await closeDocument(documentId)
@@ -313,6 +607,17 @@ async function runTabMenuAction(action: 'close' | 'close-others' | 'close-right'
     ? store.openDocumentIds.filter((id) => id !== documentId)
     : store.openDocumentIds.slice(store.openDocumentIds.indexOf(documentId) + 1)
   for (const id of ids) await closeDocument(id)
+}
+
+async function reopenLastClosedTab() {
+  closeTabMenus()
+  const documentId = recentlyClosedTabs.value.shift()
+  if (!documentId || !store.documents.some((document) => document.id === documentId)) {
+    notify('没有可重新打开的标签')
+    return
+  }
+  await chooseDocument(documentId, { skipResumePrompt: true })
+  notify('已重新打开上一个标签')
 }
 
 function onTabOutsideClick(event: MouseEvent) {
@@ -339,6 +644,7 @@ async function boot() {
 }
 onMounted(() => {
   void boot()
+  void bindNativeFileDrop()
   window.addEventListener('keydown', onKeydown)
   document.addEventListener('fullscreenchange', onFullscreenChange)
   document.addEventListener('click', onTabOutsideClick)
@@ -348,6 +654,7 @@ onUnmounted(() => {
   document.removeEventListener('fullscreenchange', onFullscreenChange)
   document.removeEventListener('click', onTabOutsideClick)
   stopFocusTimer()
+  stopNativeFileDrop?.()
   stopAllDocumentWatchers()
   if (searchTimer !== null) window.clearTimeout(searchTimer)
   if (scrollFrame !== null) window.cancelAnimationFrame(scrollFrame)
@@ -412,6 +719,7 @@ function onKeydown(event: KeyboardEvent) {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'o' && !isTypingTarget(event.target)) { event.preventDefault(); void openFile(); return }
   if (event.key === 'Escape') {
     if (store.mode === 'region-focus' || store.mode === 'focus') exitFocusMode()
+    else if (store.mode === 'clean') toggleCleanMode()
     selectionToolbar.value = null
     return
   }
@@ -485,7 +793,21 @@ function onDragLeave(event: DragEvent) {
   const next = event.relatedTarget as Node | null
   if (!next || !current.contains(next)) draggingFiles.value = false
 }
+async function importNativeDroppedPaths(paths: string[]) {
+  const markdownPaths = paths.filter((path) => /\.(md|markdown)$/i.test(path))
+  if (!markdownPaths.length) { notify('请拖入 .md 或 .markdown 文件'); return }
+  if (busyAction.value) return
+  busyAction.value = 'drop'
+  try {
+    const files = await Promise.all(markdownPaths.map(async (path) => ({ path, source: await readMarkdownPath(path) })))
+    const count = await store.addOpenedFiles(files)
+    if (count) { view.value = 'reader'; notify(`已导入 ${count} 个 Markdown 文档`) }
+  } catch (error) {
+    notify(error instanceof Error ? error.message : '导入文档失败')
+  } finally { busyAction.value = null }
+}
 async function onDrop(event: DragEvent) {
+  if (isTauriRuntime()) return
   if (busyAction.value) return
   draggingFiles.value = false
   const files = Array.from(event.dataTransfer?.files ?? []).filter((file) => /\.(md|markdown)$/i.test(file.name))
@@ -497,6 +819,19 @@ async function onDrop(event: DragEvent) {
   } catch (error) {
     notify(error instanceof Error ? error.message : '导入文档失败')
   } finally { busyAction.value = null }
+}
+
+async function bindNativeFileDrop() {
+  if (!isTauriRuntime()) return
+  const { getCurrentWindow } = await import('@tauri-apps/api/window')
+  stopNativeFileDrop = await getCurrentWindow().onDragDropEvent(({ payload }) => {
+    if (payload.type === 'enter' || payload.type === 'over') draggingFiles.value = true
+    if (payload.type === 'leave') draggingFiles.value = false
+    if (payload.type === 'drop') {
+      draggingFiles.value = false
+      void importNativeDroppedPaths(payload.paths)
+    }
+  })
 }
 
 function showResumePromptIfNeeded(documentId: string) {
@@ -650,6 +985,7 @@ async function deleteFile(file: { path: string; name: string; documentId?: strin
   } finally { busyAction.value = null }
 }
 async function closeDocument(id: string) {
+  if (store.openDocumentIds.includes(id)) recentlyClosedTabs.value = [id, ...recentlyClosedTabs.value.filter((item) => item !== id)].slice(0, 8)
   await store.closeDocument(id)
   if (!store.currentDocument) { view.value = 'library'; return }
   await nextTick()
@@ -700,6 +1036,16 @@ function regionAtScrollPosition(element: HTMLElement, documentId: string) {
   return bestIndex === undefined ? store.activeRegionId : regionLayoutCache[bestIndex].id
 }
 function restoreScroll() { if (readerViewport.value && currentProgress.value) readerViewport.value.scrollTop = currentProgress.value.scrollPercent * (readerViewport.value.scrollHeight - readerViewport.value.clientHeight) }
+function currentViewportPercent() {
+  const viewport = readerViewport.value
+  return viewport && viewport.scrollHeight > viewport.clientHeight ? viewport.scrollTop / (viewport.scrollHeight - viewport.clientHeight) : currentProgress.value?.scrollPercent ?? 0
+}
+function restoreViewportPercent(percent: number) {
+  nextTick(() => {
+    const viewport = readerViewport.value
+    if (viewport) viewport.scrollTop = percent * Math.max(0, viewport.scrollHeight - viewport.clientHeight)
+  })
+}
 function onReaderWheel() { focusScrollTargetId = null }
 function onReaderPointerDown() { focusScrollTargetId = null }
 function onReaderScroll() {
@@ -757,6 +1103,13 @@ function toggleFocusMode() {
   if (regionId) store.setFocusedRegion(regionId)
   store.setMode('focus')
   view.value = 'reader'
+}
+function toggleCleanMode() {
+  const percent = currentViewportPercent()
+  store.setMode(store.mode === 'clean' ? 'normal' : 'clean')
+  view.value = 'reader'
+  restoreViewportPercent(percent)
+  notify(store.mode === 'clean' ? '已进入纯净阅读，按 Esc 退出' : '已恢复完整阅读界面')
 }
 function setViewerZoom(value: number) { viewerZoom.value = Math.min(3, Math.max(.5, Number(value.toFixed(2)))) }
 function resetViewerView() { viewerZoom.value = 1; viewerPan.value = { x: 0, y: 0 } }
@@ -889,6 +1242,10 @@ function scrollToHeading(regionId: string) {
   const first = readerDocument?.regions[0]
   if (first?.id === regionId && readerRegions.value[0]?.id !== regionId) readerViewport.value?.scrollTo({ top: 0, behavior: 'smooth' })
 }
+function headingRailPosition(index: number) {
+  const count = store.currentDocument?.headings.length ?? 0
+  return count <= 1 ? '50%' : `${(index / (count - 1)) * 100}%`
+}
 function stopFocusTimer() { if (focusTimer !== null) { window.clearInterval(focusTimer); focusTimer = null }; focusRunning.value = false }
 function toggleFocusTimer() {
   if (focusRemaining.value <= 0) focusRemaining.value = 25 * 60
@@ -957,6 +1314,31 @@ async function copySelection() {
   }
   selectionToolbar.value = null
 }
+async function copySelectionMarkdown() {
+  if (!selectionToolbar.value) return
+  const markdown = selectionToolbar.value.text.split(/\r?\n/).map((line) => `> ${line}`).join('\n')
+  try {
+    await navigator.clipboard.writeText(markdown)
+    notify('已复制 Markdown 引用')
+  } catch {
+    notify('当前环境不允许访问剪贴板')
+  }
+  selectionToolbar.value = null
+}
+function searchSelection() {
+  if (!selectionToolbar.value) return
+  query.value = selectionToolbar.value.text
+  searchNeedle.value = selectionToolbar.value.text.toLowerCase()
+  selectionToolbar.value = null
+  openSearch('current')
+}
+async function highlightSelection() {
+  if (!selectionToolbar.value || !store.currentDocument) return
+  const selected = selectionToolbar.value
+  await store.addAnnotation({ id: `highlight_${Date.now()}`, documentId: store.currentDocument.id, regionId: selected.regionId, selectedText: selected.text, color: annotationColor.value, note: '', createdAt: Date.now() })
+  selectionToolbar.value = null
+  notify('已高亮并保存阅读标记')
+}
 function jumpToAnnotation(annotation: Annotation) {
   store.clearFocus()
   scrollToHeading(annotation.regionId)
@@ -984,7 +1366,7 @@ async function requestFullscreen() {
 </script>
 
 <template>
-  <div class="app-shell" :aria-busy="booting || busyAction !== null" :class="{ 'is-focus': store.mode === 'focus', 'is-region-focus': store.mode === 'region-focus', 'has-focus-region': Boolean(store.focusedRegionId), 'is-dragging': draggingFiles, [`theme-${store.activeThemeId}`]: true, [`focus-${focusAmbience}`]: store.mode === 'focus' }" :style="store.mode === 'focus' ? focusThemeStyles : undefined" @dragover.prevent @dragenter.prevent="onDragEnter" @dragleave.prevent="onDragLeave" @drop.prevent="onDrop">
+  <div class="app-shell" :aria-busy="booting || busyAction !== null" :class="{ 'is-focus': store.mode === 'focus', 'is-clean': store.mode === 'clean', 'is-region-focus': store.mode === 'region-focus', 'has-focus-region': Boolean(store.focusedRegionId), 'is-dragging': draggingFiles, [`theme-${store.activeThemeId}`]: true, [`focus-${focusAmbience}`]: store.mode === 'focus' }" :style="store.mode === 'focus' ? focusThemeStyles : undefined" @dragover.prevent @dragenter.prevent="onDragEnter" @dragleave.prevent="onDragLeave" @drop.prevent="onDrop">
     <aside class="global-nav">
       <div class="brand-mark"><span><AppIcon name="logo" :size="18" /></span><small>墨阅 · MOYUE</small></div>
       <nav>
@@ -1042,11 +1424,14 @@ async function requestFullscreen() {
               <IconButton class="reader-tab-list-trigger" icon="chevron-down" size="sm" :active="tabListOpen" :label="`查看全部标签（${store.openDocuments.length}）`" :aria-expanded="tabListOpen" @click.stop="toggleTabList" />
               <div v-if="tabListOpen" class="tab-list-popover" role="menu" @click.stop>
                 <div class="tab-list-heading"><span>已打开文档</span><small>{{ store.openDocuments.length }}</small></div>
-                <button v-for="document in store.openDocuments" :key="document.id" class="tab-list-item" :class="{ active: store.currentDocumentId === document.id }" type="button" role="menuitem" @click="chooseDocument(document.id); closeTabMenus()">
+                <label v-if="store.openDocuments.length > 3" class="tab-list-search"><AppIcon name="search" :size="13" /><input v-model="tabSearchQuery" type="search" placeholder="搜索已打开标签…" aria-label="搜索已打开标签" /></label>
+                <button v-for="document in filteredOpenDocuments" :key="document.id" class="tab-list-item" :class="{ active: store.currentDocumentId === document.id }" type="button" role="menuitem" @click="chooseDocument(document.id); closeTabMenus()">
                   <AppIcon name="reader" :size="14" />
                   <span class="tab-list-copy"><strong>{{ tabLabel(document) }}</strong><small :title="document.path">{{ document.path }}</small></span>
                   <AppIcon v-if="store.currentDocumentId === document.id" name="check" :size="13" />
                 </button>
+                <div v-if="!filteredOpenDocuments.length" class="tab-list-empty">没有匹配的标签</div>
+                <button class="tab-reopen-button" type="button" role="menuitem" :disabled="!recentlyClosedTabs.length" @click="reopenLastClosedTab"><AppIcon name="history" :size="13" />重新打开上一个标签</button>
               </div>
             </div>
           </div>
@@ -1058,33 +1443,58 @@ async function requestFullscreen() {
             <button type="button" role="menuitem" @click="runTabMenuAction('close')">关闭标签</button>
             <button type="button" role="menuitem" :disabled="store.openDocuments.length < 2" @click="runTabMenuAction('close-others')">关闭其他标签</button>
             <button type="button" role="menuitem" :disabled="!hasTabsToRight(tabContextMenu.documentId)" @click="runTabMenuAction('close-right')">关闭右侧标签</button>
+            <button type="button" role="menuitem" :disabled="!recentlyClosedTabs.length" @click="runTabMenuAction('reopen')">重新打开上一个标签</button>
           </div>
         </Teleport>
         <Teleport to="body">
           <div v-if="fileContextMenu" class="file-context-menu" :style="{ top: `${fileContextMenu.y}px`, left: `${fileContextMenu.x}px` }" role="menu" @click.stop>
             <div class="file-context-title">{{ fileContextMenu.file.name }}</div>
             <button type="button" role="menuitem" @click="openFileContextEntry"><AppIcon name="reader" :size="13" />打开文件</button>
+            <button type="button" role="menuitem" @click="openFileContextNewTab"><AppIcon name="external" :size="13" />在新标签中打开</button>
             <button v-if="fileContextMenu.file.documentId" type="button" role="menuitem" @click="reloadFileContextEntry"><AppIcon name="sync" :size="13" />重新载入</button>
             <div class="file-context-divider" />
+            <button type="button" role="menuitem" @click="createFileContextFile"><AppIcon name="plus" :size="13" />新建文件</button>
+            <button type="button" role="menuitem" @click="createFileContextFolder"><AppIcon name="library" :size="13" />新建文件夹</button>
+            <button type="button" role="menuitem" @click="searchFileContextEntry"><AppIcon name="search" :size="13" />搜索</button>
+            <div class="file-context-divider" />
+            <button type="button" role="menuitem" @click="showDocumentList"><AppIcon name="file" :size="13" />文档列表</button>
+            <button type="button" role="menuitem" @click="showDocumentTree"><AppIcon name="library" :size="13" />文档树</button>
+            <div class="file-context-divider" />
+            <button type="button" role="menuitem" @click="renameFileContextEntry"><AppIcon name="edit" :size="13" />重命名</button>
+            <button type="button" role="menuitem" @click="duplicateFileContextEntry"><AppIcon name="copy" :size="13" />创建副本</button>
             <button type="button" role="menuitem" @click="openFileContextDirectory"><AppIcon name="library" :size="13" />打开所在目录</button>
             <button type="button" role="menuitem" @click="copyFileContextValue('name')"><AppIcon name="copy" :size="13" />复制文件名</button>
             <button type="button" role="menuitem" @click="copyFileContextValue('file')"><AppIcon name="copy" :size="13" />复制文件路径</button>
             <button type="button" role="menuitem" @click="copyFileContextValue('directory')"><AppIcon name="copy" :size="13" />复制目录路径</button>
+            <button type="button" role="menuitem" @click="showFileProperties"><AppIcon name="info" :size="13" />属性</button>
             <button v-if="isDeletableFile(fileContextMenu.file)" type="button" role="menuitem" class="file-context-danger" @click="deleteContextFile"><AppIcon name="trash" :size="13" />删除文件</button>
           </div>
         </Teleport>
-        <div class="reader-layout" :class="{ 'focus-layout': store.mode === 'focus' }">
-          <aside v-if="store.mode !== 'focus'" class="outline-panel">
+        <Teleport to="body">
+          <div v-if="fileProperties" class="overlay file-properties-overlay" @click.self="fileProperties = null">
+            <div class="file-properties-dialog" role="dialog" aria-modal="true" aria-label="文件属性">
+              <div class="file-properties-heading"><div><span class="section-kicker">FILE PROPERTIES</span><h2>{{ fileProperties.name }}</h2></div><IconButton icon="close" size="sm" label="关闭文件属性" @click="fileProperties = null" /></div>
+              <dl class="file-properties-list"><div><dt>位置</dt><dd>{{ fileProperties.path }}</dd></div><div><dt>类型</dt><dd>Markdown 文档</dd></div><div><dt>状态</dt><dd>{{ fileStatus(fileProperties) }}</dd></div><div><dt>当前目录</dt><dd>{{ fileDirectoryPath(fileProperties.path) || '当前工作区' }}</dd></div></dl>
+              <div class="file-properties-actions"><button class="ghost-button" type="button" @click="fileProperties = null">关闭</button><button class="primary-button" type="button" @click="copyFilePropertiesPath"><AppIcon name="copy" :size="13" />复制文件路径</button></div>
+            </div>
+          </div>
+        </Teleport>
+        <div class="reader-layout" :class="{ 'focus-layout': store.mode === 'focus', 'clean-layout': store.mode === 'clean' }">
+          <aside v-if="store.mode !== 'focus' && store.mode !== 'clean'" class="outline-panel">
             <div class="panel-heading panel-switcher">
               <div class="panel-tabs" role="tablist" aria-label="阅读侧栏">
             <button type="button" :class="{ active: leftPanelTab === 'files' }" @click="leftPanelTab = 'files'">文件 <span>{{ currentDirectoryFiles.length }}</span></button>
                 <button type="button" :class="{ active: leftPanelTab === 'outline' }" @click="leftPanelTab = 'outline'">大纲</button>
               </div>
-              <button class="text-button" type="button" @click="store.setMode(store.mode === 'clean' ? 'normal' : 'clean')">{{ store.mode === 'clean' ? '展开' : '收起' }}</button>
+              <button class="text-button" type="button" @click="toggleCleanMode">收起</button>
             </div>
             <div v-if="leftPanelTab === 'files'" class="file-browser-panel">
-              <div class="file-location" :title="currentDirectory"><AppIcon name="library" :size="13" /><span>{{ currentDirectoryLabel }}</span><small>所在目录</small></div>
-              <nav class="file-list" aria-label="当前文件夹中的 Markdown 文件">
+              <div class="file-location" :title="fileBrowserMode === 'tree' ? filesystemTree?.path : currentDirectory"><AppIcon name="library" :size="13" /><span>{{ fileBrowserMode === 'tree' ? filesystemTreeScope === 'system' ? '系统文件树' : '工作区文件树' : currentDirectoryLabel }}</span><small>{{ fileBrowserMode === 'tree' ? filesystemTreeScope === 'system' ? '按需展开' : '已授权文件' : '所在目录' }}</small></div>
+              <div v-if="fileBrowserMode === 'tree'" class="filesystem-tree-panel">
+                <div v-if="filesystemTree" class="filesystem-tree" :aria-label="filesystemTreeScope === 'system' ? '系统文件树' : '工作区文件树'"><FileSystemTree :node="filesystemTree" :selected-path="filesystemTreeTarget" @toggle="toggleFilesystemNode" @open="openFilesystemTreeNode" /></div>
+                <p v-else class="file-browser-note"><AppIcon name="info" :size="13" />右键文件选择“文档树”以打开文件层级</p>
+              </div>
+              <nav v-else class="file-list" aria-label="当前文件夹中的 Markdown 文件">
                 <div v-for="file in currentDirectoryFiles" :key="file.path" class="file-item" :class="{ active: store.currentDocumentId === file.documentId, 'is-unloaded': !file.documentId }">
                   <button type="button" class="file-item-open" :aria-label="file.documentId ? `打开 ${file.name}` : `载入 ${file.name}`" @click="openFileTreeEntry(file)" @contextmenu.prevent="openFileContextMenu($event, file)"><AppIcon name="file" :size="14" /><span class="file-item-copy"><strong>{{ file.name }}</strong><small>{{ fileStatus(file) }}</small></span><i v-if="store.currentDocumentId === file.documentId" class="file-active-mark" /></button><IconButton v-if="isDeletableFile(file)" class="file-delete" icon="trash" size="sm" :label="`删除 ${file.name}`" :disabled="busyAction !== null" @click="deleteFile(file)" />
                 </div>
@@ -1094,11 +1504,11 @@ async function requestFullscreen() {
             <nav v-else class="outline-list" aria-label="当前文档大纲"><button v-for="heading in store.currentDocument?.headings" :key="heading.id" :data-outline-id="heading.id" type="button" :class="{ active: store.activeHeadingId === heading.id }" :style="{ paddingLeft: `${12 + (heading.depth - 1) * 14}px` }" @click="scrollToHeading(heading.regionId)">{{ heading.text }}</button></nav>
             <div v-if="leftPanelTab === 'outline'" class="outline-footer"><span class="progress-ring" :style="{ '--progress': `${(currentProgress?.scrollPercent ?? 0) * 360}deg` }" /> <span>{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}% 已读</span></div>
           </aside>
-          <div ref="readerViewport" class="reader-viewport" @scroll="onReaderScroll" @wheel="onReaderWheel" @pointerdown="onReaderPointerDown" @mouseup="captureSelection"><div class="reader-content"><div class="reader-meta"><span class="section-kicker">{{ store.currentDocument?.path }}</span><span>{{ store.currentDocument?.wordCount }} 字 · 约 {{ store.currentDocument?.estimatedReadMinutes }} 分钟</span></div><h1 class="reader-title">{{ store.currentDocument?.title }}</h1><p class="reader-deck">在文字、图表和一块留白之间，找到你自己的阅读速度。</p><div class="reader-rule" />
-            <div class="regions-stack"><RegionBlock v-for="region in readerRegions" :key="region.id" :region="region" :focused="store.focusedRegionId === region.id" :active="store.activeRegionId === region.id" :focus-distance="focusDistanceByRegion.get(region.id)" :theme-mode="store.mode === 'focus' ? 'dark' : store.activeTheme?.manifest.mode" :theme-key="`${store.mode}-${focusAmbience}`" @focus="focusRegion(region)" @open-viewer="openViewer(region)" @code-copied="notify('代码已复制')" /></div>
+          <div ref="readerViewport" class="reader-viewport" @scroll="onReaderScroll" @wheel="onReaderWheel" @pointerdown="onReaderPointerDown" @mouseup="captureSelection"><nav v-if="(store.currentDocument?.headings.length ?? 0) > 0" class="reading-progress-rail" aria-label="阅读进度导航"><span class="reading-progress-rail-caption">{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}%</span><div class="reading-progress-rail-track"><span class="reading-progress-rail-fill" :style="{ height: `${(currentProgress?.scrollPercent ?? 0) * 100}%` }" /><button v-for="(heading, index) in store.currentDocument?.headings" :key="heading.id" type="button" class="reading-progress-marker" :class="{ active: store.activeHeadingId === heading.id }" :style="{ top: headingRailPosition(index) }" :aria-label="`跳转到 ${heading.text}`" :title="heading.text" @click.stop="scrollToHeading(heading.regionId)"><i /><span>{{ heading.text }}</span></button></div></nav><div class="reader-content"><div class="reader-meta"><span class="section-kicker">{{ store.currentDocument?.path }}</span><span>{{ store.currentDocument?.wordCount }} 字 · 约 {{ store.currentDocument?.estimatedReadMinutes }} 分钟</span></div><h1 class="reader-title">{{ store.currentDocument?.title }}</h1><p class="reader-deck">在文字、图表和一块留白之间，找到你自己的阅读速度。</p><div class="reader-rule" />
+            <div class="regions-stack"><RegionBlock v-for="region in readerRegions" :key="region.id" :region="region" :annotations="currentAnnotations" :focused="store.focusedRegionId === region.id" :active="store.activeRegionId === region.id" :focus-distance="focusDistanceByRegion.get(region.id)" :theme-mode="store.mode === 'focus' ? 'dark' : store.activeTheme?.manifest.mode" :theme-key="`${store.mode}-${focusAmbience}`" @focus="focusRegion(region)" @open-viewer="openViewer(region)" @code-copied="notify('代码已复制')" /></div>
             <footer class="reader-footer"><span>墨阅 · Moyue Reader</span><span>Read → Focus → Understand</span></footer>
           </div></div>
-        <aside v-if="store.mode !== 'focus'" class="context-panel"><div class="context-top"><span class="section-kicker">主题中心</span><button class="text-button" type="button" @click="view = 'themes'">更多 <AppIcon name="external" :size="12" /></button></div><div class="theme-mini-card"><ThemePicker :themes="store.themes" :selected-theme-id="store.activeThemeId" compact @select="applyReaderTheme" /><div class="theme-mini-caption"><strong>{{ store.activeTheme?.manifest.name }}</strong><small>沉浸阅读 · {{ store.activeTheme?.manifest.mode === 'light' ? '白昼' : '深色' }}</small></div></div><div class="translation-card"><div class="side-card-heading"><span>划词翻译</span><span>中 ↔ 英</span></div><strong>intelligence</strong><small>/ɪnˈtelɪdʒəns/</small><p>n. 智能；智力；理解力<br />复数：intelligences</p><button type="button" @click="assist('translate')">在适配器中打开 <AppIcon name="external" :size="12" /></button></div><div class="diagram-card"><div class="side-card-heading"><span>图表示例</span><IconButton icon="close" size="sm" label="关闭图表示例" @click="notify('图表可独立查看')" /></div><div class="mini-diagram"><span>数据收集</span><i>↓</i><div><span>数据预处理</span><span>模型训练</span></div><i>↓</i><div><span>评估与优化</span><span>预测应用</span></div></div><button class="diagram-link" type="button" @click="notify('请点击正文中的图表进入独立查看')">独立查看 <AppIcon name="external" :size="12" /></button></div><div class="context-card current-context"><span class="section-kicker">CURRENT REGION</span><strong>{{ currentHeading?.text || '开篇' }}</strong><small>{{ store.currentDocument?.regions.length ?? 0 }} 个阅读区域 · {{ currentAnnotations.length }} 条批注</small></div><div class="context-actions"><button type="button" @click="toggleFocusMode"><AppIcon name="focus" :size="13" />进入专注</button><button type="button" @click="view = 'themes'"><AppIcon name="palette" :size="13" />切换主题</button></div><div v-if="currentAnnotations.length" class="annotation-panel"><div class="annotation-heading"><span class="section-kicker">ANNOTATIONS</span><span>{{ currentAnnotations.length }}</span></div><button v-for="annotation in currentAnnotations.slice(0, 4)" :key="annotation.id" class="annotation-item" type="button" @click="jumpToAnnotation(annotation)"><span class="annotation-dot" :style="{ background: annotation.color }" /><span><b>{{ annotation.note || '未命名批注' }}</b><small>{{ annotation.selectedText }}</small></span></button></div></aside>
+        <aside v-if="store.mode !== 'focus' && store.mode !== 'clean'" class="context-panel"><div class="context-top"><span class="section-kicker">主题中心</span><button class="text-button" type="button" @click="view = 'themes'">更多 <AppIcon name="external" :size="12" /></button></div><div class="theme-mini-card"><ThemePicker :themes="store.themes" :selected-theme-id="store.activeThemeId" compact @select="applyReaderTheme" /><div class="theme-mini-caption"><strong>{{ store.activeTheme?.manifest.name }}</strong><small>沉浸阅读 · {{ store.activeTheme?.manifest.mode === 'light' ? '白昼' : '深色' }}</small></div></div><div class="translation-card"><div class="side-card-heading"><span>划词翻译</span><span>中 ↔ 英</span></div><strong>intelligence</strong><small>/ɪnˈtelɪdʒəns/</small><p>n. 智能；智力；理解力<br />复数：intelligences</p><button type="button" @click="assist('translate')">在适配器中打开 <AppIcon name="external" :size="12" /></button></div><div class="diagram-card"><div class="side-card-heading"><span>图表示例</span><IconButton icon="close" size="sm" label="关闭图表示例" @click="notify('图表可独立查看')" /></div><div class="mini-diagram"><span>数据收集</span><i>↓</i><div><span>数据预处理</span><span>模型训练</span></div><i>↓</i><div><span>评估与优化</span><span>预测应用</span></div></div><button class="diagram-link" type="button" @click="notify('请点击正文中的图表进入独立查看')">独立查看 <AppIcon name="external" :size="12" /></button></div><div class="context-card current-context"><span class="section-kicker">CURRENT REGION</span><strong>{{ currentHeading?.text || '开篇' }}</strong><small>{{ store.currentDocument?.regions.length ?? 0 }} 个阅读区域 · {{ currentAnnotations.length }} 条批注</small></div><div class="context-actions"><button type="button" @click="toggleFocusMode"><AppIcon name="focus" :size="13" />进入专注</button><button type="button" @click="toggleCleanMode"><AppIcon name="eye" :size="13" />纯净阅读</button></div><div v-if="currentAnnotations.length" class="annotation-panel"><div class="annotation-heading"><span class="section-kicker">ANNOTATIONS</span><span>{{ currentAnnotations.length }}</span></div><button v-for="annotation in currentAnnotations.slice(0, 4)" :key="annotation.id" class="annotation-item" type="button" @click="jumpToAnnotation(annotation)"><span class="annotation-dot" :style="{ background: annotation.color }" /><span><b>{{ annotation.note || '高亮标记' }}</b><small>{{ annotation.selectedText }}</small></span></button></div></aside>
         <aside v-if="store.mode === 'focus'" class="focus-sidebar"><div class="focus-sidebar-head"><div><span class="section-kicker">FOCUS READING</span><strong>专注阅读</strong></div><button class="ghost-button" type="button" @click="exitFocusMode"><AppIcon name="close" :size="13" />退出</button></div><div class="focus-timer-card"><div class="focus-timer-ring" :style="{ '--focus-progress': `${focusProgress * 360}deg` }"><strong>{{ focusTimeLabel }}</strong><span>{{ focusRunning ? '专注中' : focusRemaining === 0 ? '已完成' : '准备开始' }}</span></div><div class="focus-timer-actions"><button type="button" @click="resetFocusTimer">重置</button><button class="primary-button" type="button" @click="toggleFocusTimer">{{ focusRunning ? '暂停' : '开始' }}</button></div></div><FocusAmbiencePicker v-model="focusAmbience" /><div class="focus-card focus-outline"><div class="focus-card-heading"><span>内容导航</span><small>{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}%</small></div><nav><button v-for="heading in store.currentDocument?.headings" :key="heading.id" :data-focus-outline-id="heading.id" type="button" :class="{ active: store.activeHeadingId === heading.id }" @click="focusHeading(heading.regionId)"><i />{{ heading.text }}</button></nav></div></aside>
         </div>
         <div v-if="resumePrompt?.documentId === store.currentDocumentId" class="resume-prompt" role="dialog" aria-label="继续阅读">
@@ -1113,7 +1523,8 @@ async function requestFullscreen() {
           </div>
         </div>
         <div v-if="store.mode === 'region-focus'" class="focus-hud"><span v-if="focusPosition" class="focus-hud-position">{{ focusPosition }}</span><span>↑ ↓ 切换区域</span><span>Enter 聚焦</span><button type="button" @click="clearRegionFocus">ESC 退出</button></div>
-        <div v-if="selectionToolbar" class="selection-toolbar"><span class="selection-label">{{ selectionToolbar.text.slice(0, 28) }}{{ selectionToolbar.text.length > 28 ? '…' : '' }}</span><button type="button" @click="assist('translate')">翻译</button><button type="button" @click="assist('explain')">解释</button><button type="button" @click="beginAnnotation">批注</button><button type="button" @click="copySelection">复制</button></div>
+        <div v-if="store.mode === 'clean'" class="clean-mode-hud"><span><AppIcon name="eye" :size="13" />纯净阅读</span><button type="button" @click="toggleCleanMode">退出 <kbd>Esc</kbd></button></div>
+        <div v-if="selectionToolbar" class="selection-toolbar"><span class="selection-label">{{ selectionToolbar.text.slice(0, 28) }}{{ selectionToolbar.text.length > 28 ? '…' : '' }}</span><button type="button" @click="highlightSelection">高亮</button><button type="button" @click="beginAnnotation">批注</button><button type="button" @click="searchSelection">搜索</button><button type="button" @click="assist('translate')">翻译</button><button type="button" @click="copySelectionMarkdown">复制 Markdown</button><button type="button" @click="copySelection">复制</button></div>
       </section>
 
       <ThemeCenter v-else-if="view === 'themes'" :themes="store.themes" :active-theme-id="store.activeThemeId" :active-theme="store.activeTheme" @apply="applyReaderTheme" @install="store.installTheme" @notify="notify" />

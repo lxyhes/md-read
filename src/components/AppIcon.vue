@@ -26,9 +26,11 @@ export type AppIconName =
   | 'more'
   | 'download'
   | 'copy'
+  | 'edit'
   | 'check'
   | 'chevron-up'
   | 'chevron-down'
+  | 'chevron-right'
   | 'code'
   | 'table'
   | 'image'
@@ -159,6 +161,10 @@ withDefaults(defineProps<{ name: AppIconName; size?: number; strokeWidth?: numbe
       <rect x="8" y="8" width="11" height="12" rx="1.5" />
       <path d="M6 16H5a1.5 1.5 0 0 1-1.5-1.5v-9A1.5 1.5 0 0 1 5 4h8.5A1.5 1.5 0 0 1 15 5.5V7" />
     </template>
+    <template v-else-if="name === 'edit'">
+      <path d="m5 16-.8 4 4-.8L19 8.4 15.6 5 5 16Z" />
+      <path d="m13.8 6.8 3.4 3.4M4.2 20h4" />
+    </template>
     <template v-else-if="name === 'check'">
       <path d="m5 12.5 4.2 4.2L19 7" />
     </template>
@@ -167,6 +173,9 @@ withDefaults(defineProps<{ name: AppIconName; size?: number; strokeWidth?: numbe
     </template>
     <template v-else-if="name === 'chevron-down'">
       <path d="m6 10 6 6 6-6" />
+    </template>
+    <template v-else-if="name === 'chevron-right'">
+      <path d="m9 6 6 6-6 6" />
     </template>
     <template v-else-if="name === 'code'">
       <path d="m9 7-5 5 5 5M15 7l5 5-5 5" />

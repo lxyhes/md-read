@@ -78,6 +78,34 @@ export const useReaderStore = defineStore('reader', () => {
     return document
   }
 
+  async function renameDocument(id: string, nextPath: string) {
+    const existing = documents.value.find((item) => item.id === id)
+    if (!existing) return null
+    const { parseMarkdown } = await import('../parser')
+    const document = parseMarkdown(nextPath, existing.source, (url) => resolveMarkdownAssetUrl(nextPath, url))
+    const previousProgress = progress.value[id] ?? await getProgress(id)
+    const previousAnnotations = loadAnnotations(id)
+    const wasCurrent = currentDocumentId.value === id
+    documents.value = [...documents.value.filter((item) => item.id !== id && item.id !== document.id), document]
+    openDocumentIds.value = openDocumentIds.value.map((item) => item === id ? document.id : item)
+    if (wasCurrent) {
+      currentDocumentId.value = document.id
+      annotations.value = previousAnnotations.map((item) => ({ ...item, documentId: document.id }))
+    }
+    if (previousProgress) {
+      const nextProgress = { ...previousProgress, documentId: document.id }
+      delete progress.value[id]
+      progress.value[document.id] = nextProgress
+      await saveProgress(nextProgress)
+    }
+    for (const annotation of previousAnnotations) await saveAnnotation({ ...annotation, documentId: document.id })
+    await saveDocumentSnapshot(document)
+    await saveDocument({ id: document.id, path: document.path, title: document.title, sourceHash: document.sourceHash, updatedAt: document.updatedAt, source: document.source })
+    await deleteDocument(id)
+    persistSession()
+    return document
+  }
+
   async function bootstrap() {
     const saved = loadDocumentSnapshots()
     if (saved.length) documents.value = saved
@@ -181,7 +209,7 @@ export const useReaderStore = defineStore('reader', () => {
 
   const openDocuments = computed(() => openDocumentIds.value.map((id) => documents.value.find((document) => document.id === id)).filter((document): document is ReaderDocument => Boolean(document)))
 
-  return { documents, openDocuments, openDocumentIds, currentDocumentId, currentDocument, mode, activeRegionId, focusedRegionId, activeHeadingId, selection, progress, annotations, themes, activeThemeId, activeTheme, readerSettings, bootstrap, importFiles, importFolder, addOpenedFiles, reloadDocument, openDocument, closeDocument, removeDocument, setProgress, setFocusedRegion, focusRegion, clearFocus, setMode, addAnnotation, applyTheme, installTheme, updateSettings }
+  return { documents, openDocuments, openDocumentIds, currentDocumentId, currentDocument, mode, activeRegionId, focusedRegionId, activeHeadingId, selection, progress, annotations, themes, activeThemeId, activeTheme, readerSettings, bootstrap, importFiles, importFolder, addOpenedFiles, reloadDocument, renameDocument, openDocument, closeDocument, removeDocument, setProgress, setFocusedRegion, focusRegion, clearFocus, setMode, addAnnotation, applyTheme, installTheme, updateSettings }
 })
 
 function readSettings() {

@@ -1,11 +1,12 @@
 import { convertFileSrc, invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
-import { readDir, readTextFile, remove, watch } from '@tauri-apps/plugin-fs'
+import { copyFile, mkdir, readDir, readTextFile, remove, rename, watch, writeTextFile } from '@tauri-apps/plugin-fs'
 
 const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
 export interface OpenedFile { path: string; source: string }
 export interface WorkspaceFile { path: string; name: string }
+export interface FileSystemEntry { path: string; name: string; isDirectory: boolean }
 
 export async function watchMarkdownPath(path: string, onChange: () => void): Promise<(() => void) | null> {
   if (!isTauri()) return null
@@ -84,6 +85,15 @@ export async function listMarkdownFiles(path: string): Promise<WorkspaceFile[]> 
     .sort((left, right) => left.name.localeCompare(right.name, 'zh-CN'))
 }
 
+export async function listFileSystemEntries(path: string): Promise<FileSystemEntry[]> {
+  if (!isTauri()) throw new Error('浏览器预览无法读取系统文件树，请使用桌面端打开')
+  const directory = path.replace(/\\/g, '/').replace(/\/+$/, '') || '/'
+  const entries = await readDir(directory)
+  return entries
+    .map((entry) => ({ name: entry.name, path: directory === '/' ? `/${entry.name}` : `${directory}/${entry.name}`, isDirectory: Boolean(entry.isDirectory) }))
+    .sort((left, right) => Number(right.isDirectory) - Number(left.isDirectory) || left.name.localeCompare(right.name, 'zh-CN'))
+}
+
 export async function readMarkdownPath(path: string): Promise<string> {
   if (!isTauri()) throw new Error('浏览器预览无法读取未载入文件，请使用桌面端打开')
   return readTextFile(path)
@@ -93,6 +103,29 @@ export async function deleteMarkdownPath(path: string): Promise<void> {
   if (!isTauri()) throw new Error('浏览器预览无法删除文件，请使用桌面端打开')
   if (!/\.(md|markdown)$/i.test(path)) throw new Error('只能删除 Markdown 文件')
   await remove(path, { recursive: false })
+}
+
+export async function createMarkdownFile(path: string, source = ''): Promise<void> {
+  if (!isTauri()) throw new Error('浏览器预览无法新建文件，请使用桌面端打开')
+  if (!/\.(md|markdown)$/i.test(path)) throw new Error('只能创建 Markdown 文件')
+  await writeTextFile(path, source)
+}
+
+export async function createMarkdownDirectory(path: string): Promise<void> {
+  if (!isTauri()) throw new Error('浏览器预览无法新建文件夹，请使用桌面端打开')
+  await mkdir(path)
+}
+
+export async function renameMarkdownPath(path: string, nextPath: string): Promise<void> {
+  if (!isTauri()) throw new Error('浏览器预览无法重命名文件，请使用桌面端打开')
+  if (!/\.(md|markdown)$/i.test(path) || !/\.(md|markdown)$/i.test(nextPath)) throw new Error('只能重命名 Markdown 文件')
+  await rename(path, nextPath)
+}
+
+export async function copyMarkdownPath(path: string, nextPath: string): Promise<void> {
+  if (!isTauri()) throw new Error('浏览器预览无法创建文件副本，请使用桌面端打开')
+  if (!/\.(md|markdown)$/i.test(path) || !/\.(md|markdown)$/i.test(nextPath)) throw new Error('只能复制 Markdown 文件')
+  await copyFile(path, nextPath)
 }
 
 export async function openMarkdownDirectory(path: string): Promise<void> {

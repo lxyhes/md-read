@@ -2059,6 +2059,126 @@ button:focus-visible,
   }
 }
 
+/* Reading position: a quiet chapter rail beside the page, without duplicating the outline panel. */
+.reader-viewport {
+  position: relative;
+}
+.reading-progress-rail {
+  position: sticky;
+  top: 50%;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  width: 30px;
+  height: 0;
+  margin-left: auto;
+  margin-right: 13px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.reading-progress-rail-caption {
+  margin-bottom: 10px;
+  color: var(--accent);
+  font: 9px var(--mono);
+  letter-spacing: .04em;
+}
+.reading-progress-rail-track {
+  position: relative;
+  width: 16px;
+  height: 210px;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-raised) 52%, transparent);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--app-bg) 10%, transparent);
+}
+.reading-progress-rail-track::before {
+  position: absolute;
+  top: 9px;
+  bottom: 9px;
+  left: 50%;
+  width: 1px;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  content: "";
+  transform: translateX(-50%);
+}
+.reading-progress-rail-fill {
+  position: absolute;
+  top: 9px;
+  left: 50%;
+  width: 2px;
+  max-height: calc(100% - 18px);
+  border-radius: 2px;
+  background: var(--accent);
+  transform: translateX(-50%);
+  transform-origin: top;
+}
+.reading-progress-marker {
+  position: absolute;
+  left: 50%;
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  padding: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+}
+.reading-progress-marker i {
+  display: block;
+  width: 6px;
+  height: 6px;
+  border: 1px solid color-mix(in srgb, var(--muted) 72%, transparent);
+  border-radius: 50%;
+  background: var(--surface);
+  transition: width .18s ease, height .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease;
+}
+.reading-progress-marker:hover i,
+.reading-progress-marker.active i {
+  width: 9px;
+  height: 9px;
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 13%, transparent);
+}
+.reading-progress-marker > span {
+  position: absolute;
+  right: 24px;
+  top: 50%;
+  display: block;
+  width: max-content;
+  max-width: 190px;
+  padding: 6px 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-raised);
+  color: var(--ink);
+  font: 10px var(--ui-font);
+  opacity: 0;
+  pointer-events: none;
+  text-overflow: ellipsis;
+  transform: translateY(-50%) translateX(4px);
+  transition: opacity .16s ease, transform .16s ease;
+  white-space: nowrap;
+}
+.reading-progress-marker:hover > span,
+.reading-progress-marker:focus-visible > span {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0);
+}
+.reading-progress-marker:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+@media (max-width: 1180px) {
+  .reading-progress-rail { margin-right: 6px; }
+  .reading-progress-marker > span { display: none; }
+}
+
 /* Keep Mermaid SVGs measurable in the independent viewer. */
 .viewer-stage .mermaid-block {
   width: min(920px, 100%);
@@ -2557,7 +2677,7 @@ button:focus-visible,
 }
 .file-context-menu {
   position: fixed;
-  width: 228px;
+  width: 246px;
   padding: 6px;
 }
 .tab-context-title,
@@ -2611,17 +2731,263 @@ button:focus-visible,
 .file-context-menu .file-context-danger:hover:not(:disabled) {
   color: #f29a9a;
 }
+.filesystem-tree-panel {
+  min-height: 0;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+}
+.filesystem-tree {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 9px 0 18px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent-soft) transparent;
+}
+.filesystem-tree-node {
+  min-width: max-content;
+}
+.filesystem-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 190px;
+  min-height: 28px;
+  padding-top: 5px;
+  padding-right: 10px;
+  padding-bottom: 5px;
+  border-left: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  text-align: left;
+  font: 10px var(--ui-font);
+  transition: background .16s ease, color .16s ease, border-color .16s ease;
+}
+.filesystem-tree-row:hover,
+.filesystem-tree-row.selected {
+  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--ink);
+}
+.filesystem-tree-row.directory {
+  color: var(--ink);
+}
+.filesystem-tree-row > .app-icon {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+.filesystem-tree-chevron {
+  display: grid;
+  place-items: center;
+  width: 12px;
+  flex: 0 0 12px;
+  color: var(--muted);
+}
+.filesystem-tree-chevron i {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.filesystem-tree-name {
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.filesystem-tree-loading {
+  margin-left: auto;
+  color: var(--accent);
+  font: 9px var(--mono);
+}
+.filesystem-tree-error,
+.filesystem-tree-empty {
+  padding-top: 5px;
+  padding-bottom: 6px;
+  color: var(--muted);
+  font: 9px/1.4 var(--ui-font);
+}
+.filesystem-tree-error {
+  color: #c96c6c;
+}
+.file-properties-dialog {
+  width: min(540px, calc(100vw - 48px));
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 24px 80px rgba(0,0,0,.4);
+}
+.file-properties-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.file-properties-heading h2 {
+  margin: 8px 0 0;
+  color: var(--ink);
+  font: 400 17px/1.3 var(--ui-font);
+  word-break: break-word;
+}
+.file-properties-list {
+  margin: 0;
+  padding: 8px 22px 13px;
+}
+.file-properties-list > div {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  gap: 15px;
+  padding: 10px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+.file-properties-list > div:last-child {
+  border-bottom: 0;
+}
+.file-properties-list dt {
+  color: var(--muted);
+  font: 10px var(--ui-font);
+}
+.file-properties-list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font: 10px/1.5 var(--mono);
+}
+.file-properties-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 22px 18px;
+  background: color-mix(in srgb, var(--surface-raised) 42%, transparent);
+}
 .reader-tab-status {
   flex: 0 0 auto;
   max-width: 260px;
   padding-left: 12px;
   white-space: nowrap;
 }
+.tab-list-search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 3px 2px 7px;
+  padding: 7px 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--accent);
+}
+.tab-list-search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font: 10px var(--ui-font);
+}
+.tab-list-search input::placeholder { color: var(--muted); }
+.tab-list-empty {
+  padding: 14px 9px;
+  color: var(--muted);
+  text-align: center;
+  font: 10px var(--ui-font);
+}
+.tab-reopen-button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  margin-top: 5px;
+  padding: 8px 9px;
+  border-top: 1px solid var(--border);
+  background: transparent;
+  color: var(--accent);
+  text-align: left;
+  font: 10px var(--ui-font);
+}
+.tab-reopen-button:hover:not(:disabled) { background: var(--accent-soft); }
+.tab-reopen-button:disabled { cursor: not-allowed; opacity: .42; }
+.tab-context-menu button:last-child { border-top: 1px solid var(--border); margin-top: 4px; }
 @media (max-width: 900px) {
   .reader-tab-status span:nth-child(2),
   .reader-tab-status span:nth-child(3) {
     display: none;
   }
+}
+
+/* Clean reading removes chrome while preserving the exact scroll position. */
+.app-shell.is-clean .global-nav {
+  width: 0;
+  flex-basis: 0;
+  padding: 0;
+  overflow: hidden;
+  border-right: 0;
+}
+.app-shell.is-clean .topbar {
+  height: 0;
+  flex-basis: 0;
+  min-height: 0;
+  padding-block: 0;
+  overflow: hidden;
+  border-bottom: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+.app-shell.is-clean .reader-layout.clean-layout {
+  grid-template-columns: minmax(0, 1fr);
+}
+.clean-mode-hud {
+  position: absolute;
+  right: 22px;
+  bottom: 18px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 9px 7px 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-raised) 92%, transparent);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--app-bg) 20%, transparent);
+  color: var(--muted);
+  font: 10px var(--ui-font);
+  backdrop-filter: blur(12px);
+}
+.clean-mode-hud > span,
+.clean-mode-hud button { display: inline-flex; align-items: center; gap: 5px; }
+.clean-mode-hud > span { color: var(--accent); }
+.clean-mode-hud button { padding: 4px 6px; border-radius: 5px; background: transparent; color: var(--muted); }
+.clean-mode-hud button:hover { background: var(--accent-soft); color: var(--ink); }
+
+/* Code ergonomics: line-aware copy and an explicit wrapping choice. */
+.code-copy:disabled { cursor: not-allowed; opacity: .38; }
+.code-wrap-toggle.active {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+.code-body .line { cursor: text; }
+.code-body.is-wrapped pre,
+.code-body.is-wrapped pre code,
+.code-body.is-wrapped pre code .line {
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.code-body.is-wrapped pre { overflow-x: hidden; }
+.reader-highlight {
+  padding: .06em .12em;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--highlight-color, var(--accent)) 34%, transparent);
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--highlight-color, var(--accent)) 75%, transparent);
+  color: inherit;
 }
 
 /* Independent viewer: make the modal feel like a focused workspace, not a utility dialog. */
