@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { getProgress, loadAnnotations, loadDocumentSnapshots, saveAnnotation, saveDocument, saveDocumentSnapshot, saveProgress } from '../persistence'
+import { deleteDocument, getProgress, loadAnnotations, loadDocumentSnapshots, saveAnnotation, saveDocument, saveDocumentSnapshot, saveProgress } from '../persistence'
 import { openMarkdownFile, openMarkdownFolder, resolveMarkdownAssetUrl, type OpenedFile } from '../fileService'
 import { builtInThemes, cssVariables, defaultTokens } from '../themes'
 const SESSION_KEY = 'moyue:reader-session'
@@ -134,6 +134,29 @@ export const useReaderStore = defineStore('reader', () => {
     }
   }
 
+  async function removeDocument(id: string) {
+    const documentIndex = documents.value.findIndex((item) => item.id === id)
+    if (documentIndex < 0) return
+    const openIndex = openDocumentIds.value.indexOf(id)
+    const wasCurrent = currentDocumentId.value === id
+    documents.value = documents.value.filter((item) => item.id !== id)
+    openDocumentIds.value = openDocumentIds.value.filter((item) => item !== id)
+    await deleteDocument(id)
+    if (!wasCurrent) {
+      persistSession()
+      return
+    }
+    const nextId = openDocumentIds.value[openIndex] ?? openDocumentIds.value[openIndex - 1] ?? null
+    if (nextId) await openDocument(nextId)
+    else {
+      currentDocumentId.value = null
+      mode.value = 'normal'
+      focusedRegionId.value = null
+      annotations.value = []
+      persistSession()
+    }
+  }
+
   async function setProgress(scrollPercent: number, regionId: string | null, headingId: string | null) {
     if (!currentDocumentId.value) return
     const value = { documentId: currentDocumentId.value, regionId, headingId, scrollPercent, readingTime: progress.value[currentDocumentId.value]?.readingTime ?? 0, updatedAt: Date.now() }
@@ -141,9 +164,14 @@ export const useReaderStore = defineStore('reader', () => {
     await saveProgress(value)
   }
 
-  function focusRegion(id: string) { focusedRegionId.value = id; activeRegionId.value = id; mode.value = 'region-focus' }
+  function setFocusedRegion(id: string) { focusedRegionId.value = id; activeRegionId.value = id }
+  function focusRegion(id: string) { setFocusedRegion(id); mode.value = 'region-focus' }
   function clearFocus() { focusedRegionId.value = null; activeRegionId.value = null; mode.value = 'normal' }
-  function setMode(value: ReaderMode) { mode.value = value; if (value !== 'region-focus') focusedRegionId.value = null }
+  function setMode(value: ReaderMode) {
+    mode.value = value
+    if (value === 'focus' && !focusedRegionId.value && activeRegionId.value) setFocusedRegion(activeRegionId.value)
+    if (value !== 'focus' && value !== 'region-focus') focusedRegionId.value = null
+  }
   async function addAnnotation(annotation: Annotation) { annotations.value.push(annotation); await saveAnnotation(annotation) }
   function installTheme(theme: MoyueTheme) { themes.value = [...themes.value.filter((item) => item.manifest.id !== theme.manifest.id), theme] }
   function updateSettings(settings: Partial<typeof readerSettings.value>) {
@@ -153,7 +181,7 @@ export const useReaderStore = defineStore('reader', () => {
 
   const openDocuments = computed(() => openDocumentIds.value.map((id) => documents.value.find((document) => document.id === id)).filter((document): document is ReaderDocument => Boolean(document)))
 
-  return { documents, openDocuments, openDocumentIds, currentDocumentId, currentDocument, mode, activeRegionId, focusedRegionId, activeHeadingId, selection, progress, annotations, themes, activeThemeId, activeTheme, readerSettings, bootstrap, importFiles, importFolder, addOpenedFiles, reloadDocument, openDocument, closeDocument, setProgress, focusRegion, clearFocus, setMode, addAnnotation, applyTheme, installTheme, updateSettings }
+  return { documents, openDocuments, openDocumentIds, currentDocumentId, currentDocument, mode, activeRegionId, focusedRegionId, activeHeadingId, selection, progress, annotations, themes, activeThemeId, activeTheme, readerSettings, bootstrap, importFiles, importFolder, addOpenedFiles, reloadDocument, openDocument, closeDocument, removeDocument, setProgress, setFocusedRegion, focusRegion, clearFocus, setMode, addAnnotation, applyTheme, installTheme, updateSettings }
 })
 
 function readSettings() {

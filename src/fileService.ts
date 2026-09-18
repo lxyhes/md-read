@@ -1,6 +1,6 @@
-import { convertFileSrc } from '@tauri-apps/api/core'
+import { convertFileSrc, invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
-import { readDir, readTextFile, watch } from '@tauri-apps/plugin-fs'
+import { readDir, readTextFile, remove, watch } from '@tauri-apps/plugin-fs'
 
 const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
@@ -87,6 +87,19 @@ export async function listMarkdownFiles(path: string): Promise<WorkspaceFile[]> 
 export async function readMarkdownPath(path: string): Promise<string> {
   if (!isTauri()) throw new Error('浏览器预览无法读取未载入文件，请使用桌面端打开')
   return readTextFile(path)
+}
+
+export async function deleteMarkdownPath(path: string): Promise<void> {
+  if (!isTauri()) throw new Error('浏览器预览无法删除文件，请使用桌面端打开')
+  if (!/\.(md|markdown)$/i.test(path)) throw new Error('只能删除 Markdown 文件')
+  await remove(path, { recursive: false })
+}
+
+export async function openMarkdownDirectory(path: string): Promise<void> {
+  if (!isTauri()) throw new Error('浏览器预览无法打开系统目录，请使用桌面端打开')
+  const directory = dirnameOf(path)
+  if (!directory) throw new Error('当前文件没有可用的目录路径')
+  await invoke('open_directory', { path: directory })
 }
 
 async function filesToOpened(files: FileList | null): Promise<OpenedFile[]> {

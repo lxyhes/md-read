@@ -30,6 +30,18 @@ export async function saveDocumentSnapshot(document: ReaderDocument): Promise<vo
   writeJson('moyue:documents:full', [...existing.filter((item) => item.id !== document.id), document])
 }
 
+export async function deleteDocument(documentId: string): Promise<void> {
+  const existing = readJson<ReaderDocument[]>('moyue:documents:full', [])
+  writeJson('moyue:documents:full', existing.filter((item) => item.id !== documentId))
+  localStorage.removeItem(`moyue:document:${documentId}`)
+  localStorage.removeItem(`moyue:progress:${documentId}`)
+  localStorage.removeItem(`moyue:annotations:${documentId}`)
+  const db = await getDatabase()
+  await db?.execute('DELETE FROM documents WHERE id = ?', [documentId])
+  await db?.execute('DELETE FROM progress WHERE document_id = ?', [documentId])
+  await db?.execute('DELETE FROM annotations WHERE document_id = ?', [documentId])
+}
+
 export function loadDocumentSnapshots(): ReaderDocument[] {
   return readJson<ReaderDocument[]>('moyue:documents:full', [])
 }
