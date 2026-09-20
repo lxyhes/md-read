@@ -1497,7 +1497,7 @@ html, body, #app { background: var(--app-bg, #070d22); }
   padding-bottom: 9px;
 }
 .reader-content .region-content {
-  font-size: max(18px, var(--reader-size));
+  font-size: max(15px, var(--reader-size));
 }
 .reader-content .code-frame pre {
   padding-top: 38px;
@@ -3835,4 +3835,255 @@ button:focus-visible,
 }
 .mermaid-svg svg .edgePath .path {
   stroke-width: 1.25px;
+}
+
+/* Reader finish: keep document navigation quiet and give the article room to breathe. */
+.reader-tab-scroll {
+  scrollbar-width: none;
+}
+
+.reader-tab-scroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+@media (min-width: 1181px) {
+  .app-shell:not(.is-focus) .reader-layout {
+    grid-template-columns: 204px minmax(0, 1fr) 242px;
+  }
+
+  .app-shell:not(.is-focus) .reader-content {
+    width: min(var(--reader-width), calc(100% - 64px));
+    padding-top: 38px;
+  }
+}
+
+.app-shell:not(.is-focus) .reader-meta {
+  align-items: center;
+  padding-bottom: 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+}
+
+.app-shell:not(.is-focus) .reader-meta > span:last-child {
+  padding: 4px 8px;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-raised) 54%, transparent);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.app-shell:not(.is-focus) .reader-title {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Responsive reading: reclaim the page before shrinking the type. */
+@media (max-width: 1080px) {
+  .app-shell:not(.is-focus) .global-nav,
+  .app-shell:not(.is-focus) .global-nav:hover {
+    width: 64px;
+    flex-basis: 64px;
+    padding-right: 8px;
+    padding-left: 8px;
+  }
+
+  .app-shell:not(.is-focus) .brand-mark {
+    margin-right: 0;
+    margin-left: 0;
+  }
+
+  .app-shell:not(.is-focus) .brand-mark-logo {
+    width: 48px;
+    height: 48px;
+  }
+
+  .app-shell:not(.is-focus) .nav-section-label,
+  .app-shell:not(.is-focus) .nav-item > span:last-child,
+  .app-shell:not(.is-focus) .nav-motto,
+  .app-shell:not(.is-focus) .profile-chip > span:last-child {
+    display: none;
+  }
+
+  .app-shell:not(.is-focus) .nav-item {
+    justify-content: center;
+    padding-right: 0;
+    padding-left: 0;
+  }
+
+  .app-shell:not(.is-focus) .reader-layout {
+    grid-template-columns: 180px minmax(0, 1fr);
+  }
+
+  .app-shell:not(.is-focus) .context-panel {
+    display: none;
+  }
+
+  .app-shell:not(.is-focus) .reader-content {
+    width: min(var(--reader-width), calc(100% - 40px));
+  }
+}
+
+@media (max-width: 720px) {
+  .app-shell:not(.is-focus) .topbar {
+    gap: 10px;
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .app-shell:not(.is-focus) .crumbs {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .app-shell:not(.is-focus) .crumbs strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .app-shell:not(.is-focus) .command-trigger {
+    min-width: 160px;
+    max-width: 220px;
+  }
+
+  .app-shell:not(.is-focus) .top-actions {
+    gap: 4px;
+  }
+
+  .app-shell:not(.is-focus) .reader-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-shell:not(.is-focus) .outline-panel {
+    display: none;
+  }
+
+  .app-shell:not(.is-focus) .reader-tabbar {
+    height: 40px;
+    padding-right: 8px;
+    padding-left: 8px;
+  }
+
+  .app-shell:not(.is-focus) .reader-layout {
+    height: calc(100% - 40px);
+  }
+
+  .app-shell:not(.is-focus) .reader-content {
+    width: calc(100% - 28px);
+    padding-top: 26px;
+    padding-bottom: 52px;
+  }
+
+  .app-shell:not(.is-focus) .reader-title {
+    margin-top: 16px;
+    font-size: clamp(32px, 9vw, 46px);
+    line-height: 1.06;
+  }
+
+  .app-shell:not(.is-focus) .reader-deck {
+    font-size: 15px;
+    line-height: 1.6;
+  }
+
+  .app-shell:not(.is-focus) .reader-rule {
+    margin-top: 24px;
+    margin-bottom: 28px;
+  }
+
+  .app-shell:not(.is-focus) .region-block {
+    margin-left: 0;
+    padding: 10px 25px 10px 8px;
+  }
+
+  .app-shell:not(.is-focus) .reading-progress-rail {
+    display: none;
+  }
+
+  .app-shell .reader-tab {
+    min-width: 132px;
+    padding-right: 10px;
+    padding-left: 10px;
+  }
+
+  .app-shell .reader-tab strong {
+    max-width: 132px;
+  }
+}
+
+@media (max-width: 540px) {
+  .app-shell:not(.is-focus) .global-nav,
+  .app-shell:not(.is-focus) .global-nav:hover {
+    width: 0;
+    flex-basis: 0;
+    padding: 0;
+    overflow: hidden;
+    border-right: 0;
+  }
+
+  .app-shell:not(.is-focus) .topbar {
+    height: 56px;
+    flex-basis: 56px;
+    gap: 8px;
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .app-shell:not(.is-focus) .crumbs {
+    min-width: 0;
+    flex: 1;
+    gap: 7px;
+    overflow: hidden;
+  }
+
+  .app-shell:not(.is-focus) .crumbs .eyebrow,
+  .app-shell:not(.is-focus) .crumb-separator {
+    display: none;
+  }
+
+  .app-shell:not(.is-focus) .crumbs strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .app-shell:not(.is-focus) .command-trigger {
+    width: 34px;
+    min-width: 34px;
+    flex: 0 0 34px;
+    padding: 8px;
+    overflow: hidden;
+  }
+
+  .app-shell:not(.is-focus) .command-trigger span {
+    display: none;
+  }
+
+  .app-shell:not(.is-focus) .command-trigger kbd {
+    padding: 0;
+    border: 0;
+    font-size: 0;
+  }
+
+  .app-shell:not(.is-focus) .command-trigger kbd::before {
+    content: "⌕";
+    font-size: 16px;
+  }
+
+  .app-shell:not(.is-focus) .top-actions {
+    gap: 2px;
+  }
+
+  .app-shell:not(.is-focus) .top-actions .icon-button {
+    width: 30px;
+    height: 30px;
+  }
+
+  .app-shell:not(.is-focus) .reader-tab-status {
+    display: none;
+  }
 }
