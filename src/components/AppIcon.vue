@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import logoAsset from '../assets/moyue-symbol.png'
+
 export type AppIconName =
   | 'logo'
   | 'home'
@@ -45,7 +47,9 @@ withDefaults(defineProps<{ name: AppIconName; size?: number; strokeWidth?: numbe
 </script>
 
 <template>
+  <img v-if="name === 'logo'" class="app-icon app-icon-logo" :src="logoAsset" :width="size" :height="size" alt="" aria-hidden="true" />
   <svg
+    v-else
     class="app-icon"
     :width="size"
     :height="size"
@@ -58,12 +62,7 @@ withDefaults(defineProps<{ name: AppIconName; size?: number; strokeWidth?: numbe
     aria-hidden="true"
     focusable="false"
   >
-    <template v-if="name === 'logo'">
-      <path d="M12 3.8c2.9 3.7 5.8 6.7 5.8 10.4a5.8 5.8 0 1 1-11.6 0C6.2 10.5 9.1 7.5 12 3.8Z" fill="currentColor" fill-opacity=".14" />
-      <path d="M8.7 11.9c1.1-.1 2.2.2 3.3.9 1.1-.7 2.2-1 3.3-.9v5.2c-1.1-.2-2.2.1-3.3.8-1.1-.7-2.2-1-3.3-.8v-5.2Z" fill="currentColor" fill-opacity=".22" />
-      <path d="M8.7 11.9c1.1-.1 2.2.2 3.3.9 1.1-.7 2.2-1 3.3-.9v5.2c-1.1-.2-2.2.1-3.3.8-1.1-.7-2.2-1-3.3-.8v-5.2ZM12 12.8v5.1" />
-    </template>
-    <template v-else-if="name === 'home'">
+    <template v-if="name === 'home'">
       <path d="m3.5 10.7 8.5-7 8.5 7" />
       <path d="M5.5 9.8v9.7h13V9.8M9.5 19.5v-5h5v5" />
     </template>
