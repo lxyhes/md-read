@@ -1,43 +1,46 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { FocusAmbienceId } from '../types'
+import type { MoyueTheme } from '../types'
 import AppIcon from './AppIcon.vue'
 
-const props = defineProps<{ modelValue: FocusAmbienceId }>()
-const emit = defineEmits<{ 'update:modelValue': [value: FocusAmbienceId] }>()
+const props = defineProps<{ themes: MoyueTheme[]; selectedThemeId: string }>()
+const emit = defineEmits<{ select: [theme: MoyueTheme] }>()
 
-const options: Array<{ id: FocusAmbienceId; name: string; hint: string }> = [
-  { id: 'moonlit', name: '山湖夜色', hint: '安静' },
-  { id: 'forest', name: '森林细雨', hint: '清醒' },
-  { id: 'fire', name: '篝火氛围', hint: '温暖' },
-]
+const options = computed(() => props.themes.slice(0, 3))
+const current = computed(() => options.value.find((theme) => theme.manifest.id === props.selectedThemeId) ?? options.value[0])
 
-const current = computed(() => options.find((item) => item.id === props.modelValue) ?? options[0])
-
-function select(id: FocusAmbienceId) {
-  localStorage.setItem('moyue:focus-ambience', id)
-  emit('update:modelValue', id)
+function themeStyle(theme: MoyueTheme) {
+  const { color } = theme.tokens
+  return {
+    '--ambience-accent': color.accent,
+    '--ambience-border': color.border,
+    '--ambience-surface': color.surface,
+    '--ambience-ink': color.text,
+    '--ambience-preview': color.appBackground,
+  }
 }
 </script>
 
 <template>
   <div class="focus-card ambience-card">
     <div class="focus-card-heading">
-      <span>沉浸氛围</span>
-      <small>当前 · {{ current.name }}</small>
+      <span>阅读主题</span>
+      <small>当前 · {{ current?.manifest.name || '默认主题' }}</small>
     </div>
     <div class="ambience-grid">
       <button
-        v-for="item in options"
-        :key="item.id"
+        v-for="theme in options"
+        :key="theme.manifest.id"
         type="button"
-        :class="['ambience-option', `ambience-${item.id}`, { selected: props.modelValue === item.id }]"
-        :aria-pressed="props.modelValue === item.id"
-        :title="`切换到${item.name}`"
-        @click="select(item.id)"
+        class="ambience-option"
+        :class="{ selected: props.selectedThemeId === theme.manifest.id }"
+        :style="themeStyle(theme)"
+        :aria-pressed="props.selectedThemeId === theme.manifest.id"
+        :title="`切换到${theme.manifest.name}`"
+        @click="emit('select', theme)"
       >
         <span class="ambience-preview" aria-hidden="true"><i /><i /><i /></span>
-        <span class="ambience-copy"><b>{{ item.name }}</b><small>{{ item.hint }}</small></span>
+        <span class="ambience-copy"><b>{{ theme.manifest.name }}</b><small>{{ theme.manifest.mode === 'light' ? '白昼阅读' : '夜间阅读' }}</small></span>
         <span class="ambience-check" aria-hidden="true"><AppIcon name="check" :size="10" /></span>
       </button>
     </div>

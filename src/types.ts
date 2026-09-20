@@ -76,7 +76,6 @@ export interface ReaderSelection {
 }
 
 export type ReaderMode = 'normal' | 'clean' | 'focus' | 'region-focus'
-export type FocusAmbienceId = 'moonlit' | 'forest' | 'fire'
 export type ViewerType = 'code' | 'mermaid' | 'image' | 'table'
 
 export interface ViewerState {

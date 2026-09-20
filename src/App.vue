@@ -8,7 +8,7 @@ import AppIcon from './components/AppIcon.vue'
 import IconButton from './components/IconButton.vue'
 import FileSystemTree, { type FileSystemTreeNode } from './components/FileSystemTree.vue'
 import { copyMarkdownPath, createMarkdownDirectory, createMarkdownFile, deleteMarkdownPath, listFileSystemEntries, listMarkdownFiles, openMarkdownDirectory, openMarkdownFile, readMarkdownPath, renameMarkdownPath, watchMarkdownPath, type WorkspaceFile } from './fileService'
-import type { Annotation, FocusAmbienceId, ReaderRegion, ViewerType } from './types'
+import type { Annotation, ReaderRegion, ViewerType } from './types'
 
 const FocusAmbiencePicker = defineAsyncComponent(() => import('./components/FocusAmbiencePicker.vue'))
 const ThemeCenter = defineAsyncComponent(() => import('./components/ThemeCenter.vue'))
@@ -50,6 +50,7 @@ const customProvider = ref('')
 const busyAction = ref<BusyAction>(null)
 const draggingFiles = ref(false)
 const leftPanelTab = ref<'files' | 'outline'>('files')
+const outlineQuery = ref('')
 const fileBrowserMode = ref<'list' | 'tree'>('list')
 const filesystemTree = ref<FileSystemTreeNode | null>(null)
 const filesystemTreeTarget = ref('')
@@ -64,11 +65,6 @@ const fileProperties = ref<FileTreeEntry | null>(null)
 let fileTreeRequest = 0
 const focusRemaining = ref(25 * 60)
 const focusRunning = ref(false)
-function readFocusAmbience(): FocusAmbienceId {
-  const value = localStorage.getItem('moyue:focus-ambience')
-  return value === 'forest' || value === 'fire' ? value : 'moonlit'
-}
-const focusAmbience = ref<FocusAmbienceId>(readFocusAmbience())
 let focusTimer: number | null = null
 let scrollFrame: number | null = null
 let progressTimer: number | null = null
@@ -83,21 +79,24 @@ const documentWatchers = new Map<string, () => void>()
 const documentReloadTimers = new Map<string, number>()
 let documentWatchRequest = 0
 let pendingProgress: { documentId: string; scrollPercent: number; regionId: string | null; headingId: string | null } | null = null
-const focusThemeStyles = computed<Record<string, string>>(() => {
-  const themes: Record<FocusAmbienceId, Record<string, string>> = {
-    moonlit: {
-      '--focus-accent': '#a89cff', '--focus-border': 'rgba(168, 156, 255, .32)', '--focus-sidebar-bg': 'linear-gradient(180deg, rgba(31, 30, 72, .96), rgba(13, 18, 40, .94))', '--focus-card-bg': 'linear-gradient(150deg, rgba(59, 56, 125, .68), rgba(21, 24, 51, .82))', '--focus-page-bg': 'radial-gradient(ellipse at 52% 8%, rgba(128, 119, 255, .18), transparent 35%), linear-gradient(112deg, rgba(8, 15, 39, .98), rgba(20, 28, 70, .82) 53%, rgba(9, 15, 39, .98))', '--focus-copy': '#f2efff', '--focus-muted': '#b3afd3', '--app-bg': '#0a1029', '--surface': '#121a3a', '--surface-raised': '#1c2550', '--ink': '#f2efff', '--muted': '#a8afd6', '--accent': '#a89cff', '--accent-soft': 'rgba(168, 156, 255, .18)', '--border': 'rgba(168, 156, 255, .25)', '--code-bg': '#0f172e',
-    },
-    forest: {
-      '--focus-accent': '#82d6ad', '--focus-border': 'rgba(109, 204, 165, .32)', '--focus-sidebar-bg': 'linear-gradient(180deg, rgba(17, 51, 55, .96), rgba(8, 27, 34, .94))', '--focus-card-bg': 'linear-gradient(150deg, rgba(26, 79, 77, .72), rgba(11, 35, 42, .84))', '--focus-page-bg': 'radial-gradient(ellipse at 52% 8%, rgba(77, 174, 144, .18), transparent 35%), linear-gradient(112deg, rgba(7, 24, 32, .98), rgba(13, 48, 56, .84) 53%, rgba(6, 20, 27, .98))', '--focus-copy': '#e8fff4', '--focus-muted': '#a5cfbe', '--app-bg': '#081d25', '--surface': '#0d2a31', '--surface-raised': '#143d42', '--ink': '#e8fff4', '--muted': '#9cc9b7', '--accent': '#82d6ad', '--accent-soft': 'rgba(130, 214, 173, .18)', '--border': 'rgba(109, 204, 165, .25)', '--code-bg': '#0b222b',
-    },
-    fire: {
-      '--focus-accent': '#f3a36d', '--focus-border': 'rgba(243, 163, 109, .34)', '--focus-sidebar-bg': 'linear-gradient(180deg, rgba(63, 35, 54, .96), rgba(29, 18, 31, .94))', '--focus-card-bg': 'linear-gradient(150deg, rgba(105, 52, 61, .68), rgba(38, 22, 35, .84))', '--focus-page-bg': 'radial-gradient(ellipse at 52% 8%, rgba(226, 110, 67, .18), transparent 35%), linear-gradient(112deg, rgba(28, 16, 31, .98), rgba(61, 30, 45, .84) 53%, rgba(20, 13, 25, .98))', '--focus-copy': '#fff0e6', '--focus-muted': '#d6b0a1', '--app-bg': '#1c1020', '--surface': '#2d1929', '--surface-raised': '#482333', '--ink': '#fff0e6', '--muted': '#d4ad9e', '--accent': '#f3a36d', '--accent-soft': 'rgba(243, 163, 109, .18)', '--border': 'rgba(243, 163, 109, .26)', '--code-bg': '#211523',
-    },
-  }
-  return themes[focusAmbience.value]
+const focusThemes = computed(() => {
+  const themes = store.themes.filter((theme) => theme.builtIn !== false)
+  const active = store.activeTheme
+  if (active && !themes.some((theme) => theme.manifest.id === active.manifest.id)) themes.unshift(active)
+  return themes.slice(0, 3)
 })
-const isDark = computed(() => store.activeTheme?.manifest.mode !== 'light')
+const focusThemeStyles = computed<Record<string, string>>(() => {
+  const color = store.activeTheme.tokens.color
+  return {
+    '--focus-accent': color.accent,
+    '--focus-border': color.border,
+    '--focus-sidebar-bg': 'linear-gradient(180deg, color-mix(in srgb, var(--surface) 96%, var(--accent) 4%), color-mix(in srgb, var(--app-bg) 98%, transparent))',
+    '--focus-card-bg': 'linear-gradient(150deg, color-mix(in srgb, var(--surface-raised) 92%, var(--accent) 8%), color-mix(in srgb, var(--surface) 94%, transparent))',
+    '--focus-page-bg': 'radial-gradient(ellipse at 52% 8%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 38%), linear-gradient(112deg, var(--app-bg), color-mix(in srgb, var(--app-bg) 82%, var(--surface)) 53%, var(--app-bg))',
+    '--focus-copy': color.text,
+    '--focus-muted': color.textMuted,
+  }
+})
 const searchResults = computed(() => {
   const needle = searchNeedle.value
   if (!needle) return []
@@ -120,6 +119,12 @@ const filteredOpenDocuments = computed(() => {
   return store.openDocuments.filter((document) => `${document.title} ${document.path}`.toLowerCase().includes(needle))
 })
 const currentHeading = computed(() => store.currentDocument?.headings.find((heading) => heading.id === store.activeHeadingId))
+const filteredOutlineHeadings = computed(() => {
+  const needle = outlineQuery.value.trim().toLowerCase()
+  const headings = store.currentDocument?.headings ?? []
+  return needle ? headings.filter((heading) => heading.text.toLowerCase().includes(needle)) : headings
+})
+const showReadingQuickActions = computed(() => (currentProgress.value?.scrollPercent ?? 0) > 0.08)
 const readerRegions = computed(() => {
   const document = store.currentDocument
   if (!document) return []
@@ -667,7 +672,7 @@ watch(query, () => {
   searchTimer = window.setTimeout(() => { searchNeedle.value = query.value.trim().toLowerCase(); searchTimer = null }, 90)
 })
 watch(() => store.mode, (mode) => { if (mode !== 'focus') stopFocusTimer() })
-watch(() => store.currentDocument?.path, () => { fileSyncState.value = 'idle'; focusScrollTargetId = null; invalidateRegionLayout(); void refreshFileTree() }, { immediate: true })
+watch(() => store.currentDocument?.path, () => { fileSyncState.value = 'idle'; focusScrollTargetId = null; outlineQuery.value = ''; invalidateRegionLayout(); void refreshFileTree() }, { immediate: true })
 watch(() => store.currentDocumentId, () => nextTick(observeReaderLayout))
 watch(() => store.openDocuments.map((document) => document.path).join('\n'), () => { void syncDocumentWatchers() }, { immediate: true })
 watch(() => [store.activeHeadingId, leftPanelTab.value, store.mode], () => {
@@ -718,6 +723,7 @@ function onKeydown(event: KeyboardEvent) {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'w' && view.value === 'reader' && store.currentDocumentId && !isTypingTarget(event.target)) { event.preventDefault(); void closeDocument(store.currentDocumentId); return }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'o' && !isTypingTarget(event.target)) { event.preventDefault(); void openFile(); return }
   if (event.key === 'Escape') {
+    event.preventDefault()
     if (store.mode === 'region-focus' || store.mode === 'focus') exitFocusMode()
     else if (store.mode === 'clean') toggleCleanMode()
     selectionToolbar.value = null
@@ -1242,6 +1248,13 @@ function scrollToHeading(regionId: string) {
   const first = readerDocument?.regions[0]
   if (first?.id === regionId && readerRegions.value[0]?.id !== regionId) readerViewport.value?.scrollTo({ top: 0, behavior: 'smooth' })
 }
+function jumpToCurrentHeading() {
+  if (currentHeading.value) scrollToHeading(currentHeading.value.regionId)
+  else scrollToTop()
+}
+function scrollToTop() {
+  readerViewport.value?.scrollTo({ top: 0, behavior: 'smooth' })
+}
 function headingRailPosition(index: number) {
   const count = store.currentDocument?.headings.length ?? 0
   return count <= 1 ? '50%' : `${(index / (count - 1)) * 100}%`
@@ -1366,9 +1379,9 @@ async function requestFullscreen() {
 </script>
 
 <template>
-  <div class="app-shell" :aria-busy="booting || busyAction !== null" :class="{ 'is-focus': store.mode === 'focus', 'is-clean': store.mode === 'clean', 'is-region-focus': store.mode === 'region-focus', 'has-focus-region': Boolean(store.focusedRegionId), 'is-dragging': draggingFiles, [`theme-${store.activeThemeId}`]: true, [`focus-${focusAmbience}`]: store.mode === 'focus' }" :style="store.mode === 'focus' ? focusThemeStyles : undefined" @dragover.prevent @dragenter.prevent="onDragEnter" @dragleave.prevent="onDragLeave" @drop.prevent="onDrop">
+  <div class="app-shell" :aria-busy="booting || busyAction !== null" :class="{ 'is-focus': store.mode === 'focus', 'is-clean': store.mode === 'clean', 'is-region-focus': store.mode === 'region-focus', 'has-focus-region': Boolean(store.focusedRegionId), 'is-dragging': draggingFiles, [`theme-${store.activeThemeId}`]: true }" :style="store.mode === 'focus' ? focusThemeStyles : undefined" @dragover.prevent @dragenter.prevent="onDragEnter" @dragleave.prevent="onDragLeave" @drop.prevent="onDrop">
     <aside class="global-nav">
-      <div class="brand-mark"><span><AppIcon name="logo" :size="18" /></span><small>墨阅 · MOYUE</small></div>
+      <div class="brand-mark"><span class="brand-mark-symbol"><AppIcon name="logo" :size="19" /></span><small><b>墨阅</b><i>MOYUE</i></small></div>
       <nav>
         <span class="nav-section-label">我的空间</span>
         <button class="nav-item" :class="{ active: view === 'library' && libraryTab === 'home' }" type="button" @click="openLibrary('home')"><span class="nav-icon"><AppIcon name="home" /></span><span>我的空间</span></button>
@@ -1501,15 +1514,21 @@ async function requestFullscreen() {
               </nav>
               <p class="file-browser-note"><AppIcon name="info" :size="13" />当前目录的 Markdown 文件，点击即可打开</p>
             </div>
-            <nav v-else class="outline-list" aria-label="当前文档大纲"><button v-for="heading in store.currentDocument?.headings" :key="heading.id" :data-outline-id="heading.id" type="button" :class="{ active: store.activeHeadingId === heading.id }" :style="{ paddingLeft: `${12 + (heading.depth - 1) * 14}px` }" @click="scrollToHeading(heading.regionId)">{{ heading.text }}</button></nav>
+            <div v-else class="outline-view">
+              <label class="outline-search"><AppIcon name="search" :size="13" /><input v-model="outlineQuery" type="search" placeholder="筛选章节…" aria-label="筛选章节" /><button v-if="outlineQuery" type="button" aria-label="清除章节筛选" @click="outlineQuery = ''">×</button></label>
+              <nav class="outline-list" aria-label="当前文档大纲">
+                <button v-for="heading in filteredOutlineHeadings" :key="heading.id" :data-outline-id="heading.id" type="button" :class="{ active: store.activeHeadingId === heading.id }" :style="{ paddingLeft: `${12 + (heading.depth - 1) * 14}px` }" @click="scrollToHeading(heading.regionId)">{{ heading.text }}</button>
+                <p v-if="!filteredOutlineHeadings.length" class="outline-empty">没有匹配的章节</p>
+              </nav>
+            </div>
             <div v-if="leftPanelTab === 'outline'" class="outline-footer"><span class="progress-ring" :style="{ '--progress': `${(currentProgress?.scrollPercent ?? 0) * 360}deg` }" /> <span>{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}% 已读</span></div>
           </aside>
           <div ref="readerViewport" class="reader-viewport" @scroll="onReaderScroll" @wheel="onReaderWheel" @pointerdown="onReaderPointerDown" @mouseup="captureSelection"><nav v-if="(store.currentDocument?.headings.length ?? 0) > 0" class="reading-progress-rail" aria-label="阅读进度导航"><span class="reading-progress-rail-caption">{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}%</span><div class="reading-progress-rail-track"><span class="reading-progress-rail-fill" :style="{ height: `${(currentProgress?.scrollPercent ?? 0) * 100}%` }" /><button v-for="(heading, index) in store.currentDocument?.headings" :key="heading.id" type="button" class="reading-progress-marker" :class="{ active: store.activeHeadingId === heading.id }" :style="{ top: headingRailPosition(index) }" :aria-label="`跳转到 ${heading.text}`" :title="heading.text" @click.stop="scrollToHeading(heading.regionId)"><i /><span>{{ heading.text }}</span></button></div></nav><div class="reader-content"><div class="reader-meta"><span class="section-kicker">{{ store.currentDocument?.path }}</span><span>{{ store.currentDocument?.wordCount }} 字 · 约 {{ store.currentDocument?.estimatedReadMinutes }} 分钟</span></div><h1 class="reader-title">{{ store.currentDocument?.title }}</h1><p class="reader-deck">在文字、图表和一块留白之间，找到你自己的阅读速度。</p><div class="reader-rule" />
-            <div class="regions-stack"><RegionBlock v-for="region in readerRegions" :key="region.id" :region="region" :annotations="currentAnnotations" :focused="store.focusedRegionId === region.id" :active="store.activeRegionId === region.id" :focus-distance="focusDistanceByRegion.get(region.id)" :theme-mode="store.mode === 'focus' ? 'dark' : store.activeTheme?.manifest.mode" :theme-key="`${store.mode}-${focusAmbience}`" @focus="focusRegion(region)" @open-viewer="openViewer(region)" @code-copied="notify('代码已复制')" /></div>
+             <div class="regions-stack"><RegionBlock v-for="region in readerRegions" :key="region.id" :region="region" :annotations="currentAnnotations" :focused="store.focusedRegionId === region.id" :active="store.activeRegionId === region.id" :focus-distance="focusDistanceByRegion.get(region.id)" :theme-mode="store.activeTheme?.manifest.mode" :theme-key="`${store.mode}-${store.activeThemeId}`" @focus="focusRegion(region)" @open-viewer="openViewer(region)" @code-copied="notify('代码已复制')" /></div>
             <footer class="reader-footer"><span>墨阅 · Moyue Reader</span><span>Read → Focus → Understand</span></footer>
-          </div></div>
+          </div><div v-if="showReadingQuickActions && !resumePrompt" class="reading-quick-actions" aria-label="阅读快捷操作"><span class="reading-quick-context"><i />{{ currentHeading?.text || '阅读中' }}</span><button v-if="currentHeading" type="button" @click="jumpToCurrentHeading">本章开头</button><button type="button" @click="scrollToTop">回到顶部</button></div></div>
         <aside v-if="store.mode !== 'focus' && store.mode !== 'clean'" class="context-panel"><div class="context-top"><span class="section-kicker">主题中心</span><button class="text-button" type="button" @click="view = 'themes'">更多 <AppIcon name="external" :size="12" /></button></div><div class="theme-mini-card"><ThemePicker :themes="store.themes" :selected-theme-id="store.activeThemeId" compact @select="applyReaderTheme" /><div class="theme-mini-caption"><strong>{{ store.activeTheme?.manifest.name }}</strong><small>沉浸阅读 · {{ store.activeTheme?.manifest.mode === 'light' ? '白昼' : '深色' }}</small></div></div><div class="translation-card"><div class="side-card-heading"><span>划词翻译</span><span>中 ↔ 英</span></div><strong>intelligence</strong><small>/ɪnˈtelɪdʒəns/</small><p>n. 智能；智力；理解力<br />复数：intelligences</p><button type="button" @click="assist('translate')">在适配器中打开 <AppIcon name="external" :size="12" /></button></div><div class="diagram-card"><div class="side-card-heading"><span>图表示例</span><IconButton icon="close" size="sm" label="关闭图表示例" @click="notify('图表可独立查看')" /></div><div class="mini-diagram"><span>数据收集</span><i>↓</i><div><span>数据预处理</span><span>模型训练</span></div><i>↓</i><div><span>评估与优化</span><span>预测应用</span></div></div><button class="diagram-link" type="button" @click="notify('请点击正文中的图表进入独立查看')">独立查看 <AppIcon name="external" :size="12" /></button></div><div class="context-card current-context"><span class="section-kicker">CURRENT REGION</span><strong>{{ currentHeading?.text || '开篇' }}</strong><small>{{ store.currentDocument?.regions.length ?? 0 }} 个阅读区域 · {{ currentAnnotations.length }} 条批注</small></div><div class="context-actions"><button type="button" @click="toggleFocusMode"><AppIcon name="focus" :size="13" />进入专注</button><button type="button" @click="toggleCleanMode"><AppIcon name="eye" :size="13" />纯净阅读</button></div><div v-if="currentAnnotations.length" class="annotation-panel"><div class="annotation-heading"><span class="section-kicker">ANNOTATIONS</span><span>{{ currentAnnotations.length }}</span></div><button v-for="annotation in currentAnnotations.slice(0, 4)" :key="annotation.id" class="annotation-item" type="button" @click="jumpToAnnotation(annotation)"><span class="annotation-dot" :style="{ background: annotation.color }" /><span><b>{{ annotation.note || '高亮标记' }}</b><small>{{ annotation.selectedText }}</small></span></button></div></aside>
-        <aside v-if="store.mode === 'focus'" class="focus-sidebar"><div class="focus-sidebar-head"><div><span class="section-kicker">FOCUS READING</span><strong>专注阅读</strong></div><button class="ghost-button" type="button" @click="exitFocusMode"><AppIcon name="close" :size="13" />退出</button></div><div class="focus-timer-card"><div class="focus-timer-ring" :style="{ '--focus-progress': `${focusProgress * 360}deg` }"><strong>{{ focusTimeLabel }}</strong><span>{{ focusRunning ? '专注中' : focusRemaining === 0 ? '已完成' : '准备开始' }}</span></div><div class="focus-timer-actions"><button type="button" @click="resetFocusTimer">重置</button><button class="primary-button" type="button" @click="toggleFocusTimer">{{ focusRunning ? '暂停' : '开始' }}</button></div></div><FocusAmbiencePicker v-model="focusAmbience" /><div class="focus-card focus-outline"><div class="focus-card-heading"><span>内容导航</span><small>{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}%</small></div><nav><button v-for="heading in store.currentDocument?.headings" :key="heading.id" :data-focus-outline-id="heading.id" type="button" :class="{ active: store.activeHeadingId === heading.id }" @click="focusHeading(heading.regionId)"><i />{{ heading.text }}</button></nav></div></aside>
+         <aside v-if="store.mode === 'focus'" class="focus-sidebar"><div class="focus-sidebar-head"><div><span class="section-kicker">FOCUS READING</span><strong>专注阅读</strong><small class="focus-document-label">{{ store.currentDocument?.title || '当前文档' }}</small></div><button class="ghost-button" type="button" @click="exitFocusMode"><AppIcon name="close" :size="13" />退出</button></div><div class="focus-session-meta"><span><i />{{ focusRunning ? '专注进行中' : '准备开始' }}</span><span>{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}% 已读</span></div><div class="focus-timer-card"><div class="focus-timer-ring" :style="{ '--focus-progress': `${focusProgress * 360}deg` }"><strong>{{ focusTimeLabel }}</strong><span>{{ focusRunning ? '专注中' : focusRemaining === 0 ? '已完成' : '准备开始' }}</span></div><div class="focus-timer-actions"><button type="button" @click="resetFocusTimer">重置</button><button class="primary-button" type="button" @click="toggleFocusTimer">{{ focusRunning ? '暂停' : '开始' }}</button></div></div><FocusAmbiencePicker :themes="focusThemes" :selected-theme-id="store.activeThemeId" @select="applyReaderTheme" /><div class="focus-card focus-outline"><div class="focus-card-heading"><span>内容导航</span><small>{{ store.currentDocument?.headings.length ?? 0 }} 章 · {{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}%</small></div><nav v-if="store.currentDocument?.headings.length"><button v-for="heading in store.currentDocument.headings" :key="heading.id" :data-focus-outline-id="heading.id" type="button" :class="{ active: store.activeHeadingId === heading.id }" @click="focusHeading(heading.regionId)"><i />{{ heading.text }}</button></nav><p v-else class="focus-outline-empty">这篇文档还没有章节标题</p></div></aside>
         </div>
         <div v-if="resumePrompt?.documentId === store.currentDocumentId" class="resume-prompt" role="dialog" aria-label="继续阅读">
           <div>
