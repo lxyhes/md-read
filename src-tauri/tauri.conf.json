@@ -19,7 +19,8 @@
         "minHeight": 720,
         "resizable": true,
         "decorations": true,
-        "transparent": false
+        "transparent": false,
+        "additionalBrowserArgs": "--disable-http-cache"
       }
     ],
     "security": {

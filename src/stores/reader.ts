@@ -4,6 +4,8 @@ import { deleteDocument, getProgress, loadAnnotations, loadDocumentSnapshots, sa
 import { openMarkdownFile, openMarkdownFolder, resolveMarkdownAssetUrl, type OpenedFile } from '../fileService'
 import { builtInThemes, cssVariables, defaultTokens } from '../themes'
 const SESSION_KEY = 'moyue:reader-session'
+const THEME_KEY = 'moyue:theme'
+const DEFAULT_THEME_ID = 'paper-white'
 
 function readSession() {
   try {
@@ -28,7 +30,8 @@ export const useReaderStore = defineStore('reader', () => {
   const progress = ref<Record<string, ReadingProgress>>({})
   const annotations = ref<Annotation[]>([])
   const themes = ref<MoyueTheme[]>([...builtInThemes])
-  const activeThemeId = ref(localStorage.getItem('moyue:theme') || 'ember-paper')
+  const savedThemeId = localStorage.getItem(THEME_KEY)
+  const activeThemeId = ref(savedThemeId === 'ember-paper' ? DEFAULT_THEME_ID : savedThemeId || DEFAULT_THEME_ID)
   const savedSettings = readSettings()
   const readerSettings = ref({ fontSize: savedSettings.fontSize, lineHeight: savedSettings.lineHeight, width: savedSettings.width, fontFamily: savedSettings.fontFamily })
   const currentDocument = computed(() => documents.value.find((document) => document.id === currentDocumentId.value) ?? null)
@@ -40,7 +43,7 @@ export const useReaderStore = defineStore('reader', () => {
 
   function applyTheme(theme: MoyueTheme) {
     activeThemeId.value = theme.manifest.id
-    localStorage.setItem('moyue:theme', theme.manifest.id)
+    localStorage.setItem(THEME_KEY, theme.manifest.id)
     const variables = cssVariables(theme)
     variables['--reader-width'] = `${readerSettings.value.width}px`
     variables['--reader-size'] = `${readerSettings.value.fontSize}px`
