@@ -3,7 +3,7 @@ import type { MoyueTheme, ThemeManifest, ThemeTokens } from './types'
 
 export const defaultTokens: ThemeTokens = {
   color: {
-    appBackground: '#0b1230', surface: '#111b3d', surfaceRaised: '#182751', text: '#edf1ff', textMuted: '#a7b2d7', accent: '#8b82ff', accentSoft: '#303b7a', border: 'rgba(183,194,255,.18)', codeBackground: '#080f28'
+    appBackground: '#0b1224', surface: '#121d35', surfaceRaised: '#1b2a47', text: '#edf2ff', textMuted: '#9eacd0', accent: '#aaa2ff', accentSoft: '#303974', border: 'rgba(186,196,255,.20)', codeBackground: '#081322'
   },
   reader: { width: 760, fontSize: 18, lineHeight: 1.82, paragraphGap: 22, fontFamily: 'Iowan Old Style, Palatino Linotype, Georgia, serif' }
 }
@@ -17,17 +17,17 @@ export const builtInThemes: MoyueTheme[] = [
   {
     builtIn: true,
     manifest: { schemaVersion: 1, id: 'quiet-moss', name: '静默苔原', version: '1.0.0', author: 'Moyue', mode: 'light', description: '适合白天长时间阅读的浅色主题', entry: { tokens: 'tokens.json', reader: 'reader.css', markdown: 'markdown.css', components: 'components.css' } },
-    tokens: { color: { appBackground: '#e9e7df', surface: '#f3f1e9', surfaceRaised: '#ffffff', text: '#24312d', textMuted: '#6c7970', accent: '#5d806d', accentSoft: '#d8e5db', border: 'rgba(36,49,45,.13)', codeBackground: '#e5e4dd' }, reader: { width: 760, fontSize: 18, lineHeight: 1.86, paragraphGap: 22, fontFamily: 'Iowan Old Style, Palatino Linotype, Georgia, serif' } }
+    tokens: { color: { appBackground: '#ebe8df', surface: '#f4f1e8', surfaceRaised: '#fffdf7', text: '#27342e', textMuted: '#718078', accent: '#5f8b73', accentSoft: '#dceadf', border: 'rgba(50,72,60,.15)', codeBackground: '#e6e7de' }, reader: { width: 760, fontSize: 18, lineHeight: 1.86, paragraphGap: 22, fontFamily: 'Iowan Old Style, Palatino Linotype, Georgia, serif' } }
   },
   {
     builtIn: true,
     manifest: { schemaVersion: 1, id: 'paper-white', name: '纯净白纸', version: '1.0.0', author: 'Moyue', mode: 'light', description: '高对比、低干扰的白色长文阅读主题', entry: { tokens: 'tokens.json', reader: 'reader.css', markdown: 'markdown.css', components: 'components.css' } },
-    tokens: { color: { appBackground: '#f3f5f4', surface: '#f8faf9', surfaceRaised: '#ffffff', text: '#1d2933', textMuted: '#63717a', accent: '#2a756d', accentSoft: '#dfeeea', border: 'rgba(29,41,51,.14)', codeBackground: '#f0f3f4' }, reader: { width: 840, fontSize: 18, lineHeight: 1.78, paragraphGap: 18, fontFamily: 'Iowan Old Style, Palatino Linotype, Georgia, serif' } }
+    tokens: { color: { appBackground: '#eef3f2', surface: '#f8fbfa', surfaceRaised: '#ffffff', text: '#1f2a31', textMuted: '#65747b', accent: '#277f77', accentSoft: '#d8efea', border: 'rgba(31,54,58,.14)', codeBackground: '#edf2f2' }, reader: { width: 840, fontSize: 18, lineHeight: 1.78, paragraphGap: 18, fontFamily: 'Iowan Old Style, Palatino Linotype, Georgia, serif' } }
   },
   {
     builtIn: true,
     manifest: { schemaVersion: 1, id: 'blue-hour', name: '蓝调时刻', version: '1.0.0', author: 'Moyue', mode: 'dark', description: '冷静、清晰的夜间技术阅读主题', entry: { tokens: 'tokens.json', reader: 'reader.css', markdown: 'markdown.css', components: 'components.css' } },
-    tokens: { color: { appBackground: '#101a23', surface: '#172631', surfaceRaised: '#213746', text: '#e3eff2', textMuted: '#8ea9b0', accent: '#8dd6d0', accentSoft: '#254e52', border: 'rgba(227,239,242,.13)', codeBackground: '#0d151c' }, reader: { width: 780, fontSize: 18, lineHeight: 1.8, paragraphGap: 20, fontFamily: 'Iowan Old Style, Palatino Linotype, Georgia, serif' } }
+    tokens: { color: { appBackground: '#0d1b25', surface: '#142832', surfaceRaised: '#1c3946', text: '#e3f0f2', textMuted: '#8faeb2', accent: '#7ed8d0', accentSoft: '#20545a', border: 'rgba(175,220,220,.17)', codeBackground: '#09161d' }, reader: { width: 780, fontSize: 18, lineHeight: 1.8, paragraphGap: 20, fontFamily: 'Iowan Old Style, Palatino Linotype, Georgia, serif' } }
   }
 ]
 

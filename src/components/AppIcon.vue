@@ -59,11 +59,9 @@ withDefaults(defineProps<{ name: AppIconName; size?: number; strokeWidth?: numbe
     focusable="false"
   >
     <template v-if="name === 'logo'">
-      <path d="M4 5.8c2.8-.6 5.5 0 8 2v11c-2.5-1.7-5.2-2.2-8-1.3V5.8Z" fill="currentColor" fill-opacity=".16" />
-      <path d="M20 5.8c-2.8-.6-5.5 0-8 2v11c2.5-1.7 5.2-2.2 8-1.3V5.8Z" fill="currentColor" fill-opacity=".16" />
-      <path d="M4 5.8c2.8-.6 5.5 0 8 2v11c-2.5-1.7-5.2-2.2-8-1.3V5.8ZM20 5.8c-2.8-.6-5.5 0-8 2v11c2.5-1.7 5.2-2.2 8-1.3V5.8Z" />
-      <path d="M12 7.8v11" />
-      <path d="M6.5 9.2c1.6 0 3 .4 4.5 1.2M17.5 9.2c-1.6 0-3 .4-4.5 1.2" opacity=".7" />
+      <path d="M12 3.8c2.9 3.7 5.8 6.7 5.8 10.4a5.8 5.8 0 1 1-11.6 0C6.2 10.5 9.1 7.5 12 3.8Z" fill="currentColor" fill-opacity=".14" />
+      <path d="M8.7 11.9c1.1-.1 2.2.2 3.3.9 1.1-.7 2.2-1 3.3-.9v5.2c-1.1-.2-2.2.1-3.3.8-1.1-.7-2.2-1-3.3-.8v-5.2Z" fill="currentColor" fill-opacity=".22" />
+      <path d="M8.7 11.9c1.1-.1 2.2.2 3.3.9 1.1-.7 2.2-1 3.3-.9v5.2c-1.1-.2-2.2.1-3.3.8-1.1-.7-2.2-1-3.3-.8v-5.2ZM12 12.8v5.1" />
     </template>
     <template v-else-if="name === 'home'">
       <path d="m3.5 10.7 8.5-7 8.5 7" />

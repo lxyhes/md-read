@@ -105,10 +105,8 @@ html, body, #app { background: #070d22; }
 .drop-overlay small { color: #b0b9df; font: 10px var(--ui-font); }
 button:disabled { cursor: wait; opacity: .58; transform: none !important; }
 
-/* Focus ambience: three distinct reading climates, kept inside the reader shell. */
-.app-shell.is-focus { --focus-accent: #a89cff; --focus-border: rgba(168, 156, 255, .32); --focus-sidebar-bg: linear-gradient(180deg, rgba(31, 30, 72, .9), rgba(13, 18, 40, .88)); --focus-card-bg: linear-gradient(150deg, rgba(59, 56, 125, .62), rgba(21, 24, 51, .72)); --focus-page-bg: radial-gradient(ellipse at 52% 8%, rgba(128, 119, 255, .15), transparent 35%), linear-gradient(112deg, rgba(8, 15, 39, .96), rgba(20, 28, 70, .72) 53%, rgba(9, 15, 39, .96)); --focus-copy: #f2efff; --focus-muted: #b3afd3; --app-bg: #0a1029; --surface: #121a3a; --surface-raised: #1c2550; --ink: #f2efff; --muted: #a8afd6; --accent: #a89cff; --accent-soft: rgba(168, 156, 255, .18); --border: rgba(168, 156, 255, .25); --code-bg: #0f172e; }
-.app-shell.is-focus.focus-forest { --focus-accent: #82d6ad; --focus-border: rgba(109, 204, 165, .32); --focus-sidebar-bg: linear-gradient(180deg, rgba(17, 51, 55, .92), rgba(8, 27, 34, .9)); --focus-card-bg: linear-gradient(150deg, rgba(26, 79, 77, .68), rgba(11, 35, 42, .78)); --focus-page-bg: radial-gradient(ellipse at 52% 8%, rgba(77, 174, 144, .16), transparent 35%), linear-gradient(112deg, rgba(7, 24, 32, .97), rgba(13, 48, 56, .78) 53%, rgba(6, 20, 27, .97)); --focus-copy: #e8fff4; --focus-muted: #a5cfbe; --app-bg: #081d25; --surface: #0d2a31; --surface-raised: #143d42; --ink: #e8fff4; --muted: #9cc9b7; --accent: #82d6ad; --accent-soft: rgba(130, 214, 173, .18); --border: rgba(109, 204, 165, .25); --code-bg: #0b222b; }
-.app-shell.is-focus.focus-fire { --focus-accent: #f3a36d; --focus-border: rgba(243, 163, 109, .34); --focus-sidebar-bg: linear-gradient(180deg, rgba(63, 35, 54, .92), rgba(29, 18, 31, .92)); --focus-card-bg: linear-gradient(150deg, rgba(105, 52, 61, .62), rgba(38, 22, 35, .8)); --focus-page-bg: radial-gradient(ellipse at 52% 8%, rgba(226, 110, 67, .15), transparent 35%), linear-gradient(112deg, rgba(28, 16, 31, .97), rgba(61, 30, 45, .78) 53%, rgba(20, 13, 25, .97)); --focus-copy: #fff0e6; --focus-muted: #d6b0a1; --app-bg: #1c1020; --surface: #2d1929; --surface-raised: #482333; --ink: #fff0e6; --muted: #d4ad9e; --accent: #f3a36d; --accent-soft: rgba(243, 163, 109, .18); --border: rgba(243, 163, 109, .26); --code-bg: #211523; }
+/* Focus mode inherits the active Moyue theme instead of maintaining a second palette. */
+.app-shell.is-focus { --focus-accent: var(--accent); --focus-border: var(--border); --focus-sidebar-bg: linear-gradient(180deg, color-mix(in srgb, var(--surface) 96%, var(--accent) 4%), color-mix(in srgb, var(--app-bg) 98%, transparent)); --focus-card-bg: linear-gradient(150deg, color-mix(in srgb, var(--surface-raised) 92%, var(--accent) 8%), color-mix(in srgb, var(--surface) 94%, transparent)); --focus-page-bg: radial-gradient(ellipse at 52% 8%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 38%), linear-gradient(112deg, var(--app-bg), color-mix(in srgb, var(--app-bg) 82%, var(--surface)) 53%, var(--app-bg)); --focus-copy: var(--ink); --focus-muted: var(--muted); }
 .app-shell.is-focus, .app-shell.is-focus * { transition-property: background-color, background-image, border-color, box-shadow, color, opacity; transition-duration: .55s; transition-timing-function: ease; }
 .app-shell.is-focus .global-nav { border-right-color: var(--border); background: linear-gradient(180deg, color-mix(in srgb, var(--app-bg) 88%, #000), var(--app-bg)); }
 .app-shell.is-focus .topbar, .app-shell.is-focus .reader-tabbar { border-color: var(--border); background: color-mix(in srgb, var(--surface) 78%, transparent); }
@@ -138,6 +136,11 @@ button:disabled { cursor: wait; opacity: .58; transform: none !important; }
 .app-shell.is-focus .focus-outline nav button { color: color-mix(in srgb, var(--focus-muted) 82%, transparent); }
 .app-shell.is-focus .focus-outline nav button:hover, .app-shell.is-focus .focus-outline nav button.active { color: var(--focus-copy); }
 .app-shell.is-focus .focus-outline nav button.active i { border-color: var(--focus-accent); background: var(--focus-accent); box-shadow: 0 0 8px var(--focus-accent); }
+.app-shell.is-focus .focus-document-label { display: block; max-width: 210px; margin-top: 7px; overflow: hidden; color: var(--focus-muted); font: 10px var(--ui-font); text-overflow: ellipsis; white-space: nowrap; }
+.focus-session-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 14px; color: var(--focus-muted); font: 9px var(--ui-font); }
+.focus-session-meta span { display: inline-flex; align-items: center; gap: 5px; }
+.focus-session-meta i { width: 6px; height: 6px; border-radius: 50%; background: var(--focus-accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--focus-accent) 13%, transparent); }
+.focus-outline-empty { margin: 18px 0 2px; color: var(--focus-muted); font: 10px/1.6 var(--ui-font); }
 
 .ambience-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .ambience-grid .ambience-option { position: relative; display: flex; min-width: 0; min-height: 112px; flex-direction: column; align-items: stretch; padding: 0; overflow: hidden; border: 1px solid var(--ambience-border); border-radius: 11px; background: var(--ambience-surface); color: var(--ambience-ink); text-align: left; transition: transform .25s ease, border-color .25s ease, box-shadow .25s ease; }
@@ -152,33 +155,13 @@ button:disabled { cursor: wait; opacity: .58; transform: none !important; }
 .ambience-check { position: absolute; top: 7px; right: 7px; display: grid !important; place-items: center; width: 15px; height: 15px; border: 1px solid color-mix(in srgb, var(--ambience-accent) 55%, transparent); border-radius: 50%; background: color-mix(in srgb, var(--ambience-accent) 22%, transparent); color: var(--ambience-accent) !important; font: 10px var(--mono) !important; opacity: 0; transform: scale(.72); transition: opacity .2s, transform .2s; }
 .ambience-grid .ambience-option.selected .ambience-check { opacity: 1; transform: scale(1); }
 
-.ambience-moonlit { --ambience-accent: #b6adff; --ambience-border: rgba(167, 158, 255, .25); --ambience-surface: #171d47; --ambience-ink: #f1efff; }
-.ambience-moonlit .ambience-preview { background: radial-gradient(circle at 74% 25%, rgba(170, 181, 255, .16), transparent 19%), linear-gradient(155deg, #303a78, #161d4a 58%, #0d1431); }
-.ambience-moonlit .ambience-preview::before { top: 12px; right: 18px; width: 22px; height: 22px; border-radius: 50%; background: #f5f1d4; box-shadow: -7px -3px 0 1px #303a78, 0 0 18px rgba(245, 241, 212, .45); }
-.ambience-moonlit .ambience-preview::after { right: -6px; bottom: -18px; left: -6px; height: 38px; border-radius: 50% 50% 0 0; background: linear-gradient(165deg, transparent 0 33%, rgba(126, 139, 219, .45) 34% 47%, rgba(39, 57, 119, .92) 48% 100%); transform: rotate(-3deg); }
-.ambience-moonlit .ambience-preview i { width: 2px; height: 2px; border-radius: 50%; background: #d9deff; box-shadow: 13px 11px #d9deff, 31px 4px rgba(217, 222, 255, .75), 48px 18px #d9deff, 67px 7px rgba(217, 222, 255, .8); }
-.ambience-moonlit .ambience-preview i:nth-child(1) { top: 12px; left: 16px; }
-.ambience-moonlit .ambience-preview i:nth-child(2) { top: 27px; left: 38px; opacity: .5; }
-.ambience-moonlit .ambience-preview i:nth-child(3) { top: 8px; left: 61px; opacity: .65; }
-
-.ambience-forest { --ambience-accent: #86d7b0; --ambience-border: rgba(102, 201, 160, .25); --ambience-surface: #123b3d; --ambience-ink: #e7fff3; }
-.ambience-forest .ambience-preview { background: linear-gradient(160deg, #214e58, #10363a 54%, #0b222b); }
-.ambience-forest .ambience-preview::before { inset: -22px -10px 13px; opacity: .6; background: repeating-linear-gradient(112deg, transparent 0 9px, rgba(151, 226, 205, .24) 10px 11px, transparent 12px 19px); transform: skewX(-9deg); }
-.ambience-forest .ambience-preview::after { right: -10px; bottom: -13px; left: -10px; height: 36px; background: radial-gradient(ellipse at 18% 96%, #0a2028 0 28%, transparent 29%), radial-gradient(ellipse at 49% 100%, #0a2028 0 35%, transparent 36%), radial-gradient(ellipse at 80% 98%, #0a2028 0 30%, transparent 31%), linear-gradient(180deg, transparent, rgba(5, 21, 27, .9)); }
-.ambience-forest .ambience-preview i { bottom: 16px; width: 4px; height: 4px; border-radius: 50%; background: #8de2bc; box-shadow: 22px 3px 0 rgba(141, 226, 188, .65), 48px -2px 0 rgba(141, 226, 188, .55); }
-.ambience-forest .ambience-preview i:nth-child(1) { left: 17px; opacity: .55; }
-.ambience-forest .ambience-preview i:nth-child(2) { left: 42px; opacity: .8; }
-.ambience-forest .ambience-preview i:nth-child(3) { left: 67px; opacity: .45; }
-
-.ambience-fire { --ambience-accent: #ffc07e; --ambience-border: rgba(239, 145, 92, .3); --ambience-surface: #49283c; --ambience-ink: #fff1e6; }
-.ambience-fire .ambience-preview { background: radial-gradient(circle at 50% 72%, rgba(255, 174, 86, .28), transparent 25%), linear-gradient(155deg, #6a354b, #321e36 62%, #171323); }
-.ambience-fire .ambience-preview::before { top: 11px; left: 13px; width: 3px; height: 3px; border-radius: 50%; background: #ffbd62; box-shadow: 17px 20px 0 1px rgba(255, 125, 62, .78), 40px 3px 0 #f9c47a, 62px 23px 0 1px rgba(255, 146, 66, .86), 78px 10px 0 rgba(255, 205, 119, .75); animation: ambience-float 3.4s ease-in-out infinite; }
-.ambience-fire .ambience-preview::after { bottom: 5px; left: 50%; width: 29px; height: 39px; background: radial-gradient(ellipse at 50% 77%, #fff3b0 0 11%, #ffc04e 12% 37%, #f0783f 38% 64%, transparent 65%); clip-path: polygon(50% 0, 67% 29%, 100% 48%, 79% 100%, 21% 100%, 0 51%, 34% 31%); filter: drop-shadow(0 0 9px rgba(255, 139, 64, .72)); transform: translateX(-50%); }
-.ambience-fire .ambience-preview i { bottom: 8px; left: 27px; width: 27px; height: 5px; border-radius: 50%; background: rgba(255, 166, 88, .45); filter: blur(5px); }
-.ambience-fire .ambience-preview i:nth-child(2) { left: auto; right: 25px; width: 20px; opacity: .55; }
-.ambience-fire .ambience-preview i:nth-child(3) { bottom: 21px; left: 16px; width: 3px; height: 3px; border-radius: 50%; background: #ffd187; box-shadow: 55px 3px #ffb965; }
-
-@keyframes ambience-float { 0%, 100% { transform: translateY(0); opacity: .82; } 50% { transform: translateY(-4px); opacity: 1; } }
+.ambience-preview { background: radial-gradient(circle at 76% 22%, color-mix(in srgb, var(--ambience-accent) 42%, transparent), transparent 26%), linear-gradient(155deg, color-mix(in srgb, var(--ambience-accent) 34%, var(--ambience-preview)), var(--ambience-preview) 62%, var(--ambience-surface)); }
+.ambience-preview::before { top: 12px; right: 18px; width: 24px; height: 24px; border: 1px solid color-mix(in srgb, var(--ambience-accent) 70%, transparent); border-radius: 50%; background: color-mix(in srgb, var(--ambience-accent) 38%, transparent); box-shadow: 0 0 20px color-mix(in srgb, var(--ambience-accent) 28%, transparent); }
+.ambience-preview::after { right: -8px; bottom: -17px; left: -8px; height: 42px; border-radius: 50% 50% 0 0; background: linear-gradient(165deg, transparent 0 28%, color-mix(in srgb, var(--ambience-accent) 24%, transparent) 29% 44%, color-mix(in srgb, var(--ambience-surface) 90%, transparent) 45% 100%); transform: rotate(-3deg); }
+.ambience-preview i { width: 3px; height: 3px; border-radius: 50%; background: color-mix(in srgb, var(--ambience-accent) 78%, white); box-shadow: 16px 12px color-mix(in srgb, var(--ambience-accent) 68%, white), 40px 5px color-mix(in srgb, var(--ambience-accent) 52%, white), 65px 18px color-mix(in srgb, var(--ambience-accent) 74%, white); }
+.ambience-preview i:nth-child(1) { top: 14px; left: 16px; }
+.ambience-preview i:nth-child(2) { top: 29px; left: 42px; opacity: .62; }
+.ambience-preview i:nth-child(3) { top: 9px; left: 66px; opacity: .78; }
 
 /* Unified icon layer: compact, keyboard-friendly controls with Semi-like states. */
 .app-icon { display: inline-block; flex: 0 0 auto; vertical-align: middle; }
@@ -207,10 +190,13 @@ button:disabled { cursor: wait; opacity: .58; transform: none !important; }
 .extension-icon .app-icon { display: block; }
 .theme-empty-state > span, .create-theme > span { display: grid; place-items: center; }
 .ambience-check .app-icon { display: block; }
-.brand-mark > span { width: 38px; height: 38px; border-radius: 12px; background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 22%, var(--surface)), color-mix(in srgb, var(--accent) 7%, var(--surface))); box-shadow: 0 8px 18px color-mix(in srgb, var(--accent) 18%, transparent); }
+.brand-mark > span { position: relative; width: 38px; height: 38px; border-radius: 12px 12px 12px 5px; background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 24%, var(--surface)), color-mix(in srgb, var(--accent) 7%, var(--surface))); box-shadow: 0 8px 18px color-mix(in srgb, var(--accent) 18%, transparent); transition: transform .24s ease, box-shadow .24s ease; }
 .brand-mark > span .app-icon { width: 22px; height: 22px; }
 .app-shell:not(.is-focus) .brand-mark > span { border-color: color-mix(in srgb, var(--accent) 62%, var(--border)); background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 22%, var(--surface)), color-mix(in srgb, var(--accent) 8%, var(--surface))); color: var(--accent); }
-.brand-mark small { font-weight: 700; letter-spacing: .12em; }
+.brand-mark:hover > span { transform: translateY(-1px); box-shadow: 0 10px 24px color-mix(in srgb, var(--accent) 25%, transparent); }
+.brand-mark small { display: flex; align-items: baseline; gap: 6px; font-weight: 700; letter-spacing: .08em; }
+.brand-mark small b { color: var(--ink); font-size: 11px; font-weight: 700; letter-spacing: .08em; }
+.brand-mark small i { color: var(--muted); font-size: 7px; font-style: normal; font-weight: 700; letter-spacing: .18em; }
 
 /* Theme switching components: one picker is reused by the reader sidebar and the full theme center. */
 .theme-picker-gallery { display: contents; }
@@ -275,6 +261,24 @@ html, body, #app { background: var(--app-bg, #070d22); }
 .app-shell:not(.is-focus) .editor-section-nav { border-color: var(--border); }
 .app-shell:not(.is-focus) .editor-section-nav button { color: var(--muted); }
 .app-shell:not(.is-focus) .editor-section-nav button.active, .app-shell:not(.is-focus) .editor-section-nav button:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--ink); }
+
+/* Theme center previews inherit the actual theme instead of a card-order preset. */
+.app-shell:not(.is-focus) .theme-center-toolbar { padding: 8px; border: 1px solid var(--border); border-radius: 13px; background: color-mix(in srgb, var(--surface) 78%, transparent); box-shadow: 0 12px 28px color-mix(in srgb, var(--app-bg) 14%, transparent); }
+.app-shell:not(.is-focus) .theme-search input::placeholder { color: var(--muted); opacity: .78; }
+.app-shell:not(.is-focus) .theme-filter { outline: none; }
+.app-shell:not(.is-focus) .theme-card { position: relative; overflow: hidden; }
+.app-shell:not(.is-focus) .theme-card .theme-swatch { background: var(--theme-bg); color: var(--theme-ink); }
+.app-shell:not(.is-focus) .theme-card .theme-swatch::before { background: radial-gradient(circle at 78% 22%, color-mix(in srgb, var(--theme-accent) 80%, var(--theme-surface)) 0 2%, transparent 3%), linear-gradient(145deg, transparent 0 38%, color-mix(in srgb, var(--theme-accent) 64%, transparent) 38.5% 46%, transparent 46.5%), linear-gradient(28deg, transparent 0 55%, color-mix(in srgb, var(--theme-accent) 34%, var(--theme-bg)) 55.5% 70%, transparent 70.5%), linear-gradient(150deg, color-mix(in srgb, var(--theme-bg) 60%, var(--theme-surface)), var(--theme-surface) 52%, var(--theme-bg)); }
+.app-shell:not(.is-focus) .theme-card .theme-swatch strong { color: var(--theme-ink); text-shadow: 0 2px 14px color-mix(in srgb, var(--theme-bg) 72%, #000); }
+.app-shell:not(.is-focus) .theme-card .theme-swatch small { color: var(--theme-muted); }
+.app-shell:not(.is-focus) .theme-card .theme-swatch .swatch-line { background: var(--theme-accent); box-shadow: 0 0 14px color-mix(in srgb, var(--theme-accent) 48%, transparent); }
+.app-shell:not(.is-focus) .theme-card .theme-card-meta { padding: 12px 14px 13px; background: color-mix(in srgb, var(--theme-surface) 78%, var(--theme-bg)); color: var(--theme-muted); }
+.app-shell:not(.is-focus) .theme-card .theme-card-meta span:first-child { color: var(--theme-ink); }
+.app-shell:not(.is-focus) .theme-mini-option { border-color: color-mix(in srgb, var(--theme-accent) 28%, var(--border)); background: color-mix(in srgb, var(--theme-bg) 82%, var(--theme-surface)); color: var(--theme-ink); }
+.app-shell:not(.is-focus) .theme-mini-option:hover, .app-shell:not(.is-focus) .theme-mini-option.selected { border-color: var(--theme-accent); background: color-mix(in srgb, var(--theme-accent) 14%, var(--theme-surface)); box-shadow: 0 8px 18px color-mix(in srgb, var(--theme-accent) 14%, transparent); }
+.app-shell:not(.is-focus) .theme-mini-option-art { background: linear-gradient(145deg, var(--theme-bg), var(--theme-surface)); color: var(--theme-accent); }
+.app-shell:not(.is-focus) .theme-mini-option-copy strong { color: var(--theme-ink); }
+.app-shell:not(.is-focus) .theme-mini-option-copy small { color: var(--theme-muted); }
 
 /* Full-bleed shell: the reader is the product surface, not a floating card. */
 .app-shell { width: 100%; height: 100vh; margin: 0; border: 0; border-radius: 0; box-shadow: none; }
@@ -424,15 +428,15 @@ html, body, #app { background: var(--app-bg, #070d22); }
   box-shadow: 0 10px 26px rgba(37, 59, 66, .055);
 }
 .app-shell.theme-paper-white:not(.is-focus) .theme-mini-option {
-  border-color: rgba(24, 35, 45, .12);
-  background: rgba(255, 255, 255, .78);
-  color: #18232d;
+  border-color: color-mix(in srgb, var(--theme-accent) 26%, var(--border));
+  background: color-mix(in srgb, var(--theme-surface) 88%, var(--theme-bg));
+  color: var(--theme-ink);
 }
 .app-shell.theme-paper-white:not(.is-focus) .theme-mini-option-copy strong {
-  color: #18232d;
+  color: var(--theme-ink);
 }
 .app-shell.theme-paper-white:not(.is-focus) .theme-mini-option-copy small {
-  color: #607080;
+  color: var(--theme-muted);
 }
 
 /* Long documents need their own outline scroll area instead of being clipped by the reader shell. */
@@ -2511,6 +2515,15 @@ button:focus-visible,
 }
 
 /* Document tabs: keep the workspace calm while making the active document obvious. */
+.app-shell.is-focus .focus-timer-ring { border: 0; background: conic-gradient(from -32deg, var(--focus-accent) 0 var(--focus-progress), color-mix(in srgb, var(--focus-accent) 16%, transparent) var(--focus-progress) 360deg); box-shadow: 0 0 35px color-mix(in srgb, var(--focus-accent) 22%, transparent); }
+.app-shell.is-focus .focus-timer-ring::before { position: absolute; inset: 8px; border-radius: 50%; background: color-mix(in srgb, var(--surface-raised) 94%, var(--surface)); content: ""; }
+.app-shell.is-focus .focus-timer-ring strong, .app-shell.is-focus .focus-timer-ring span { position: relative; z-index: 1; }
+.app-shell.is-focus .focus-timer-ring strong { color: var(--focus-copy); }
+.app-shell.is-focus .focus-timer-ring span, .app-shell.is-focus .focus-timer-actions button:first-child { color: var(--focus-muted); }
+.app-shell.is-focus .focus-timer-actions button:first-child { border-color: var(--focus-border); }
+.app-shell.is-focus .focus-timer-actions .primary-button { color: var(--app-bg); }
+
+/* Document tabs: keep the workspace calm while making the active document obvious. */
 .app-shell .reader-tabbar {
   gap: 0;
   min-width: 0;
@@ -3472,4 +3485,115 @@ button:focus-visible,
   .viewer-stage .table-viewer table {
     min-width: 620px;
   }
+}
+
+/* Long-document navigation: filter the outline without stealing the reader's rhythm. */
+.outline-view {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+.outline-search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 16px 0 8px;
+  padding: 7px 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--surface-raised) 46%, transparent);
+  color: var(--accent);
+}
+.outline-search:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 9%, transparent);
+}
+.outline-search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font: 10px var(--ui-font);
+}
+.outline-search input::placeholder { color: var(--muted); }
+.outline-search button {
+  padding: 0 2px;
+  background: transparent;
+  color: var(--muted);
+  font: 15px/1 var(--ui-font);
+}
+.outline-search button:hover { color: var(--accent); }
+.outline-view .outline-list {
+  min-height: 0;
+  flex: 1 1 auto;
+  margin-top: 0;
+  overflow-y: auto;
+}
+.outline-empty {
+  margin: 16px 8px;
+  color: var(--muted);
+  font: 10px/1.5 var(--ui-font);
+}
+
+/* A small fixed island keeps the two most common jumps within thumb reach. */
+.reading-quick-actions {
+  position: fixed;
+  right: max(18px, calc((100vw - min(1480px, calc(100vw - 112px))) / 2 + 288px));
+  bottom: 22px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: min(330px, calc(100% - 48px));
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--surface-raised) 91%, transparent);
+  box-shadow: 0 12px 30px color-mix(in srgb, var(--app-bg) 22%, transparent);
+  backdrop-filter: blur(12px);
+  animation: toast-in .22s ease both;
+}
+.reading-quick-context {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 150px;
+  padding: 0 7px;
+  overflow: hidden;
+  color: var(--muted);
+  font: 10px var(--ui-font);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.reading-quick-context i {
+  width: 5px;
+  height: 5px;
+  flex: 0 0 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 13%, transparent);
+}
+.reading-quick-actions button {
+  padding: 7px 8px;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  font: 10px var(--ui-font);
+  white-space: nowrap;
+}
+.reading-quick-actions button:hover {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+@media (max-width: 720px) {
+  .reading-quick-actions {
+    right: 12px;
+    bottom: 12px;
+    max-width: calc(100% - 24px);
+  }
+  .reading-quick-context { max-width: 110px; }
 }

@@ -19,6 +19,7 @@ const emit = defineEmits<{
 
 const themeTab = ref<'official' | 'mine'>('official')
 const themeSearch = ref('')
+const themeModeFilter = ref<'all' | 'dark' | 'light'>('all')
 const themeDraft = ref<MoyueTheme | null>(null)
 const themeInput = ref<HTMLInputElement | null>(null)
 
@@ -26,7 +27,8 @@ const filteredThemes = computed(() => {
   const needle = themeSearch.value.trim().toLowerCase()
   return props.themes.filter((theme) => {
     const matchesTab = themeTab.value === 'official' ? theme.builtIn !== false : theme.builtIn === false
-    return matchesTab && (!needle || `${theme.manifest.name} ${theme.manifest.description ?? ''} ${theme.manifest.author}`.toLowerCase().includes(needle))
+    const matchesMode = themeModeFilter.value === 'all' || theme.manifest.mode === themeModeFilter.value
+    return matchesTab && matchesMode && (!needle || `${theme.manifest.name} ${theme.manifest.description ?? ''} ${theme.manifest.author}`.toLowerCase().includes(needle))
   })
 })
 
@@ -84,7 +86,7 @@ async function onThemeFile(event: Event) {
         <button :class="{ active: themeTab === 'mine' }" type="button" @click="themeTab = 'mine'">我的主题</button>
       </div>
       <label class="theme-search"><AppIcon name="search" :size="14" /><input v-model="themeSearch" placeholder="搜索主题、风格、作者…" /></label>
-      <select class="theme-filter" aria-label="主题风格"><option>全部风格</option><option>深色阅读</option><option>浅色阅读</option></select>
+      <select v-model="themeModeFilter" class="theme-filter" aria-label="主题风格"><option value="all">全部风格</option><option value="dark">深色阅读</option><option value="light">浅色阅读</option></select>
     </div>
     <div class="theme-layout">
       <div class="theme-gallery">
