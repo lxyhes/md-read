@@ -33,7 +33,7 @@ function themeStyle(theme: MoyueTheme) {
         :key="theme.manifest.id"
         type="button"
         class="ambience-option"
-        :class="{ selected: props.selectedThemeId === theme.manifest.id }"
+        :class="[`ambience-option-${theme.manifest.id}`, { selected: props.selectedThemeId === theme.manifest.id }]"
         :style="themeStyle(theme)"
         :aria-pressed="props.selectedThemeId === theme.manifest.id"
         :title="`切换到${theme.manifest.name}`"
