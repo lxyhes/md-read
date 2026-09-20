@@ -45,7 +45,24 @@ async function render() {
     const styles = shell ? getComputedStyle(shell) : getComputedStyle(document.documentElement)
     const token = (name: string, fallback: string) => styles.getPropertyValue(name).trim() || fallback
     const colors = store.activeTheme.tokens.color
-    mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'base', themeVariables: { primaryColor: token('--surface-raised', colors.surfaceRaised), primaryTextColor: token('--ink', colors.text), lineColor: token('--accent', colors.accent), secondaryColor: token('--surface', colors.surface), tertiaryColor: token('--app-bg', colors.appBackground), primaryBorderColor: token('--accent', colors.accent), fontFamily: 'Iowan Old Style, Georgia, serif' } })
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: 'strict',
+      theme: 'base',
+      themeVariables: {
+        primaryColor: token('--surface-raised', colors.surfaceRaised),
+        primaryTextColor: token('--ink', colors.text),
+        lineColor: token('--accent', colors.accent),
+        secondaryColor: token('--surface', colors.surface),
+        tertiaryColor: token('--app-bg', colors.appBackground),
+        primaryBorderColor: token('--accent', colors.accent),
+        edgeLabelBackground: token('--surface', colors.surface),
+        fontFamily: token('--ui-font', '"Aptos", "Segoe UI", sans-serif'),
+        fontSize: '14px',
+        fontWeight: '500',
+      },
+      flowchart: { htmlLabels: true, nodeSpacing: 24, rankSpacing: 34, padding: 10 },
+    })
     const result = await mermaid.render(`moyue-${Math.random().toString(36).slice(2)}`, normalizeMermaidCode(props.code))
     svg.value = result.svg
   } catch (cause) {
