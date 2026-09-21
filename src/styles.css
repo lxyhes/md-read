@@ -471,7 +471,7 @@ html, body, #app { background: var(--app-bg, #070d22); }
   max-width: 100%;
   overflow-x: auto;
   overflow-wrap: normal;
-  vertical-align: baseline;
+  vertical-align: middle;
   white-space: nowrap;
   word-break: normal;
 }
@@ -747,6 +747,7 @@ html, body, #app { background: var(--app-bg, #070d22); }
 /* Editorial Markdown layer: preserve the document's structure instead of rendering a flat text column. */
 .reader-content .region-content {
   color: color-mix(in srgb, var(--ink) 94%, var(--accent));
+  font-weight: 500;
   text-wrap: pretty;
 }
 .reader-content .region-block.region-heading {
@@ -908,6 +909,7 @@ html, body, #app { background: var(--app-bg, #070d22); }
   background: color-mix(in srgb, var(--code-bg) 82%, var(--accent-soft));
   color: color-mix(in srgb, var(--accent) 86%, var(--ink));
   font-size: .84em;
+  line-height: 1.35;
 }
 .reader-content .code-frame {
   position: relative;
