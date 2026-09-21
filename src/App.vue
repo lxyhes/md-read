@@ -3,13 +3,14 @@ import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, 
 import { useReaderStore } from './stores/reader'
 import RegionBlock from './components/RegionBlock.vue'
 import MermaidBlock from './components/MermaidBlock.vue'
+import TreeDiagram from './components/TreeDiagram.vue'
 import ThemePicker from './components/ThemePicker.vue'
 import AppIcon from './components/AppIcon.vue'
 import IconButton from './components/IconButton.vue'
 import FileSystemTree, { type FileSystemTreeNode } from './components/FileSystemTree.vue'
 import { copyMarkdownPath, createMarkdownDirectory, createMarkdownFile, deleteMarkdownPath, listFileSystemEntries, listMarkdownFiles, openMarkdownDirectory, openMarkdownFile, readMarkdownPath, renameMarkdownPath, watchMarkdownPath, type WorkspaceFile } from './fileService'
 import type { Annotation, ReaderRegion, ViewerType } from './types'
-import { asciiDiagramToMermaid } from './asciiDiagram'
+import { asciiDiagramToMermaid, asciiTreeToTree } from './asciiDiagram'
 import logoAsset from './assets/moyue-logo.png'
 
 const FocusAmbiencePicker = defineAsyncComponent(() => import('./components/FocusAmbiencePicker.vue'))
@@ -107,6 +108,7 @@ const searchResults = computed(() => {
   return documents.flatMap((document) => document.regions.filter((region) => `${document.title} ${document.path} ${region.textContent}`.toLowerCase().includes(needle)).map((region) => ({ document, region }))).slice(0, 18)
 })
 const activeViewerRegion = computed(() => viewer.value?.region ?? null)
+const activeViewerTree = computed(() => viewer.value?.type === 'tree' ? asciiTreeToTree(viewer.value.region.textContent) : null)
 const viewerCanZoom = computed(() => (viewer.value?.type === 'mermaid' || viewer.value?.type === 'image') && viewerTab.value === 'preview')
 const viewerCanPan = computed(() => viewerCanZoom.value)
 const viewerStageStyle = computed<Record<string, string>>(() => ({
@@ -1173,8 +1175,14 @@ function toggleCleanMode() {
 function setViewerZoom(value: number) { viewerZoom.value = Math.min(3, Math.max(.5, Number(value.toFixed(2)))) }
 function resetViewerView() { viewerZoom.value = 1; viewerPan.value = { x: 0, y: 0 } }
 function openViewer(region: ReaderRegion) {
+  const generatedTree = region.type === 'code' ? asciiTreeToTree(region.textContent) : null
   const generatedDiagram = region.type === 'code' ? asciiDiagramToMermaid(region.textContent) : null
-  if (generatedDiagram) {
+  if (generatedTree) {
+    viewer.value = {
+      type: 'tree',
+      region: { ...region, metadata: { ...(region.metadata ?? {}), sourceCode: region.textContent, autoTree: true } },
+    }
+  } else if (generatedDiagram) {
     viewer.value = {
       type: 'mermaid',
       region: { ...region, metadata: { ...(region.metadata ?? {}), code: generatedDiagram, sourceCode: region.textContent, autoDiagram: true } },
@@ -1186,17 +1194,19 @@ function openViewer(region: ReaderRegion) {
 }
 function closeViewer() { viewer.value = null; viewerDragging.value = false; resetViewerView(); viewerFullscreen.value = false }
 function viewerKind(type: ViewerType) {
-  return type === 'mermaid' ? '图表' : type === 'image' ? '图片' : type === 'code' ? '代码' : '表格'
+  return type === 'mermaid' ? '图表' : type === 'tree' ? '目录树' : type === 'image' ? '图片' : type === 'code' ? '代码' : '表格'
 }
 function viewerTitle(type: ViewerType, region: ReaderRegion) {
   if (type === 'image') return region.textContent || '原图预览'
   if (type === 'code') return String(region.metadata?.language ?? 'text').toUpperCase()
+  if (type === 'tree') return '目录树'
   if (type === 'table') return '数据表'
   return region.metadata?.autoDiagram ? '自动流程图' : 'Mermaid 图表'
 }
 function viewerSubtitle(type: ViewerType, region: ReaderRegion) {
   if (type === 'image') return '原始尺寸预览 · 滚轮缩放 · 拖动查看'
   if (type === 'code') return `${region.textContent.split(/\r?\n/).length} 行 · 可复制代码`
+  if (type === 'tree') return '从文本树自动生成 · 支持展开与折叠'
   if (type === 'table') return '完整表格 · 支持横向滚动'
   return region.metadata?.autoDiagram ? '从文本框图自动生成 · 可缩放画布 · 支持导出' : '可缩放画布 · 支持源码与结构查看'
 }
@@ -1595,10 +1605,10 @@ async function requestFullscreen() {
             </div>
             <div v-if="leftPanelTab === 'outline'" class="outline-footer"><span class="progress-ring" :style="{ '--progress': `${(currentProgress?.scrollPercent ?? 0) * 360}deg` }" /> <span>{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}% 已读</span></div>
           </aside>
-          <div ref="readerViewport" class="reader-viewport" @scroll="onReaderScroll" @wheel="onReaderWheel" @pointerdown="onReaderPointerDown" @mouseup="captureSelection"><nav v-if="(store.currentDocument?.headings.length ?? 0) > 0" class="reading-progress-rail" aria-label="阅读进度导航"><span class="reading-progress-rail-caption">{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}%</span><div class="reading-progress-rail-track"><span class="reading-progress-rail-fill" :style="{ height: `${(currentProgress?.scrollPercent ?? 0) * 100}%` }" /><button v-for="(heading, index) in store.currentDocument?.headings" :key="heading.id" type="button" class="reading-progress-marker" :class="{ active: store.activeHeadingId === heading.id }" :style="{ top: headingRailPosition(index) }" :aria-label="`跳转到 ${heading.text}`" :title="heading.text" @click.stop="scrollToHeading(heading.regionId)"><i /><span>{{ heading.text }}</span></button></div></nav><div class="reader-content"><div class="reader-meta"><span class="section-kicker">{{ store.currentDocument?.path }}</span><span>{{ store.currentDocument?.wordCount }} 字 · 约 {{ store.currentDocument?.estimatedReadMinutes }} 分钟</span><span class="reader-zoom-hint" title="使用快捷键调整阅读字号"><kbd>Ctrl / Cmd + + / -</kbd><span>调整字号</span></span></div><h1 class="reader-title">{{ store.currentDocument?.title }}</h1><p class="reader-deck">在文字、图表和一块留白之间，找到你自己的阅读速度。</p><div class="reader-rule" />
+          <div class="reader-column"><div class="reader-meta"><span class="section-kicker">{{ store.currentDocument?.path }}</span><span>{{ store.currentDocument?.wordCount }} 字 · 约 {{ store.currentDocument?.estimatedReadMinutes }} 分钟</span><span class="reader-zoom-hint" title="使用快捷键调整阅读字号"><kbd>Ctrl / Cmd + + / -</kbd><span>调整字号</span></span></div><div ref="readerViewport" class="reader-viewport" @scroll="onReaderScroll" @wheel="onReaderWheel" @pointerdown="onReaderPointerDown" @mouseup="captureSelection"><nav v-if="(store.currentDocument?.headings.length ?? 0) > 0" class="reading-progress-rail" aria-label="阅读进度导航"><span class="reading-progress-rail-caption">{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}%</span><div class="reading-progress-rail-track"><span class="reading-progress-rail-fill" :style="{ height: `${(currentProgress?.scrollPercent ?? 0) * 100}%` }" /><button v-for="(heading, index) in store.currentDocument?.headings" :key="heading.id" type="button" class="reading-progress-marker" :class="{ active: store.activeHeadingId === heading.id }" :style="{ top: headingRailPosition(index) }" :aria-label="`跳转到 ${heading.text}`" :title="heading.text" @click.stop="scrollToHeading(heading.regionId)"><i /><span>{{ heading.text }}</span></button></div></nav><div class="reader-content"><div class="reader-meta"><span class="section-kicker">{{ store.currentDocument?.path }}</span><span>{{ store.currentDocument?.wordCount }} 字 · 约 {{ store.currentDocument?.estimatedReadMinutes }} 分钟</span><span class="reader-zoom-hint" title="使用快捷键调整阅读字号"><kbd>Ctrl / Cmd + + / -</kbd><span>调整字号</span></span></div><h1 class="reader-title">{{ store.currentDocument?.title }}</h1><p class="reader-deck">在文字、图表和一块留白之间，找到你自己的阅读速度。</p><div class="reader-rule" />
              <div class="regions-stack"><RegionBlock v-for="region in readerRegions" :key="region.id" :region="region" :annotations="currentAnnotations" :focused="store.focusedRegionId === region.id" :active="store.activeRegionId === region.id" :focus-distance="focusDistanceByRegion.get(region.id)" :theme-mode="store.activeTheme?.manifest.mode" :theme-key="`${store.mode}-${store.activeThemeId}`" @focus="focusRegion(region)" @open-viewer="openViewer(region)" @code-copied="notify('代码已复制')" /></div>
             <footer class="reader-footer"><span>墨阅 · Moyue Reader</span><span>Read → Focus → Understand</span></footer>
-          </div><div v-if="showReadingQuickActions && !resumePrompt" class="reading-quick-actions" aria-label="阅读快捷操作"><span class="reading-quick-context"><i />{{ currentHeading?.text || '阅读中' }}</span><button v-if="currentHeading" type="button" @click="jumpToCurrentHeading">本章开头</button><button type="button" @click="scrollToTop">回到顶部</button></div></div>
+          </div><div v-if="showReadingQuickActions && !resumePrompt" class="reading-quick-actions" aria-label="阅读快捷操作"><span class="reading-quick-context"><i />{{ currentHeading?.text || '阅读中' }}</span><button v-if="currentHeading" type="button" @click="jumpToCurrentHeading">本章开头</button><button type="button" @click="scrollToTop">回到顶部</button></div></div></div>
         <aside v-if="store.mode !== 'focus' && store.mode !== 'clean'" class="context-panel"><div class="context-top"><span class="section-kicker">主题中心</span><button class="text-button" type="button" @click="view = 'themes'">更多 <AppIcon name="external" :size="12" /></button></div><div class="theme-mini-card"><ThemePicker :themes="store.themes" :selected-theme-id="store.activeThemeId" compact @select="applyReaderTheme" /><div class="theme-mini-caption"><strong>{{ store.activeTheme?.manifest.name }}</strong><small>沉浸阅读 · {{ store.activeTheme?.manifest.mode === 'light' ? '白昼' : '深色' }}</small></div></div><div class="translation-card"><div class="side-card-heading"><span>划词翻译</span><span>中 ↔ 英</span></div><strong>intelligence</strong><small>/ɪnˈtelɪdʒəns/</small><p>n. 智能；智力；理解力<br />复数：intelligences</p><button type="button" @click="assist('translate')">在适配器中打开 <AppIcon name="external" :size="12" /></button></div><div class="diagram-card"><div class="side-card-heading"><span>图表示例</span><IconButton icon="close" size="sm" label="关闭图表示例" @click="notify('图表可独立查看')" /></div><div class="mini-diagram"><span>数据收集</span><i>↓</i><div><span>数据预处理</span><span>模型训练</span></div><i>↓</i><div><span>评估与优化</span><span>预测应用</span></div></div><button class="diagram-link" type="button" @click="notify('请点击正文中的图表进入独立查看')">独立查看 <AppIcon name="external" :size="12" /></button></div><div class="context-card current-context"><span class="section-kicker">CURRENT REGION</span><strong>{{ currentHeading?.text || '开篇' }}</strong><small>{{ store.currentDocument?.regions.length ?? 0 }} 个阅读区域 · {{ currentAnnotations.length }} 条批注</small></div><div class="context-actions"><button type="button" @click="toggleFocusMode"><AppIcon name="focus" :size="13" />进入专注</button><button type="button" @click="toggleCleanMode"><AppIcon name="eye" :size="13" />纯净阅读</button></div><div v-if="currentAnnotations.length" class="annotation-panel"><div class="annotation-heading"><span class="section-kicker">ANNOTATIONS</span><span>{{ currentAnnotations.length }}</span></div><button v-for="annotation in currentAnnotations.slice(0, 4)" :key="annotation.id" class="annotation-item" type="button" @click="jumpToAnnotation(annotation)"><span class="annotation-dot" :style="{ background: annotation.color }" /><span><b>{{ annotation.note || '高亮标记' }}</b><small>{{ annotation.selectedText }}</small></span></button></div></aside>
          <aside v-if="store.mode === 'focus'" class="focus-sidebar"><div class="focus-sidebar-head"><div><span class="section-kicker">FOCUS READING</span><strong>专注阅读</strong><small class="focus-document-label">{{ store.currentDocument?.title || '当前文档' }}</small></div><button class="ghost-button" type="button" @click="exitFocusMode"><AppIcon name="close" :size="13" />退出</button></div><div class="focus-session-meta"><span><i />{{ focusRunning ? '专注进行中' : '准备开始' }}</span><span>{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}% 已读</span></div><div class="focus-timer-card"><div class="focus-timer-ring" :style="{ '--focus-progress': `${focusProgress * 360}deg` }"><strong>{{ focusTimeLabel }}</strong><span>{{ focusRunning ? '专注中' : focusRemaining === 0 ? '已完成' : '准备开始' }}</span></div><div class="focus-timer-actions"><button type="button" @click="resetFocusTimer">重置</button><button class="primary-button" type="button" @click="toggleFocusTimer">{{ focusRunning ? '暂停' : '开始' }}</button></div></div><FocusAmbiencePicker :themes="focusThemes" :selected-theme-id="store.activeThemeId" @select="applyReaderTheme" /><div class="focus-card focus-outline"><div class="focus-card-heading"><span>内容导航</span><small>{{ store.currentDocument?.headings.length ?? 0 }} 章 · {{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}%</small></div><nav v-if="store.currentDocument?.headings.length"><button v-for="heading in store.currentDocument.headings" :key="heading.id" :data-focus-outline-id="heading.id" type="button" :class="{ active: store.activeHeadingId === heading.id }" @click="focusHeading(heading.regionId)"><i />{{ heading.text }}</button></nav><p v-else class="focus-outline-empty">这篇文档还没有章节标题</p></div></aside>
         </div>
@@ -1652,7 +1662,8 @@ async function requestFullscreen() {
           <button type="button" :class="{ active: viewerTab === 'data' }" @click="viewerTab = 'data'">结构</button>
         </nav>
         <div ref="viewerStage" class="viewer-stage" :class="{ 'is-pan-enabled': viewerCanPan, 'is-dragging': viewerDragging }" :style="viewerStageStyle" @wheel="onViewerWheel" @pointerdown="onViewerPointerDown" @pointermove="onViewerPointerMove" @pointerup="onViewerPointerUp" @pointercancel="onViewerPointerUp" @dblclick="onViewerDoubleClick">
-          <MermaidBlock v-if="viewer.type === 'mermaid' && viewerTab === 'preview'" :code="String(viewer.region.metadata?.code ?? viewer.region.textContent)" large @rendered="fitViewer" />
+          <TreeDiagram v-if="viewer.type === 'tree' && activeViewerTree" :node="activeViewerTree" root />
+          <MermaidBlock v-else-if="viewer.type === 'mermaid' && viewerTab === 'preview'" :code="String(viewer.region.metadata?.code ?? viewer.region.textContent)" :native-labels="Boolean(viewer.region.metadata?.autoDiagram)" large @rendered="fitViewer" />
           <div v-else-if="viewer.type === 'mermaid' && viewerTab === 'source'" class="viewer-source-panel">
             <div class="viewer-source-toolbar"><span>Mermaid 源码</span><button type="button" @click="copyViewerSource"><AppIcon name="copy" :size="13" />复制源码</button></div>
             <pre class="viewer-source">{{ mermaidSource() }}</pre>
@@ -1671,7 +1682,7 @@ async function requestFullscreen() {
             <button v-if="viewer.type === 'mermaid'" type="button" @click="copyViewerSource"><AppIcon name="copy" :size="14" />复制源码</button>
             <button v-if="viewer.type === 'mermaid'" type="button" @click="exportViewer('svg')"><AppIcon name="download" :size="14" />导出 SVG</button>
             <button v-if="viewer.type === 'mermaid'" type="button" @click="exportViewer('png')"><AppIcon name="download" :size="14" />导出 PNG</button>
-            <button v-if="viewer.type === 'code' || viewer.type === 'table'" type="button" @click="exportViewer()"><AppIcon name="download" :size="14" />导出文本</button>
+            <button v-if="viewer.type === 'code' || viewer.type === 'tree' || viewer.type === 'table'" type="button" @click="exportViewer()"><AppIcon name="download" :size="14" />导出文本</button>
           </div>
         </footer>
       </div>

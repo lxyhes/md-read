@@ -2,9 +2,10 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { Annotation, ReaderRegion, ThemeManifest } from '../types'
 import MermaidBlock from './MermaidBlock.vue'
+import TreeDiagram from './TreeDiagram.vue'
 import AppIcon from './AppIcon.vue'
 import IconButton from './IconButton.vue'
-import { asciiDiagramToMermaid } from '../asciiDiagram'
+import { asciiDiagramToMermaid, asciiTreeToTree } from '../asciiDiagram'
 
 const props = defineProps<{ region: ReaderRegion; annotations?: Annotation[]; focused: boolean; active: boolean; focusDistance?: number; themeMode?: ThemeManifest['mode']; themeKey?: string }>()
 const emit = defineEmits<{ focus: []; openViewer: []; 'code-copied': [] }>()
@@ -15,8 +16,9 @@ const selectedCodeText = ref('')
 const activeCodeLine = ref('')
 let copyTimer: number | null = null
 const codeLanguage = computed(() => String(props.region.metadata?.language ?? 'text'))
+const asciiTree = computed(() => props.region.type === 'code' ? asciiTreeToTree(props.region.textContent) : null)
 const asciiDiagramCode = computed(() => props.region.type === 'code' ? asciiDiagramToMermaid(props.region.textContent) : null)
-const isDiagramLike = computed(() => Boolean(asciiDiagramCode.value))
+const isDiagramLike = computed(() => Boolean(asciiTree.value || asciiDiagramCode.value))
 const codeLineCount = computed(() => Math.max(1, props.region.textContent.split(/\r?\n/).length))
 const focusDistanceClass = computed(() => `focus-distance-${Math.min(3, Math.max(0, props.focusDistance ?? 0))}`)
 const regionAnnotations = computed(() => props.annotations?.filter((annotation) => annotation.regionId === props.region.id) ?? [])
@@ -108,8 +110,11 @@ function copyActiveCodeLine() { void copyCodeText(activeCodeLine.value) }
       <div v-html="highlighted" />
       <button class="inline-view-action" type="button" @click.stop="emit('openViewer')">查看原图 <AppIcon name="external" :size="12" /></button>
     </div>
+      <div v-else-if="region.type === 'code' && asciiTree" class="region-content auto-tree-region">
+      <TreeDiagram :node="asciiTree" root />
+    </div>
     <div v-else-if="region.type === 'code' && asciiDiagramCode" class="region-content auto-diagram-region" @click.stop="emit('openViewer')">
-      <MermaidBlock :code="asciiDiagramCode" :theme-key="themeKey" />
+      <MermaidBlock :code="asciiDiagramCode" :theme-key="themeKey" native-labels />
     </div>
     <div v-else class="region-content">
       <div v-if="region.type === 'code'" class="code-frame" :class="{ 'is-diagram': isDiagramLike }" :data-language="isDiagramLike ? 'diagram' : codeLanguage">

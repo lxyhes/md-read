@@ -12,6 +12,11 @@ type DiagramRelation = {
   target: string
 }
 
+export type AsciiTreeNode = {
+  label: string
+  children: AsciiTreeNode[]
+}
+
 const verticalChars = new Set(['│', '|', '┃'])
 const cornerChars = new Set(['┌', '╭', '+'])
 const topRightChars = new Set(['┐', '╮', '+'])
@@ -48,7 +53,12 @@ function findBoxes(lines: string[]): DiagramBox[] {
           if (!isHorizontalLine(bottomLine.slice(left + 1, right))) continue
           const content = lines.slice(top + 1, bottom).filter((item) => verticalChars.has(item[left]))
           if (!content.length) continue
-          const labels = content.map((item) => item.slice(left + 1, right).trim()).filter(Boolean)
+          const labels = content
+            .map((item) => {
+              const contentRight = Math.max(...Array.from(verticalChars).map((character) => item.lastIndexOf(character)))
+              return item.slice(left + 1, contentRight > left ? contentRight : right).trim()
+            })
+            .filter(Boolean)
           if (!labels.length) continue
           boxes.push({ top, bottom, left, right, labels })
           break
@@ -75,11 +85,11 @@ function mermaidText(value: string) {
 }
 
 function mermaidLabel(value: string) {
-  return value.split('<br/>').map((part) => `&nbsp;${mermaidText(part)}&nbsp;`).join('<br/>')
+  return value.split('<br/>').map((part) => `\u00a0${mermaidText(part)}\u00a0`).join('<br/>')
 }
 
 function mermaidEdgeLabel(value: string) {
-  return `&nbsp;${mermaidText(value)}&nbsp;`
+  return `\u00a0${mermaidText(value)}\u00a0`
 }
 
 function nodeKey(value: string) {
@@ -89,6 +99,36 @@ function nodeKey(value: string) {
 function nodeDisplay(value: string) {
   const parts = value.trim().split(/\s{2,}/).filter(Boolean)
   return { key: parts[0] || value.trim(), label: parts.join('<br/>') || value.trim() }
+}
+
+const treeBranchPattern = /^([\s│|]*)(?:├──|└──|\+--|\\--)[ \t]*(.+?)\s*$/
+
+/** Parse Unicode directory trees into nested data instead of forcing them through Mermaid. */
+export function asciiTreeToTree(source: string): AsciiTreeNode | null {
+  const lines = source
+    .replace(/(?:&#x20;|&#32;|&nbsp;)/gi, ' ')
+    .replace(/\t/g, '    ')
+    .split(/\r?\n/)
+  const firstLine = lines.find((line) => line.trim())
+  if (!firstLine || treeBranchPattern.test(firstLine) || /^[\s│|]*$/.test(firstLine)) return null
+
+  const root: AsciiTreeNode = { label: firstLine.trim(), children: [] }
+  const stack: AsciiTreeNode[] = [root]
+  let branchCount = 0
+  for (const line of lines.slice(lines.indexOf(firstLine) + 1)) {
+    if (!line.trim() || /^[\s│|]*$/.test(line)) continue
+    const match = line.match(treeBranchPattern)
+    if (!match) return null
+    const depth = Math.max(1, Math.ceil(match[1].length / 4) + 1)
+    const parent = stack[depth - 1]
+    if (!parent) return null
+    const node: AsciiTreeNode = { label: match[2].trim(), children: [] }
+    parent.children.push(node)
+    stack.length = depth
+    stack.push(node)
+    branchCount += 1
+  }
+  return branchCount ? root : null
 }
 
 /** Convert the small box-and-arrow diagrams commonly pasted into Markdown code blocks. */

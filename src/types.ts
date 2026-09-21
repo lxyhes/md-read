@@ -76,7 +76,7 @@ export interface ReaderSelection {
 }
 
 export type ReaderMode = 'normal' | 'clean' | 'focus' | 'region-focus'
-export type ViewerType = 'code' | 'mermaid' | 'image' | 'table'
+export type ViewerType = 'code' | 'mermaid' | 'tree' | 'image' | 'table'
 
 export interface ViewerState {
   type: ViewerType | null
