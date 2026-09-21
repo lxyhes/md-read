@@ -1,8 +1,8 @@
-import { convertFileSrc, invoke } from '@tauri-apps/api/core'
+import { convertFileSrc, invoke, isTauri as tauriIsTauri } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
 import { copyFile, mkdir, readDir, readTextFile, remove, rename, watch, writeTextFile } from '@tauri-apps/plugin-fs'
 
-const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+const isTauri = () => tauriIsTauri()
 
 export type BrowserAssetMap = Readonly<Record<string, string>>
 export interface OpenedFile { path: string; source: string; assets?: BrowserAssetMap }
@@ -48,11 +48,27 @@ export function resolveMarkdownAssetUrl(markdownPath: string, url: string, brows
   if (!localPath) return url
 
   const absolutePath = resolveLocalAssetPath(markdownPath, localPath)
-  if (!isTauri()) {
-    const browserUrl = browserAssets?.[assetKey(absolutePath)] ?? browserAssets?.[assetKey(localPath)]
-    return browserUrl ? `${browserUrl}${match?.[2] ?? ''}` : url
-  }
+  const loadedUrl = browserAssets?.[assetKey(absolutePath)] ?? browserAssets?.[assetKey(localPath)]
+  if (loadedUrl) return `${loadedUrl}${match?.[2] ?? ''}`
+  if (!isTauri()) return url
   return `${convertFileSrc(absolutePath)}${match?.[2] ?? ''}`
+}
+
+export async function createTauriAssetMap(markdownPath: string, urls: Iterable<string>): Promise<Record<string, string>> {
+  const assets: Record<string, string> = {}
+  if (!isTauri()) return assets
+  for (const url of new Set(urls)) {
+    const rawPath = url.trim().match(/^([^?#]*)/)?.[1] ?? ''
+    const localPath = localAssetPath(decodeUrlPath(rawPath))
+    if (!localPath || !isImagePath(localPath)) continue
+    const absolutePath = resolveLocalAssetPath(markdownPath, localPath)
+    try {
+      const response = await invoke<ArrayBuffer | number[]>('read_local_image', { path: absolutePath })
+      const bytes = response instanceof ArrayBuffer ? new Uint8Array(response) : Uint8Array.from(response)
+      assets[assetKey(absolutePath)] = URL.createObjectURL(new Blob([bytes], { type: imageMimeType(absolutePath) }))
+    } catch (error) { console.error(`无法读取 Markdown 图片：${absolutePath}`, error) }
+  }
+  return assets
 }
 
 export async function authorizeMarkdownAssets(markdownPath: string): Promise<void> {
@@ -203,7 +219,7 @@ function normalizeLocalPath(path: string) {
     if (segment === '..') { if (result.length && result[result.length - 1] !== '..') result.pop(); continue }
     result.push(segment)
   }
-  return `${prefix}${result.join('/')}`
+  return `${prefix}${drive ? '/' : ''}${result.join('/')}`
 }
 
 function decodeUrlPath(path: string) {
@@ -233,6 +249,11 @@ function assetKey(path: string) {
 
 function isImagePath(path: string) {
   return /\.(?:avif|bmp|gif|jpe?g|png|svg|webp)$/i.test(path)
+}
+
+function imageMimeType(path: string) {
+  const extension = path.split('.').pop()?.toLowerCase()
+  return extension === 'svg' ? 'image/svg+xml' : extension === 'jpg' || extension === 'jpeg' ? 'image/jpeg' : `image/${extension || 'png'}`
 }
 
 async function scanDirectory(path: string): Promise<OpenedFile[]> {
