@@ -25,7 +25,7 @@
     ],
     "security": {
       "csp": null,
-      "assetProtocol": { "enable": true, "scope": ["**"] }
+      "assetProtocol": { "enable": true, "scope": [] }
     }
   },
   "bundle": {

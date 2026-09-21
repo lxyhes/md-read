@@ -4,7 +4,8 @@ import { copyFile, mkdir, readDir, readTextFile, remove, rename, watch, writeTex
 
 const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
-export interface OpenedFile { path: string; source: string }
+export type BrowserAssetMap = Readonly<Record<string, string>>
+export interface OpenedFile { path: string; source: string; assets?: BrowserAssetMap }
 export interface WorkspaceFile { path: string; name: string }
 export interface FileSystemEntry { path: string; name: string; isDirectory: boolean }
 
@@ -38,15 +39,37 @@ export async function watchMarkdownPath(path: string, onChange: () => void): Pro
   return () => { stopped = true; window.clearInterval(timer); stopNative() }
 }
 
-export function resolveMarkdownAssetUrl(markdownPath: string, url: string): string {
-  if (!isTauri() || !url.trim() || url.startsWith('#') || /^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(url)) return url
-  const match = url.match(/^([^?#]*)(.*)$/)
-  const relativePath = match?.[1]
-  if (!relativePath) return url
-  const directory = dirnameOf(markdownPath)
-  if (!directory) return url
-  const absolutePath = normalizeLocalPath(`${directory}/${relativePath}`)
+export function resolveMarkdownAssetUrl(markdownPath: string, url: string, browserAssets?: BrowserAssetMap): string {
+  const value = url.trim()
+  if (!value || value.startsWith('#')) return url
+  const match = value.match(/^([^?#]*)(.*)$/)
+  const rawPath = match?.[1] ?? value
+  const localPath = localAssetPath(decodeUrlPath(rawPath))
+  if (!localPath) return url
+
+  const absolutePath = resolveLocalAssetPath(markdownPath, localPath)
+  if (!isTauri()) {
+    const browserUrl = browserAssets?.[assetKey(absolutePath)] ?? browserAssets?.[assetKey(localPath)]
+    return browserUrl ? `${browserUrl}${match?.[2] ?? ''}` : url
+  }
   return `${convertFileSrc(absolutePath)}${match?.[2] ?? ''}`
+}
+
+export async function authorizeMarkdownAssets(markdownPath: string): Promise<void> {
+  if (!isTauri()) return
+  const directory = dirnameOf(markdownPath)
+  if (!directory) return
+  await invoke('allow_asset_directory', { path: directory })
+}
+
+export function createBrowserAssetMap(files: File[]): Record<string, string> {
+  const assets: Record<string, string> = {}
+  for (const file of files) {
+    const path = file.webkitRelativePath || file.name
+    if (!isImagePath(path)) continue
+    assets[assetKey(path)] = URL.createObjectURL(file)
+  }
+  return assets
 }
 
 export async function openMarkdownFile(): Promise<OpenedFile[]> {
@@ -58,7 +81,7 @@ export async function openMarkdownFile(): Promise<OpenedFile[]> {
   return new Promise((resolve) => {
     const input = document.createElement('input')
     input.type = 'file'
-    input.accept = '.md,.markdown,text/markdown'
+    input.accept = '.md,.markdown,text/markdown,image/*'
     input.multiple = true
     let settled = false
     const finish = async () => {
@@ -158,7 +181,9 @@ export async function openMarkdownDirectory(path: string): Promise<void> {
 
 async function filesToOpened(files: FileList | null): Promise<OpenedFile[]> {
   if (!files) return []
-  return Promise.all(Array.from(files).filter((file) => /\.(md|markdown)$/i.test(file.name)).map(async (file) => ({ path: file.webkitRelativePath || file.name, source: await file.text() })))
+  const selectedFiles = Array.from(files)
+  const assets = createBrowserAssetMap(selectedFiles)
+  return Promise.all(selectedFiles.filter((file) => /\.(md|markdown)$/i.test(file.name)).map(async (file) => ({ path: file.webkitRelativePath || file.name, source: await file.text(), assets })))
 }
 
 function dirnameOf(path: string) {
@@ -179,6 +204,35 @@ function normalizeLocalPath(path: string) {
     result.push(segment)
   }
   return `${prefix}${result.join('/')}`
+}
+
+function decodeUrlPath(path: string) {
+  try { return decodeURIComponent(path) } catch { return path }
+}
+
+function localAssetPath(path: string): string | null {
+  const normalized = path.replace(/\\/g, '/')
+  if (/^[A-Za-z]:\//.test(normalized)) return normalized
+  if (/^file:\/\//i.test(normalized)) {
+    const filePath = normalized.replace(/^file:\/\//i, '').replace(/^\/([A-Za-z]:[\\/])/, '$1')
+    return filePath || null
+  }
+  if (/^[a-z][a-z\d+.-]*:/i.test(normalized) || normalized.startsWith('//')) return null
+  return normalized
+}
+
+function resolveLocalAssetPath(markdownPath: string, assetPath: string) {
+  if (/^(?:[A-Za-z]:\/|\/)/.test(assetPath)) return normalizeLocalPath(assetPath)
+  const directory = dirnameOf(markdownPath)
+  return normalizeLocalPath(directory ? `${directory}/${assetPath}` : assetPath)
+}
+
+function assetKey(path: string) {
+  return normalizeLocalPath(path).replace(/^\.\//, '').toLowerCase()
+}
+
+function isImagePath(path: string) {
+  return /\.(?:avif|bmp|gif|jpe?g|png|svg|webp)$/i.test(path)
 }
 
 async function scanDirectory(path: string): Promise<OpenedFile[]> {

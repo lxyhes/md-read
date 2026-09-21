@@ -1,152 +1,151 @@
 # 墨阅 Moyue Reader
 
-一款面向桌面端的 Markdown 沉浸式阅读器。
+> 把 Markdown 读成一段真正能停留的时间。
 
-墨阅不是 Markdown 编辑器，重点是让长文档更适合阅读、理解和回看：Markdown 会被解析为多个阅读区域，用户可以按章节导航、聚焦内容、查看代码和 Mermaid 图表，并在主题之间切换阅读氛围。
+墨阅是一款 **本地优先、离线可用的 Markdown 沉浸式阅读器**。它不追求把编辑器做得更复杂，而是把长文档变成更容易浏览、理解和回看的阅读空间：章节导航、代码高亮、Mermaid 图表、专注模式、主题切换和阅读进度，都在一个安静的桌面窗口里完成。
 
-当前版本定位为桌面端 V1 阅读器，优先保证本地、离线、连续阅读体验。正式验证平台为 Windows，前端结构保持 Tauri 跨平台兼容。
+![墨阅产品视觉预览](./设计图/1.png)
 
-## 当前能力
+> 上图为产品视觉预览。当前项目优先验证 Windows 桌面端体验，前端结构保持 Tauri 跨平台兼容。
 
-- Markdown / GFM 渲染：标题、大纲、列表、任务列表、引用、表格、图片和分隔线
-- 阅读体验：阅读进度恢复、区域聚焦、专注模式、快捷键、选词工具栏
-- 代码阅读：Shiki 语法高亮、行号、语言标识、行数统计、复制代码、横向滚动
-- 独立查看器：Mermaid 图表、图片、代码和表格；Mermaid 支持适应窗口、缩放拖动、源码复制、SVG / PNG 导出
-- 主题系统：月影深蓝、静默苔原、蓝调时刻，以及主题导入、编辑和导出
-- 本地数据：Tauri 桌面端使用 SQLite；浏览器预览使用 localStorage 回退
-- 文件操作：打开 Markdown 文件、打开文件夹扫描 Markdown、拖拽导入
-- 连续阅读：恢复上次打开的文档标签、当前文档和滚动位置；桌面端监听 Markdown 外部修改并自动重新解析
-- 桌面交互：多文档标签、文件树、全屏、相对图片资源、外部文件变化提示
-- 性能与可用性：搜索防抖、长文档区域懒布局、键盘焦点样式、初始化和保存失败反馈
+## 为什么是墨阅？
 
-## 支持的 Markdown 内容
+- **为阅读而生**：Markdown 被拆成清晰的阅读区域，按章节浏览，随时聚焦当前内容。
+- **长文也能读下去**：自动恢复文档、标签和滚动位置，阅读进度保存在本地。
+- **代码和图表是一等内容**：Shiki 代码高亮、行号、复制；Mermaid 支持缩放、拖动、源码查看和 SVG / PNG 导出。
+- **完全掌控自己的文件**：打开本地文件或文件夹即可使用，支持拖拽导入、相对图片资源和外部文件变化监听。
+- **让环境适合你**：内置多种阅读主题，支持自定义主题、导入和导出主题包。
 
-解析链路为：
+## 你可以用它做什么？
 
-~~~text
-Markdown
-  → remark-parse
-  → remark-gfm / frontmatter
-  → ReaderRegion
-  → Vue 阅读区域渲染
-~~~
+| 场景 | 墨阅提供的体验 |
+| --- | --- |
+| 阅读技术文档 | 目录导航、全文搜索、代码高亮、快捷键和阅读进度 |
+| 学习长文章 | 专注模式、区域聚焦、划词高亮、批注和纯净阅读 |
+| 查看架构与流程 | Mermaid 图表独立查看、缩放拖动、复制源码、导出图片 |
+| 整理本地资料 | 打开文件夹扫描 Markdown，多文档标签、文件树和本地持久化 |
+| 调整阅读氛围 | 月影深蓝、静默苔原、纯净白纸、蓝调时刻，以及可编辑主题 |
 
-支持的主要内容包括：
+## 30 秒开始阅读
 
-- 标题与大纲、段落、软换行、引用、列表和任务列表
-- fenced code、Shiki 高亮、Mermaid 代码块
-- GFM 表格、图片、链接和分隔线
-- 危险 HTML、脚本、事件属性和危险 URL 会被隐藏或清理
-- 桌面端 Markdown 相对图片会按文档目录解析
+### 直接运行桌面版（推荐）
 
-## 技术栈
-
-- Tauri 2
-- Vue 3 + TypeScript + Vite
-- Pinia
-- remark-parse + remark-gfm + unified
-- Shiki
-- Mermaid
-- SQLite（Tauri SQL 插件）
-
-## 开发环境
-
-建议使用：
-
-- Node.js 18+
-- Rust stable
-- Windows 10 / 11（当前主要验证平台）
-
-安装前端依赖：
+环境要求：Node.js 18+、Rust stable、Windows 10 / 11。
 
 ```bash
+# 进入项目目录后执行
 npm install
-```
-
-启动浏览器预览：
-
-```bash
-npm run dev
-```
-
-启动 Tauri 桌面开发模式：
-
-```bash
 npm run tauri dev
 ```
 
-浏览器预览适合查看 UI 和基础 Markdown 渲染；完整的本地文件读取、文件夹扫描、SQLite、外部文件监听和相对图片资源体验请使用 Tauri 桌面模式。
+启动后，点击「导入 Markdown」、打开文件夹，或直接把 `.md` / `.markdown` 文件拖进窗口即可。
 
-## 常用命令
+### 只查看前端预览
 
 ```bash
-# 类型检查并构建前端
-npm run build
-
-# 运行单元测试
-npm run test
-
-# 预览生产构建
-npm run preview
+npm install
+npm run dev
 ```
 
-## 项目结构
+浏览器预览适合体验界面和基础 Markdown 渲染；本地文件读取、文件夹扫描、SQLite 持久化、外部文件监听和相对图片资源，请使用 Tauri 桌面版。
+
+## 功能亮点
+
+### 把 Markdown 变成阅读空间
+
+- 支持标题、大纲、段落、软换行、引用、列表、任务列表、表格、图片、链接和分隔线。
+- 支持搜索全部文档或当前文档，按结果直接跳转到对应阅读区域。
+- 支持多文档标签、文件树、全屏、纯净阅读和专注计时。
+- 支持划词高亮、批注、复制为 Markdown 引用。
+
+### 让代码与图表更容易理解
+
+- fenced code 使用 Shiki 进行语法高亮，显示语言、行号和行数，支持完整复制与横向滚动。
+- `mermaid` 代码块会直接渲染为图表，可适应窗口、缩放、拖动、查看源码和导出 SVG / PNG。
+- 常见的文本框图、ASCII 流程图和目录树可自动转换为可视化结构。
+
+### 保持本地、安静和可控
+
+- 桌面端使用 SQLite 保存文档快照、阅读进度和批注；浏览器预览使用 `localStorage` 回退。
+- Markdown 外部修改后自动重新解析，并尽量保留当前阅读位置。
+- 危险 HTML、脚本、事件属性和危险 URL 会被隐藏或清理。
+- 不依赖账号、云同步或固定第三方 AI 服务，文件始终在你的本地工作区中。
+
+## 常用快捷键
+
+| 快捷键 | 操作 |
+| --- | --- |
+| `Ctrl / Cmd + K` | 搜索全部文档 |
+| `Ctrl / Cmd + F` | 搜索当前文档 |
+| `Ctrl / Cmd + O` | 打开 Markdown 文件 |
+| `Ctrl / Cmd + Tab` | 切换下一个文档 |
+| `F` | 进入 / 退出专注模式 |
+| `Enter` / `Space` | 聚焦当前阅读区域 |
+| `↑` / `↓` | 切换阅读区域 |
+| `Esc` | 退出聚焦或关闭查看器 |
+
+## 开发者信息
+
+```text
+Vue 3 + TypeScript + Vite
+Tauri 2 + Rust
+Pinia
+remark-parse + remark-gfm + unified
+Shiki
+Mermaid
+SQLite（Tauri SQL 插件）
+```
+
+项目结构：
 
 ```text
 .
 ├─ src/
-│  ├─ components/       Vue 阅读组件、主题组件和图标组件
+│  ├─ components/       Vue 阅读、主题和图标组件
 │  ├─ stores/            Pinia 阅读状态
-│  ├─ parser.ts          Markdown AST 与 ReaderRegion 转换
+│  ├─ parser.ts          Markdown AST → ReaderRegion
 │  ├─ highlight.ts       Shiki 代码高亮
 │  ├─ persistence.ts     SQLite / localStorage 持久化
 │  ├─ fileService.ts     文件导入、文件树和外部文件监听
 │  ├─ themes.ts          内置主题与主题包处理
 │  └─ styles.css         全局布局、主题和阅读排版
 ├─ src-tauri/            Tauri 2 Rust 容器与插件配置
-├─ 设计图/               产品设计参考图
+├─ 设计图/               产品视觉参考图
 └─ package.json
 ```
 
-## 阅读交互
+常用命令：
 
-- `Ctrl / Cmd + K`：打开搜索
-- Ctrl / Cmd + O：打开 Markdown 文件
-- Ctrl / Cmd + Tab：切换下一个已打开文档
-- Ctrl / Cmd + Shift + Tab：切换上一个已打开文档
-- Ctrl / Cmd + W：关闭当前文档标签
-- `F`：进入专注模式
-- `Enter` / `空格`：聚焦当前阅读区域
-- `↑` / `↓`：切换阅读区域
-- `Esc`：退出区域聚焦或关闭查看器
-- 点击代码块的复制按钮：复制完整代码内容
+```bash
+npm run dev          # 浏览器开发预览
+npm run tauri dev   # Tauri 桌面开发模式
+npm run test         # 运行单元测试
+npm run build        # 类型检查并构建前端
+npm run preview      # 预览生产构建
+```
 
-## 主题与本地数据
+## 当前状态
 
-- 内置主题：ember-paper、quiet-moss、blue-hour
-- 主题切换不会重新解析 Markdown。
-- 自定义主题可导入、实时预览、应用和导出为 .moyue-theme。
-- 阅读偏好保存在本地，切换主题或重启后保留正文宽度、字号、行距和字体。
-- 文档快照、阅读进度和批注保存在本地；Tauri 桌面端额外使用 SQLite。
-- 不提交本地 .env、数据库、构建产物和用户文档，相关规则见 .gitignore。
+墨阅目前处于桌面端 V1 开发阶段，已完成本地 Markdown 阅读、文件夹工作区、代码 / Mermaid 查看、主题系统、阅读进度和本地持久化。
 
-## 当前验证
-
-~~~bash
-npm run test
-npm run build
-~~~
-
-当前单元测试覆盖 Markdown Region 解析、标题、大纲、危险 HTML、软换行和相对资源解析。
-
-## V1 暂缓项
+暂不包含：
 
 - PDF 阅读
 - 账号、云同步和社区主题市场
 - 插件脚本运行时
-- ECharts 数据图表
 - 固定的第三方 AI / 翻译服务
 - 原生安装包发布和自动更新
+
+欢迎使用、试读自己的 Markdown 文档，并通过 Issue 或 PR 告诉我们：你希望下一次阅读变得更顺手的地方是什么？
+
+## 验证项目
+
+```bash
+npm run test
+npm run build
+```
+
+当前测试覆盖 Markdown Region 解析、标题与大纲、危险 HTML、软换行、相对资源解析、ASCII 图表转换和粘贴内容格式化。
 
 ## 许可证
 

@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { deleteDocument, getProgress, loadAnnotations, loadDocumentSnapshots, saveAnnotation, saveDocument, saveDocumentSnapshot, saveProgress } from '../persistence'
-import { openMarkdownFile, openMarkdownFolder, resolveMarkdownAssetUrl, type OpenedFile } from '../fileService'
+import { authorizeMarkdownAssets, openMarkdownFile, openMarkdownFolder, resolveMarkdownAssetUrl, type OpenedFile } from '../fileService'
 import { builtInThemes, cssVariables, defaultTokens } from '../themes'
 const SESSION_KEY = 'moyue:reader-session'
 const THEME_KEY = 'moyue:theme'
@@ -57,7 +57,8 @@ export const useReaderStore = defineStore('reader', () => {
     const { parseMarkdown } = await import('../parser')
     const openedIds: string[] = []
     for (const file of files) {
-      const document = parseMarkdown(file.path, file.source, (url) => resolveMarkdownAssetUrl(file.path, url))
+      await authorizeMarkdownAssets(file.path)
+      const document = parseMarkdown(file.path, file.source, (url) => resolveMarkdownAssetUrl(file.path, url, file.assets))
       documents.value = [...documents.value.filter((item) => item.id !== document.id), document]
       openedIds.push(document.id)
       await saveDocumentSnapshot(document)
@@ -70,7 +71,8 @@ export const useReaderStore = defineStore('reader', () => {
 
   async function reloadDocument(file: OpenedFile) {
     const { parseMarkdown } = await import('../parser')
-    const document = parseMarkdown(file.path, file.source, (url) => resolveMarkdownAssetUrl(file.path, url))
+    await authorizeMarkdownAssets(file.path)
+    const document = parseMarkdown(file.path, file.source, (url) => resolveMarkdownAssetUrl(file.path, url, file.assets))
     documents.value = [...documents.value.filter((item) => item.id !== document.id), document]
     await saveDocumentSnapshot(document)
     await saveDocument({ id: document.id, path: document.path, title: document.title, sourceHash: document.sourceHash, updatedAt: document.updatedAt, source: document.source })
@@ -85,6 +87,7 @@ export const useReaderStore = defineStore('reader', () => {
     const existing = documents.value.find((item) => item.id === id)
     if (!existing) return null
     const { parseMarkdown } = await import('../parser')
+    await authorizeMarkdownAssets(nextPath)
     const document = parseMarkdown(nextPath, existing.source, (url) => resolveMarkdownAssetUrl(nextPath, url))
     const previousProgress = progress.value[id] ?? await getProgress(id)
     const previousAnnotations = loadAnnotations(id)
@@ -111,7 +114,12 @@ export const useReaderStore = defineStore('reader', () => {
 
   async function bootstrap() {
     const saved = loadDocumentSnapshots()
-    if (saved.length) documents.value = saved
+    if (saved.length) {
+      documents.value = saved
+      await Promise.all(documents.value.map(async (document) => {
+        try { await authorizeMarkdownAssets(document.path) } catch { /* stale snapshots can still render their text */ }
+      }))
+    }
     else {
       const { parseMarkdown } = await import('../parser')
       documents.value.push(parseMarkdown('欢迎开始 · Moyue.md', sample))
