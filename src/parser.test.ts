@@ -47,6 +47,11 @@ describe('Moyue markdown region parser', () => {
     expect(document.regions[0].html).toContain('src="blob:test-image"')
   })
 
+  it('preserves the slash after a Windows drive letter', () => {
+    const document = parseMarkdown('E:/notes/readme.md', '![local](./assets/cover.png)', (url) => resolveMarkdownAssetUrl('E:/notes/readme.md', url, { 'e:/notes/assets/cover.png': 'blob:test-image' }))
+    expect(document.regions[0].html).toContain('src="blob:test-image"')
+  })
+
   it('keeps relative asset query strings after resolving them', () => {
     const document = parseMarkdown('notes/readme.md', '![local](../assets/cover.png?raw=1#top)', (url) => resolveMarkdownAssetUrl('notes/readme.md', url, { 'assets/cover.png': 'blob:test-image' }))
     expect(document.regions[0].html).toContain('src="blob:test-image?raw=1#top"')

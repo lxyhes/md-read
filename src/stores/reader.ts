@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { deleteDocument, getProgress, loadAnnotations, loadDocumentSnapshots, saveAnnotation, saveDocument, saveDocumentSnapshot, saveProgress } from '../persistence'
-import { authorizeMarkdownAssets, openMarkdownFile, openMarkdownFolder, resolveMarkdownAssetUrl, type OpenedFile } from '../fileService'
+import { authorizeMarkdownAssets, createTauriAssetMap, openMarkdownFile, openMarkdownFolder, resolveMarkdownAssetUrl, type OpenedFile } from '../fileService'
 import { builtInThemes, cssVariables, defaultTokens } from '../themes'
 const SESSION_KEY = 'moyue:reader-session'
 const THEME_KEY = 'moyue:theme'
@@ -52,13 +52,20 @@ export const useReaderStore = defineStore('reader', () => {
     for (const [name, value] of Object.entries(variables)) document.documentElement.style.setProperty(name, value)
   }
 
+  async function parseOpenedFile(file: OpenedFile) {
+    const { parseMarkdown } = await import('../parser')
+    try { await authorizeMarkdownAssets(file.path) } catch { /* binary loading below does not require the asset protocol */ }
+    const urls: string[] = []
+    parseMarkdown(file.path, file.source, (url) => { urls.push(url); return url })
+    const assets = { ...await createTauriAssetMap(file.path, urls), ...file.assets }
+    return parseMarkdown(file.path, file.source, (url) => resolveMarkdownAssetUrl(file.path, url, assets))
+  }
+
   async function addOpenedFiles(files: OpenedFile[]) {
     if (!files.length) return 0
-    const { parseMarkdown } = await import('../parser')
     const openedIds: string[] = []
     for (const file of files) {
-      await authorizeMarkdownAssets(file.path)
-      const document = parseMarkdown(file.path, file.source, (url) => resolveMarkdownAssetUrl(file.path, url, file.assets))
+      const document = await parseOpenedFile(file)
       documents.value = [...documents.value.filter((item) => item.id !== document.id), document]
       openedIds.push(document.id)
       await saveDocumentSnapshot(document)
@@ -70,9 +77,7 @@ export const useReaderStore = defineStore('reader', () => {
   }
 
   async function reloadDocument(file: OpenedFile) {
-    const { parseMarkdown } = await import('../parser')
-    await authorizeMarkdownAssets(file.path)
-    const document = parseMarkdown(file.path, file.source, (url) => resolveMarkdownAssetUrl(file.path, url, file.assets))
+    const document = await parseOpenedFile(file)
     documents.value = [...documents.value.filter((item) => item.id !== document.id), document]
     await saveDocumentSnapshot(document)
     await saveDocument({ id: document.id, path: document.path, title: document.title, sourceHash: document.sourceHash, updatedAt: document.updatedAt, source: document.source })
@@ -86,9 +91,7 @@ export const useReaderStore = defineStore('reader', () => {
   async function renameDocument(id: string, nextPath: string) {
     const existing = documents.value.find((item) => item.id === id)
     if (!existing) return null
-    const { parseMarkdown } = await import('../parser')
-    await authorizeMarkdownAssets(nextPath)
-    const document = parseMarkdown(nextPath, existing.source, (url) => resolveMarkdownAssetUrl(nextPath, url))
+    const document = await parseOpenedFile({ path: nextPath, source: existing.source })
     const previousProgress = progress.value[id] ?? await getProgress(id)
     const previousAnnotations = loadAnnotations(id)
     const wasCurrent = currentDocumentId.value === id
@@ -115,10 +118,8 @@ export const useReaderStore = defineStore('reader', () => {
   async function bootstrap() {
     const saved = loadDocumentSnapshots()
     if (saved.length) {
-      documents.value = saved
-      await Promise.all(documents.value.map(async (document) => {
-        try { await authorizeMarkdownAssets(document.path) } catch { /* stale snapshots can still render their text */ }
-      }))
+      documents.value = await Promise.all(saved.map((document) => parseOpenedFile({ path: document.path, source: document.source })))
+      for (const document of documents.value) await saveDocumentSnapshot(document)
     }
     else {
       const { parseMarkdown } = await import('../parser')
