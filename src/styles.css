@@ -605,6 +605,17 @@ html, body, #app { background: var(--app-bg, #070d22); }
   font: 9px var(--mono);
   opacity: .72;
 }
+.file-tree-back {
+  flex: 0 0 auto;
+  padding: 3px 0 3px 7px;
+  border-left: 1px solid var(--border);
+  background: transparent;
+  color: var(--accent);
+  font: 9px var(--ui-font);
+}
+.file-tree-back:hover {
+  color: var(--ink);
+}
 .file-list {
   min-height: 0;
   flex: 1 1 auto;
@@ -3873,6 +3884,35 @@ button:focus-visible,
   white-space: nowrap;
 }
 
+.app-shell:not(.is-focus) .reader-meta {
+  flex-wrap: wrap;
+}
+
+.app-shell:not(.is-focus) .reader-meta > span:nth-child(2) {
+  padding: 4px 8px;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-raised) 54%, transparent);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.app-shell:not(.is-focus) .reader-meta > span.reader-zoom-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.reader-zoom-hint kbd {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--accent-soft) 42%, var(--surface-raised));
+}
+
 .app-shell:not(.is-focus) .reader-title {
   max-width: 100%;
   overflow-wrap: anywhere;
@@ -4086,4 +4126,40 @@ button:focus-visible,
   .app-shell:not(.is-focus) .reader-tab-status {
     display: none;
   }
+}
+
+/* Reader zoom: keep every layer of the document tied to the same readable size. */
+.app-shell:not(.is-focus) .reader-content .reader-title,
+.app-shell.is-focus .reader-content .reader-title {
+  font-size: clamp(32px, calc(var(--reader-size) * 2.8), 68px);
+}
+
+.app-shell:not(.is-focus) .reader-content .reader-deck,
+.app-shell.is-focus .reader-content .reader-deck {
+  font-size: clamp(15px, calc(var(--reader-size) * .95), 23px);
+}
+
+.app-shell:not(.is-focus) .reader-content .region-content h1,
+.app-shell.is-focus .reader-content .region-content h1 {
+  font-size: clamp(29px, calc(var(--reader-size) * 2.1), 48px);
+}
+
+.app-shell:not(.is-focus) .reader-content .region-content h2,
+.app-shell.is-focus .reader-content .region-content h2 {
+  font-size: clamp(24px, calc(var(--reader-size) * 1.72), 38px);
+}
+
+.app-shell:not(.is-focus) .reader-content .region-content h3,
+.app-shell.is-focus .reader-content .region-content h3 {
+  font-size: clamp(20px, calc(var(--reader-size) * 1.4), 30px);
+}
+
+.app-shell:not(.is-focus) .reader-content .region-content h4,
+.app-shell.is-focus .reader-content .region-content h4 {
+  font-size: clamp(18px, calc(var(--reader-size) * 1.1), 24px);
+}
+
+.app-shell:not(.is-focus) .reader-content .region-content pre,
+.app-shell.is-focus .reader-content .region-content pre {
+  font-size: clamp(13px, calc(var(--reader-size) * .78), 19px);
 }
