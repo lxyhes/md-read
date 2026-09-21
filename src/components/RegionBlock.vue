@@ -4,6 +4,7 @@ import type { Annotation, ReaderRegion, ThemeManifest } from '../types'
 import MermaidBlock from './MermaidBlock.vue'
 import AppIcon from './AppIcon.vue'
 import IconButton from './IconButton.vue'
+import { asciiDiagramToMermaid } from '../asciiDiagram'
 
 const props = defineProps<{ region: ReaderRegion; annotations?: Annotation[]; focused: boolean; active: boolean; focusDistance?: number; themeMode?: ThemeManifest['mode']; themeKey?: string }>()
 const emit = defineEmits<{ focus: []; openViewer: []; 'code-copied': [] }>()
@@ -14,7 +15,8 @@ const selectedCodeText = ref('')
 const activeCodeLine = ref('')
 let copyTimer: number | null = null
 const codeLanguage = computed(() => String(props.region.metadata?.language ?? 'text'))
-const isDiagramLike = computed(() => props.region.type === 'code' && /[┌┐└┘│─━→←↑↓]/.test(props.region.textContent))
+const asciiDiagramCode = computed(() => props.region.type === 'code' ? asciiDiagramToMermaid(props.region.textContent) : null)
+const isDiagramLike = computed(() => Boolean(asciiDiagramCode.value))
 const codeLineCount = computed(() => Math.max(1, props.region.textContent.split(/\r?\n/).length))
 const focusDistanceClass = computed(() => `focus-distance-${Math.min(3, Math.max(0, props.focusDistance ?? 0))}`)
 const regionAnnotations = computed(() => props.annotations?.filter((annotation) => annotation.regionId === props.region.id) ?? [])
@@ -105,6 +107,9 @@ function copyActiveCodeLine() { void copyCodeText(activeCodeLine.value) }
     <div v-else-if="region.type === 'image'" class="region-content image-region" @click.stop="emit('openViewer')">
       <div v-html="highlighted" />
       <button class="inline-view-action" type="button" @click.stop="emit('openViewer')">查看原图 <AppIcon name="external" :size="12" /></button>
+    </div>
+    <div v-else-if="region.type === 'code' && asciiDiagramCode" class="region-content auto-diagram-region" @click.stop="emit('openViewer')">
+      <MermaidBlock :code="asciiDiagramCode" :theme-key="themeKey" />
     </div>
     <div v-else class="region-content">
       <div v-if="region.type === 'code'" class="code-frame" :class="{ 'is-diagram': isDiagramLike }" :data-language="isDiagramLike ? 'diagram' : codeLanguage">

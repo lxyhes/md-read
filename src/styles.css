@@ -3816,16 +3816,22 @@ button:focus-visible,
   background: transparent;
   box-shadow: none;
   object-fit: contain;
-  transition: transform .24s ease, box-shadow .24s ease;
-}
-.brand-mark:hover .brand-mark-logo {
-  transform: translateY(-1px);
 }
 
 /* Mermaid polish: preserve the full overview while giving labels a cleaner technical rhythm. */
 .mermaid-svg svg {
   shape-rendering: geometricPrecision;
   text-rendering: optimizeLegibility;
+}
+
+/* Text box diagrams get the same visual treatment as explicit Mermaid blocks. */
+.reader-content .auto-diagram-region {
+  margin-top: 8px;
+  margin-bottom: 10px;
+}
+.reader-content .auto-diagram-region .mermaid-block {
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
+  box-shadow: 0 14px 32px color-mix(in srgb, var(--accent) 8%, transparent);
 }
 .mermaid-svg svg .node rect {
   rx: 8px;

@@ -196,6 +196,7 @@ export const useReaderStore = defineStore('reader', () => {
   }
 
   function setFocusedRegion(id: string) { focusedRegionId.value = id; activeRegionId.value = id }
+  function clearFocusedRegion() { focusedRegionId.value = null }
   function focusRegion(id: string) { setFocusedRegion(id); mode.value = 'region-focus' }
   function clearFocus() { focusedRegionId.value = null; activeRegionId.value = null; mode.value = 'normal' }
   function setMode(value: ReaderMode) {
@@ -212,7 +213,7 @@ export const useReaderStore = defineStore('reader', () => {
 
   const openDocuments = computed(() => openDocumentIds.value.map((id) => documents.value.find((document) => document.id === id)).filter((document): document is ReaderDocument => Boolean(document)))
 
-  return { documents, openDocuments, openDocumentIds, currentDocumentId, currentDocument, mode, activeRegionId, focusedRegionId, activeHeadingId, selection, progress, annotations, themes, activeThemeId, activeTheme, readerSettings, bootstrap, importFiles, importFolder, addOpenedFiles, reloadDocument, renameDocument, openDocument, closeDocument, removeDocument, setProgress, setFocusedRegion, focusRegion, clearFocus, setMode, addAnnotation, applyTheme, installTheme, updateSettings }
+  return { documents, openDocuments, openDocumentIds, currentDocumentId, currentDocument, mode, activeRegionId, focusedRegionId, activeHeadingId, selection, progress, annotations, themes, activeThemeId, activeTheme, readerSettings, bootstrap, importFiles, importFolder, addOpenedFiles, reloadDocument, renameDocument, openDocument, closeDocument, removeDocument, setProgress, setFocusedRegion, clearFocusedRegion, focusRegion, clearFocus, setMode, addAnnotation, applyTheme, installTheme, updateSettings }
 })
 
 function readSettings() {

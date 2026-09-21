@@ -61,7 +61,7 @@ async function render() {
         fontSize: '14px',
         fontWeight: '500',
       },
-      flowchart: { htmlLabels: true, nodeSpacing: 24, rankSpacing: 34, padding: 10 },
+      flowchart: { htmlLabels: true, nodeSpacing: 36, rankSpacing: 50, padding: 18, wrappingWidth: 260, curve: 'basis' },
     })
     const result = await mermaid.render(`moyue-${Math.random().toString(36).slice(2)}`, normalizeMermaidCode(props.code))
     svg.value = result.svg

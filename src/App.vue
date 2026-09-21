@@ -9,6 +9,7 @@ import IconButton from './components/IconButton.vue'
 import FileSystemTree, { type FileSystemTreeNode } from './components/FileSystemTree.vue'
 import { copyMarkdownPath, createMarkdownDirectory, createMarkdownFile, deleteMarkdownPath, listFileSystemEntries, listMarkdownFiles, openMarkdownDirectory, openMarkdownFile, readMarkdownPath, renameMarkdownPath, watchMarkdownPath, type WorkspaceFile } from './fileService'
 import type { Annotation, ReaderRegion, ViewerType } from './types'
+import { asciiDiagramToMermaid } from './asciiDiagram'
 import logoAsset from './assets/moyue-logo.png'
 
 const FocusAmbiencePicker = defineAsyncComponent(() => import('./components/FocusAmbiencePicker.vue'))
@@ -75,6 +76,7 @@ let regionLayoutDocumentId: string | null = null
 let regionLayoutStateKey: string | null = null
 let regionLayoutCache: Array<{ id: string; top: number; bottom: number }> = []
 let focusScrollTargetId: string | null = null
+let focusWheelAt = -Infinity
 let stopNativeFileDrop: (() => void) | null = null
 const documentWatchers = new Map<string, () => void>()
 const documentReloadTimers = new Map<string, number>()
@@ -763,7 +765,8 @@ function onKeydown(event: KeyboardEvent) {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'o' && !isTypingTarget(event.target)) { event.preventDefault(); void openFile(); return }
   if (event.key === 'Escape') {
     event.preventDefault()
-    if (store.mode === 'region-focus' || store.mode === 'focus') exitFocusMode()
+    if (store.mode === 'focus' && store.focusedRegionId) clearRegionFocus()
+    else if (store.mode === 'region-focus' || store.mode === 'focus') exitFocusMode()
     else if (store.mode === 'clean') toggleCleanMode()
     selectionToolbar.value = null
     return
@@ -1092,7 +1095,17 @@ function restoreViewportPercent(percent: number) {
     if (viewport) viewport.scrollTop = percent * Math.max(0, viewport.scrollHeight - viewport.clientHeight)
   })
 }
-function onReaderWheel() { focusScrollTargetId = null }
+function onReaderWheel(event: WheelEvent) {
+  focusScrollTargetId = null
+  const viewport = readerViewport.value
+  const isFocusMode = store.mode === 'region-focus' || store.mode === 'focus'
+  if (!viewport || !isFocusMode || event.ctrlKey || event.deltaY === 0) return
+  event.preventDefault()
+  const now = performance.now()
+  if (now - focusWheelAt < 180) return
+  focusWheelAt = now
+  moveFocus(event.deltaY > 0 ? 1 : -1)
+}
 function onReaderPointerDown() { focusScrollTargetId = null }
 function onReaderScroll() {
   if (scrollFrame !== null) return
@@ -1159,7 +1172,18 @@ function toggleCleanMode() {
 }
 function setViewerZoom(value: number) { viewerZoom.value = Math.min(3, Math.max(.5, Number(value.toFixed(2)))) }
 function resetViewerView() { viewerZoom.value = 1; viewerPan.value = { x: 0, y: 0 } }
-function openViewer(region: ReaderRegion) { viewer.value = { type: region.type === 'code' ? 'code' : region.type === 'image' ? 'image' : region.type === 'table' ? 'table' : 'mermaid', region }; resetViewerView(); viewerTab.value = 'preview'; viewerFullscreen.value = false }
+function openViewer(region: ReaderRegion) {
+  const generatedDiagram = region.type === 'code' ? asciiDiagramToMermaid(region.textContent) : null
+  if (generatedDiagram) {
+    viewer.value = {
+      type: 'mermaid',
+      region: { ...region, metadata: { ...(region.metadata ?? {}), code: generatedDiagram, sourceCode: region.textContent, autoDiagram: true } },
+    }
+  } else {
+    viewer.value = { type: region.type === 'code' ? 'code' : region.type === 'image' ? 'image' : region.type === 'table' ? 'table' : 'mermaid', region }
+  }
+  resetViewerView(); viewerTab.value = 'preview'; viewerFullscreen.value = false
+}
 function closeViewer() { viewer.value = null; viewerDragging.value = false; resetViewerView(); viewerFullscreen.value = false }
 function viewerKind(type: ViewerType) {
   return type === 'mermaid' ? '图表' : type === 'image' ? '图片' : type === 'code' ? '代码' : '表格'
@@ -1168,13 +1192,13 @@ function viewerTitle(type: ViewerType, region: ReaderRegion) {
   if (type === 'image') return region.textContent || '原图预览'
   if (type === 'code') return String(region.metadata?.language ?? 'text').toUpperCase()
   if (type === 'table') return '数据表'
-  return 'Mermaid 图表'
+  return region.metadata?.autoDiagram ? '自动流程图' : 'Mermaid 图表'
 }
 function viewerSubtitle(type: ViewerType, region: ReaderRegion) {
   if (type === 'image') return '原始尺寸预览 · 滚轮缩放 · 拖动查看'
   if (type === 'code') return `${region.textContent.split(/\r?\n/).length} 行 · 可复制代码`
   if (type === 'table') return '完整表格 · 支持横向滚动'
-  return '可缩放画布 · 支持源码与结构查看'
+  return region.metadata?.autoDiagram ? '从文本框图自动生成 · 可缩放画布 · 支持导出' : '可缩放画布 · 支持源码与结构查看'
 }
 function fitViewer() {
   if (!viewerCanPan.value) return
@@ -1195,7 +1219,7 @@ function toggleViewerFullscreen() {
   void nextTick(() => requestAnimationFrame(fitViewer))
 }
 function mermaidSource() {
-  return viewer.value?.region.type === 'mermaid' ? String(viewer.value.region.metadata?.code ?? viewer.value.region.textContent) : ''
+  return viewer.value?.type === 'mermaid' ? String(viewer.value.region.metadata?.sourceCode ?? viewer.value.region.metadata?.code ?? viewer.value.region.textContent) : ''
 }
 async function copyViewerSource() {
   const source = mermaidSource()
@@ -1244,7 +1268,7 @@ function onViewerPointerUp(event: PointerEvent) {
 function onViewerDoubleClick() { if (viewerCanPan.value) resetViewerView() }
 function exportViewer(format: 'svg' | 'png' = 'svg') {
   if (!viewer.value) return
-  const svg = viewer.value.region.type === 'mermaid' ? document.querySelector<SVGSVGElement>('.viewer-stage svg') : null
+  const svg = viewer.value.type === 'mermaid' ? document.querySelector<SVGSVGElement>('.viewer-stage svg') : null
   const source = svg?.outerHTML ?? viewer.value.region.textContent
   if (!source) { notify('当前内容暂时没有可导出的数据'); return }
   if (format === 'png' && svg) {
@@ -1276,7 +1300,7 @@ function exportViewer(format: 'svg' | 'png' = 'svg') {
     image.src = svgUrl
     return
   }
-  const extension = viewer.value.region.type === 'mermaid' ? 'svg' : 'txt'
+  const extension = viewer.value.type === 'mermaid' ? 'svg' : 'txt'
   downloadBlob(new Blob([source], { type: extension === 'svg' ? 'image/svg+xml' : 'text/plain' }), `moyue-${viewer.value.region.type}.${extension}`)
   notify('内容已导出')
 }
@@ -1316,7 +1340,8 @@ function exitFocusMode() {
 }
 function clearRegionFocus() {
   focusScrollTargetId = null
-  store.clearFocus()
+  if (store.mode === 'focus') store.clearFocusedRegion()
+  else store.clearFocus()
 }
 function headingIdForRegion(regionId: string | null) {
   const readerDocument = store.currentDocument

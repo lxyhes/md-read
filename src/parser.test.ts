@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { hashText, parseMarkdown } from './parser'
+import { asciiDiagramToMermaid } from './asciiDiagram'
 
 describe('Moyue markdown region parser', () => {
   const source = '# Title\n\nA paragraph.\n\n```mermaid\nflowchart LR\nA --> B\n```'
@@ -37,5 +38,45 @@ describe('Moyue markdown region parser', () => {
     const document = parseMarkdown('notes/readme.md', '![local](assets/cover.png)\n\n[remote](https://example.com)', (url) => url.startsWith('assets/') ? `asset://${url}` : url)
     expect(document.regions[0].html).toContain('src="asset://assets/cover.png"')
     expect(document.regions[1].html).toContain('href="https://example.com"')
+  })
+
+  it('converts box-and-arrow text diagrams into Mermaid', () => {
+    const diagram = [
+      '┌──────────────┐',
+      '│ Matr         │',
+      '│ 物资           │',
+      '└──────┬───────┘',
+      '       │ categoryId',
+      '       ↓',
+      '┌──────────────┐',
+      '│ MatrCategory   │',
+      '└──────────────┘',
+    ].join('\n')
+    expect(asciiDiagramToMermaid(diagram)).toContain('n0 -->|&nbsp;categoryId&nbsp;| n1')
+    expect(asciiDiagramToMermaid('普通文本')).toBeNull()
+  })
+
+  it('converts mixed box diagrams and labelled horizontal relations', () => {
+    const diagram = [
+      '┌────────────┐',
+      '&#x20;          │   Matr     │',
+      '&#x20;          │  物资       │',
+      '&#x20;          └─────┬──────┘',
+      '&#x20;                │ categoryId',
+      '&#x20;                ↓',
+      '&#x20;         ┌────────────┐',
+      '&#x20;         │MatrCategory│',
+      '&#x20;         └────────────┘',
+      '',
+      'Matr ── supplierId ──➝ Supplier       供应商',
+      'Matr ── mfgId      ──➝ Mfg            厂商',
+      'User ── UserWarehouse ──➝ 可操作仓库',
+    ].join('\n')
+    const mermaid = asciiDiagramToMermaid(diagram)
+    expect(mermaid).toContain('flowchart LR')
+    expect(mermaid).toContain('supplierId')
+    expect(mermaid).toContain('UserWarehouse')
+    expect(mermaid).toContain('categoryId')
+    expect(mermaid).toContain('&nbsp;MatrCategory&nbsp;')
   })
 })
