@@ -11,6 +11,7 @@ import FileSystemTree, { type FileSystemTreeNode } from './components/FileSystem
 import { copyMarkdownPath, createMarkdownDirectory, createMarkdownFile, deleteMarkdownPath, listFileSystemEntries, listMarkdownFiles, openMarkdownDirectory, openMarkdownFile, readMarkdownPath, renameMarkdownPath, watchMarkdownPath, type WorkspaceFile } from './fileService'
 import type { Annotation, ReaderRegion, ViewerType } from './types'
 import { asciiDiagramToMermaid, asciiTreeToTree } from './asciiDiagram'
+import { formatClipboardToMarkdown } from './pasteMarkdown'
 import logoAsset from './assets/moyue-logo.png'
 
 const FocusAmbiencePicker = defineAsyncComponent(() => import('./components/FocusAmbiencePicker.vue'))
@@ -18,7 +19,7 @@ const ThemeCenter = defineAsyncComponent(() => import('./components/ThemeCenter.
 const ViewerCode = defineAsyncComponent(() => import('./components/ViewerCode.vue'))
 
 type View = 'library' | 'reader' | 'themes' | 'settings'
-type BusyAction = 'file' | 'folder' | 'drop' | 'delete' | null
+type BusyAction = 'file' | 'folder' | 'drop' | 'paste' | 'delete' | null
 type FileSyncState = 'idle' | 'syncing' | 'updated' | 'error'
 type FileTreeEntry = { path: string; name: string; documentId?: string }
 const store = useReaderStore()
@@ -185,6 +186,61 @@ function openLibrary(tab: 'home' | 'all') { libraryTab.value = tab; view.value =
 function isTypingTarget(target: EventTarget | null) {
   const element = target as HTMLElement | null
   return !!element && (element.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(element.tagName))
+}
+
+async function importClipboardContent(html: string, text: string) {
+  if (busyAction.value) return
+  const source = formatClipboardToMarkdown(html, text)
+  if (!source) {
+    notify('剪贴板里没有可格式化的文字')
+    return
+  }
+  busyAction.value = 'paste'
+  try {
+    const path = `剪贴板-${Date.now()}.md`
+    const count = await store.addOpenedFiles([{ path, source }])
+    if (count) {
+      view.value = 'reader'
+      await nextTick()
+      restoreScroll()
+      notify('已粘贴并格式化为 Markdown')
+    }
+  } catch (error) {
+    notify(error instanceof Error ? error.message : '粘贴内容失败')
+  } finally {
+    busyAction.value = null
+  }
+}
+
+function onPaste(event: ClipboardEvent) {
+  if (isTypingTarget(event.target)) return
+  const clipboard = event.clipboardData
+  const html = clipboard?.getData('text/html') ?? ''
+  const text = clipboard?.getData('text/plain') ?? ''
+  if (!html && !text) return
+  event.preventDefault()
+  void importClipboardContent(html, text)
+}
+
+async function pasteFromClipboard() {
+  if (busyAction.value) return
+  try {
+    const clipboard = navigator.clipboard
+    if (clipboard && typeof clipboard.read === 'function') {
+      const items = await clipboard.read()
+      const item = items[0]
+      if (item) {
+        const htmlBlob = item.types.includes('text/html') ? await item.getType('text/html') : null
+        const textBlob = item.types.includes('text/plain') ? await item.getType('text/plain') : null
+        await importClipboardContent(htmlBlob ? await htmlBlob.text() : '', textBlob ? await textBlob.text() : '')
+        return
+      }
+    }
+    if (!clipboard) throw new Error('clipboard-unavailable')
+    await importClipboardContent('', await clipboard.readText())
+  } catch (error) {
+    notify(error instanceof Error ? '无法读取剪贴板，请直接按 Ctrl/Cmd+V' : '无法读取剪贴板')
+  }
 }
 
 function onFullscreenChange() {
@@ -685,11 +741,13 @@ onMounted(() => {
   void boot()
   void bindNativeFileDrop()
   window.addEventListener('keydown', onKeydown)
+  window.addEventListener('paste', onPaste)
   document.addEventListener('fullscreenchange', onFullscreenChange)
   document.addEventListener('click', onTabOutsideClick)
 })
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('paste', onPaste)
   document.removeEventListener('fullscreenchange', onFullscreenChange)
   document.removeEventListener('click', onTabOutsideClick)
   stopFocusTimer()
@@ -1496,10 +1554,11 @@ async function requestFullscreen() {
 
       <section v-if="view === 'library'" class="page library-page">
         <div class="library-hero reveal-1"><div><p class="section-kicker">LOCAL READING STUDIO</p><h1>给一个想法<br /><em>足够的时间。</em></h1><p class="hero-copy">墨阅把 Markdown 变成一个可以停留的空间。<br />离线、安静、属于你的阅读节奏。</p></div><div class="hero-orbit"><span class="orbit-core">读</span><span class="orbit-label label-one">Region Focus</span><span class="orbit-label label-two">Theme Package</span><span class="orbit-label label-three">Offline First</span></div></div>
-        <div class="page-toolbar reveal-2"><div><span class="section-kicker">YOUR SHELF</span><h2>最近阅读 <span>{{ store.documents.length }}</span></h2></div><div class="toolbar-actions"><button class="ghost-button" type="button" :disabled="busyAction !== null" @click="openFolder"><AppIcon name="library" :size="14" />{{ busyAction === 'folder' ? '扫描中…' : '打开文件夹' }}</button><button class="primary-button" type="button" :disabled="busyAction !== null" @click="openFile"><AppIcon name="plus" :size="14" />{{ busyAction === 'file' ? '打开中…' : '导入 Markdown' }}</button></div></div>
+        <div class="page-toolbar reveal-2"><div><span class="section-kicker">YOUR SHELF</span><h2>最近阅读 <span>{{ store.documents.length }}</span></h2></div><div class="toolbar-actions"><button class="ghost-button" type="button" :disabled="busyAction !== null" @click="pasteFromClipboard"><AppIcon name="copy" :size="14" />{{ busyAction === 'paste' ? '格式化中…' : '粘贴并格式化' }}</button><button class="ghost-button" type="button" :disabled="busyAction !== null" @click="openFolder"><AppIcon name="library" :size="14" />{{ busyAction === 'folder' ? '扫描中…' : '打开文件夹' }}</button><button class="primary-button" type="button" :disabled="busyAction !== null" @click="openFile"><AppIcon name="plus" :size="14" />{{ busyAction === 'file' ? '打开中…' : '导入 Markdown' }}</button></div></div>
         <div class="document-grid reveal-3">
           <button v-for="(document, index) in store.documents" :key="document.id" class="document-card" type="button" @click="chooseDocument(document.id)"><div class="card-topline"><span class="file-badge">MD</span><span>{{ index === 0 ? '刚刚' : '本地文档' }}</span></div><h3>{{ document.title }}</h3><p>{{ document.regions.length }} 个阅读区域 · {{ document.estimatedReadMinutes }} 分钟</p><div class="card-footer"><span>{{ document.path }}</span><span class="arrow"><AppIcon name="external" :size="14" /></span></div></button>
           <button class="import-card" type="button" :disabled="busyAction !== null" @click="openFile"><span class="import-plus"><AppIcon name="plus" :size="22" /></span><span>{{ busyAction === 'file' ? '正在打开…' : '拖入 Markdown' }}<br /><small>或从本地打开</small></span></button>
+          <button class="import-card" type="button" :disabled="busyAction !== null" @click="pasteFromClipboard"><span class="import-plus"><AppIcon name="copy" :size="22" /></span><span>{{ busyAction === 'paste' ? '正在格式化…' : '粘贴内容' }}<br /><small>自动整理成 Markdown</small></span></button>
         </div>
         <div class="library-note reveal-4"><span class="note-line" /> <span>当前工作区完全离线运行 · 阅读位置会自动保存</span></div>
       </section>

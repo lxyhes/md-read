@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { hashText, parseMarkdown } from './parser'
 import { asciiDiagramToMermaid, asciiTreeToTree } from './asciiDiagram'
+import { formatPastedText } from './pasteMarkdown'
 
 describe('Moyue markdown region parser', () => {
   const source = '# Title\n\nA paragraph.\n\n```mermaid\nflowchart LR\nA --> B\n```'
@@ -125,5 +126,9 @@ describe('Moyue markdown region parser', () => {
       ],
     })
     expect(asciiTreeToTree('普通文本')).toBeNull()
+  })
+
+  it('normalizes plain clipboard text into Markdown lists', () => {
+    expect(formatPastedText('标题\r\n\r\n• 第一项\r\n2) 第二项\r\n\r\n')).toBe('标题\n\n- 第一项\n2. 第二项')
   })
 })
