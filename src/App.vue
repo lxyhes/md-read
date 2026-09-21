@@ -125,10 +125,26 @@ const filteredOpenDocuments = computed(() => {
   return store.openDocuments.filter((document) => `${document.title} ${document.path}`.toLowerCase().includes(needle))
 })
 const currentHeading = computed(() => store.currentDocument?.headings.find((heading) => heading.id === store.activeHeadingId))
-const filteredOutlineHeadings = computed(() => {
+const collapsedOutlineHeadingIds = ref<Set<string>>(new Set())
+const outlineExpansionOverride = ref<boolean | null>(null)
+const outlineRows = computed(() => {
   const needle = outlineQuery.value.trim().toLowerCase()
   const headings = store.currentDocument?.headings ?? []
-  return needle ? headings.filter((heading) => heading.text.toLowerCase().includes(needle)) : headings
+  const rows = headings.map((heading, index) => ({
+    heading,
+    hasChildren: headings[index + 1]?.depth > heading.depth,
+    collapsed: outlineExpansionOverride.value === false || (outlineExpansionOverride.value === null && collapsedOutlineHeadingIds.value.has(heading.id)),
+  }))
+  if (needle) return rows.filter(({ heading }) => heading.text.toLowerCase().includes(needle)).map((row) => ({ ...row, collapsed: false }))
+
+  const visibleRows: typeof rows = []
+  let collapsedDepth = Infinity
+  for (const row of rows) {
+    if (row.heading.depth > collapsedDepth) continue
+    visibleRows.push(row)
+    collapsedDepth = row.collapsed && row.hasChildren ? row.heading.depth : Infinity
+  }
+  return visibleRows
 })
 const showReadingQuickActions = computed(() => (currentProgress.value?.scrollPercent ?? 0) > 0.08)
 const readerRegions = computed(() => {
@@ -174,6 +190,19 @@ const focusProgress = computed(() => 1 - focusRemaining.value / (25 * 60))
 function notify(message: string) {
   toast.value = message
   window.setTimeout(() => { if (toast.value === message) toast.value = '' }, 2600)
+}
+
+function toggleOutlineHeading(headingId: string) {
+  outlineExpansionOverride.value = null
+  const next = new Set(collapsedOutlineHeadingIds.value)
+  if (next.has(headingId)) next.delete(headingId)
+  else next.add(headingId)
+  collapsedOutlineHeadingIds.value = next
+}
+
+function setOutlineExpansion(expanded: boolean) {
+  outlineExpansionOverride.value = expanded
+  collapsedOutlineHeadingIds.value = new Set()
 }
 
 function openSearch(scope: 'all' | 'current' = 'all') {
@@ -765,7 +794,7 @@ watch(query, () => {
 })
 watch(() => store.mode, (mode) => { if (mode !== 'focus') stopFocusTimer() })
 watch(() => store.currentDocument?.path, (path) => { fileSyncState.value = 'idle'; focusScrollTargetId = null; outlineQuery.value = ''; invalidateRegionLayout(); void refreshFileTree(); if (path) void syncFilesystemTreeTarget(path) }, { immediate: true })
-watch(() => store.currentDocumentId, () => nextTick(observeReaderLayout))
+watch(() => store.currentDocumentId, () => { collapsedOutlineHeadingIds.value = new Set(); outlineExpansionOverride.value = null; nextTick(observeReaderLayout) })
 watch(() => store.openDocuments.map((document) => document.path).join('\n'), () => { void syncDocumentWatchers() }, { immediate: true })
 watch(() => [store.activeHeadingId, leftPanelTab.value, store.mode], () => {
   if (!store.activeHeadingId) return
@@ -1653,16 +1682,24 @@ async function requestFullscreen() {
                   <button type="button" class="file-item-open" :aria-label="file.documentId ? `打开 ${file.name}` : `载入 ${file.name}`" @click="openFileTreeEntry(file)" @contextmenu.prevent="openFileContextMenu($event, file)"><AppIcon name="file" :size="14" /><span class="file-item-copy"><strong>{{ file.name }}</strong><small>{{ fileStatus(file) }}</small></span><i v-if="store.currentDocumentId === file.documentId" class="file-active-mark" /></button><IconButton v-if="isDeletableFile(file)" class="file-delete" icon="trash" size="sm" :label="`删除 ${file.name}`" :disabled="busyAction !== null" @click="deleteFile(file)" />
                 </div>
               </nav>
-              <p class="file-browser-note"><AppIcon name="info" :size="13" />当前目录的 Markdown 文件，点击即可打开</p>
             </div>
             <div v-else class="outline-view">
               <label class="outline-search"><AppIcon name="search" :size="13" /><input v-model="outlineQuery" type="search" placeholder="筛选章节…" aria-label="筛选章节" /><button v-if="outlineQuery" type="button" aria-label="清除章节筛选" @click="outlineQuery = ''">×</button></label>
+              <div v-if="store.currentDocument?.headings.length" class="outline-actions" aria-label="大纲展开控制">
+                <div class="outline-action-group">
+                  <button type="button" title="展开全部章节" @click="setOutlineExpansion(true)"><AppIcon name="chevron-down" :size="11" />全部展开</button>
+                  <button type="button" title="折叠全部章节" @click="setOutlineExpansion(false)"><AppIcon name="chevron-right" :size="11" />全部折叠</button>
+                </div>
+              </div>
               <nav class="outline-list" aria-label="当前文档大纲">
-                <button v-for="heading in filteredOutlineHeadings" :key="heading.id" :data-outline-id="heading.id" type="button" :class="{ active: store.activeHeadingId === heading.id }" :style="{ paddingLeft: `${12 + (heading.depth - 1) * 14}px` }" @click="scrollToHeading(heading.regionId)">{{ heading.text }}</button>
-                <p v-if="!filteredOutlineHeadings.length" class="outline-empty">没有匹配的章节</p>
+                <div v-for="row in outlineRows" :key="row.heading.id" class="outline-row" :class="[`outline-depth-${Math.min(row.heading.depth, 3)}`, { active: store.activeHeadingId === row.heading.id }]" :style="{ paddingLeft: `${6 + (row.heading.depth - 1) * 14}px` }">
+                  <button v-if="row.hasChildren" class="outline-toggle" type="button" :aria-expanded="!row.collapsed" :aria-label="`${row.collapsed ? '展开' : '折叠'} ${row.heading.text}`" @click="toggleOutlineHeading(row.heading.id)"><AppIcon :name="row.collapsed ? 'chevron-right' : 'chevron-down'" :size="12" /></button>
+                  <span v-else class="outline-toggle-spacer" aria-hidden="true" />
+                  <button class="outline-heading-button" :data-outline-id="row.heading.id" type="button" :class="{ active: store.activeHeadingId === row.heading.id }" :aria-current="store.activeHeadingId === row.heading.id ? 'location' : undefined" @click="scrollToHeading(row.heading.regionId)">{{ row.heading.text }}</button>
+                </div>
+                <p v-if="!outlineRows.length" class="outline-empty">没有匹配的章节</p>
               </nav>
             </div>
-            <div v-if="leftPanelTab === 'outline'" class="outline-footer"><span class="progress-ring" :style="{ '--progress': `${(currentProgress?.scrollPercent ?? 0) * 360}deg` }" /> <span>{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}% 已读</span></div>
           </aside>
           <div class="reader-column"><div class="reader-meta"><span class="section-kicker">{{ store.currentDocument?.path }}</span><span>{{ store.currentDocument?.wordCount }} 字 · 约 {{ store.currentDocument?.estimatedReadMinutes }} 分钟</span><span class="reader-zoom-hint" title="使用快捷键调整阅读字号"><kbd>Ctrl / Cmd + + / -</kbd><span>调整字号</span></span></div><div ref="readerViewport" class="reader-viewport" @scroll="onReaderScroll" @wheel="onReaderWheel" @pointerdown="onReaderPointerDown" @mouseup="captureSelection"><nav v-if="(store.currentDocument?.headings.length ?? 0) > 0" class="reading-progress-rail" aria-label="阅读进度导航"><span class="reading-progress-rail-caption">{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}%</span><div class="reading-progress-rail-track"><span class="reading-progress-rail-fill" :style="{ height: `${(currentProgress?.scrollPercent ?? 0) * 100}%` }" /><button v-for="(heading, index) in store.currentDocument?.headings" :key="heading.id" type="button" class="reading-progress-marker" :class="{ active: store.activeHeadingId === heading.id }" :style="{ top: headingRailPosition(index) }" :aria-label="`跳转到 ${heading.text}`" :title="heading.text" @click.stop="scrollToHeading(heading.regionId)"><i /><span>{{ heading.text }}</span></button></div></nav><div class="reader-content"><div class="reader-meta"><span class="section-kicker">{{ store.currentDocument?.path }}</span><span>{{ store.currentDocument?.wordCount }} 字 · 约 {{ store.currentDocument?.estimatedReadMinutes }} 分钟</span><span class="reader-zoom-hint" title="使用快捷键调整阅读字号"><kbd>Ctrl / Cmd + + / -</kbd><span>调整字号</span></span></div><h1 class="reader-title">{{ store.currentDocument?.title }}</h1><p class="reader-deck">在文字、图表和一块留白之间，找到你自己的阅读速度。</p><div class="reader-rule" />
              <div class="regions-stack"><RegionBlock v-for="region in readerRegions" :key="region.id" :region="region" :annotations="currentAnnotations" :focused="store.focusedRegionId === region.id" :active="store.activeRegionId === region.id" :focus-distance="focusDistanceByRegion.get(region.id)" :theme-mode="store.activeTheme?.manifest.mode" :theme-key="`${store.mode}-${store.activeThemeId}`" @focus="focusRegion(region)" @open-viewer="openViewer(region)" @code-copied="notify('代码已复制')" /></div>

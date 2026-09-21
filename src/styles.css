@@ -744,12 +744,6 @@ html, body, #app { background: var(--app-bg, #070d22); }
   scrollbar-width: thin;
   scrollbar-color: var(--accent-soft) transparent;
 }
-.reader-layout > .outline-panel .outline-footer {
-  flex: 0 0 auto;
-  margin-top: 0;
-  background: color-mix(in srgb, var(--surface) 92%, transparent);
-}
-
 /* Editorial Markdown layer: preserve the document's structure instead of rendering a flat text column. */
 .reader-content .region-content {
   color: color-mix(in srgb, var(--ink) 94%, var(--accent));
@@ -3547,11 +3541,104 @@ button:focus-visible,
   font: 15px/1 var(--ui-font);
 }
 .outline-search button:hover { color: var(--accent); }
+.outline-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 26px;
+  padding: 0 2px 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  color: var(--muted);
+}
+.outline-action-group {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 2px;
+}
+.outline-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 5px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  font: 10px var(--ui-font);
+  white-space: nowrap;
+  transition: background-color .18s ease, border-color .18s ease, color .18s ease;
+}
+.outline-actions button:hover {
+  border-color: color-mix(in srgb, var(--accent) 26%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent);
+}
+.outline-actions button .app-icon {
+  opacity: .78;
+}
 .outline-view .outline-list {
   min-height: 0;
   flex: 1 1 auto;
-  margin-top: 0;
+  margin-top: 9px;
   overflow-y: auto;
+}
+.outline-row {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  align-items: stretch;
+  border-radius: 7px;
+  transition: background-color .18s ease, color .18s ease;
+}
+.outline-row:hover {
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+.outline-row.active {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.outline-row.active::before {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 0;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  content: "";
+}
+.outline-depth-1 .outline-heading-button { font-weight: 600; }
+.outline-depth-2 .outline-heading-button { font-weight: 500; }
+.outline-depth-3 .outline-heading-button { color: color-mix(in srgb, var(--muted) 92%, var(--ink)); }
+.outline-toggle,
+.outline-toggle-spacer {
+  display: grid;
+  width: 18px;
+  min-width: 18px;
+  height: auto;
+  padding: 0 !important;
+  place-items: center;
+  border-radius: 5px;
+  color: color-mix(in srgb, var(--muted) 82%, var(--accent));
+}
+.outline-toggle:hover {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--accent);
+}
+.outline-list .outline-heading-button {
+  min-width: 0;
+  flex: 1;
+  padding: 7px 5px 7px 0;
+  overflow-wrap: anywhere;
+  line-height: 1.42;
+  transition: color .18s ease;
+}
+.outline-list .outline-heading-button:hover,
+.outline-list .outline-heading-button.active {
+  color: var(--accent);
+}
+.outline-list .outline-heading-button.active::before {
+  content: none;
 }
 .outline-empty {
   margin: 16px 8px;
