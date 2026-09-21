@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { hashText, parseMarkdown } from './parser'
 import { asciiDiagramToMermaid, asciiTreeToTree } from './asciiDiagram'
 import { formatPastedText } from './pasteMarkdown'
+import { resolveMarkdownAssetUrl } from './fileService'
 
 describe('Moyue markdown region parser', () => {
   const source = '# Title\n\nA paragraph.\n\n```mermaid\nflowchart LR\nA --> B\n```'
@@ -39,6 +40,16 @@ describe('Moyue markdown region parser', () => {
     const document = parseMarkdown('notes/readme.md', '![local](assets/cover.png)\n\n[remote](https://example.com)', (url) => url.startsWith('assets/') ? `asset://${url}` : url)
     expect(document.regions[0].html).toContain('src="asset://assets/cover.png"')
     expect(document.regions[1].html).toContain('href="https://example.com"')
+  })
+
+  it('resolves browser assets relative to the Markdown file', () => {
+    const document = parseMarkdown('notes/readme.md', '![local](../assets/cover%20image.png)', (url) => resolveMarkdownAssetUrl('notes/readme.md', url, { 'assets/cover image.png': 'blob:test-image' }))
+    expect(document.regions[0].html).toContain('src="blob:test-image"')
+  })
+
+  it('keeps relative asset query strings after resolving them', () => {
+    const document = parseMarkdown('notes/readme.md', '![local](../assets/cover.png?raw=1#top)', (url) => resolveMarkdownAssetUrl('notes/readme.md', url, { 'assets/cover.png': 'blob:test-image' }))
+    expect(document.regions[0].html).toContain('src="blob:test-image?raw=1#top"')
   })
 
   it('converts box-and-arrow text diagrams into Mermaid', () => {

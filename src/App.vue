@@ -8,7 +8,7 @@ import ThemePicker from './components/ThemePicker.vue'
 import AppIcon from './components/AppIcon.vue'
 import IconButton from './components/IconButton.vue'
 import FileSystemTree, { type FileSystemTreeNode } from './components/FileSystemTree.vue'
-import { copyMarkdownPath, createMarkdownDirectory, createMarkdownFile, deleteMarkdownPath, listFileSystemEntries, listMarkdownFiles, openMarkdownDirectory, openMarkdownFile, readMarkdownPath, renameMarkdownPath, watchMarkdownPath, type WorkspaceFile } from './fileService'
+import { copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, deleteMarkdownPath, listFileSystemEntries, listMarkdownFiles, openMarkdownDirectory, openMarkdownFile, readMarkdownPath, renameMarkdownPath, watchMarkdownPath, type WorkspaceFile } from './fileService'
 import type { Annotation, ReaderRegion, ViewerType } from './types'
 import { asciiDiagramToMermaid, asciiTreeToTree } from './asciiDiagram'
 import { formatClipboardToMarkdown } from './pasteMarkdown'
@@ -952,11 +952,13 @@ async function onDrop(event: DragEvent) {
   if (isTauriRuntime()) return
   if (busyAction.value) return
   draggingFiles.value = false
-  const files = Array.from(event.dataTransfer?.files ?? []).filter((file) => /\.(md|markdown)$/i.test(file.name))
+  const droppedFiles = Array.from(event.dataTransfer?.files ?? [])
+  const files = droppedFiles.filter((file) => /\.(md|markdown)$/i.test(file.name))
   if (!files.length) { notify('请拖入 .md 或 .markdown 文件'); return }
   busyAction.value = 'drop'
   try {
-    const count = await store.addOpenedFiles(await Promise.all(files.map(async (file) => ({ path: file.name, source: await file.text() }))))
+    const assets = createBrowserAssetMap(droppedFiles)
+    const count = await store.addOpenedFiles(await Promise.all(files.map(async (file) => ({ path: file.webkitRelativePath || file.name, source: await file.text(), assets }))))
     if (count) { view.value = 'reader'; notify(`已导入 ${count} 个 Markdown 文档`) }
   } catch (error) {
     notify(error instanceof Error ? error.message : '导入文档失败')
