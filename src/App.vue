@@ -25,6 +25,7 @@ type FileTreeEntry = { path: string; name: string; documentId?: string }
 const store = useReaderStore()
 const view = ref<View>('library')
 const libraryTab = ref<'home' | 'all'>('all')
+const navCollapsed = ref(localStorage.getItem('moyue:nav-collapsed') === 'true')
 const readerViewport = ref<HTMLElement | null>(null)
 const searchOpen = ref(false)
 const query = ref('')
@@ -212,6 +213,10 @@ function openSearch(scope: 'all' | 'current' = 'all') {
 }
 
 function openLibrary(tab: 'home' | 'all') { libraryTab.value = tab; view.value = 'library' }
+function toggleNavCollapsed() {
+  navCollapsed.value = !navCollapsed.value
+  localStorage.setItem('moyue:nav-collapsed', String(navCollapsed.value))
+}
 function isTypingTarget(target: EventTarget | null) {
   const element = target as HTMLElement | null
   return !!element && (element.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(element.tagName))
@@ -1548,9 +1553,10 @@ async function requestFullscreen() {
 </script>
 
 <template>
-  <div class="app-shell" :aria-busy="booting || busyAction !== null" :class="{ 'is-focus': store.mode === 'focus', 'is-clean': store.mode === 'clean', 'is-region-focus': store.mode === 'region-focus', 'has-focus-region': Boolean(store.focusedRegionId), 'is-dragging': draggingFiles, [`theme-${store.activeThemeId}`]: true }" :style="store.mode === 'focus' ? focusThemeStyles : undefined" @dragover.prevent @dragenter.prevent="onDragEnter" @dragleave.prevent="onDragLeave" @drop.prevent="onDrop">
+  <div class="app-shell" :aria-busy="booting || busyAction !== null" :class="{ 'is-focus': store.mode === 'focus', 'is-clean': store.mode === 'clean', 'is-region-focus': store.mode === 'region-focus', 'has-focus-region': Boolean(store.focusedRegionId), 'is-dragging': draggingFiles, 'nav-collapsed': navCollapsed, [`theme-${store.activeThemeId}`]: true }" :style="store.mode === 'focus' ? focusThemeStyles : undefined" @dragover.prevent @dragenter.prevent="onDragEnter" @dragleave.prevent="onDragLeave" @drop.prevent="onDrop">
     <aside class="global-nav">
       <div class="brand-mark"><img class="brand-mark-logo" :src="logoAsset" alt="墨阅 Moyue" /></div>
+      <button class="nav-collapse-toggle" type="button" :aria-label="navCollapsed ? '展开侧栏' : '收起侧栏'" :title="navCollapsed ? '展开侧栏' : '收起侧栏'" @click="toggleNavCollapsed"><AppIcon name="chevron-right" :size="15" /></button>
       <nav>
         <span class="nav-section-label">我的空间</span>
         <button class="nav-item" :class="{ active: view === 'library' && libraryTab === 'home' }" type="button" @click="openLibrary('home')"><span class="nav-icon"><AppIcon name="home" /></span><span>我的空间</span></button>
@@ -1560,8 +1566,8 @@ async function requestFullscreen() {
         <button class="nav-item" type="button" @click="notify('AI 知识库将在适配器完成后接入')"><span class="nav-icon"><AppIcon name="sparkle" /></span><span>AI 知识库</span></button>
         <button class="nav-item" type="button" @click="notify('个人笔记将在下一阶段接入')"><span class="nav-icon"><AppIcon name="note" /></span><span>个人笔记</span></button>
         <span class="nav-section-label nav-section-gap">探索</span>
-        <button class="nav-item" :class="{ active: view === 'themes' }" type="button" @click="view = 'themes'"><span class="nav-icon"><AppIcon name="palette" /></span><span>主题中心</span></button>
-        <button class="nav-item" type="button" @click="notify('插件市场将在下一阶段接入')"><span class="nav-icon"><AppIcon name="plugin" /></span><span>插件中心</span></button>
+        <button class="nav-item nav-explore-item" :class="{ active: view === 'themes' }" type="button" @click="view = 'themes'"><span class="nav-icon"><AppIcon name="palette" /></span><span>主题中心</span></button>
+        <button class="nav-item nav-explore-item" type="button" @click="notify('插件市场将在下一阶段接入')"><span class="nav-icon"><AppIcon name="plugin" /></span><span>插件中心</span></button>
       </nav>
       <div class="nav-bottom">
         <button class="nav-item" :class="{ active: view === 'settings' }" type="button" @click="view = 'settings'"><span class="nav-icon"><AppIcon name="settings" /></span><span>设置</span></button>
