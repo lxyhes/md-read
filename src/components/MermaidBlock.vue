@@ -3,7 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useReaderStore } from '../stores/reader'
 import AppIcon from './AppIcon.vue'
 
-const props = defineProps<{ code: string; large?: boolean; themeKey?: string }>()
+const props = defineProps<{ code: string; large?: boolean; themeKey?: string; nativeLabels?: boolean }>()
 const emit = defineEmits<{ click: []; rendered: [] }>()
 const store = useReaderStore()
 const svg = ref('')
@@ -61,7 +61,7 @@ async function render() {
         fontSize: '14px',
         fontWeight: '500',
       },
-      flowchart: { htmlLabels: true, nodeSpacing: 36, rankSpacing: 50, padding: 18, wrappingWidth: 260, curve: 'basis' },
+      flowchart: { htmlLabels: !props.nativeLabels, nodeSpacing: 36, rankSpacing: 50, padding: 18, wrappingWidth: 260, curve: 'basis' },
     })
     const result = await mermaid.render(`moyue-${Math.random().toString(36).slice(2)}`, normalizeMermaidCode(props.code))
     svg.value = result.svg

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { hashText, parseMarkdown } from './parser'
-import { asciiDiagramToMermaid } from './asciiDiagram'
+import { asciiDiagramToMermaid, asciiTreeToTree } from './asciiDiagram'
 
 describe('Moyue markdown region parser', () => {
   const source = '# Title\n\nA paragraph.\n\n```mermaid\nflowchart LR\nA --> B\n```'
@@ -52,7 +52,7 @@ describe('Moyue markdown region parser', () => {
       '│ MatrCategory   │',
       '└──────────────┘',
     ].join('\n')
-    expect(asciiDiagramToMermaid(diagram)).toContain('n0 -->|&nbsp;categoryId&nbsp;| n1')
+    expect(asciiDiagramToMermaid(diagram)).toContain('n0 -->|\u00a0categoryId\u00a0| n1')
     expect(asciiDiagramToMermaid('普通文本')).toBeNull()
   })
 
@@ -70,13 +70,60 @@ describe('Moyue markdown region parser', () => {
       '',
       'Matr ── supplierId ──➝ Supplier       供应商',
       'Matr ── mfgId      ──➝ Mfg            厂商',
+      'Matr ── matrId     ──➝ MatrUnit      多单位',
+      'Matr ── hisCode    ──➝ HIS           收费编码',
+      'Matr ── hrpCode    ──➝ HRP           对码',
+      '',
+      'Dept ── warehouseId ──➝ Warehouse',
+      'Warehouse ── locationId ──➝ Location',
       'User ── UserWarehouse ──➝ 可操作仓库',
+      '',
+      'Dept ── WarehouseMap ──➝ 高值/低值业务仓库',
     ].join('\n')
     const mermaid = asciiDiagramToMermaid(diagram)
     expect(mermaid).toContain('flowchart LR')
-    expect(mermaid).toContain('supplierId')
-    expect(mermaid).toContain('UserWarehouse')
-    expect(mermaid).toContain('categoryId')
-    expect(mermaid).toContain('&nbsp;MatrCategory&nbsp;')
+    for (const label of ['categoryId', 'supplierId', 'mfgId', 'matrId', 'hisCode', 'hrpCode', 'warehouseId', 'locationId', 'UserWarehouse', 'WarehouseMap']) {
+      expect(mermaid).toContain(label)
+    }
+    for (const node of ['MatrCategory', 'Supplier', 'Mfg', 'MatrUnit', 'HIS', 'HRP', 'Warehouse', 'Location', '可操作仓库', '高值/低值业务仓库']) {
+      expect(mermaid).toContain(node)
+    }
+    expect(mermaid).toContain('物资\u00a0"]')
+    expect(mermaid).not.toContain('物资       │')
+    expect(mermaid).toContain('\u00a0MatrCategory\u00a0')
+  })
+
+  it('parses directory trees without flattening their hierarchy', () => {
+    const tree = asciiTreeToTree([
+      '墨阅',
+      '',
+      '├── 我的空间',
+      '│',
+      '├── 文档库',
+      '│   ├── 全部文档',
+      '│   ├── 最近阅读',
+      '│   └── 收藏',
+      '├── Markdown Reader',
+      '│   ├── 大纲',
+      '│   └── 内容导航',
+      '└── 设置',
+    ].join('\n'))
+    expect(tree).toEqual({
+      label: '墨阅',
+      children: [
+        { label: '我的空间', children: [] },
+        { label: '文档库', children: [
+          { label: '全部文档', children: [] },
+          { label: '最近阅读', children: [] },
+          { label: '收藏', children: [] },
+        ] },
+        { label: 'Markdown Reader', children: [
+          { label: '大纲', children: [] },
+          { label: '内容导航', children: [] },
+        ] },
+        { label: '设置', children: [] },
+      ],
+    })
+    expect(asciiTreeToTree('普通文本')).toBeNull()
   })
 })
