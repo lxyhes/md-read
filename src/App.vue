@@ -262,11 +262,16 @@ function filesystemPathKey(path: string) {
   return normalizedPath(path).replace(/\/+$/, '').toLowerCase()
 }
 
+function filesystemDocumentRoot(path: string) {
+  const directory = directoryOf(path)
+  return directory !== '当前工作区' && filesystemRoot(path) ? directory : ''
+}
+
 function createFilesystemNode(path: string, name: string, isDirectory: boolean): FileSystemTreeNode {
   return { path, name, isDirectory, expanded: false, loading: false, children: null }
 }
 
-function createWorkspaceTree(targetPath: string): FileSystemTreeNode {
+function createWorkspaceTree(): FileSystemTreeNode {
   const root = createFilesystemNode('当前工作区', '当前工作区', true)
   root.expanded = true
   root.children = []
@@ -289,11 +294,10 @@ function createWorkspaceTree(targetPath: string): FileSystemTreeNode {
     }
     parent.children?.push({ ...createFilesystemNode(document.path, fileNameOf(path), false), documentId: document.id })
   }
-  const target = filesystemPathKey(targetPath)
   function sortAndReveal(node: FileSystemTreeNode) {
+    node.expanded = true
     node.children?.sort((left, right) => Number(right.isDirectory) - Number(left.isDirectory) || left.name.localeCompare(right.name, 'zh-CN'))
     for (const child of node.children ?? []) {
-      if (child.isDirectory && target.startsWith(`${filesystemPathKey(child.path.replace('@workspace/', ''))}/`)) node.expanded = true
       sortAndReveal(child)
     }
   }
@@ -306,7 +310,7 @@ async function loadFilesystemNode(node: FileSystemTreeNode) {
   node.loading = true
   node.error = ''
   try {
-    node.children = (await listFileSystemEntries(node.path)).map((entry) => createFilesystemNode(entry.path, entry.name, entry.isDirectory))
+    node.children = (await listFileSystemEntries(node.path)).filter((entry) => entry.isDirectory || /\.(md|markdown)$/i.test(entry.name)).map((entry) => createFilesystemNode(entry.path, entry.name, entry.isDirectory))
   } catch (error) {
     node.children = []
     node.error = error instanceof Error ? error.message : '无法读取此目录'
@@ -327,6 +331,14 @@ async function revealFilesystemTarget(node: FileSystemTreeNode, targetPath: stri
   const target = filesystemPathKey(targetPath)
   const child = node.children?.find((item) => target === filesystemPathKey(item.path) || target.startsWith(`${filesystemPathKey(item.path)}/`))
   if (child && filesystemPathKey(child.path) !== target && child.isDirectory) await revealFilesystemTarget(child, targetPath)
+}
+
+async function expandFilesystemTree(node: FileSystemTreeNode) {
+  await loadFilesystemNode(node)
+  node.expanded = true
+  for (const child of node.children ?? []) {
+    if (child.isDirectory) await expandFilesystemTree(child)
+  }
 }
 
 function fileDirectoryPath(path: string) {
@@ -439,17 +451,17 @@ function showDocumentList() {
 }
 
 async function openFilesystemTreeForFile(file: FileTreeEntry) {
-  const rootPath = filesystemRoot(file.path)
+  const rootPath = filesystemDocumentRoot(file.path)
   if (!rootPath) {
     notify('当前文档没有真实系统路径，请重新选择这个文件')
     return
   }
   filesystemTreeScope.value = 'system'
   filesystemTreeTarget.value = file.path
-  const root = createFilesystemNode(rootPath, rootPath === '/' ? '/' : rootPath.replace(/\//g, '\\'), true)
+  const root = createFilesystemNode(rootPath, fileNameOf(rootPath) || rootPath, true)
   filesystemTree.value = root
-  await revealFilesystemTarget(root, file.path)
-  notify(root.error ? '系统文件树已打开，但根目录读取受限' : '已打开当前文件所在的系统文件树')
+  await expandFilesystemTree(root)
+  notify(root.error ? '当前目录文档树已打开，但目录读取受限' : '已打开当前目录的文档树')
 }
 
 async function showDocumentTree() {
@@ -461,7 +473,7 @@ async function showDocumentTree() {
   if (!isTauriRuntime()) {
     filesystemTreeScope.value = 'workspace'
     filesystemTreeTarget.value = file.path
-    filesystemTree.value = createWorkspaceTree(file.path)
+    filesystemTree.value = createWorkspaceTree()
     notify('已打开已授权工作区的文件树')
     return
   }
@@ -482,16 +494,18 @@ async function showDocumentTree() {
 async function syncFilesystemTreeTarget(path: string) {
   if (fileBrowserMode.value !== 'tree' || !path) return
   filesystemTreeTarget.value = path
-  if (filesystemTreeScope.value === 'workspace' || !filesystemRoot(path)) {
+  const rootPath = filesystemDocumentRoot(path)
+  if (filesystemTreeScope.value === 'workspace' || !rootPath) {
     filesystemTreeScope.value = 'workspace'
-    filesystemTree.value = createWorkspaceTree(path)
+    filesystemTree.value = createWorkspaceTree()
     return
   }
-  const rootPath = filesystemRoot(path)
   if (!filesystemTree.value || filesystemPathKey(filesystemTree.value.path) !== filesystemPathKey(rootPath)) {
-    filesystemTree.value = createFilesystemNode(rootPath, rootPath === '/' ? '/' : rootPath.replace(/\//g, '\\'), true)
+    filesystemTree.value = createFilesystemNode(rootPath, fileNameOf(rootPath) || rootPath, true)
+    await expandFilesystemTree(filesystemTree.value)
+  } else {
+    await revealFilesystemTarget(filesystemTree.value, path)
   }
-  await revealFilesystemTarget(filesystemTree.value, path)
 }
 
 async function openFilesystemTreeNode(node: FileSystemTreeNode) {
@@ -1535,9 +1549,9 @@ async function requestFullscreen() {
               <button class="text-button" type="button" @click="toggleCleanMode">收起</button>
             </div>
             <div v-if="leftPanelTab === 'files'" class="file-browser-panel">
-              <div class="file-location" :title="fileBrowserMode === 'tree' ? filesystemTree?.path : currentDirectory"><AppIcon name="library" :size="13" /><span>{{ fileBrowserMode === 'tree' ? filesystemTreeScope === 'system' ? '系统文件树' : '工作区文件树' : currentDirectoryLabel }}</span><small>{{ fileBrowserMode === 'tree' ? filesystemTreeScope === 'system' ? '按需展开' : '已授权文件' : '所在目录' }}</small><button v-if="fileBrowserMode === 'tree'" type="button" class="file-tree-back" aria-label="返回当前目录文件列表" @click="showDocumentList">返回</button></div>
+              <div class="file-location" :title="fileBrowserMode === 'tree' ? filesystemTree?.path : currentDirectory"><AppIcon name="library" :size="13" /><span>{{ fileBrowserMode === 'tree' ? filesystemTreeScope === 'system' ? '文档树' : '工作区文档树' : currentDirectoryLabel }}</span><small>{{ fileBrowserMode === 'tree' ? filesystemTreeScope === 'system' ? '当前目录' : '已授权文件' : '所在目录' }}</small><button v-if="fileBrowserMode === 'tree'" type="button" class="file-tree-back" aria-label="返回当前目录文件列表" @click="showDocumentList">返回</button></div>
               <div v-if="fileBrowserMode === 'tree'" class="filesystem-tree-panel">
-                <div v-if="filesystemTree" class="filesystem-tree" :aria-label="filesystemTreeScope === 'system' ? '系统文件树' : '工作区文件树'"><FileSystemTree :node="filesystemTree" :selected-path="filesystemTreeTarget" @toggle="toggleFilesystemNode" @open="openFilesystemTreeNode" /></div>
+                <div v-if="filesystemTree" class="filesystem-tree" :aria-label="filesystemTreeScope === 'system' ? '当前目录文档树' : '工作区文档树'"><FileSystemTree :node="filesystemTree" :selected-path="filesystemTreeTarget" @toggle="toggleFilesystemNode" @open="openFilesystemTreeNode" /></div>
                 <p v-else class="file-browser-note"><AppIcon name="info" :size="13" />右键文件选择“文档树”以打开文件层级</p>
               </div>
               <nav v-else class="file-list" aria-label="当前文件夹中的 Markdown 文件">
