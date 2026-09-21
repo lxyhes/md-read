@@ -4342,6 +4342,129 @@ button:focus-visible,
   }
 }
 
+/* Global navigation can stay compact without relying on hover. */
+.nav-collapse-toggle {
+  position: absolute;
+  top: 18px;
+  right: 8px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--surface) 76%, transparent);
+  color: var(--muted);
+  opacity: .72;
+  transition: opacity .2s ease, background-color .2s ease, border-color .2s ease, color .2s ease, transform .25s ease;
+}
+.global-nav { position: relative; }
+.nav-collapse-toggle:focus-visible {
+  opacity: 1;
+}
+.nav-collapse-toggle:hover {
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--ink);
+}
+.app-shell:not(.nav-collapsed) .nav-collapse-toggle { transform: rotate(180deg); }
+.app-shell.nav-collapsed .global-nav,
+.app-shell.nav-collapsed .global-nav:hover {
+  width: 64px;
+  flex-basis: 64px;
+  align-items: stretch;
+  padding-right: 8px;
+  padding-left: 8px;
+}
+.app-shell.nav-collapsed .brand-mark {
+  justify-content: center;
+  margin-right: 0;
+  margin-left: 0;
+  margin-bottom: 24px;
+}
+.app-shell.nav-collapsed .brand-mark-logo {
+  width: 46px;
+  height: 46px;
+}
+.app-shell.nav-collapsed .nav-section-label,
+.app-shell.nav-collapsed .nav-motto {
+  display: none;
+}
+.app-shell.nav-collapsed .nav-item {
+  justify-content: center;
+  padding-right: 0;
+  padding-left: 0;
+}
+.app-shell.nav-collapsed .nav-item > span:last-child,
+.app-shell.nav-collapsed .profile-chip > span:last-child {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.app-shell.nav-collapsed .nav-section-gap {
+  display: flex;
+  height: 1px;
+  margin: 16px 4px 10px;
+  padding: 0;
+  border-top-color: color-mix(in srgb, var(--border) 78%, transparent);
+  font-size: 0;
+}
+.app-shell.nav-collapsed .profile-chip {
+  justify-content: center;
+  margin-right: 0;
+  margin-left: 0;
+  padding-right: 0;
+  padding-left: 0;
+}
+.app-shell.nav-collapsed .nav-collapse-toggle {
+  top: 76px;
+  right: 20px;
+  opacity: 1;
+}
+.app-shell.nav-collapsed .global-nav > nav {
+  margin-top: 28px;
+}
+
+/* Give the discovery tools their own quiet visual rhythm. */
+.nav-section-gap {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 23px;
+  margin-bottom: 8px;
+  padding-top: 0;
+  border-top: 0;
+}
+.nav-section-gap::before,
+.nav-section-gap::after {
+  height: 1px;
+  flex: 1;
+  background: color-mix(in srgb, var(--border) 82%, transparent);
+  content: "";
+}
+.nav-explore-item .nav-icon {
+  width: 24px;
+  height: 24px;
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+.nav-explore-item:hover .nav-icon,
+.nav-explore-item.active .nav-icon {
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--border));
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.app-shell.nav-collapsed .nav-section-gap {
+  gap: 0;
+  margin: 16px 4px 10px;
+  border-top: 0;
+}
+
 /* Reader zoom: keep every layer of the document tied to the same readable size. */
 .app-shell:not(.is-focus) .reader-content .reader-title,
 .app-shell.is-focus .reader-content .reader-title {
