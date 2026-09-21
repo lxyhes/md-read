@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { nextTick, onMounted, ref, watch } from 'vue'
 import AppIcon from './AppIcon.vue'
 
 export interface FileSystemTreeNode {
@@ -24,6 +25,7 @@ const emit = defineEmits<{
   toggle: [node: FileSystemTreeNode]
   open: [node: FileSystemTreeNode]
 }>()
+const selectedRow = ref<HTMLButtonElement | null>(null)
 
 function pathKey(path: string) {
   return path.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
@@ -33,6 +35,15 @@ function selectNode() {
   if (props.node.isDirectory) emit('toggle', props.node)
   else emit('open', props.node)
 }
+
+function revealSelectedRow() {
+  if (pathKey(props.node.path) !== pathKey(props.selectedPath)) return
+  void nextTick(() => selectedRow.value?.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'nearest' }))
+}
+
+onMounted(revealSelectedRow)
+watch(() => props.selectedPath, revealSelectedRow)
+watch(() => props.node.expanded, revealSelectedRow)
 </script>
 
 <template>
@@ -40,6 +51,7 @@ function selectNode() {
     <button
       type="button"
       class="filesystem-tree-row"
+      ref="selectedRow"
       :class="{ directory: node.isDirectory, expanded: node.expanded, selected: pathKey(node.path) === pathKey(selectedPath) }"
       :style="{ paddingLeft: `${8 + depth * 15}px` }"
       :aria-expanded="node.isDirectory ? node.expanded : undefined"

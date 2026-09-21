@@ -479,6 +479,21 @@ async function showDocumentTree() {
   await openFilesystemTreeForFile(file)
 }
 
+async function syncFilesystemTreeTarget(path: string) {
+  if (fileBrowserMode.value !== 'tree' || !path) return
+  filesystemTreeTarget.value = path
+  if (filesystemTreeScope.value === 'workspace' || !filesystemRoot(path)) {
+    filesystemTreeScope.value = 'workspace'
+    filesystemTree.value = createWorkspaceTree(path)
+    return
+  }
+  const rootPath = filesystemRoot(path)
+  if (!filesystemTree.value || filesystemPathKey(filesystemTree.value.path) !== filesystemPathKey(rootPath)) {
+    filesystemTree.value = createFilesystemNode(rootPath, rootPath === '/' ? '/' : rootPath.replace(/\//g, '\\'), true)
+  }
+  await revealFilesystemTarget(filesystemTree.value, path)
+}
+
 async function openFilesystemTreeNode(node: FileSystemTreeNode) {
   if (node.isDirectory) {
     await toggleFilesystemNode(node)
@@ -673,7 +688,7 @@ watch(query, () => {
   searchTimer = window.setTimeout(() => { searchNeedle.value = query.value.trim().toLowerCase(); searchTimer = null }, 90)
 })
 watch(() => store.mode, (mode) => { if (mode !== 'focus') stopFocusTimer() })
-watch(() => store.currentDocument?.path, () => { fileSyncState.value = 'idle'; focusScrollTargetId = null; outlineQuery.value = ''; invalidateRegionLayout(); void refreshFileTree() }, { immediate: true })
+watch(() => store.currentDocument?.path, (path) => { fileSyncState.value = 'idle'; focusScrollTargetId = null; outlineQuery.value = ''; invalidateRegionLayout(); void refreshFileTree(); if (path) void syncFilesystemTreeTarget(path) }, { immediate: true })
 watch(() => store.currentDocumentId, () => nextTick(observeReaderLayout))
 watch(() => store.openDocuments.map((document) => document.path).join('\n'), () => { void syncDocumentWatchers() }, { immediate: true })
 watch(() => [store.activeHeadingId, leftPanelTab.value, store.mode], () => {
@@ -971,6 +986,7 @@ function fileStatus(file: { documentId?: string }) {
   return `${store.documents.find((document) => document.id === file.documentId)?.regions.length ?? 0} 个阅读区域`
 }
 async function openFileTreeEntry(file: { path: string; name: string; documentId?: string }) {
+  if (fileBrowserMode.value === 'tree') filesystemTreeTarget.value = file.path
   if (file.documentId) { await chooseDocument(file.documentId); return }
   if (busyAction.value) return
   busyAction.value = 'file'
@@ -1377,7 +1393,7 @@ async function saveCurrentAnnotation() {
 }
 function applyReaderTheme(theme: Parameters<typeof store.applyTheme>[0]) { store.applyTheme(theme); notify(`已切换到「${theme.manifest.name}」`) }
 
-function changeSetting(key: 'fontSize' | 'lineHeight' | 'width', value: number) { store.updateSettings({ [key]: value }); document.documentElement.style.setProperty(`--reader-${key === 'fontSize' ? 'size' : key === 'lineHeight' ? 'leading' : 'width'}`, key === 'width' ? `${value}px` : String(value)) }
+function changeSetting(key: 'fontSize' | 'lineHeight' | 'width', value: number) { store.updateSettings({ [key]: value }); document.documentElement.style.setProperty(`--reader-${key === 'fontSize' ? 'size' : key === 'lineHeight' ? 'leading' : 'width'}`, key === 'fontSize' || key === 'width' ? `${value}px` : String(value)) }
 function changeReaderZoom(delta: number) {
   const nextSize = Math.min(24, Math.max(15, store.readerSettings.fontSize + delta))
   if (nextSize !== store.readerSettings.fontSize) {
@@ -1519,7 +1535,7 @@ async function requestFullscreen() {
               <button class="text-button" type="button" @click="toggleCleanMode">收起</button>
             </div>
             <div v-if="leftPanelTab === 'files'" class="file-browser-panel">
-              <div class="file-location" :title="fileBrowserMode === 'tree' ? filesystemTree?.path : currentDirectory"><AppIcon name="library" :size="13" /><span>{{ fileBrowserMode === 'tree' ? filesystemTreeScope === 'system' ? '系统文件树' : '工作区文件树' : currentDirectoryLabel }}</span><small>{{ fileBrowserMode === 'tree' ? filesystemTreeScope === 'system' ? '按需展开' : '已授权文件' : '所在目录' }}</small></div>
+              <div class="file-location" :title="fileBrowserMode === 'tree' ? filesystemTree?.path : currentDirectory"><AppIcon name="library" :size="13" /><span>{{ fileBrowserMode === 'tree' ? filesystemTreeScope === 'system' ? '系统文件树' : '工作区文件树' : currentDirectoryLabel }}</span><small>{{ fileBrowserMode === 'tree' ? filesystemTreeScope === 'system' ? '按需展开' : '已授权文件' : '所在目录' }}</small><button v-if="fileBrowserMode === 'tree'" type="button" class="file-tree-back" aria-label="返回当前目录文件列表" @click="showDocumentList">返回</button></div>
               <div v-if="fileBrowserMode === 'tree'" class="filesystem-tree-panel">
                 <div v-if="filesystemTree" class="filesystem-tree" :aria-label="filesystemTreeScope === 'system' ? '系统文件树' : '工作区文件树'"><FileSystemTree :node="filesystemTree" :selected-path="filesystemTreeTarget" @toggle="toggleFilesystemNode" @open="openFilesystemTreeNode" /></div>
                 <p v-else class="file-browser-note"><AppIcon name="info" :size="13" />右键文件选择“文档树”以打开文件层级</p>
@@ -1540,7 +1556,7 @@ async function requestFullscreen() {
             </div>
             <div v-if="leftPanelTab === 'outline'" class="outline-footer"><span class="progress-ring" :style="{ '--progress': `${(currentProgress?.scrollPercent ?? 0) * 360}deg` }" /> <span>{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}% 已读</span></div>
           </aside>
-          <div ref="readerViewport" class="reader-viewport" @scroll="onReaderScroll" @wheel="onReaderWheel" @pointerdown="onReaderPointerDown" @mouseup="captureSelection"><nav v-if="(store.currentDocument?.headings.length ?? 0) > 0" class="reading-progress-rail" aria-label="阅读进度导航"><span class="reading-progress-rail-caption">{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}%</span><div class="reading-progress-rail-track"><span class="reading-progress-rail-fill" :style="{ height: `${(currentProgress?.scrollPercent ?? 0) * 100}%` }" /><button v-for="(heading, index) in store.currentDocument?.headings" :key="heading.id" type="button" class="reading-progress-marker" :class="{ active: store.activeHeadingId === heading.id }" :style="{ top: headingRailPosition(index) }" :aria-label="`跳转到 ${heading.text}`" :title="heading.text" @click.stop="scrollToHeading(heading.regionId)"><i /><span>{{ heading.text }}</span></button></div></nav><div class="reader-content"><div class="reader-meta"><span class="section-kicker">{{ store.currentDocument?.path }}</span><span>{{ store.currentDocument?.wordCount }} 字 · 约 {{ store.currentDocument?.estimatedReadMinutes }} 分钟</span></div><h1 class="reader-title">{{ store.currentDocument?.title }}</h1><p class="reader-deck">在文字、图表和一块留白之间，找到你自己的阅读速度。</p><div class="reader-rule" />
+          <div ref="readerViewport" class="reader-viewport" @scroll="onReaderScroll" @wheel="onReaderWheel" @pointerdown="onReaderPointerDown" @mouseup="captureSelection"><nav v-if="(store.currentDocument?.headings.length ?? 0) > 0" class="reading-progress-rail" aria-label="阅读进度导航"><span class="reading-progress-rail-caption">{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}%</span><div class="reading-progress-rail-track"><span class="reading-progress-rail-fill" :style="{ height: `${(currentProgress?.scrollPercent ?? 0) * 100}%` }" /><button v-for="(heading, index) in store.currentDocument?.headings" :key="heading.id" type="button" class="reading-progress-marker" :class="{ active: store.activeHeadingId === heading.id }" :style="{ top: headingRailPosition(index) }" :aria-label="`跳转到 ${heading.text}`" :title="heading.text" @click.stop="scrollToHeading(heading.regionId)"><i /><span>{{ heading.text }}</span></button></div></nav><div class="reader-content"><div class="reader-meta"><span class="section-kicker">{{ store.currentDocument?.path }}</span><span>{{ store.currentDocument?.wordCount }} 字 · 约 {{ store.currentDocument?.estimatedReadMinutes }} 分钟</span><span class="reader-zoom-hint" title="使用快捷键调整阅读字号"><kbd>Ctrl / Cmd + + / -</kbd><span>调整字号</span></span></div><h1 class="reader-title">{{ store.currentDocument?.title }}</h1><p class="reader-deck">在文字、图表和一块留白之间，找到你自己的阅读速度。</p><div class="reader-rule" />
              <div class="regions-stack"><RegionBlock v-for="region in readerRegions" :key="region.id" :region="region" :annotations="currentAnnotations" :focused="store.focusedRegionId === region.id" :active="store.activeRegionId === region.id" :focus-distance="focusDistanceByRegion.get(region.id)" :theme-mode="store.activeTheme?.manifest.mode" :theme-key="`${store.mode}-${store.activeThemeId}`" @focus="focusRegion(region)" @open-viewer="openViewer(region)" @code-copied="notify('代码已复制')" /></div>
             <footer class="reader-footer"><span>墨阅 · Moyue Reader</span><span>Read → Focus → Understand</span></footer>
           </div><div v-if="showReadingQuickActions && !resumePrompt" class="reading-quick-actions" aria-label="阅读快捷操作"><span class="reading-quick-context"><i />{{ currentHeading?.text || '阅读中' }}</span><button v-if="currentHeading" type="button" @click="jumpToCurrentHeading">本章开头</button><button type="button" @click="scrollToTop">回到顶部</button></div></div>
