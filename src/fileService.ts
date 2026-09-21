@@ -10,11 +10,32 @@ export interface FileSystemEntry { path: string; name: string; isDirectory: bool
 
 export async function watchMarkdownPath(path: string, onChange: () => void): Promise<(() => void) | null> {
   if (!isTauri()) return null
-  const target = comparablePath(path)
   const directory = dirnameOf(path)
-  return watch(directory || path, (event) => {
-    if (!event.paths.length || event.paths.some((changedPath) => comparablePath(changedPath) === target)) onChange()
-  }, { delayMs: 700 })
+  let lastSource: string | null = null
+  let checking = false
+  let stopped = false
+  const check = async () => {
+    if (stopped || checking) return
+    checking = true
+    try {
+      const source = await readTextFile(path)
+      if (lastSource !== null && source !== lastSource) onChange()
+      lastSource = source
+    } catch {
+      // External editors may replace the file briefly; the next check retries.
+    } finally {
+      checking = false
+    }
+  }
+  await check()
+  const timer = window.setInterval(() => { void check() }, 1500)
+  let stopNative = () => {}
+  try {
+    stopNative = await watch(directory || path, () => { void check() }, { delayMs: 700 })
+  } catch {
+    // Polling remains available when the filesystem watcher is unsupported.
+  }
+  return () => { stopped = true; window.clearInterval(timer); stopNative() }
 }
 
 export function resolveMarkdownAssetUrl(markdownPath: string, url: string): string {
@@ -158,10 +179,6 @@ function normalizeLocalPath(path: string) {
     result.push(segment)
   }
   return `${prefix}${result.join('/')}`
-}
-
-function comparablePath(path: string) {
-  return normalizeLocalPath(path.replace(/^file:\/\/?/i, '')).replace(/\/$/, '').toLowerCase()
 }
 
 async function scanDirectory(path: string): Promise<OpenedFile[]> {
