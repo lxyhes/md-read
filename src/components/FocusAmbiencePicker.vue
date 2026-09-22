@@ -6,7 +6,7 @@ import AppIcon from './AppIcon.vue'
 const props = defineProps<{ themes: MoyueTheme[]; selectedThemeId: string }>()
 const emit = defineEmits<{ select: [theme: MoyueTheme] }>()
 
-const options = computed(() => props.themes.slice(0, 3))
+const options = computed(() => props.themes)
 const current = computed(() => options.value.find((theme) => theme.manifest.id === props.selectedThemeId) ?? options.value[0])
 
 function themeStyle(theme: MoyueTheme) {
