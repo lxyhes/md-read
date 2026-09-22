@@ -36,6 +36,18 @@ describe('Moyue markdown region parser', () => {
     expect(document.regions[0].html).toContain('<br />')
   })
 
+  it('preserves leading spaces that exist in the source paragraph', () => {
+    const document = parseMarkdown('notes/indent.md', '  第一段\n\n   第二段\n\n普通段落')
+    expect(document.regions[0].html).toContain('<p>&nbsp;&nbsp;第一段</p>')
+    expect(document.regions[1].html).toContain('<p>&nbsp;&nbsp;&nbsp;第二段</p>')
+    expect(document.regions[2].html).toBe('<p>普通段落</p>')
+  })
+
+  it('preserves leading spaces on every soft-wrapped source line', () => {
+    const document = parseMarkdown('notes/lines.md', '第一行\n  第二行\n   第三行')
+    expect(document.regions[0].html).toBe('<p>第一行<br />&nbsp;&nbsp;第二行<br />&nbsp;&nbsp;&nbsp;第三行</p>')
+  })
+
   it('resolves relative assets without changing external URLs', () => {
     const document = parseMarkdown('notes/readme.md', '![local](assets/cover.png)\n\n[remote](https://example.com)', (url) => url.startsWith('assets/') ? `asset://${url}` : url)
     expect(document.regions[0].html).toContain('src="asset://assets/cover.png"')

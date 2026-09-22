@@ -91,6 +91,39 @@ function blockHtml(node: MdastNode, resolveUrl: MarkdownUrlResolver = (url) => u
   }
 }
 
+function sourceLeadingWhitespaceHtml(value: string): string {
+  const leadingWhitespace = value.match(/^[ \t\u00a0\u3000]*/)?.[0] ?? ''
+  return leadingWhitespace
+    .replace(/ /g, '&nbsp;')
+    .replace(/\t/g, '&nbsp;&nbsp;&nbsp;&nbsp;')
+    .replace(/\u00a0/g, '&nbsp;')
+}
+
+function sourceLineIndentHtml(source: string, node: MdastNode): string[] {
+  if (node.type !== 'paragraph') return []
+  const start = node.position?.start?.offset
+  const end = node.position?.end?.offset
+  if (typeof start !== 'number' || typeof end !== 'number') return []
+
+  const lineStart = source.lastIndexOf('\n', Math.max(0, start - 1)) + 1
+  return source
+    .slice(lineStart, end)
+    .split(/\r?\n/)
+    .map(sourceLeadingWhitespaceHtml)
+}
+
+function blockHtmlWithSourceIndent(node: MdastNode, source: string, resolveUrl: MarkdownUrlResolver = (url) => url): string {
+  const html = blockHtml(node, resolveUrl)
+  const lineIndents = sourceLineIndentHtml(source, node)
+  if (!lineIndents.length || !lineIndents.some(Boolean)) return html
+
+  let lineIndex = 0
+  const firstLine = lineIndents[0] ?? ''
+  return html
+    .replace('<p>', `<p>${firstLine}`)
+    .replace(/<br \/>/g, (breakTag) => `${breakTag}${lineIndents[Math.min(++lineIndex, lineIndents.length - 1)] ?? ''}`)
+}
+
 function mermaidCode(node: MdastNode): string | null {
   if (node.type !== 'code') return null
   if (node.lang?.trim().toLowerCase() === 'mermaid') return node.value ?? ''
@@ -134,7 +167,7 @@ export function parseMarkdown(path: string, source: string, resolveUrl: Markdown
     if (type === 'image') metadata.url = resolveUrl(imageNode(node)?.url ?? '')
     const region: ReaderRegion = {
       id, documentId, type, index: regions.length, textContent, sourceStart: start, sourceEnd: end,
-      html: blockHtml(node, resolveUrl), metadata
+      html: blockHtmlWithSourceIndent(node, source, resolveUrl), metadata
     }
     regions.push(region)
     if (type === 'heading') headings.push({ id: `heading_${hashText(`${id}:${textContent}`)}`, text: textContent, depth: node.depth ?? 1, regionId: id })
