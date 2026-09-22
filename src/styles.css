@@ -4566,8 +4566,52 @@ button:focus-visible,
 }
 @media (min-width: 1181px) {
   .app-shell:not(.is-focus) .reader-layout {
-    grid-template-columns: 204px minmax(0, 1fr) 220px;
+    grid-template-columns: var(--outline-panel-width, 204px) minmax(0, 1fr) 220px;
   }
+}
+
+@media (min-width: 721px) and (max-width: 1180px) {
+  .app-shell:not(.is-focus) .reader-layout {
+    grid-template-columns: var(--outline-panel-width, 195px) minmax(450px, 1fr);
+  }
+}
+
+.outline-panel {
+  position: relative;
+}
+.outline-resizer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  width: 10px;
+  border: 0;
+  background: transparent;
+  cursor: col-resize;
+  touch-action: none;
+}
+.outline-resizer::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 1px;
+  background: var(--border);
+  content: "";
+  transition: width .16s ease, background .16s ease, box-shadow .16s ease;
+}
+.outline-resizer:hover::after,
+.outline-resizer:focus-visible::after,
+.is-resizing-outline .outline-resizer::after {
+  width: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+body.is-resizing-outline,
+body.is-resizing-outline * {
+  cursor: col-resize !important;
+  user-select: none !important;
 }
 
 /* Keep the resume prompt in the reader flow so it never covers document text. */
