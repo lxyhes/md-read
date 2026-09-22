@@ -99,9 +99,15 @@ function mermaidCode(node: MdastNode): string | null {
   return match?.[1] ?? null
 }
 
+function imageNode(node: MdastNode): MdastNode | null {
+  if (node.type === 'image') return node
+  if (node.type === 'paragraph' && node.children?.length === 1 && node.children[0]?.type === 'image') return node.children[0]
+  return null
+}
+
 function regionType(node: MdastNode): ReaderRegionType {
   if (mermaidCode(node) !== null) return 'mermaid'
-  if (node.type === 'image') return 'image'
+  if (imageNode(node)) return 'image'
   if (node.type === 'table') return 'table'
   if (node.type === 'thematicBreak') return 'thematic-break'
   return node.type as ReaderRegionType
@@ -125,7 +131,7 @@ export function parseMarkdown(path: string, source: string, resolveUrl: Markdown
     const metadata: Record<string, unknown> = {}
     if (node.lang) metadata.language = node.lang
     if (type === 'mermaid') metadata.code = diagramCode ?? ''
-    if (type === 'image') metadata.url = resolveUrl(node.url ?? '')
+    if (type === 'image') metadata.url = resolveUrl(imageNode(node)?.url ?? '')
     const region: ReaderRegion = {
       id, documentId, type, index: regions.length, textContent, sourceStart: start, sourceEnd: end,
       html: blockHtml(node, resolveUrl), metadata

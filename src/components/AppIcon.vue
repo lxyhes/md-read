@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import logoAsset from '../assets/moyue-logo.png'
+import logoAsset from '../assets/moyue-logo-256.png'
 
 export type AppIconName =
   | 'logo'

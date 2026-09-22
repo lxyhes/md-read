@@ -42,6 +42,12 @@ describe('Moyue markdown region parser', () => {
     expect(document.regions[1].html).toContain('href="https://example.com"')
   })
 
+  it('treats a standalone markdown image paragraph as an image region', () => {
+    const document = parseMarkdown('notes/readme.md', '![cover](https://example.com/cover.png)')
+    expect(document.regions[0].type).toBe('image')
+    expect(document.regions[0].metadata?.url).toBe('https://example.com/cover.png')
+  })
+
   it('resolves browser assets relative to the Markdown file', () => {
     const document = parseMarkdown('notes/readme.md', '![local](../assets/cover%20image.png)', (url) => resolveMarkdownAssetUrl('notes/readme.md', url, { 'assets/cover image.png': 'blob:test-image' }))
     expect(document.regions[0].html).toContain('src="blob:test-image"')

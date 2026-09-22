@@ -8,7 +8,7 @@ import IconButton from './IconButton.vue'
 import { asciiDiagramToMermaid, asciiTreeToTree } from '../asciiDiagram'
 
 const props = defineProps<{ region: ReaderRegion; annotations?: Annotation[]; focused: boolean; active: boolean; focusDistance?: number; themeMode?: ThemeManifest['mode']; themeKey?: string }>()
-const emit = defineEmits<{ focus: []; openViewer: []; 'code-copied': [] }>()
+const emit = defineEmits<{ focus: []; openViewer: []; 'open-link': [url: string]; 'code-copied': [] }>()
 const highlighted = ref(props.region.html)
 const copied = ref(false)
 const wrapped = ref(false)
@@ -99,24 +99,38 @@ async function copyCodeText(text: string) {
 }
 function copySelectedCode() { void copyCodeText(selectedCodeText.value) }
 function copyActiveCodeLine() { void copyCodeText(activeCodeLine.value) }
+function handleContentClick(event: MouseEvent) {
+  const target = event.target
+  if (!(target instanceof Element)) return
+  const link = target.closest<HTMLAnchorElement>('a[href]')
+  const url = link?.getAttribute('href')?.trim()
+  if (link) {
+    event.stopPropagation()
+    if (!url || !/^(?:https?:|mailto:|tel:|\/\/)/i.test(url)) return
+    event.preventDefault()
+    emit('open-link', url)
+    return
+  }
+  if (props.region.type === 'table' || target.closest('img, button, summary, details')) event.stopPropagation()
+}
 </script>
 
 <template>
-  <article :data-region-id="region.id" class="region-block" :class="[`region-${region.type}`, focusDistanceClass, { focused, active }]" tabindex="0" @click="emit('focus')" @keydown.enter.prevent="emit('focus')" @keydown.space.prevent="emit('focus')">
+  <article :data-region-id="region.id" class="region-block" :class="[`region-${region.type}`, focusDistanceClass, { focused, active }]" tabindex="0" @click="emit('focus')" @keydown.enter.self.prevent="emit('focus')" @keydown.space.self.prevent="emit('focus')">
       <div v-if="region.type === 'mermaid'" class="region-content" @click.stop="emit('openViewer')">
       <MermaidBlock :code="String(region.metadata?.code ?? region.textContent)" :theme-key="themeKey" />
     </div>
     <div v-else-if="region.type === 'image'" class="region-content image-region" @click.stop="emit('openViewer')">
       <div v-html="highlighted" />
-      <button class="inline-view-action" type="button" @click.stop="emit('openViewer')">查看原图 <AppIcon name="external" :size="12" /></button>
+      <button class="inline-view-action image-zoom-action" type="button" aria-label="放大查看原图" @click.stop="emit('openViewer')">放大查看 <AppIcon name="expand" :size="12" /></button>
     </div>
-      <div v-else-if="region.type === 'code' && asciiTree" class="region-content auto-tree-region">
+      <div v-else-if="region.type === 'code' && asciiTree" class="region-content auto-tree-region" @click.stop>
       <TreeDiagram :node="asciiTree" root />
     </div>
     <div v-else-if="region.type === 'code' && asciiDiagramCode" class="region-content auto-diagram-region" @click.stop="emit('openViewer')">
       <MermaidBlock :code="asciiDiagramCode" :theme-key="themeKey" native-labels />
     </div>
-    <div v-else class="region-content">
+      <div v-else class="region-content" @click="handleContentClick">
       <div v-if="region.type === 'code'" class="code-frame" :class="{ 'is-diagram': isDiagramLike }" :data-language="isDiagramLike ? 'diagram' : codeLanguage">
         <div class="code-toolbar" @click.stop>
           <span class="code-language"><AppIcon name="code" :size="13" /><b>{{ codeLanguage }}</b><small>{{ codeLineCount }} 行</small></span>
@@ -139,6 +153,7 @@ function copyActiveCodeLine() { void copyCodeText(activeCodeLine.value) }
       </div>
       <div v-else v-html="renderedHtml" />
     </div>
-    <IconButton class="region-more" icon="more" size="sm" label="聚焦此区域" @click.stop="emit('focus')" />
+    <IconButton v-if="region.type === 'image'" class="region-more image-region-more" icon="expand" size="sm" label="放大查看原图" @click.stop="emit('openViewer')" />
+    <IconButton v-else class="region-more" icon="more" size="sm" label="聚焦此区域" @click.stop="emit('focus')" />
   </article>
 </template>
