@@ -1425,29 +1425,10 @@ html, body, #app { background: var(--app-bg, #070d22); }
   position: fixed;
   inset: 0;
   z-index: 40;
-  display: grid;
-  place-content: center;
-  justify-items: center;
-  gap: 8px;
-  background: color-mix(in srgb, var(--app-bg) 92%, transparent);
-  color: var(--ink);
-  backdrop-filter: blur(10px);
+  background: transparent;
 }
-.app-loading strong {
-  font: 14px var(--ui-font);
-}
-.app-loading small {
-  color: var(--muted);
-  font: 11px var(--ui-font);
-}
-.loading-orbit {
-  width: 28px;
-  height: 28px;
-  margin-bottom: 5px;
-  border: 2px solid color-mix(in srgb, var(--accent) 22%, transparent);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: loading-spin .8s linear infinite;
+@keyframes loading-spin {
+  to { transform: rotate(360deg); }
 }
 .reader-tab-status.is-error {
   color: #e98282;
@@ -1907,10 +1888,6 @@ button:focus-visible,
   outline: 2px solid color-mix(in srgb, var(--accent) 76%, transparent);
   outline-offset: 2px;
 }
-@keyframes loading-spin {
-  to { transform: rotate(360deg); }
-}
-
 /* Mermaid reading canvas: natural-size diagrams with deliberate zoom controls. */
 .viewer-actions {
   flex-wrap: wrap;
@@ -2896,6 +2873,14 @@ button:focus-visible,
   padding: 14px 22px 18px;
   background: color-mix(in srgb, var(--surface-raised) 42%, transparent);
 }
+.file-delete-message {
+  margin: 0;
+  padding: 19px 22px 17px;
+  color: var(--muted);
+  font: 12px/1.6 var(--ui-font);
+  overflow-wrap: anywhere;
+}
+.file-delete-confirm { background: #b95e5e; color: #fff7f4; }
 .reader-tab-status {
   flex: 0 0 auto;
   max-width: 260px;
@@ -3648,64 +3633,52 @@ button:focus-visible,
   font: 10px/1.5 var(--ui-font);
 }
 
-/* A small fixed island keeps the two most common jumps within thumb reach. */
-.reading-quick-actions {
-  position: fixed;
-  right: max(18px, calc((100vw - min(1480px, calc(100vw - 112px))) / 2 + 288px));
-  bottom: 22px;
-  z-index: 4;
+.reader-navigation {
   display: flex;
   align-items: center;
   gap: 4px;
-  max-width: min(330px, calc(100% - 48px));
-  padding: 5px;
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 3px;
   border: 1px solid var(--border);
   border-radius: 9px;
-  background: color-mix(in srgb, var(--surface-raised) 91%, transparent);
-  box-shadow: 0 12px 30px color-mix(in srgb, var(--app-bg) 22%, transparent);
-  backdrop-filter: blur(12px);
-  animation: toast-in .22s ease both;
+  background: color-mix(in srgb, var(--surface-raised) 72%, transparent);
 }
-.reading-quick-context {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  max-width: 150px;
-  padding: 0 7px;
-  overflow: hidden;
-  color: var(--muted);
-  font: 10px var(--ui-font);
-  text-overflow: ellipsis;
+.reader-progress-label {
+  padding: 4px 7px;
+  color: var(--accent);
+  font: 10px var(--mono);
   white-space: nowrap;
 }
-.reading-quick-context i {
-  width: 5px;
-  height: 5px;
-  flex: 0 0 5px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 13%, transparent);
-}
-.reading-quick-actions button {
-  padding: 7px 8px;
-  border-radius: 5px;
+.reader-navigation button {
+  padding: 5px 7px;
+  border-radius: 6px;
   background: transparent;
   color: var(--muted);
   font: 10px var(--ui-font);
   white-space: nowrap;
 }
-.reading-quick-actions button:hover {
+.reader-navigation button:hover {
   background: var(--accent-soft);
   color: var(--ink);
 }
+.reader-navigation button:disabled,
+.reader-navigation button:disabled:hover {
+  background: transparent;
+  color: var(--muted);
+  cursor: default;
+  opacity: .42;
+}
 @media (max-width: 720px) {
-  .reading-quick-actions {
-    right: 12px;
-    bottom: 12px;
-    max-width: calc(100% - 24px);
+  .reader-navigation {
+    gap: 2px;
   }
-  .reading-quick-context { max-width: 110px; }
+  .reader-progress-label {
+    display: none;
+  }
+  .reader-navigation button {
+    padding-inline: 6px;
+  }
 }
 
 /* Theme signatures: each built-in theme gets its own visual rhythm, not just a different hue. */
@@ -4008,12 +3981,13 @@ button:focus-visible,
 .mermaid-svg svg .edgeLabel,
 .mermaid-svg svg .label {
   font-family: var(--ui-font), sans-serif !important;
+  font-weight: 400 !important;
 }
 .mermaid-svg svg .edgeLabel rect {
   rx: 5px;
   ry: 5px;
   fill: var(--surface) !important;
-  opacity: .94;
+  opacity: 1 !important;
 }
 .mermaid-svg svg .edgePath .path {
   stroke-width: 1.25px;
@@ -4589,12 +4563,6 @@ button:focus-visible,
 .reader-content .region-block:focus-visible {
   outline: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
   outline-offset: 2px;
-}
-.app-shell.is-clean .reading-quick-actions {
-  right: 20px;
-  bottom: 20px;
-  background: var(--surface-raised);
-  backdrop-filter: none;
 }
 @media (min-width: 1181px) {
   .app-shell:not(.is-focus) .reader-layout {

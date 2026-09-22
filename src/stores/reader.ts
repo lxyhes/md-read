@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { deleteDocument, getLocalProgress, getProgress, loadAnnotations, loadDocumentSnapshots, saveAnnotation, saveDocument, saveDocumentSnapshot, saveProgress } from '../persistence'
+import { deleteAnnotation, deleteDocument, getLocalProgress, getProgress, loadAnnotations, loadDocumentSnapshots, saveAnnotation, saveDocument, saveDocumentSnapshot, saveProgress } from '../persistence'
 import { authorizeMarkdownAssets, createTauriAssetMap, openMarkdownFile, openMarkdownFolder, resolveMarkdownAssetUrl, type OpenedFile } from '../fileService'
 import { builtInThemes, cssVariables, defaultTokens } from '../themes'
 const SESSION_KEY = 'moyue:reader-session'
@@ -233,6 +233,7 @@ export const useReaderStore = defineStore('reader', () => {
     if (value !== 'focus' && value !== 'region-focus') focusedRegionId.value = null
   }
   async function addAnnotation(annotation: Annotation) { annotations.value.push(annotation); await saveAnnotation(annotation) }
+  async function removeAnnotation(annotation: Annotation) { annotations.value = annotations.value.filter((item) => item.id !== annotation.id); await deleteAnnotation(annotation) }
   function installTheme(theme: MoyueTheme) { themes.value = [...themes.value.filter((item) => item.manifest.id !== theme.manifest.id), theme] }
   function updateSettings(settings: Partial<typeof readerSettings.value>) {
     readerSettings.value = { ...readerSettings.value, ...settings }
@@ -241,7 +242,7 @@ export const useReaderStore = defineStore('reader', () => {
 
   const openDocuments = computed(() => openDocumentIds.value.map((id) => documents.value.find((document) => document.id === id)).filter((document): document is ReaderDocument => Boolean(document)))
 
-  return { documents, openDocuments, openDocumentIds, currentDocumentId, currentDocument, mode, activeRegionId, focusedRegionId, activeHeadingId, selection, progress, annotations, themes, activeThemeId, activeTheme, readerSettings, bootstrap, importFiles, importFolder, addOpenedFiles, reloadDocument, renameDocument, openDocument, closeDocument, removeDocument, setProgress, setFocusedRegion, clearFocusedRegion, focusRegion, clearFocus, setMode, addAnnotation, applyTheme, installTheme, updateSettings }
+  return { documents, openDocuments, openDocumentIds, currentDocumentId, currentDocument, mode, activeRegionId, focusedRegionId, activeHeadingId, selection, progress, annotations, themes, activeThemeId, activeTheme, readerSettings, bootstrap, importFiles, importFolder, addOpenedFiles, reloadDocument, renameDocument, openDocument, closeDocument, removeDocument, setProgress, setFocusedRegion, clearFocusedRegion, focusRegion, clearFocus, setMode, addAnnotation, removeAnnotation, applyTheme, installTheme, updateSettings }
 })
 
 function readSettings() {

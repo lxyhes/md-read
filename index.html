@@ -6,16 +6,71 @@
     <meta name="theme-color" content="#151311" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>墨阅 · Moyue Reader</title>
+    <script>
+      (() => {
+        try {
+          const saved = localStorage.getItem('moyue:theme')
+          document.documentElement.dataset.moyueTheme = saved === 'quiet-moss' || saved === 'blue-hour' ? saved : 'paper-white'
+        } catch {
+          document.documentElement.dataset.moyueTheme = 'paper-white'
+        }
+      })()
+    </script>
     <style>
-      html, body { min-width: 1080px; min-height: 100%; margin: 0; background: #0b1224; }
-      #startup-splash { position: fixed; inset: 0; display: grid; place-content: center; gap: 8px; color: #edf2ff; font: 14px "Segoe UI", sans-serif; text-align: center; }
-      #startup-splash small { color: #9eacd0; font-size: 11px; }
-      #startup-splash i { width: 28px; height: 28px; margin: 0 auto 8px; border: 2px solid rgba(170,162,255,.25); border-top-color: #aaa2ff; border-radius: 50%; animation: startup-spin .8s linear infinite; }
-      @keyframes startup-spin { to { transform: rotate(360deg); } }
+      :root { --startup-bg: #eef3f2; --startup-surface: #f8fbfa; --startup-surface-raised: #fff; --startup-text: #1f2a31; --startup-muted: #65747b; --startup-accent: #277f77; --startup-accent-soft: #d8efea; --startup-border: rgba(31, 54, 58, .14); }
+      :root[data-moyue-theme="quiet-moss"] { --startup-bg: #ebe8df; --startup-surface: #f4f1e8; --startup-surface-raised: #fffdf7; --startup-text: #27342e; --startup-muted: #718078; --startup-accent: #5f8b73; --startup-accent-soft: #dceadf; --startup-border: rgba(50, 72, 60, .15); }
+      :root[data-moyue-theme="blue-hour"] { --startup-bg: #0d1b25; --startup-surface: #142832; --startup-surface-raised: #1c3946; --startup-text: #e3f0f2; --startup-muted: #8faeb2; --startup-accent: #7ed8d0; --startup-accent-soft: #20545a; --startup-border: rgba(175, 220, 220, .17); }
+      html, body { min-width: 1080px; min-height: 100%; margin: 0; background: var(--app-bg, var(--startup-bg)); }
+      .startup-loading { position: fixed; inset: 0; z-index: 40; display: grid; place-content: center; justify-items: center; color: var(--ink, var(--startup-text)); font: 14px "Segoe UI", sans-serif; text-align: center; background: transparent; }
+      .startup-card { width: min(280px, calc(100vw - 32px)); padding: 20px 22px 17px; border: 1px solid var(--border, var(--startup-border)); border-radius: 14px; background: color-mix(in srgb, var(--surface, var(--startup-surface)) 96%, transparent); box-shadow: 0 16px 40px color-mix(in srgb, var(--app-bg, var(--startup-bg)) 18%, transparent); }
+      .startup-loading small { color: var(--muted, var(--startup-muted)); font-size: 11px; }
+      .startup-stage { position: relative; width: 116px; height: 92px; margin-bottom: 2px; transform: rotate(-3deg); }
+      .startup-paper { position: absolute; width: 66px; height: 78px; border: 1px solid color-mix(in srgb, var(--accent, var(--startup-accent)) 22%, transparent); border-radius: 7px; background: color-mix(in srgb, var(--surface, var(--startup-surface)) 88%, var(--accent, var(--startup-accent)) 12%); box-shadow: 0 12px 24px color-mix(in srgb, var(--app-bg, var(--startup-bg)) 20%, transparent); }
+      .startup-paper-back { top: 8px; left: 20px; transform: rotate(-13deg); opacity: .38; animation: startup-paper-back 3s ease-in-out infinite; }
+      .startup-paper-mid { top: 5px; left: 30px; transform: rotate(10deg); opacity: .62; animation: startup-paper-mid 3s ease-in-out infinite; }
+      .startup-paper-main { top: 3px; left: 25px; z-index: 1; display: flex; flex-direction: column; gap: 7px; padding: 14px 11px; border-color: color-mix(in srgb, var(--accent, var(--startup-accent)) 70%, transparent); background: linear-gradient(145deg, color-mix(in srgb, var(--surface-raised, var(--startup-surface-raised)) 86%, var(--accent, var(--startup-accent)) 14%), var(--surface, var(--startup-surface))); transform: rotate(0); animation: startup-paper-main 3s ease-in-out infinite; }
+      .startup-paper-main b, .startup-paper-main i { display: block; height: 3px; border-radius: 3px; background: color-mix(in srgb, var(--ink, var(--startup-text)) 68%, transparent); }
+      .startup-paper-main b { width: 38px; height: 7px; margin-bottom: 2px; background: var(--accent, var(--startup-accent)); }
+      .startup-paper-main i:nth-of-type(1) { width: 46px; }
+      .startup-paper-main i:nth-of-type(2) { width: 32px; }
+      .startup-paper-main i:nth-of-type(3) { width: 41px; }
+      .startup-paper-main em { position: absolute; top: 13px; left: 11px; width: 2px; height: 55px; border-radius: 2px; background: var(--accent, var(--startup-accent)); box-shadow: 0 0 12px color-mix(in srgb, var(--accent, var(--startup-accent)) 70%, transparent); animation: startup-reading-line 2.2s ease-in-out infinite; }
+      .startup-bookmark { position: absolute; right: 17px; top: 2px; z-index: 2; width: 8px; height: 25px; background: var(--accent, var(--startup-accent)); clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 75%, 0 100%); animation: startup-bookmark 3s ease-in-out infinite; }
+      .startup-title-row { display: flex; align-items: baseline; gap: 3px; }
+      .startup-title-row strong { font-weight: 600; letter-spacing: .02em; }
+      .startup-dots { width: 15px; overflow: hidden; color: var(--accent, var(--startup-accent)); letter-spacing: 2px; animation: startup-dots 1.2s steps(4, end) infinite; }
+      .startup-loading > small { min-height: 16px; }
+      .startup-steps { display: flex; gap: 14px; margin-top: 7px; color: var(--muted, var(--startup-muted)); font-size: 10px; }
+      .startup-step { position: relative; display: flex; align-items: center; gap: 5px; }
+      .startup-step::before { width: 4px; height: 4px; border-radius: 50%; background: currentColor; content: ""; }
+      .startup-step:nth-child(1) { animation: startup-step 3s ease-in-out infinite; }
+      .startup-step:nth-child(2) { animation: startup-step 3s ease-in-out 1s infinite; }
+      .startup-step:nth-child(3) { animation: startup-step 3s ease-in-out 2s infinite; }
+      .startup-progress { width: 180px; height: 2px; overflow: hidden; border-radius: 2px; background: color-mix(in srgb, var(--accent-soft, var(--startup-accent-soft)) 72%, transparent); }
+      .startup-progress i { display: block; width: 42%; height: 100%; border-radius: inherit; background: var(--accent, var(--startup-accent)); box-shadow: 0 0 10px color-mix(in srgb, var(--accent, var(--startup-accent)) 55%, transparent); animation: startup-progress 3s ease-in-out infinite; }
+      @keyframes startup-paper-back { 50%, 70% { transform: translate(-5px, 2px) rotate(-17deg); } }
+      @keyframes startup-paper-mid { 50%, 70% { transform: translate(5px, -2px) rotate(14deg); } }
+      @keyframes startup-paper-main { 50%, 70% { transform: translateY(-2px); } }
+      @keyframes startup-bookmark { 50%, 70% { transform: translateY(4px); } }
+      @keyframes startup-reading-line { 0%, 8% { transform: translateY(0); opacity: 0; } 20% { opacity: 1; } 74% { transform: translateY(43px); opacity: 1; } 86%, 100% { transform: translateY(43px); opacity: 0; } }
+      @keyframes startup-dots { 0%, 20% { width: 3px; } 45% { width: 7px; } 70%, 100% { width: 15px; } }
+      @keyframes startup-step { 0%, 25%, 100% { color: var(--muted, var(--startup-muted)); } 10%, 20% { color: var(--accent, var(--startup-accent)); } }
+      @keyframes startup-progress { 0% { transform: translateX(-105%); } 60% { transform: translateX(105%); } 100% { transform: translateX(335%); } }
+      @media (prefers-reduced-motion: reduce) { .startup-loading * { animation-duration: 1ms !important; animation-iteration-count: 1 !important; } }
     </style>
   </head>
   <body>
-    <div id="app"><div id="startup-splash" role="status" aria-live="polite"><i></i><strong>正在恢复阅读空间</strong><small>正在载入最近文档与阅读位置</small></div></div>
+    <div id="app">
+      <div id="startup-splash" class="startup-loading" role="status" aria-live="polite">
+        <div class="startup-card">
+          <div class="startup-stage" aria-hidden="true"><div class="startup-paper startup-paper-back"></div><div class="startup-paper startup-paper-mid"></div><div class="startup-paper startup-paper-main"><b></b><i></i><i></i><i></i><em></em></div><span class="startup-bookmark"></span></div>
+          <div class="startup-title-row"><strong>正在恢复阅读空间</strong><span class="startup-dots">...</span></div>
+          <small>把文档、位置与阅读状态准备好</small>
+          <div class="startup-steps" aria-hidden="true"><span class="startup-step">读取文档</span><span class="startup-step">恢复位置</span><span class="startup-step">准备界面</span></div>
+          <div class="startup-progress" aria-hidden="true"><i></i></div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

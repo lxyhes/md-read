@@ -8,7 +8,7 @@ import TreeDiagram from './components/TreeDiagram.vue'
 import AppIcon from './components/AppIcon.vue'
 import IconButton from './components/IconButton.vue'
 import FileSystemTree, { type FileSystemTreeNode } from './components/FileSystemTree.vue'
-import { copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, deleteMarkdownPath, listFileSystemEntries, listMarkdownFiles, openMarkdownDirectory, openMarkdownFile, readMarkdownPath, renameMarkdownPath, watchMarkdownPath, type WorkspaceFile } from './fileService'
+import { copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, listFileSystemEntries, listMarkdownFiles, openMarkdownDirectory, openMarkdownFile, readMarkdownPath, renameMarkdownPath, watchMarkdownPath, type WorkspaceFile } from './fileService'
 import type { Annotation, ReaderRegion, ViewerType } from './types'
 import { asciiDiagramToMermaid, asciiTreeToTree } from './asciiDiagram'
 import { formatClipboardToMarkdown } from './pasteMarkdown'
@@ -68,6 +68,7 @@ const recentlyClosedTabs = ref<string[]>([])
 const tabContextMenu = ref<{ documentId: string; x: number; y: number } | null>(null)
 const fileContextMenu = ref<{ file: FileTreeEntry; x: number; y: number } | null>(null)
 const fileProperties = ref<FileTreeEntry | null>(null)
+const deleteConfirmation = ref<{ file: FileTreeEntry } | null>(null)
 let fileTreeRequest = 0
 const focusRemaining = ref(25 * 60)
 const focusRunning = ref(false)
@@ -156,7 +157,9 @@ const outlineRows = computed(() => {
   }
   return visibleRows
 })
-const showReadingQuickActions = computed(() => (currentProgress.value?.scrollPercent ?? 0) > 0.08)
+const readerScrollPercent = ref(0)
+const readerAtTop = computed(() => readerScrollPercent.value <= 0.01)
+const readerAtBottom = computed(() => readerScrollPercent.value >= 0.99)
 const readerRegions = computed(() => {
   const document = store.currentDocument
   if (!document) return []
@@ -1132,17 +1135,19 @@ async function openFileTreeEntry(file: { path: string; name: string; documentId?
 function isDeletableFile(file: { path: string }) {
   return file.path !== '欢迎开始 · Moyue.md'
 }
-async function deleteFile(file: { path: string; name: string; documentId?: string }) {
+async function deleteFile(file: FileTreeEntry) {
   if (!isDeletableFile(file) || busyAction.value) return
-  const workspaceOnly = currentDirectory.value === '当前工作区'
-  const action = workspaceOnly ? '从当前工作区移除' : '删除'
-  if (!window.confirm(`确定${action}“${file.name}”？此操作不可撤销。`)) return
+  deleteConfirmation.value = { file }
+}
+async function confirmDeleteFile() {
+  const confirmation = deleteConfirmation.value
+  if (!confirmation || busyAction.value) return
+  deleteConfirmation.value = null
   busyAction.value = 'delete'
   try {
-    if (!workspaceOnly) await deleteMarkdownPath(file.path)
-    if (file.documentId) await store.removeDocument(file.documentId)
+    if (confirmation.file.documentId) await store.removeDocument(confirmation.file.documentId)
     await refreshFileTree()
-    notify(workspaceOnly ? `已从当前工作区移除 ${file.name}` : `已删除 ${file.name}`)
+    notify(`已从阅读空间移除 ${confirmation.file.name}`)
   } catch (error) {
     notify(error instanceof Error ? error.message : '删除文件失败')
   } finally { busyAction.value = null }
@@ -1198,7 +1203,13 @@ function regionAtScrollPosition(element: HTMLElement, documentId: string) {
   })[0]
   return bestIndex === undefined ? store.activeRegionId : regionLayoutCache[bestIndex].id
 }
-function restoreScroll() { if (readerViewport.value && currentProgress.value) readerViewport.value.scrollTop = currentProgress.value.scrollPercent * (readerViewport.value.scrollHeight - readerViewport.value.clientHeight) }
+function restoreScroll() {
+  const viewport = readerViewport.value
+  if (!viewport) return
+  const percent = currentProgress.value?.scrollPercent ?? 0
+  readerScrollPercent.value = percent
+  viewport.scrollTop = percent * (viewport.scrollHeight - viewport.clientHeight)
+}
 function currentViewportPercent() {
   const viewport = readerViewport.value
   return viewport && viewport.scrollHeight > viewport.clientHeight ? viewport.scrollTop / (viewport.scrollHeight - viewport.clientHeight) : currentProgress.value?.scrollPercent ?? 0
@@ -1206,7 +1217,10 @@ function currentViewportPercent() {
 function restoreViewportPercent(percent: number) {
   nextTick(() => {
     const viewport = readerViewport.value
-    if (viewport) viewport.scrollTop = percent * Math.max(0, viewport.scrollHeight - viewport.clientHeight)
+    if (viewport) {
+      readerScrollPercent.value = percent
+      viewport.scrollTop = percent * Math.max(0, viewport.scrollHeight - viewport.clientHeight)
+    }
   })
 }
 function onReaderWheel(event: WheelEvent) {
@@ -1229,6 +1243,7 @@ function onReaderScroll() {
     const document = store.currentDocument
     if (!element || !document) return
     const percent = element.scrollHeight <= element.clientHeight ? 0 : element.scrollTop / (element.scrollHeight - element.clientHeight)
+    readerScrollPercent.value = percent
     const regionId = regionAtScrollPosition(element, document.id)
     const isFocusMode = store.mode === 'region-focus' || store.mode === 'focus'
     const isNavigating = isFocusMode && focusScrollTargetId !== null && regionId !== focusScrollTargetId
@@ -1454,7 +1469,14 @@ function jumpToCurrentHeading() {
   else scrollToTop()
 }
 function scrollToTop() {
+  readerScrollPercent.value = 0
   readerViewport.value?.scrollTo({ top: 0, behavior: 'smooth' })
+}
+function scrollToBottom() {
+  const viewport = readerViewport.value
+  if (!viewport) return
+  readerScrollPercent.value = 1
+  viewport.scrollTo({ top: viewport.scrollHeight, behavior: 'smooth' })
 }
 function headingRailPosition(index: number) {
   const count = store.currentDocument?.headings.length ?? 0
@@ -1550,9 +1572,20 @@ function searchSelection() {
 async function highlightSelection() {
   if (!selectionToolbar.value || !store.currentDocument) return
   const selected = selectionToolbar.value
+  const existing = store.annotations.filter((annotation) => annotation.documentId === store.currentDocument?.id && annotation.regionId === selected.regionId && annotation.selectedText.trim() === selected.text.trim())
+  if (existing.length) {
+    for (const annotation of existing) await store.removeAnnotation(annotation)
+    selectionToolbar.value = null
+    notify('已取消高亮')
+    return
+  }
   await store.addAnnotation({ id: `highlight_${Date.now()}`, documentId: store.currentDocument.id, regionId: selected.regionId, selectedText: selected.text, color: annotationColor.value, note: '', createdAt: Date.now() })
   selectionToolbar.value = null
   notify('已高亮并保存阅读标记')
+}
+function selectionIsHighlighted() {
+  if (!selectionToolbar.value || !store.currentDocument) return false
+  return store.annotations.some((annotation) => annotation.documentId === store.currentDocument?.id && annotation.regionId === selectionToolbar.value?.regionId && annotation.selectedText.trim() === selectionToolbar.value?.text.trim())
 }
 function jumpToAnnotation(annotation: Annotation) {
   store.clearFocus()
@@ -1703,6 +1736,15 @@ async function requestFullscreen() {
             </div>
           </div>
         </Teleport>
+        <Teleport to="body">
+          <div v-if="deleteConfirmation" class="overlay file-delete-overlay" @click.self="deleteConfirmation = null">
+            <div class="file-properties-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-file-title">
+              <div class="file-properties-heading"><div><span class="section-kicker">REMOVE FROM MOYUE</span><h2 id="delete-file-title">从阅读空间移除？</h2></div><IconButton icon="close" size="sm" label="取消移除" @click="deleteConfirmation = null" /></div>
+              <p class="file-delete-message">确定从 Moyue 阅读空间移除“{{ deleteConfirmation.file.name }}”？不会删除本地文件。</p>
+              <div class="file-properties-actions"><button class="ghost-button" type="button" @click="deleteConfirmation = null">取消</button><button class="primary-button" type="button" @click="confirmDeleteFile">确认移除</button></div>
+            </div>
+          </div>
+        </Teleport>
         <div class="reader-layout" :class="{ 'focus-layout': store.mode === 'focus', 'clean-layout': store.mode === 'clean' }">
           <aside v-if="store.mode !== 'focus' && store.mode !== 'clean'" class="outline-panel">
             <div class="panel-heading panel-switcher">
@@ -1747,6 +1789,12 @@ async function requestFullscreen() {
               <span class="section-kicker reader-path" :title="store.currentDocument?.path">{{ store.currentDocument?.path }}</span>
               <span class="reader-stat">{{ store.currentDocument?.wordCount }} 字 · 约 {{ store.currentDocument?.estimatedReadMinutes }} 分钟</span>
               <span class="reader-zoom-hint" title="使用快捷键调整阅读字号"><kbd>Ctrl / Cmd + + / -</kbd><span>调整字号</span></span>
+              <div class="reader-navigation" aria-label="阅读位置与跳转">
+                <span class="reader-progress-label" aria-live="polite">阅读到 {{ Math.round(readerScrollPercent * 100) }}%</span>
+                <button v-if="store.mode === 'clean' && currentHeading" type="button" @click="jumpToCurrentHeading">本章开头</button>
+                <button type="button" :disabled="readerAtTop" @click="scrollToTop">回到顶部</button>
+                <button type="button" :disabled="readerAtBottom" @click="scrollToBottom">到文末</button>
+              </div>
             </div>
             <div ref="readerViewport" class="reader-viewport" @scroll="onReaderScroll" @wheel="onReaderWheel" @pointerdown="onReaderPointerDown" @mouseup="captureSelection">
               <nav v-if="store.mode === 'clean' && (store.currentDocument?.headings.length ?? 0) > 0" class="reading-progress-rail" aria-label="阅读进度导航"><span class="reading-progress-rail-caption">{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}%</span><div class="reading-progress-rail-track"><span class="reading-progress-rail-fill" :style="{ height: `${(currentProgress?.scrollPercent ?? 0) * 100}%` }" /><button v-for="(heading, index) in store.currentDocument?.headings" :key="heading.id" type="button" class="reading-progress-marker" :class="{ active: store.activeHeadingId === heading.id }" :style="{ top: headingRailPosition(index) }" :aria-label="`跳转到 ${heading.text}`" :title="heading.text" @click.stop="scrollToHeading(heading.regionId)"><i /><span>{{ heading.text }}</span></button></div></nav>
@@ -1754,7 +1802,6 @@ async function requestFullscreen() {
               <div class="regions-stack"><RegionBlock v-for="region in readerRegions" :key="region.id" :region="region" :annotations="currentAnnotations" :focused="store.focusedRegionId === region.id" :active="store.activeRegionId === region.id" :focus-distance="focusDistanceByRegion.get(region.id)" :theme-mode="store.activeTheme?.manifest.mode" :theme-key="`${store.mode}-${store.activeThemeId}`" @focus="focusRegion(region)" @open-viewer="openViewer(region)" @open-link="openExternalLink" @code-copied="notify('代码已复制')" /></div>
             <footer class="reader-footer"><span>墨阅 · Moyue Reader</span><span>Read → Focus → Understand</span></footer>
               </div>
-              <div v-if="store.mode === 'clean' && showReadingQuickActions && !resumePrompt" class="reading-quick-actions" aria-label="阅读快捷操作"><span class="reading-quick-context"><i />{{ currentHeading?.text || '阅读中' }}</span><button v-if="currentHeading" type="button" @click="jumpToCurrentHeading">本章开头</button><button type="button" @click="scrollToTop">回到顶部</button></div>
             </div>
           </div>
         <aside v-if="store.mode !== 'focus' && store.mode !== 'clean'" class="context-panel">
@@ -1778,7 +1825,7 @@ async function requestFullscreen() {
         </div>
         <div v-if="store.mode === 'region-focus'" class="focus-hud"><span v-if="focusPosition" class="focus-hud-position">{{ focusPosition }}</span><span>↑ ↓ 切换区域</span><span>Enter 聚焦</span><button type="button" @click="clearRegionFocus">ESC 退出</button></div>
         <div v-if="store.mode === 'clean'" class="clean-mode-hud"><span><AppIcon name="eye" :size="13" />纯净阅读</span><button type="button" @click="toggleCleanMode">退出 <kbd>Esc</kbd></button></div>
-        <div v-if="selectionToolbar" class="selection-toolbar"><span class="selection-label">{{ selectionToolbar.text.slice(0, 28) }}{{ selectionToolbar.text.length > 28 ? '…' : '' }}</span><button type="button" @click="highlightSelection">高亮</button><button type="button" @click="beginAnnotation">批注</button><button type="button" @click="searchSelection">搜索</button><button type="button" @click="assist('translate')">翻译</button><button type="button" @click="copySelectionMarkdown">复制 Markdown</button><button type="button" @click="copySelection">复制</button></div>
+        <div v-if="selectionToolbar" class="selection-toolbar"><span class="selection-label">{{ selectionToolbar.text.slice(0, 28) }}{{ selectionToolbar.text.length > 28 ? '…' : '' }}</span><button type="button" @click="highlightSelection">{{ selectionIsHighlighted() ? '取消高亮' : '高亮' }}</button><button type="button" @click="beginAnnotation">批注</button><button type="button" @click="searchSelection">搜索</button><button type="button" @click="assist('translate')">翻译</button><button type="button" @click="copySelectionMarkdown">复制 Markdown</button><button type="button" @click="copySelection">复制</button></div>
       </section>
 
       <ThemeCenter v-else-if="view === 'themes'" :themes="store.themes" :active-theme-id="store.activeThemeId" :active-theme="store.activeTheme" @apply="applyReaderTheme" @install="store.installTheme" @notify="notify" />
@@ -1841,7 +1888,15 @@ async function requestFullscreen() {
       </div>
     </div>
     <div v-if="annotationEditor" class="overlay note-overlay" @click.self="annotationEditor = null"><div class="note-dialog"><span class="section-kicker">ANNOTATION</span><h2>留下一个记号</h2><blockquote>{{ annotationEditor.text }}</blockquote><textarea v-model="annotationNote" autofocus placeholder="记录你的思考……" /><div class="note-colors"><button v-for="color in ['#e1a85b', '#a78bfa', '#76c893', '#75b7d5', '#e98282']" :key="color" type="button" :class="{ selected: annotationColor === color }" :style="{ background: color }" @click="annotationColor = color" /></div><div class="note-actions"><button class="ghost-button" type="button" @click="annotationEditor = null">取消</button><button class="primary-button" type="button" @click="saveCurrentAnnotation">保存批注</button></div></div></div>
-    <div v-if="booting" class="app-loading" role="status" aria-live="polite"><span class="loading-orbit" /><strong>正在恢复阅读空间</strong><small>正在载入最近文档与阅读位置</small></div>
+    <div v-if="booting" class="app-loading startup-loading" role="status" aria-live="polite">
+      <div class="startup-card">
+        <div class="startup-stage" aria-hidden="true"><div class="startup-paper startup-paper-back"></div><div class="startup-paper startup-paper-mid"></div><div class="startup-paper startup-paper-main"><b></b><i></i><i></i><i></i><em></em></div><span class="startup-bookmark"></span></div>
+        <div class="startup-title-row"><strong>正在恢复阅读空间</strong><span class="startup-dots">...</span></div>
+        <small>把文档、位置与阅读状态准备好</small>
+        <div class="startup-steps" aria-hidden="true"><span class="startup-step">读取文档</span><span class="startup-step">恢复位置</span><span class="startup-step">准备界面</span></div>
+        <div class="startup-progress" aria-hidden="true"><i></i></div>
+      </div>
+    </div>
     <div v-if="draggingFiles" class="drop-overlay" aria-live="polite"><span><AppIcon name="plus" :size="26" /></span><strong>释放以导入 Markdown</strong><small>支持 .md / .markdown 文件</small></div>
     <div v-if="toast" class="toast" role="status" aria-live="polite">{{ toast }}</div>
   </div>
