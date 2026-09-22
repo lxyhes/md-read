@@ -26,6 +26,13 @@ const store = useReaderStore()
 const view = ref<View>('library')
 const libraryTab = ref<'home' | 'all'>('all')
 const navCollapsed = ref(localStorage.getItem('moyue:nav-collapsed') === 'true')
+const outlinePanelMinWidth = 170
+const outlinePanelMaxWidth = 380
+const outlinePanelDefaultWidth = typeof window !== 'undefined' && window.innerWidth < 1181 ? 195 : 204
+const savedOutlinePanelWidth = Number(localStorage.getItem('moyue:outline-panel-width'))
+const outlinePanelWidth = ref(Number.isFinite(savedOutlinePanelWidth) ? Math.min(outlinePanelMaxWidth, Math.max(outlinePanelMinWidth, savedOutlinePanelWidth)) : outlinePanelDefaultWidth)
+const outlinePanelResizing = ref(false)
+let outlineResizeStart: { x: number; width: number; handle: HTMLElement } | null = null
 const readerViewport = ref<HTMLElement | null>(null)
 const searchOpen = ref(false)
 const query = ref('')
@@ -237,6 +244,48 @@ function openLibrary(tab: 'home' | 'all') { libraryTab.value = tab; view.value =
 function toggleNavCollapsed() {
   navCollapsed.value = !navCollapsed.value
   localStorage.setItem('moyue:nav-collapsed', String(navCollapsed.value))
+}
+function setOutlinePanelWidth(width: number) {
+  outlinePanelWidth.value = Math.round(Math.min(outlinePanelMaxWidth, Math.max(outlinePanelMinWidth, width)))
+  localStorage.setItem('moyue:outline-panel-width', String(outlinePanelWidth.value))
+}
+function startOutlinePanelResize(event: PointerEvent) {
+  if (event.button !== 0) return
+  const handle = event.currentTarget as HTMLElement
+  outlineResizeStart = { x: event.clientX, width: outlinePanelWidth.value, handle }
+  outlinePanelResizing.value = true
+  document.body.classList.add('is-resizing-outline')
+  handle.setPointerCapture(event.pointerId)
+  window.addEventListener('pointermove', onOutlinePanelResize)
+  window.addEventListener('pointerup', stopOutlinePanelResize)
+  window.addEventListener('pointercancel', stopOutlinePanelResize)
+  event.preventDefault()
+}
+function onOutlinePanelResize(event: PointerEvent) {
+  if (!outlineResizeStart) return
+  setOutlinePanelWidth(outlineResizeStart.width + event.clientX - outlineResizeStart.x)
+}
+function stopOutlinePanelResize(event?: PointerEvent) {
+  if (!outlineResizeStart) return
+  if (event && outlineResizeStart.handle.hasPointerCapture(event.pointerId)) outlineResizeStart.handle.releasePointerCapture(event.pointerId)
+  outlineResizeStart = null
+  outlinePanelResizing.value = false
+  document.body.classList.remove('is-resizing-outline')
+  window.removeEventListener('pointermove', onOutlinePanelResize)
+  window.removeEventListener('pointerup', stopOutlinePanelResize)
+  window.removeEventListener('pointercancel', stopOutlinePanelResize)
+}
+function onOutlinePanelResizeKeydown(event: KeyboardEvent) {
+  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+    setOutlinePanelWidth(outlinePanelWidth.value + (event.key === 'ArrowRight' ? 10 : -10))
+    event.preventDefault()
+  } else if (event.key === 'Home') {
+    setOutlinePanelWidth(outlinePanelMinWidth)
+    event.preventDefault()
+  } else if (event.key === 'End') {
+    setOutlinePanelWidth(outlinePanelMaxWidth)
+    event.preventDefault()
+  }
 }
 function isTypingTarget(target: EventTarget | null) {
   const element = target as HTMLElement | null
@@ -801,6 +850,7 @@ onMounted(() => {
   document.addEventListener('click', onTabOutsideClick)
 })
 onUnmounted(() => {
+  stopOutlinePanelResize()
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('paste', onPaste)
   document.removeEventListener('fullscreenchange', onFullscreenChange)
@@ -1745,8 +1795,9 @@ async function requestFullscreen() {
             </div>
           </div>
         </Teleport>
-        <div class="reader-layout" :class="{ 'focus-layout': store.mode === 'focus', 'clean-layout': store.mode === 'clean' }">
+        <div class="reader-layout" :class="{ 'focus-layout': store.mode === 'focus', 'clean-layout': store.mode === 'clean', 'is-resizing-outline': outlinePanelResizing }" :style="{ '--outline-panel-width': `${outlinePanelWidth}px` }">
           <aside v-if="store.mode !== 'focus' && store.mode !== 'clean'" class="outline-panel">
+            <div class="outline-resizer" role="separator" tabindex="0" aria-orientation="vertical" aria-label="调整文档侧栏宽度" :aria-valuemin="outlinePanelMinWidth" :aria-valuemax="outlinePanelMaxWidth" :aria-valuenow="outlinePanelWidth" title="拖动调整侧栏宽度" @pointerdown="startOutlinePanelResize" @keydown="onOutlinePanelResizeKeydown" />
             <div class="panel-heading panel-switcher">
               <div class="panel-tabs" role="tablist" aria-label="阅读侧栏">
             <button type="button" :class="{ active: leftPanelTab === 'files' }" @click="leftPanelTab = 'files'">文件 <span>{{ currentDirectoryFiles.length }}</span></button>
