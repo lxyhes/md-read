@@ -1679,18 +1679,18 @@ async function requestFullscreen() {
       <button class="nav-collapse-toggle" type="button" :aria-label="navCollapsed ? '展开侧栏' : '收起侧栏'" :title="navCollapsed ? '展开侧栏' : '收起侧栏'" @click="toggleNavCollapsed"><AppIcon name="chevron-right" :size="15" /></button>
       <nav>
         <span class="nav-section-label">我的空间</span>
-        <button class="nav-item" :class="{ active: view === 'library' && libraryTab === 'home' }" type="button" @click="openLibrary('home')"><span class="nav-icon"><AppIcon name="home" /></span><span>我的空间</span></button>
-        <button class="nav-item" :class="{ active: view === 'library' && libraryTab === 'all' }" type="button" @click="openLibrary('all')"><span class="nav-icon"><AppIcon name="library" /></span><span>全部文档</span></button>
-        <button class="nav-item" :class="{ active: view === 'reader' }" type="button" @click="view = 'reader'"><span class="nav-icon"><AppIcon name="history" /></span><span>最近阅读</span></button>
-        <button class="nav-item" type="button" @click="notify('收藏夹将在下一阶段接入')"><span class="nav-icon"><AppIcon name="star" /></span><span>收藏夹</span></button>
-        <button class="nav-item" type="button" @click="notify('AI 知识库将在适配器完成后接入')"><span class="nav-icon"><AppIcon name="sparkle" /></span><span>AI 知识库</span></button>
-        <button class="nav-item" type="button" @click="notify('个人笔记将在下一阶段接入')"><span class="nav-icon"><AppIcon name="note" /></span><span>个人笔记</span></button>
+        <button class="nav-item" :class="{ active: view === 'library' && libraryTab === 'home' }" type="button" title="我的空间" aria-label="我的空间" @click="openLibrary('home')"><span class="nav-icon"><AppIcon name="home" /></span><span>我的空间</span></button>
+        <button class="nav-item" :class="{ active: view === 'library' && libraryTab === 'all' }" type="button" title="全部文档" aria-label="全部文档" @click="openLibrary('all')"><span class="nav-icon"><AppIcon name="library" /></span><span>全部文档</span></button>
+        <button class="nav-item" :class="{ active: view === 'reader' }" type="button" title="最近阅读" aria-label="最近阅读" @click="view = 'reader'"><span class="nav-icon"><AppIcon name="history" /></span><span>最近阅读</span></button>
+        <button class="nav-item" type="button" title="收藏夹" aria-label="收藏夹" @click="notify('收藏夹将在下一阶段接入')"><span class="nav-icon"><AppIcon name="star" /></span><span>收藏夹</span></button>
+        <button class="nav-item" type="button" title="AI 知识库" aria-label="AI 知识库" @click="notify('AI 知识库将在适配器完成后接入')"><span class="nav-icon"><AppIcon name="sparkle" /></span><span>AI 知识库</span></button>
+        <button class="nav-item" type="button" title="个人笔记" aria-label="个人笔记" @click="notify('个人笔记将在下一阶段接入')"><span class="nav-icon"><AppIcon name="note" /></span><span>个人笔记</span></button>
         <span class="nav-section-label nav-section-gap">探索</span>
-        <button class="nav-item nav-explore-item" :class="{ active: view === 'themes' }" type="button" @click="view = 'themes'"><span class="nav-icon"><AppIcon name="palette" /></span><span>主题中心</span></button>
-        <button class="nav-item nav-explore-item" type="button" @click="notify('插件市场将在下一阶段接入')"><span class="nav-icon"><AppIcon name="plugin" /></span><span>插件中心</span></button>
+        <button class="nav-item nav-explore-item" :class="{ active: view === 'themes' }" type="button" title="主题中心" aria-label="主题中心" @click="view = 'themes'"><span class="nav-icon"><AppIcon name="palette" /></span><span>主题中心</span></button>
+        <button class="nav-item nav-explore-item" type="button" title="插件中心" aria-label="插件中心" @click="notify('插件市场将在下一阶段接入')"><span class="nav-icon"><AppIcon name="plugin" /></span><span>插件中心</span></button>
       </nav>
       <div class="nav-bottom">
-        <button class="nav-item" :class="{ active: view === 'settings' }" type="button" @click="view = 'settings'"><span class="nav-icon"><AppIcon name="settings" /></span><span>设置</span></button>
+        <button class="nav-item" :class="{ active: view === 'settings' }" type="button" title="设置" aria-label="设置" @click="view = 'settings'"><span class="nav-icon"><AppIcon name="settings" /></span><span>设置</span></button>
         <p class="nav-motto">阅读<br />是灵魂的远行</p>
         <div class="profile-chip"><span class="profile-avatar">M</span><span><b>墨阅本地</b><small>离线工作区</small></span></div>
       </div>
