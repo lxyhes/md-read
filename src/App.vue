@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { invoke } from '@tauri-apps/api/core'
 import { useReaderStore } from './stores/reader'
 import RegionBlock from './components/RegionBlock.vue'
 import MermaidBlock from './components/MermaidBlock.vue'
 import TreeDiagram from './components/TreeDiagram.vue'
-import ThemePicker from './components/ThemePicker.vue'
 import AppIcon from './components/AppIcon.vue'
 import IconButton from './components/IconButton.vue'
 import FileSystemTree, { type FileSystemTreeNode } from './components/FileSystemTree.vue'
@@ -12,7 +12,7 @@ import { copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, creat
 import type { Annotation, ReaderRegion, ViewerType } from './types'
 import { asciiDiagramToMermaid, asciiTreeToTree } from './asciiDiagram'
 import { formatClipboardToMarkdown } from './pasteMarkdown'
-import logoAsset from './assets/moyue-logo.png'
+import logoAsset from './assets/moyue-logo-256.png'
 
 const FocusAmbiencePicker = defineAsyncComponent(() => import('./components/FocusAmbiencePicker.vue'))
 const ThemeCenter = defineAsyncComponent(() => import('./components/ThemeCenter.vue'))
@@ -47,6 +47,7 @@ const annotationNote = ref('')
 const annotationColor = ref('#e1a85b')
 const viewerZoom = ref(1)
 const viewerPan = ref({ x: 0, y: 0 })
+const viewerImageNaturalSize = ref({ width: 0, height: 0 })
 const viewerDragging = ref(false)
 const viewerStage = ref<HTMLElement | null>(null)
 const resumePrompt = ref<{ documentId: string; percent: number } | null>(null)
@@ -118,6 +119,14 @@ const viewerStageStyle = computed<Record<string, string>>(() => ({
   '--viewer-pan-x': `${viewerPan.value.x}px`,
   '--viewer-pan-y': `${viewerPan.value.y}px`,
 }))
+const viewerImageStyle = computed<Record<string, string>>((): Record<string, string> => {
+  const { width, height } = viewerImageNaturalSize.value
+  if (!width || !height) return {}
+  return {
+    width: `${width * viewerZoom.value}px`,
+    height: `${height * viewerZoom.value}px`,
+  }
+})
 const currentProgress = computed(() => store.currentDocument ? store.progress[store.currentDocument.id] : undefined)
 const currentAnnotations = computed(() => store.annotations.slice().sort((a, b) => b.createdAt - a.createdAt))
 const filteredOpenDocuments = computed(() => {
@@ -163,6 +172,15 @@ const focusPosition = computed(() => {
   return index < 0 ? '' : `${index + 1} / ${readerRegions.value.length}`
 })
 function isTauriRuntime() { return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window }
+function openExternalLink(url: string) {
+  const normalized = url.trim()
+  if (!normalized) return
+  if (!isTauriRuntime()) {
+    window.open(normalized, '_blank', 'noopener,noreferrer')
+    return
+  }
+  void invoke('open_external_url', { url: normalized }).catch(() => notify('链接打开失败，请检查链接地址'))
+}
 function normalizedPath(path: string) { return path.replace(/\\/g, '/') }
 function directoryOf(path: string) {
   const normalized = normalizedPath(path)
@@ -1266,7 +1284,7 @@ function toggleCleanMode() {
   restoreViewportPercent(percent)
   notify(store.mode === 'clean' ? '已进入纯净阅读，按 Esc 退出' : '已恢复完整阅读界面')
 }
-function setViewerZoom(value: number) { viewerZoom.value = Math.min(3, Math.max(.5, Number(value.toFixed(2)))) }
+function setViewerZoom(value: number) { viewerZoom.value = Math.min(3, Math.max(.1, Number(value.toFixed(2)))) }
 function resetViewerView() { viewerZoom.value = 1; viewerPan.value = { x: 0, y: 0 } }
 function openViewer(region: ReaderRegion) {
   const generatedTree = region.type === 'code' ? asciiTreeToTree(region.textContent) : null
@@ -1284,9 +1302,11 @@ function openViewer(region: ReaderRegion) {
   } else {
     viewer.value = { type: region.type === 'code' ? 'code' : region.type === 'image' ? 'image' : region.type === 'table' ? 'table' : 'mermaid', region }
   }
+  viewerImageNaturalSize.value = { width: 0, height: 0 }
   resetViewerView(); viewerTab.value = 'preview'; viewerFullscreen.value = false
+  void nextTick(() => requestAnimationFrame(fitViewer))
 }
-function closeViewer() { viewer.value = null; viewerDragging.value = false; resetViewerView(); viewerFullscreen.value = false }
+function closeViewer() { viewer.value = null; viewerDragging.value = false; viewerImageNaturalSize.value = { width: 0, height: 0 }; resetViewerView(); viewerFullscreen.value = false }
 function viewerKind(type: ViewerType) {
   return type === 'mermaid' ? '图表' : type === 'tree' ? '目录树' : type === 'image' ? '图片' : type === 'code' ? '代码' : '表格'
 }
@@ -1309,13 +1329,26 @@ function fitViewer() {
   viewerPan.value = { x: 0, y: 0 }
   requestAnimationFrame(() => {
     const stage = viewerStage.value
+    const image = stage?.querySelector<HTMLImageElement>('.image-viewer img')
+    if (stage && image) {
+      const stageStyle = getComputedStyle(stage)
+      const paddingX = parseFloat(stageStyle.paddingLeft) + parseFloat(stageStyle.paddingRight)
+      const paddingY = parseFloat(stageStyle.paddingTop) + parseFloat(stageStyle.paddingBottom)
+      const availableWidth = Math.max(stage.clientWidth - paddingX, 160)
+      const availableHeight = Math.max(stage.clientHeight - paddingY, 160)
+      const naturalWidth = Math.max(image.naturalWidth || image.clientWidth, 1)
+      const naturalHeight = Math.max(image.naturalHeight || image.clientHeight, 1)
+      if (image.naturalWidth && image.naturalHeight) viewerImageNaturalSize.value = { width: naturalWidth, height: naturalHeight }
+      setViewerZoom(Math.min(1, Math.max(.1, Math.min(availableWidth / naturalWidth, availableHeight / naturalHeight))))
+      return
+    }
     const diagram = stage?.querySelector<HTMLElement>('.mermaid-block')
     if (!stage || !diagram) return
     const availableWidth = Math.max(stage.clientWidth - 80, 160)
     const availableHeight = Math.max(stage.clientHeight - 80, 160)
     const naturalWidth = Math.max(diagram.scrollWidth, 1)
     const naturalHeight = Math.max(diagram.scrollHeight, 1)
-    setViewerZoom(Math.min(3, Math.max(.5, Math.min(availableWidth / naturalWidth, availableHeight / naturalHeight))))
+    setViewerZoom(Math.min(3, Math.max(.1, Math.min(availableWidth / naturalWidth, availableHeight / naturalHeight))))
   })
 }
 function toggleViewerFullscreen() {
@@ -1709,11 +1742,27 @@ async function requestFullscreen() {
               </nav>
             </div>
           </aside>
-          <div class="reader-column"><div class="reader-meta"><span class="section-kicker">{{ store.currentDocument?.path }}</span><span>{{ store.currentDocument?.wordCount }} 字 · 约 {{ store.currentDocument?.estimatedReadMinutes }} 分钟</span><span class="reader-zoom-hint" title="使用快捷键调整阅读字号"><kbd>Ctrl / Cmd + + / -</kbd><span>调整字号</span></span></div><div ref="readerViewport" class="reader-viewport" @scroll="onReaderScroll" @wheel="onReaderWheel" @pointerdown="onReaderPointerDown" @mouseup="captureSelection"><nav v-if="(store.currentDocument?.headings.length ?? 0) > 0" class="reading-progress-rail" aria-label="阅读进度导航"><span class="reading-progress-rail-caption">{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}%</span><div class="reading-progress-rail-track"><span class="reading-progress-rail-fill" :style="{ height: `${(currentProgress?.scrollPercent ?? 0) * 100}%` }" /><button v-for="(heading, index) in store.currentDocument?.headings" :key="heading.id" type="button" class="reading-progress-marker" :class="{ active: store.activeHeadingId === heading.id }" :style="{ top: headingRailPosition(index) }" :aria-label="`跳转到 ${heading.text}`" :title="heading.text" @click.stop="scrollToHeading(heading.regionId)"><i /><span>{{ heading.text }}</span></button></div></nav><div class="reader-content"><div class="reader-meta"><span class="section-kicker">{{ store.currentDocument?.path }}</span><span>{{ store.currentDocument?.wordCount }} 字 · 约 {{ store.currentDocument?.estimatedReadMinutes }} 分钟</span><span class="reader-zoom-hint" title="使用快捷键调整阅读字号"><kbd>Ctrl / Cmd + + / -</kbd><span>调整字号</span></span></div><h1 class="reader-title">{{ store.currentDocument?.title }}</h1><p class="reader-deck">在文字、图表和一块留白之间，找到你自己的阅读速度。</p><div class="reader-rule" />
-             <div class="regions-stack"><RegionBlock v-for="region in readerRegions" :key="region.id" :region="region" :annotations="currentAnnotations" :focused="store.focusedRegionId === region.id" :active="store.activeRegionId === region.id" :focus-distance="focusDistanceByRegion.get(region.id)" :theme-mode="store.activeTheme?.manifest.mode" :theme-key="`${store.mode}-${store.activeThemeId}`" @focus="focusRegion(region)" @open-viewer="openViewer(region)" @code-copied="notify('代码已复制')" /></div>
+          <div class="reader-column">
+            <div class="reader-meta">
+              <span class="section-kicker reader-path" :title="store.currentDocument?.path">{{ store.currentDocument?.path }}</span>
+              <span class="reader-stat">{{ store.currentDocument?.wordCount }} 字 · 约 {{ store.currentDocument?.estimatedReadMinutes }} 分钟</span>
+              <span class="reader-zoom-hint" title="使用快捷键调整阅读字号"><kbd>Ctrl / Cmd + + / -</kbd><span>调整字号</span></span>
+            </div>
+            <div ref="readerViewport" class="reader-viewport" @scroll="onReaderScroll" @wheel="onReaderWheel" @pointerdown="onReaderPointerDown" @mouseup="captureSelection">
+              <nav v-if="store.mode === 'clean' && (store.currentDocument?.headings.length ?? 0) > 0" class="reading-progress-rail" aria-label="阅读进度导航"><span class="reading-progress-rail-caption">{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}%</span><div class="reading-progress-rail-track"><span class="reading-progress-rail-fill" :style="{ height: `${(currentProgress?.scrollPercent ?? 0) * 100}%` }" /><button v-for="(heading, index) in store.currentDocument?.headings" :key="heading.id" type="button" class="reading-progress-marker" :class="{ active: store.activeHeadingId === heading.id }" :style="{ top: headingRailPosition(index) }" :aria-label="`跳转到 ${heading.text}`" :title="heading.text" @click.stop="scrollToHeading(heading.regionId)"><i /><span>{{ heading.text }}</span></button></div></nav>
+              <div class="reader-content"><h1 class="reader-title">{{ store.currentDocument?.title }}</h1><div class="reader-rule" />
+              <div class="regions-stack"><RegionBlock v-for="region in readerRegions" :key="region.id" :region="region" :annotations="currentAnnotations" :focused="store.focusedRegionId === region.id" :active="store.activeRegionId === region.id" :focus-distance="focusDistanceByRegion.get(region.id)" :theme-mode="store.activeTheme?.manifest.mode" :theme-key="`${store.mode}-${store.activeThemeId}`" @focus="focusRegion(region)" @open-viewer="openViewer(region)" @open-link="openExternalLink" @code-copied="notify('代码已复制')" /></div>
             <footer class="reader-footer"><span>墨阅 · Moyue Reader</span><span>Read → Focus → Understand</span></footer>
-          </div><div v-if="showReadingQuickActions && !resumePrompt" class="reading-quick-actions" aria-label="阅读快捷操作"><span class="reading-quick-context"><i />{{ currentHeading?.text || '阅读中' }}</span><button v-if="currentHeading" type="button" @click="jumpToCurrentHeading">本章开头</button><button type="button" @click="scrollToTop">回到顶部</button></div></div></div>
-        <aside v-if="store.mode !== 'focus' && store.mode !== 'clean'" class="context-panel"><div class="context-top"><span class="section-kicker">主题中心</span><button class="text-button" type="button" @click="view = 'themes'">更多 <AppIcon name="external" :size="12" /></button></div><div class="theme-mini-card"><ThemePicker :themes="store.themes" :selected-theme-id="store.activeThemeId" compact @select="applyReaderTheme" /><div class="theme-mini-caption"><strong>{{ store.activeTheme?.manifest.name }}</strong><small>沉浸阅读 · {{ store.activeTheme?.manifest.mode === 'light' ? '白昼' : '深色' }}</small></div></div><div class="translation-card"><div class="side-card-heading"><span>划词翻译</span><span>中 ↔ 英</span></div><strong>intelligence</strong><small>/ɪnˈtelɪdʒəns/</small><p>n. 智能；智力；理解力<br />复数：intelligences</p><button type="button" @click="assist('translate')">在适配器中打开 <AppIcon name="external" :size="12" /></button></div><div class="diagram-card"><div class="side-card-heading"><span>图表示例</span><IconButton icon="close" size="sm" label="关闭图表示例" @click="notify('图表可独立查看')" /></div><div class="mini-diagram"><span>数据收集</span><i>↓</i><div><span>数据预处理</span><span>模型训练</span></div><i>↓</i><div><span>评估与优化</span><span>预测应用</span></div></div><button class="diagram-link" type="button" @click="notify('请点击正文中的图表进入独立查看')">独立查看 <AppIcon name="external" :size="12" /></button></div><div class="context-card current-context"><span class="section-kicker">CURRENT REGION</span><strong>{{ currentHeading?.text || '开篇' }}</strong><small>{{ store.currentDocument?.regions.length ?? 0 }} 个阅读区域 · {{ currentAnnotations.length }} 条批注</small></div><div class="context-actions"><button type="button" @click="toggleFocusMode"><AppIcon name="focus" :size="13" />进入专注</button><button type="button" @click="toggleCleanMode"><AppIcon name="eye" :size="13" />纯净阅读</button></div><div v-if="currentAnnotations.length" class="annotation-panel"><div class="annotation-heading"><span class="section-kicker">ANNOTATIONS</span><span>{{ currentAnnotations.length }}</span></div><button v-for="annotation in currentAnnotations.slice(0, 4)" :key="annotation.id" class="annotation-item" type="button" @click="jumpToAnnotation(annotation)"><span class="annotation-dot" :style="{ background: annotation.color }" /><span><b>{{ annotation.note || '高亮标记' }}</b><small>{{ annotation.selectedText }}</small></span></button></div></aside>
+              </div>
+              <div v-if="store.mode === 'clean' && showReadingQuickActions && !resumePrompt" class="reading-quick-actions" aria-label="阅读快捷操作"><span class="reading-quick-context"><i />{{ currentHeading?.text || '阅读中' }}</span><button v-if="currentHeading" type="button" @click="jumpToCurrentHeading">本章开头</button><button type="button" @click="scrollToTop">回到顶部</button></div>
+            </div>
+          </div>
+        <aside v-if="store.mode !== 'focus' && store.mode !== 'clean'" class="context-panel">
+          <div class="context-top"><span class="section-kicker">阅读上下文</span><button class="text-button" type="button" @click="view = 'themes'">主题 <AppIcon name="external" :size="12" /></button></div>
+          <div class="context-card current-context"><span class="section-kicker">CURRENT REGION</span><strong>{{ currentHeading?.text || '开篇' }}</strong><small>{{ store.currentDocument?.regions.length ?? 0 }} 个阅读区域 · {{ currentAnnotations.length }} 条批注</small></div>
+          <div class="context-actions"><button type="button" @click="toggleFocusMode"><AppIcon name="focus" :size="13" />进入专注</button><button type="button" @click="toggleCleanMode"><AppIcon name="eye" :size="13" />纯净阅读</button></div>
+          <div v-if="currentAnnotations.length" class="annotation-panel"><div class="annotation-heading"><span class="section-kicker">ANNOTATIONS</span><span>{{ currentAnnotations.length }}</span></div><button v-for="annotation in currentAnnotations.slice(0, 4)" :key="annotation.id" class="annotation-item" type="button" @click="jumpToAnnotation(annotation)"><span class="annotation-dot" :style="{ background: annotation.color }" /><span><b>{{ annotation.note || '高亮标记' }}</b><small>{{ annotation.selectedText }}</small></span></button></div>
+        </aside>
          <aside v-if="store.mode === 'focus'" class="focus-sidebar"><div class="focus-sidebar-head"><div><span class="section-kicker">FOCUS READING</span><strong>专注阅读</strong><small class="focus-document-label">{{ store.currentDocument?.title || '当前文档' }}</small></div><button class="ghost-button" type="button" @click="exitFocusMode"><AppIcon name="close" :size="13" />退出</button></div><div class="focus-session-meta"><span><i />{{ focusRunning ? '专注进行中' : '准备开始' }}</span><span>{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}% 已读</span></div><div class="focus-timer-card"><div class="focus-timer-ring" :style="{ '--focus-progress': `${focusProgress * 360}deg` }"><strong>{{ focusTimeLabel }}</strong><span>{{ focusRunning ? '专注中' : focusRemaining === 0 ? '已完成' : '准备开始' }}</span></div><div class="focus-timer-actions"><button type="button" @click="resetFocusTimer">重置</button><button class="primary-button" type="button" @click="toggleFocusTimer">{{ focusRunning ? '暂停' : '开始' }}</button></div></div><FocusAmbiencePicker :themes="focusThemes" :selected-theme-id="store.activeThemeId" @select="applyReaderTheme" /><div class="focus-card focus-outline"><div class="focus-card-heading"><span>内容导航</span><small>{{ store.currentDocument?.headings.length ?? 0 }} 章 · {{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}%</small></div><nav v-if="store.currentDocument?.headings.length"><button v-for="heading in store.currentDocument.headings" :key="heading.id" :data-focus-outline-id="heading.id" type="button" :class="{ active: store.activeHeadingId === heading.id }" @click="focusHeading(heading.regionId)"><i />{{ heading.text }}</button></nav><p v-else class="focus-outline-empty">这篇文档还没有章节标题</p></div></aside>
         </div>
         <div v-if="resumePrompt?.documentId === store.currentDocumentId" class="resume-prompt" role="dialog" aria-label="继续阅读">
@@ -1751,7 +1800,7 @@ async function requestFullscreen() {
             <button v-if="viewer.type === 'mermaid' && viewerTab === 'preview'" class="viewer-fit-button" type="button" title="适应窗口" @click="fitViewer"><AppIcon name="expand" :size="13" />适应</button>
             <div v-if="viewerCanZoom" class="viewer-zoom-group">
               <IconButton icon="minus" size="sm" variant="surface" label="缩小" @click="setViewerZoom(viewerZoom - .1)" />
-              <input v-if="viewer.type === 'mermaid' && viewerTab === 'preview'" v-model.number="viewerZoom" class="viewer-zoom-slider" type="range" min=".5" max="3" step=".05" aria-label="图表缩放" />
+              <input v-if="viewerTab === 'preview'" v-model.number="viewerZoom" class="viewer-zoom-slider" type="range" min=".1" max="3" step=".05" :aria-label="viewer.type === 'image' ? '图片缩放' : '图表缩放'" />
               <button class="viewer-zoom-value" type="button" title="还原到 100%" @click="resetViewerView">{{ Math.round(viewerZoom * 100) }}%</button>
               <IconButton icon="plus" size="sm" variant="surface" label="放大" @click="setViewerZoom(viewerZoom + .1)" />
             </div>
@@ -1776,7 +1825,7 @@ async function requestFullscreen() {
             <div class="viewer-source-toolbar"><span>图表结构</span></div>
             <pre class="viewer-source">{{ JSON.stringify(viewer.region.metadata ?? {}, null, 2) }}</pre>
           </div>
-          <div v-else-if="viewer.type === 'image'" class="image-viewer"><img :src="String(viewer.region.metadata?.url ?? '')" :alt="viewer.region.textContent" /></div>
+          <div v-else-if="viewer.type === 'image'" class="image-viewer"><img :src="String(viewer.region.metadata?.url ?? '')" :alt="viewer.region.textContent" :style="viewerImageStyle" decoding="async" @load="fitViewer" /></div>
           <ViewerCode v-else-if="viewer.type === 'code'" :region="viewer.region" :theme-mode="store.activeTheme?.manifest.mode" @copied="notify('代码已复制')" />
           <div v-else class="code-viewer table-viewer" v-html="viewer.region.html" />
         </div>

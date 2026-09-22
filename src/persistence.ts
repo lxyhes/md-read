@@ -1,12 +1,13 @@
-import Database from '@tauri-apps/plugin-sql'
 import type { Annotation, DocumentRecord, ReaderDocument, ReadingProgress } from './types'
 
 const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
-let database: Awaited<ReturnType<typeof Database.load>> | null = null
+type DatabaseConnection = Awaited<ReturnType<typeof import('@tauri-apps/plugin-sql')['default']['load']>>
+let database: DatabaseConnection | null = null
 
 async function getDatabase() {
   if (!isTauri()) return null
   if (!database) {
+    const { default: Database } = await import('@tauri-apps/plugin-sql')
     database = await Database.load('sqlite:moyue.db')
     await database.execute(`CREATE TABLE IF NOT EXISTS documents (id TEXT PRIMARY KEY, path TEXT NOT NULL, title TEXT NOT NULL, source_hash TEXT NOT NULL, source TEXT, updated_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS progress (document_id TEXT PRIMARY KEY, region_id TEXT, heading_id TEXT, scroll_percent REAL NOT NULL, reading_time INTEGER NOT NULL, updated_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS annotations (id TEXT PRIMARY KEY, document_id TEXT NOT NULL, region_id TEXT NOT NULL, selected_text TEXT NOT NULL, color TEXT NOT NULL, note TEXT NOT NULL, created_at INTEGER NOT NULL);`)
   }
@@ -53,12 +54,16 @@ export async function saveProgress(progress: ReadingProgress): Promise<void> {
 }
 
 export async function getProgress(documentId: string): Promise<ReadingProgress | null> {
-  const local = readJson<ReadingProgress | null>(`moyue:progress:${documentId}`, null)
+  const local = getLocalProgress(documentId)
   if (local) return local
   const db = await getDatabase()
   if (!db) return null
   const rows = await db.select<ReadingProgress[]>('SELECT document_id as documentId, region_id as regionId, heading_id as headingId, scroll_percent as scrollPercent, reading_time as readingTime, updated_at as updatedAt FROM progress WHERE document_id = ?', [documentId])
   return rows[0] ?? null
+}
+
+export function getLocalProgress(documentId: string): ReadingProgress | null {
+  return readJson<ReadingProgress | null>(`moyue:progress:${documentId}`, null)
 }
 
 export async function saveAnnotation(annotation: Annotation): Promise<void> {

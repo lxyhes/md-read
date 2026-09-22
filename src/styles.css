@@ -513,7 +513,7 @@ html, body, #app { background: var(--app-bg, #070d22); }
   transition: transform .12s ease-out;
 }
 .viewer-stage.is-pan-enabled .image-viewer img {
-  transform: translate3d(var(--viewer-pan-x, 0px), var(--viewer-pan-y, 0px), 0) scale(var(--viewer-zoom, 1));
+  transform: translate3d(var(--viewer-pan-x, 0px), var(--viewer-pan-y, 0px), 0);
   transition: transform .12s ease-out;
 }
 .viewer-stage.is-pan-enabled.is-dragging .mermaid-block,
@@ -4501,6 +4501,105 @@ button:focus-visible,
 .app-shell:not(.is-focus) .reader-content .region-content pre,
 .app-shell.is-focus .reader-content .region-content pre {
   font-size: clamp(13px, calc(var(--reader-size) * .78), 19px);
+}
+
+/* Reading surface: keep the article dominant and reveal utilities only when useful. */
+.image-region .image-zoom-action {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  margin: 0;
+  background: color-mix(in srgb, var(--surface-raised) 88%, transparent);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--app-bg) 18%, transparent);
+  opacity: .9;
+  backdrop-filter: blur(8px);
+  transition: opacity .18s ease, transform .18s ease, background .18s ease;
+}
+.image-region .image-zoom-action:hover,
+.image-region:focus-within .image-zoom-action {
+  opacity: 1;
+  background: var(--surface-raised);
+  transform: translateY(-2px);
+}
+.viewer-stage .image-viewer img {
+  image-rendering: auto;
+  will-change: transform;
+}
+.app-shell:not(.is-focus) .reader-column > .reader-meta {
+  flex-wrap: nowrap;
+  gap: 10px;
+  background: color-mix(in srgb, var(--surface) 96%, var(--app-bg));
+}
+.reader-path {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  color: var(--muted);
+  letter-spacing: .07em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.app-shell:not(.is-focus) .reader-meta > .reader-stat {
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  opacity: .72;
+}
+.app-shell:not(.is-focus) .reader-meta > .reader-zoom-hint {
+  flex: 0 0 auto;
+  opacity: 0;
+  transform: translateX(4px);
+  transition: opacity .18s ease, transform .18s ease;
+}
+.app-shell:not(.is-focus) .reader-meta:hover > .reader-zoom-hint {
+  opacity: 1;
+  transform: none;
+}
+.app-shell:not(.is-focus) .reader-title {
+  margin-bottom: 0;
+}
+.app-shell:not(.is-focus) .reader-content .reader-rule {
+  margin-top: 27px;
+  margin-bottom: 38px;
+}
+.context-panel > .context-top {
+  padding-bottom: 15px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+}
+.context-panel .current-context {
+  margin: 18px 0 0;
+}
+.context-panel .context-actions {
+  margin-top: 9px;
+}
+.app-shell:not(.is-focus):not(.is-region-focus) .reader-content .region-block:not(.region-heading),
+.app-shell:not(.is-focus):not(.is-region-focus) .reader-content .region-block:not(.region-heading):hover,
+.app-shell:not(.is-focus):not(.is-region-focus) .reader-content .region-block:not(.region-heading).active {
+  border-left-color: transparent;
+  background: transparent;
+  transform: none;
+}
+.app-shell:not(.is-focus):not(.is-region-focus) .reader-content .region-block.region-heading:hover,
+.app-shell:not(.is-focus):not(.is-region-focus) .reader-content .region-block.region-heading.active {
+  border-left-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  background: color-mix(in srgb, var(--accent) 3%, transparent);
+}
+.reader-content .region-block:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
+}
+.app-shell.is-clean .reading-quick-actions {
+  right: 20px;
+  bottom: 20px;
+  background: var(--surface-raised);
+  backdrop-filter: none;
+}
+@media (min-width: 1181px) {
+  .app-shell:not(.is-focus) .reader-layout {
+    grid-template-columns: 204px minmax(0, 1fr) 220px;
+  }
 }
 
 /* Keep the resume prompt in the reader flow so it never covers document text. */

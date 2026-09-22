@@ -4,11 +4,18 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#151311" />
-    <link rel="icon" type="image/png" href="/moyue-logo.png" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>墨阅 · Moyue Reader</title>
+    <style>
+      html, body { min-width: 1080px; min-height: 100%; margin: 0; background: #0b1224; }
+      #startup-splash { position: fixed; inset: 0; display: grid; place-content: center; gap: 8px; color: #edf2ff; font: 14px "Segoe UI", sans-serif; text-align: center; }
+      #startup-splash small { color: #9eacd0; font-size: 11px; }
+      #startup-splash i { width: 28px; height: 28px; margin: 0 auto 8px; border: 2px solid rgba(170,162,255,.25); border-top-color: #aaa2ff; border-radius: 50%; animation: startup-spin .8s linear infinite; }
+      @keyframes startup-spin { to { transform: rotate(360deg); } }
+    </style>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app"><div id="startup-splash" role="status" aria-live="polite"><i></i><strong>正在恢复阅读空间</strong><small>正在载入最近文档与阅读位置</small></div></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

@@ -49,25 +49,59 @@ fn open_directory(path: String) -> Result<(), String> {
     result.map(|_| ()).map_err(|error| format!("打开目录失败：{error}"))
 }
 
+fn is_allowed_external_url(url: &str) -> bool {
+    let normalized = url.trim().to_ascii_lowercase();
+    normalized.starts_with("https://")
+        || normalized.starts_with("http://")
+        || normalized.starts_with("mailto:")
+        || normalized.starts_with("tel:")
+        || normalized.starts_with("//")
+}
+
+#[tauri::command]
+fn open_external_url(url: String) -> Result<(), String> {
+    let value = url.trim();
+    if !is_allowed_external_url(value) {
+        return Err("仅支持 http、https、mailto、tel 链接".into());
+    }
+
+    #[cfg(target_os = "windows")]
+    let result = Command::new("explorer.exe").arg(value).spawn();
+    #[cfg(target_os = "macos")]
+    let result = Command::new("open").arg(value).spawn();
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let result = Command::new("xdg-open").arg(value).spawn();
+
+    result.map(|_| ()).map_err(|error| format!("打开链接失败：{error}"))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
-        .invoke_handler(tauri::generate_handler![allow_asset_directory, read_local_image, open_directory])
+        .invoke_handler(tauri::generate_handler![allow_asset_directory, read_local_image, open_directory, open_external_url])
         .run(tauri::generate_context!())
         .expect("error while running Moyue application");
 }
 
 #[cfg(test)]
 mod tests {
-    use super::is_image;
+    use super::{is_allowed_external_url, is_image};
     use std::path::Path;
 
     #[test]
     fn only_reads_images() {
         assert!(is_image(Path::new("cover.PNG")));
         assert!(!is_image(Path::new("notes.md")));
+    }
+
+    #[test]
+    fn only_opens_safe_external_urls() {
+        assert!(is_allowed_external_url("https://example.com/read"));
+        assert!(is_allowed_external_url("mailto:hello@example.com"));
+        assert!(!is_allowed_external_url("javascript:alert(1)"));
+        assert!(!is_allowed_external_url("C:/notes/readme.md"));
     }
 }

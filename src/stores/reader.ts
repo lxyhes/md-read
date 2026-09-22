@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { deleteDocument, getProgress, loadAnnotations, loadDocumentSnapshots, saveAnnotation, saveDocument, saveDocumentSnapshot, saveProgress } from '../persistence'
+import { deleteDocument, getLocalProgress, getProgress, loadAnnotations, loadDocumentSnapshots, saveAnnotation, saveDocument, saveDocumentSnapshot, saveProgress } from '../persistence'
 import { authorizeMarkdownAssets, createTauriAssetMap, openMarkdownFile, openMarkdownFolder, resolveMarkdownAssetUrl, type OpenedFile } from '../fileService'
 import { builtInThemes, cssVariables, defaultTokens } from '../themes'
 const SESSION_KEY = 'moyue:reader-session'
@@ -118,8 +118,15 @@ export const useReaderStore = defineStore('reader', () => {
   async function bootstrap() {
     const saved = loadDocumentSnapshots()
     if (saved.length) {
-      documents.value = await Promise.all(saved.map((document) => parseOpenedFile({ path: document.path, source: document.source })))
-      for (const document of documents.value) await saveDocumentSnapshot(document)
+      const needsAssetRefresh = (document: ReaderDocument) => document.regions.some((region) => region.type === 'image' && String(region.metadata?.url ?? '').startsWith('blob:'))
+      const stale = saved.filter(needsAssetRefresh)
+      if (!stale.length) documents.value = saved
+      else {
+        const refreshed = await Promise.all(stale.map((document) => parseOpenedFile({ path: document.path, source: document.source })))
+        const refreshedById = new Map(refreshed.map((document) => [document.id, document]))
+        documents.value = saved.map((document) => refreshedById.get(document.id) ?? document)
+        for (const document of refreshed) await saveDocumentSnapshot(document)
+      }
     }
     else {
       const { parseMarkdown } = await import('../parser')
@@ -131,13 +138,13 @@ export const useReaderStore = defineStore('reader', () => {
     if (!openDocumentIds.value.length) openDocumentIds.value = [documents.value[0].id]
     applyTheme(activeTheme.value)
     const initialId = session.currentDocumentId && openDocumentIds.value.includes(session.currentDocumentId) ? session.currentDocumentId : openDocumentIds.value[0]
-    await openDocument(initialId)
+    await openDocument(initialId, { deferProgress: true })
   }
 
   async function importFiles() { return addOpenedFiles(await openMarkdownFile()) }
   async function importFolder() { return addOpenedFiles(await openMarkdownFolder()) }
 
-  async function openDocument(id: string) {
+  async function openDocument(id: string, options: { deferProgress?: boolean } = {}) {
     const document = documents.value.find((item) => item.id === id)
     if (!document) return
     if (!openDocumentIds.value.includes(id)) openDocumentIds.value.push(id)
@@ -149,12 +156,24 @@ export const useReaderStore = defineStore('reader', () => {
     focusedRegionId.value = null
     selection.value = null
     annotations.value = loadAnnotations(id)
-    const saved = await getProgress(id)
-    if (saved) {
+    const localProgress = getLocalProgress(id)
+    const applyProgress = (saved: ReadingProgress | null) => {
+      if (!saved) return
       progress.value[id] = saved
       activeRegionId.value = saved.regionId
       activeHeadingId.value = saved.headingId
     }
+    if (localProgress) {
+      applyProgress(localProgress)
+      return
+    }
+    if (options.deferProgress) {
+      void getProgress(id).then((saved) => {
+        if (currentDocumentId.value === id && !getLocalProgress(id)) applyProgress(saved)
+      }).catch(() => {})
+      return
+    }
+    applyProgress(await getProgress(id))
   }
 
   async function closeDocument(id: string) {
