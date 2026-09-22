@@ -1837,7 +1837,7 @@ async function requestFullscreen() {
           </aside>
           <div class="reader-column">
             <div class="reader-meta">
-              <span class="section-kicker reader-path" :title="store.currentDocument?.path">{{ store.currentDocument?.path }}</span>
+              <span class="section-kicker reader-path" :title="store.currentDocument?.path"><AppIcon name="file" :size="13" /><span class="reader-path-value">{{ store.currentDocument?.path }}</span></span>
               <span class="reader-stat">{{ store.currentDocument?.wordCount }} 字 · 约 {{ store.currentDocument?.estimatedReadMinutes }} 分钟</span>
               <span class="reader-zoom-hint" title="使用快捷键调整阅读字号"><kbd>Ctrl / Cmd + + / -</kbd><span>调整字号</span></span>
               <div class="reader-navigation" aria-label="阅读位置与跳转">

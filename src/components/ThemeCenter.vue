@@ -72,7 +72,7 @@ async function onThemeFile(event: Event) {
 <template>
   <section class="page themes-page">
     <div class="page-heading">
-      <div><p class="section-kicker">THEME PACKAGE SYSTEM</p><h1>主题，让阅读<br /><em>拥有自己的气候。</em></h1></div>
+      <div><p class="section-kicker">阅读设置</p><h1>主题中心</h1><p class="theme-page-lede">管理阅读界面的颜色和排版。</p></div>
       <div class="toolbar-actions">
         <input ref="themeInput" type="file" accept=".moyue-theme,.zip" hidden @change="onThemeFile" />
         <button class="ghost-button" type="button" @click="themeInput?.click()"><AppIcon name="download" :size="14" />导入主题包</button>
@@ -94,7 +94,7 @@ async function onThemeFile(event: Event) {
         <button class="theme-card create-theme" type="button" @click="createCustomTheme"><span><AppIcon name="plus" :size="22" /></span><small>创建新主题</small></button>
       </div>
       <ThemeEditor v-if="themeDraft" v-model="themeDraft" @preview="applyDraft" @apply="saveDraft" />
-      <div v-else class="theme-empty-state"><span><AppIcon name="sparkle" :size="30" /></span><strong>选择一个主题开始编辑</strong><small>颜色、宽度、字号和阅读气候都会实时预览</small></div>
+      <div v-else class="theme-empty-state"><span><AppIcon name="palette" :size="24" /></span><strong>选择一个主题</strong><small>选择后可编辑颜色、宽度和字号</small></div>
     </div>
   </section>
 </template>

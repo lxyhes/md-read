@@ -34,9 +34,9 @@ function apply() { emit('apply', clone(draft.value)) }
   <div class="theme-editor">
     <div class="editor-head">
       <div>
-        <span class="section-kicker">LIVE EDITOR</span>
+        <span class="section-kicker">主题编辑</span>
         <h2>{{ draft.manifest.name }}</h2>
-        <small class="editor-subtitle">{{ draft.manifest.description || '为你的长文阅读调一层自己的光。' }}</small>
+        <small class="editor-subtitle">{{ draft.manifest.description || '调整颜色和阅读排版。' }}</small>
       </div>
       <div class="toolbar-actions">
         <button class="ghost-button" type="button" @click="preview"><AppIcon name="eye" :size="14" />预览</button>
@@ -76,9 +76,9 @@ function apply() { emit('apply', clone(draft.value)) }
     </div>
 
     <div class="theme-preview">
-      <span class="section-kicker">REAL-TIME PREVIEW</span>
-      <h3>一段值得停留的文字</h3>
-      <p>主题不是表面装饰，而是内容与注意力之间的缓冲层。调节颜色、宽度和字体，让它更像你的阅读空间。</p>
+      <span class="section-kicker">预览</span>
+      <h3>正文预览</h3>
+      <p>主题会应用到正文、代码块和辅助面板。</p>
       <code>const focus = region =&gt; reader.enter(focus)</code>
     </div>
   </div>

@@ -4069,14 +4069,16 @@ button:focus-visible,
   flex: 0 0 auto;
   width: min(var(--reader-width), calc(100% - 64px));
   margin: 0 auto;
-  border-bottom: 0;
-  background: color-mix(in srgb, var(--surface) 94%, transparent);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
+  min-height: 47px;
+  padding: 10px 0 11px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 54%, transparent);
+  background: transparent;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--surface-raised) 22%, transparent);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 .app-shell:not(.is-focus) .reader-column > .reader-meta {
   padding-top: 8px;
-  border-bottom: 0;
 }
 .reader-column > .reader-viewport {
   min-height: 0;
@@ -4502,34 +4504,118 @@ button:focus-visible,
 .app-shell:not(.is-focus) .reader-column > .reader-meta {
   flex-wrap: nowrap;
   gap: 10px;
-  background: color-mix(in srgb, var(--surface) 96%, var(--app-bg));
+  min-height: 47px;
+  padding: 9px 0 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 54%, transparent);
+  background: transparent;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--surface-raised) 22%, transparent);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 .reader-path {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
   flex: 1 1 auto;
   overflow: hidden;
-  color: var(--muted);
-  letter-spacing: .07em;
-  text-overflow: ellipsis;
+  color: color-mix(in srgb, var(--ink) 68%, var(--muted));
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .025em;
   white-space: nowrap;
 }
+.reader-path .app-icon {
+  flex: 0 0 auto;
+  color: var(--accent);
+  opacity: .82;
+}
+.reader-path-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .app-shell:not(.is-focus) .reader-meta > .reader-stat {
+  align-self: center;
   flex: 0 0 auto;
   padding: 0;
   border: 0;
   background: transparent;
   color: var(--muted);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  transform: translateY(2px);
   opacity: .72;
 }
+.app-shell:not(.is-focus) .reader-meta > .reader-stat::before {
+  display: inline-block;
+  width: 3px;
+  height: 3px;
+  margin: 0 10px 2px 0;
+  border-radius: 50%;
+  background: var(--accent);
+  content: "";
+  opacity: .7;
+}
 .app-shell:not(.is-focus) .reader-meta > .reader-zoom-hint {
+  align-self: center;
   flex: 0 0 auto;
   opacity: 0;
-  transform: translateX(4px);
+  line-height: 1;
+  transform: translate(4px, 2px);
   transition: opacity .18s ease, transform .18s ease;
 }
 .app-shell:not(.is-focus) .reader-meta:hover > .reader-zoom-hint {
   opacity: 1;
-  transform: none;
+  transform: translateY(2px);
+}
+.app-shell:not(.is-focus) .reader-zoom-hint kbd {
+  padding: 3px 6px;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--surface-raised) 44%, transparent);
+  color: var(--muted);
+  font-size: 9px;
+}
+.app-shell:not(.is-focus) .reader-zoom-hint span {
+  color: var(--muted);
+  opacity: .82;
+}
+.app-shell:not(.is-focus) .reader-navigation {
+  gap: 2px;
+  padding: 2px;
+  border-color: color-mix(in srgb, var(--border) 62%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-raised) 28%, transparent);
+}
+.app-shell:not(.is-focus) .reader-progress-label {
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--accent-soft) 28%, transparent);
+}
+.app-shell:not(.is-focus) .reader-navigation button {
+  padding: 4px 7px;
+}
+.app-shell.is-focus .reader-meta {
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 10px;
+}
+.app-shell.is-focus .reader-meta > .reader-stat,
+.app-shell.is-focus .reader-meta > .reader-zoom-hint {
+  align-self: center;
+  line-height: 1;
+  transform: translateY(2px);
+}
+.app-shell.is-focus .reader-meta > .reader-stat {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+.app-shell.is-focus .reader-meta > .reader-zoom-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 .app-shell:not(.is-focus) .reader-title {
   margin-bottom: 0;
@@ -4624,3 +4710,44 @@ body.is-resizing-outline * {
   flex: 0 0 auto;
 }
 .context-stat strong { color: var(--ink); font-weight: 500; }
+
+/* Theme center stays a tool: quiet chrome, clear hierarchy, no landing-page flourish. */
+.themes-page .page-heading {
+  align-items: center;
+  margin-bottom: 22px;
+}
+.themes-page .page-heading h1 {
+  margin: 9px 0 0;
+  font-size: 34px;
+  letter-spacing: -.035em;
+  line-height: 1.05;
+}
+.theme-page-lede {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font: 11px/1.5 var(--ui-font);
+}
+.themes-page .theme-center-toolbar {
+  margin-top: 0;
+  box-shadow: none;
+}
+.themes-page .theme-layout {
+  margin-top: 28px;
+}
+
+/* Dark theme cards: each keeps one restrained, theme-specific edge. */
+.app-shell:not(.is-focus) .theme-card:hover,
+.app-shell:not(.is-focus) .theme-card.selected {
+  border-color: var(--theme-accent);
+  box-shadow: none;
+}
+.app-shell:not(.is-focus) .theme-card-ember-paper .theme-card-meta,
+.app-shell:not(.is-focus) .theme-card-blue-hour .theme-card-meta {
+  border-top: 1px solid color-mix(in srgb, var(--theme-accent) 26%, transparent);
+}
+.app-shell:not(.is-focus) .theme-card-ember-paper .theme-card-meta {
+  background: color-mix(in srgb, var(--theme-surface) 88%, var(--theme-bg));
+}
+.app-shell:not(.is-focus) .theme-card-blue-hour .theme-card-meta {
+  background: color-mix(in srgb, var(--theme-surface) 91%, var(--theme-bg));
+}
