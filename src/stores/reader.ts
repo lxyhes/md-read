@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 import { deleteAnnotation, deleteDocument, getLocalProgress, getProgress, loadAnnotations, loadDocumentSnapshots, saveAnnotation, saveDocument, saveDocumentSnapshot, saveProgress } from '../persistence'
 import { authorizeMarkdownAssets, createTauriAssetMap, openMarkdownFile, openMarkdownFolder, resolveMarkdownAssetUrl, type OpenedFile } from '../fileService'
 import { builtInThemes, cssVariables, defaultTokens } from '../themes'
+import { interfaceFont } from '../fonts'
 const SESSION_KEY = 'moyue:reader-session'
 const THEME_KEY = 'moyue:theme'
 const DEFAULT_THEME_ID = 'paper-white'
@@ -31,9 +32,9 @@ export const useReaderStore = defineStore('reader', () => {
   const annotations = ref<Annotation[]>([])
   const themes = ref<MoyueTheme[]>([...builtInThemes])
   const savedThemeId = localStorage.getItem(THEME_KEY)
-  const activeThemeId = ref(savedThemeId === 'ember-paper' ? DEFAULT_THEME_ID : savedThemeId || DEFAULT_THEME_ID)
+  const activeThemeId = ref(savedThemeId && builtInThemes.some((theme) => theme.manifest.id === savedThemeId) ? savedThemeId : DEFAULT_THEME_ID)
   const savedSettings = readSettings()
-  const readerSettings = ref({ fontSize: savedSettings.fontSize, lineHeight: savedSettings.lineHeight, width: savedSettings.width, fontFamily: savedSettings.fontFamily })
+  const readerSettings = ref({ fontSize: savedSettings.fontSize, lineHeight: savedSettings.lineHeight, width: savedSettings.width, fontFamily: savedSettings.fontFamily, interfaceFontFamily: savedSettings.interfaceFontFamily })
   const currentDocument = computed(() => documents.value.find((document) => document.id === currentDocumentId.value) ?? null)
   const activeTheme = computed(() => themes.value.find((theme) => theme.manifest.id === activeThemeId.value) ?? themes.value[0])
 
@@ -48,7 +49,9 @@ export const useReaderStore = defineStore('reader', () => {
     variables['--reader-width'] = `${readerSettings.value.width}px`
     variables['--reader-size'] = `${readerSettings.value.fontSize}px`
     variables['--reader-leading'] = String(readerSettings.value.lineHeight)
-    variables['--reader-font'] = readerSettings.value.fontFamily
+    variables['--reader-font'] = readerSettings.value.fontFamily || theme.tokens.reader.fontFamily || defaultTokens.reader.fontFamily
+    variables['--ui-font'] = readerSettings.value.interfaceFontFamily || interfaceFont
+    variables['--shell-font'] = readerSettings.value.interfaceFontFamily || interfaceFont
     for (const [name, value] of Object.entries(variables)) document.documentElement.style.setProperty(name, value)
   }
 
@@ -238,6 +241,7 @@ export const useReaderStore = defineStore('reader', () => {
   function updateSettings(settings: Partial<typeof readerSettings.value>) {
     readerSettings.value = { ...readerSettings.value, ...settings }
     localStorage.setItem('moyue:reader-settings', JSON.stringify(readerSettings.value))
+    applyTheme(activeTheme.value)
   }
 
   const openDocuments = computed(() => openDocumentIds.value.map((id) => documents.value.find((document) => document.id === id)).filter((document): document is ReaderDocument => Boolean(document)))
@@ -247,9 +251,12 @@ export const useReaderStore = defineStore('reader', () => {
 
 function readSettings() {
   try {
-    const saved = JSON.parse(localStorage.getItem('moyue:reader-settings') ?? '{}') as Partial<typeof defaultTokens.reader>
-    return { ...defaultTokens.reader, ...saved }
+    const saved = JSON.parse(localStorage.getItem('moyue:reader-settings') ?? '{}') as Partial<typeof defaultTokens.reader> & { interfaceFontFamily?: string }
+    return { ...defaultTokens.reader, ...saved,
+      fontFamily: typeof saved?.fontFamily === 'string' && saved.fontFamily !== defaultTokens.reader.fontFamily ? saved.fontFamily : '',
+      interfaceFontFamily: typeof saved?.interfaceFontFamily === 'string' ? saved.interfaceFontFamily : '',
+    }
   } catch {
-    return { ...defaultTokens.reader }
+    return { ...defaultTokens.reader, fontFamily: '', interfaceFontFamily: '' }
   }
 }

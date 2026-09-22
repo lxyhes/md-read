@@ -145,10 +145,10 @@ button:disabled { cursor: wait; opacity: .58; transform: none !important; }
 .focus-session-meta i { width: 6px; height: 6px; border-radius: 50%; background: var(--focus-accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--focus-accent) 13%, transparent); }
 .focus-outline-empty { margin: 18px 0 2px; color: var(--focus-muted); font: 10px/1.6 var(--ui-font); }
 
-.ambience-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.ambience-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .ambience-grid .ambience-option { position: relative; display: flex; min-width: 0; min-height: 112px; flex-direction: column; align-items: stretch; padding: 0; overflow: hidden; border: 1px solid var(--ambience-border); border-radius: 11px; background: var(--ambience-surface); color: var(--ambience-ink); text-align: left; transition: transform .25s ease, border-color .25s ease, box-shadow .25s ease; }
-.ambience-grid .ambience-option:hover { transform: translateY(-2px); border-color: var(--ambience-accent); box-shadow: 0 8px 22px color-mix(in srgb, var(--ambience-accent) 18%, transparent); }
-.ambience-grid .ambience-option.selected { border-color: var(--ambience-accent); background: var(--ambience-surface); box-shadow: 0 0 0 1px color-mix(in srgb, var(--ambience-accent) 34%, transparent), 0 9px 25px color-mix(in srgb, var(--ambience-accent) 16%, transparent); }
+.ambience-grid .ambience-option:hover { transform: none; border-color: var(--ambience-accent); box-shadow: none; }
+.ambience-grid .ambience-option.selected { border-color: var(--ambience-accent); background: var(--ambience-surface); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ambience-accent) 22%, transparent); }
 .ambience-preview { position: relative; display: block !important; height: 64px; flex: 0 0 64px; overflow: hidden; color: transparent !important; font-size: 0 !important; }
 .ambience-preview::before, .ambience-preview::after, .ambience-preview i { position: absolute; display: block; content: ""; }
 .ambience-copy { display: block !important; min-width: 0; padding: 8px 8px 9px; }
@@ -227,8 +227,8 @@ button:disabled { cursor: wait; opacity: .58; transform: none !important; }
 
 /* Keep every non-focus surface driven by the active Moyue theme tokens. */
 html, body, #app { background: var(--app-bg, #070d22); }
-.app-shell:not(.is-focus) { background: radial-gradient(circle at 70% -8%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 34%), radial-gradient(circle at 16% 100%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 36%), var(--app-bg); border-color: color-mix(in srgb, var(--border) 86%, transparent); box-shadow: 0 28px 90px color-mix(in srgb, var(--app-bg) 72%, #000); }
-.app-shell:not(.is-focus)::before { opacity: .18; background: linear-gradient(145deg, transparent 0 44%, color-mix(in srgb, var(--accent) 14%, transparent) 44.2% 44.6%, transparent 44.8% 100%), linear-gradient(31deg, transparent 0 67%, color-mix(in srgb, var(--accent) 10%, transparent) 67.2% 67.7%, transparent 68% 100%); }
+.app-shell:not(.is-focus) { background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 18%, var(--app-bg)), var(--app-bg)); border-color: color-mix(in srgb, var(--border) 86%, transparent); box-shadow: none; }
+.app-shell:not(.is-focus)::before { opacity: 0; }
 .app-shell:not(.is-focus) .global-nav { border-right-color: var(--border); background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 92%, var(--app-bg)), var(--app-bg)); box-shadow: 12px 0 36px color-mix(in srgb, var(--app-bg) 25%, transparent); }
 .app-shell:not(.is-focus) .brand-mark small, .app-shell:not(.is-focus) .nav-section-label, .app-shell:not(.is-focus) .nav-motto { color: var(--muted); }
 .app-shell:not(.is-focus) .brand-mark span { border-color: color-mix(in srgb, var(--accent) 65%, var(--border)); background: color-mix(in srgb, var(--accent) 20%, var(--surface)); color: var(--accent); box-shadow: 0 0 22px color-mix(in srgb, var(--accent) 23%, transparent); }
@@ -4711,6 +4711,17 @@ body.is-resizing-outline * {
 }
 .context-stat strong { color: var(--ink); font-weight: 500; }
 
+/* User font preferences apply to every reading mode; code keeps its own family. */
+.app-shell { font-family: var(--shell-font, "Iowan Old Style", "Palatino Linotype", Georgia, serif); }
+.reader-content { font-family: var(--reader-font, "Iowan Old Style", "Palatino Linotype", Georgia, serif); }
+.app-shell .settings-grid .font-settings-card { grid-column: 1 / -1; min-width: 0; }
+.font-settings-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 22px; }
+.font-settings-heading h2 { margin: 8px 0 0; font-size: 24px; }
+.font-settings-heading > span { color: var(--muted); font: 11px var(--ui-font); }
+.interface-font-setting { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--border); }
+.interface-font-setting p { margin: 0; color: var(--muted); font: 11px/1.6 var(--ui-font); }
+.reader-meta > .font-picker { margin-left: auto; }
+
 /* Theme center stays a tool: quiet chrome, clear hierarchy, no landing-page flourish. */
 .themes-page .page-heading {
   align-items: center;
@@ -4734,20 +4745,112 @@ body.is-resizing-outline * {
 .themes-page .theme-layout {
   margin-top: 28px;
 }
+.theme-editor .editor-head {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.theme-editor .editor-head .toolbar-actions,
+.theme-editor .editor-head button {
+  white-space: nowrap;
+}
+.themes-page .editor-subtitle {
+  color: var(--muted);
+}
+.themes-page .editor-section-nav button span,
+.themes-page .theme-empty-state > span {
+  color: var(--accent);
+}
+.themes-page .primary-button {
+  color: var(--app-bg);
+}
+.themes-page :is(.ghost-button, .primary-button):hover {
+  transform: none;
+}
+.themes-page .segmented-tabs button.active,
+.themes-page .segmented-tabs button:hover {
+  box-shadow: none;
+}
 
-/* Dark theme cards: each keeps one restrained, theme-specific edge. */
+@media (max-width: 1320px) {
+  .theme-editor {
+    grid-template-columns: 120px minmax(0, 1fr);
+    gap: 0 14px;
+  }
+}
+
+/* Built-in themes share structure; color and one quiet motif carry the identity. */
 .app-shell:not(.is-focus) .theme-card:hover,
 .app-shell:not(.is-focus) .theme-card.selected {
   border-color: var(--theme-accent);
   box-shadow: none;
+  transform: none;
 }
-.app-shell:not(.is-focus) .theme-card-ember-paper .theme-card-meta,
-.app-shell:not(.is-focus) .theme-card-blue-hour .theme-card-meta {
+.app-shell:not(.is-focus) .theme-card .swatch-line {
+  box-shadow: none;
+}
+.app-shell:not(.is-focus) .theme-card .theme-card-meta {
   border-top: 1px solid color-mix(in srgb, var(--theme-accent) 26%, transparent);
+}
+.app-shell:not(.is-focus) .theme-card .theme-card-meta span:first-child {
+  font-weight: 600;
+  letter-spacing: .025em;
 }
 .app-shell:not(.is-focus) .theme-card-ember-paper .theme-card-meta {
   background: color-mix(in srgb, var(--theme-surface) 88%, var(--theme-bg));
 }
+.app-shell:not(.is-focus) .theme-card-quiet-moss .theme-card-meta {
+  background: color-mix(in srgb, var(--theme-surface) 94%, var(--theme-bg));
+}
+.app-shell:not(.is-focus) .theme-card-paper-white .theme-card-meta {
+  background: var(--theme-surface-raised);
+}
 .app-shell:not(.is-focus) .theme-card-blue-hour .theme-card-meta {
   background: color-mix(in srgb, var(--theme-surface) 91%, var(--theme-bg));
+}
+.app-shell:not(.is-focus) .theme-card-ember-paper .theme-swatch strong,
+.app-shell:not(.is-focus) .theme-card-blue-hour .theme-swatch strong {
+  text-shadow: 0 1px 6px color-mix(in srgb, var(--theme-bg) 78%, #000);
+}
+.app-shell:not(.is-focus) .theme-card-quiet-moss .theme-swatch strong,
+.app-shell:not(.is-focus) .theme-card-paper-white .theme-swatch strong {
+  text-shadow: none;
+}
+
+/* Reading surfaces stay calm and materially different without decorative glow. */
+.app-shell.theme-ember-paper:not(.is-focus) .reader-page {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 50%, var(--app-bg)), var(--app-bg));
+}
+.app-shell.theme-ember-paper:not(.is-focus) .reader-page::before {
+  opacity: .14;
+  background: radial-gradient(circle at 82% 16%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 22%);
+}
+.app-shell.theme-quiet-moss:not(.is-focus) .reader-page {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface-raised) 76%, var(--app-bg)), var(--app-bg));
+}
+.app-shell.theme-quiet-moss:not(.is-focus) .reader-page::before,
+.app-shell.theme-paper-white:not(.is-focus) .reader-page::before {
+  opacity: 0;
+}
+.app-shell.theme-paper-white:not(.is-focus) .reader-page {
+  background: var(--surface-raised);
+}
+.app-shell.theme-blue-hour:not(.is-focus) .reader-page {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 72%, var(--app-bg)), var(--app-bg));
+}
+.app-shell.theme-blue-hour:not(.is-focus) .reader-page::before {
+  opacity: .12;
+  background: linear-gradient(176deg, transparent 0 58%, color-mix(in srgb, var(--accent) 16%, transparent) 58.2% 58.5%, transparent 58.7%);
+}
+.app-shell:not(.is-focus) .reader-content .code-frame,
+.app-shell:not(.is-focus) .reader-content .table-scroll {
+  box-shadow: none;
+}
+
+/* Focus mode uses the same restrained system and exposes all four themes. */
+.app-shell.is-focus .reader-page::before {
+  opacity: .08;
+}
+.app-shell.is-focus .focus-timer-card,
+.app-shell.is-focus .focus-timer-ring {
+  box-shadow: none;
 }
