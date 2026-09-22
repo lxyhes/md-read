@@ -29,7 +29,7 @@
   },
   "bundle": {
     "active": true,
-    "icon": ["icons/icon.ico", "icons/icon.png"],
+    "icon": ["icons/moyue-simple/icon.ico", "icons/moyue-simple/icon.png"],
     "targets": "all",
     "resources": [],
     "windows": { "nsis": { "installMode": "currentUser" } }
