@@ -59,7 +59,7 @@ async function render() {
         edgeLabelBackground: token('--surface', colors.surface),
         fontFamily: token('--ui-font', '"Aptos", "Segoe UI", sans-serif'),
         fontSize: '14px',
-        fontWeight: '500',
+        fontWeight: '400',
       },
       flowchart: { htmlLabels: !props.nativeLabels, nodeSpacing: 36, rankSpacing: 50, padding: 18, wrappingWidth: 260, curve: 'basis' },
     })

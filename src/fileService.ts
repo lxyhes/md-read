@@ -1,6 +1,6 @@
 import { convertFileSrc, invoke, isTauri as tauriIsTauri } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
-import { copyFile, mkdir, readDir, readTextFile, remove, rename, watch, writeTextFile } from '@tauri-apps/plugin-fs'
+import { copyFile, mkdir, readDir, readTextFile, rename, watch, writeTextFile } from '@tauri-apps/plugin-fs'
 
 const isTauri = () => tauriIsTauri()
 
@@ -157,12 +157,6 @@ export async function listFileSystemEntries(path: string): Promise<FileSystemEnt
 export async function readMarkdownPath(path: string): Promise<string> {
   if (!isTauri()) throw new Error('浏览器预览无法读取未载入文件，请使用桌面端打开')
   return readTextFile(path)
-}
-
-export async function deleteMarkdownPath(path: string): Promise<void> {
-  if (!isTauri()) throw new Error('浏览器预览无法删除文件，请使用桌面端打开')
-  if (!/\.(md|markdown)$/i.test(path)) throw new Error('只能删除 Markdown 文件')
-  await remove(path, { recursive: false })
 }
 
 export async function createMarkdownFile(path: string, source = ''): Promise<void> {

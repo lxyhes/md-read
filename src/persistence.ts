@@ -74,6 +74,14 @@ export async function saveAnnotation(annotation: Annotation): Promise<void> {
   await db?.execute('INSERT OR REPLACE INTO annotations (id, document_id, region_id, selected_text, color, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)', [annotation.id, annotation.documentId, annotation.regionId, annotation.selectedText, annotation.color, annotation.note, annotation.createdAt])
 }
 
+export async function deleteAnnotation(annotation: Annotation): Promise<void> {
+  const key = `moyue:annotations:${annotation.documentId}`
+  const existing = readJson<Annotation[]>(key, [])
+  writeJson(key, existing.filter((item) => item.id !== annotation.id))
+  const db = await getDatabase()
+  await db?.execute('DELETE FROM annotations WHERE id = ?', [annotation.id])
+}
+
 export function loadAnnotations(documentId: string): Annotation[] {
   return readJson<Annotation[]>(`moyue:annotations:${documentId}`, [])
 }
