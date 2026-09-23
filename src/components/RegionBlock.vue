@@ -24,6 +24,10 @@ const isDiagramLike = computed(() => Boolean(asciiTree.value || asciiDiagramCode
 const codeLineCount = computed(() => Math.max(1, props.region.textContent.split(/\r?\n/).length))
 const focusDistanceClass = computed(() => `focus-distance-${Math.min(3, Math.max(0, props.focusDistance ?? 0))}`)
 const regionAnnotations = computed(() => props.annotations?.filter((annotation) => annotation.regionId === props.region.id) ?? [])
+const regionRoot = ref<HTMLElement | null>(null)
+const codeVisible = ref(false)
+let codeVisibilityObserver: IntersectionObserver | null = null
+let codeRequest = 0
 
 function highlightedHtml(source: string) {
   if (typeof document === 'undefined' || !regionAnnotations.value.length || props.region.type === 'code') return source
@@ -57,13 +61,38 @@ async function updateCode() {
     highlighted.value = props.region.html
     return
   }
+  const request = ++codeRequest
   const { highlightCode } = await import('../highlight')
-  highlighted.value = await highlightCode(props.region.textContent, String(props.region.metadata?.language ?? 'text'), props.themeMode)
+  const html = await highlightCode(props.region.textContent, String(props.region.metadata?.language ?? 'text'), props.themeMode)
+  if (request === codeRequest) highlighted.value = html
 }
-onMounted(updateCode)
-watch(() => [props.region, props.themeMode], updateCode)
+function observeCode() {
+  if (props.region.type !== 'code') return
+  if (typeof IntersectionObserver === 'undefined') {
+    codeVisible.value = true
+    void updateCode()
+    return
+  }
+  codeVisibilityObserver = new IntersectionObserver((entries) => {
+    if (!entries[0]?.isIntersecting) return
+    codeVisible.value = true
+    codeVisibilityObserver?.disconnect()
+    codeVisibilityObserver = null
+    void updateCode()
+  }, { rootMargin: '240px 0px' })
+  if (regionRoot.value) codeVisibilityObserver.observe(regionRoot.value)
+}
+onMounted(observeCode)
+watch(() => [props.region, props.themeMode], () => {
+  if (props.region.type !== 'code') {
+    highlighted.value = props.region.html
+    return
+  }
+  if (codeVisible.value) void updateCode()
+})
 onUnmounted(() => {
   if (copyTimer) window.clearTimeout(copyTimer)
+  codeVisibilityObserver?.disconnect()
 })
 
 async function copyCode() {
@@ -118,7 +147,7 @@ function handleContentClick(event: MouseEvent) {
 </script>
 
 <template>
-  <article :data-region-id="region.id" class="region-block" :class="[`region-${region.type}`, focusDistanceClass, { focused, active }]" tabindex="0" @click="emit('focus')" @keydown.enter.self.prevent="emit('focus')" @keydown.space.self.prevent="emit('focus')">
+  <article ref="regionRoot" :data-region-id="region.id" class="region-block" :class="[`region-${region.type}`, focusDistanceClass, { focused, active }]" tabindex="0" @click="emit('focus')" @keydown.enter.self.prevent="emit('focus')" @keydown.space.self.prevent="emit('focus')">
       <div v-if="region.type === 'mermaid'" class="region-content" @click.stop="emit('openViewer')">
       <MermaidBlock :code="String(region.metadata?.code ?? region.textContent)" :theme-key="themeKey" />
     </div>
