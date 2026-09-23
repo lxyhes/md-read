@@ -5757,3 +5757,262 @@ body.is-resizing-outline * {
 .reader-content .region-content .task-item.is-checked .task-checkbox {
   color: var(--app-bg);
 }
+
+/* Theme cards are small editorial covers: the copy and the motif change with the theme. */
+.app-shell:not(.is-focus) .theme-card .theme-swatch {
+  min-height: 182px;
+  padding: 16px 17px 17px;
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--theme-bg);
+  color: var(--theme-ink);
+}
+.app-shell:not(.is-focus) .theme-card .theme-swatch::before {
+  z-index: 0;
+  opacity: .95;
+  filter: none;
+  transform: none;
+}
+.app-shell:not(.is-focus) .theme-card .theme-swatch::after {
+  z-index: 0;
+}
+.app-shell:not(.is-focus) .theme-card .theme-swatch > * {
+  z-index: 2;
+}
+.app-shell:not(.is-focus) .theme-card .swatch-line {
+  width: 34px;
+  height: 2px;
+  margin-bottom: 8px;
+  border-radius: 0;
+  background: var(--theme-accent);
+  opacity: .86;
+}
+.app-shell:not(.is-focus) .theme-card-kicker {
+  display: block;
+  color: var(--theme-muted);
+  font: 9px/1.2 var(--mono);
+  letter-spacing: .13em;
+  opacity: .88;
+}
+.app-shell:not(.is-focus) .theme-card-mark {
+  position: absolute;
+  top: 15px;
+  right: 17px;
+  display: grid;
+  place-items: center;
+  width: 31px;
+  height: 31px;
+  color: var(--theme-accent);
+  font: 17px/1 var(--reader-font, serif);
+  opacity: .84;
+}
+.app-shell:not(.is-focus) .theme-card-copy {
+  position: absolute;
+  right: 17px;
+  bottom: 17px;
+  left: 17px;
+  display: grid;
+  gap: 4px;
+}
+.app-shell:not(.is-focus) .theme-card-copy strong {
+  margin: 0;
+  color: var(--theme-ink);
+  font: 400 31px/1 var(--reader-font, serif);
+  letter-spacing: .08em;
+  text-shadow: none;
+}
+.app-shell:not(.is-focus) .theme-card-copy small {
+  margin: 0;
+  color: var(--theme-muted);
+  font: 10px/1.3 var(--ui-font);
+  letter-spacing: .06em;
+}
+.app-shell:not(.is-focus) .theme-card .theme-card-meta {
+  min-height: 39px;
+  padding: 10px 13px;
+  border-top-color: color-mix(in srgb, var(--theme-ink) 14%, transparent);
+  background: color-mix(in srgb, var(--theme-surface) 84%, var(--theme-bg));
+}
+.app-shell:not(.is-focus) .theme-card.selected .theme-swatch {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--theme-accent) 55%, transparent);
+}
+
+/* 月影深蓝：月相、深水与一条冷静的地平线。 */
+.app-shell:not(.is-focus) .theme-card-ember-paper .theme-swatch {
+  background: #101936;
+  color: #edf0ff;
+}
+.app-shell:not(.is-focus) .theme-card-ember-paper .theme-swatch::before {
+  background:
+    radial-gradient(circle at 78% 25%, rgba(225, 227, 255, .92) 0 2.6%, transparent 3.2%),
+    radial-gradient(circle at 78% 25%, rgba(154, 151, 255, .24), transparent 20%),
+    radial-gradient(ellipse at 54% 92%, rgba(63, 84, 145, .42), transparent 47%),
+    linear-gradient(180deg, #111b3a 0 66%, #0d152d 66.5% 100%);
+}
+.app-shell:not(.is-focus) .theme-card-ember-paper .theme-swatch::after {
+  top: 66%;
+  right: -8%;
+  left: -8%;
+  height: 1px;
+  background: rgba(175, 180, 244, .55);
+  box-shadow: 0 7px 0 rgba(175, 180, 244, .12);
+  content: "";
+  transform: rotate(-2deg);
+}
+.app-shell:not(.is-focus) .theme-card-ember-paper .theme-card-kicker,
+.app-shell:not(.is-focus) .theme-card-ember-paper .theme-card-copy small,
+.app-shell:not(.is-focus) .theme-card-ember-paper .theme-card-mark {
+  color: #b7b9ed;
+}
+.app-shell:not(.is-focus) .theme-card-ember-paper .theme-card-copy strong { color: #f1f0ff; }
+
+/* 静默苔原：暖纸、苔痕与一块慢慢长出的阴影。 */
+.app-shell:not(.is-focus) .theme-card-quiet-moss .theme-swatch::before {
+  background:
+    radial-gradient(ellipse 62% 43% at 79% 91%, rgba(102, 119, 100, .27), transparent 70%),
+    radial-gradient(ellipse 30% 16% at 18% 78%, rgba(102, 119, 100, .12), transparent 72%),
+    repeating-linear-gradient(98deg, transparent 0 27px, rgba(80, 98, 82, .025) 28px 29px, transparent 30px 55px),
+    #f1eee5;
+}
+.app-shell:not(.is-focus) .theme-card-quiet-moss .theme-swatch::after {
+  right: 12%;
+  bottom: 28%;
+  width: 32px;
+  height: 10px;
+  border-top: 1px solid rgba(91, 111, 94, .42);
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: -28px 8px 0 -4px rgba(91, 111, 94, .23), 21px 15px 0 -5px rgba(91, 111, 94, .18);
+  content: "";
+  transform: rotate(-12deg);
+}
+
+/* 纯净白纸：只保留页边线和一个阅读标点。 */
+.app-shell:not(.is-focus) .theme-card-paper-white .theme-swatch::before {
+  background:
+    linear-gradient(90deg, transparent 0 19%, rgba(47, 113, 107, .16) 19.4% 19.8%, transparent 20.2%),
+    linear-gradient(180deg, rgba(255, 255, 255, .7), rgba(244, 247, 245, .92)),
+    #f8faf8;
+}
+.app-shell:not(.is-focus) .theme-card-paper-white .theme-swatch::after {
+  top: 20%;
+  right: 17%;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #2f716b;
+  box-shadow: 0 0 0 8px rgba(47, 113, 107, .10);
+  content: "";
+}
+
+/* 蓝调时刻：一盏青色的灯、技术线稿和深海底色。 */
+.app-shell:not(.is-focus) .theme-card-blue-hour .theme-swatch::before {
+  background:
+    radial-gradient(ellipse at 73% 21%, rgba(114, 188, 182, .5), transparent 23%),
+    repeating-linear-gradient(176deg, transparent 0 30px, rgba(114, 188, 182, .18) 31px 32px, transparent 33px 48px),
+    linear-gradient(180deg, #0e252d, #10222a 63%, #0b1a22);
+}
+.app-shell:not(.is-focus) .theme-card-blue-hour .theme-swatch::after {
+  right: -10%;
+  bottom: 25%;
+  left: -10%;
+  height: 2px;
+  background: rgba(114, 188, 182, .55);
+  box-shadow: 0 8px 0 rgba(114, 188, 182, .16);
+  content: "";
+  transform: rotate(-5deg);
+}
+.app-shell:not(.is-focus) .theme-card-blue-hour .theme-card-kicker,
+.app-shell:not(.is-focus) .theme-card-blue-hour .theme-card-copy small,
+.app-shell:not(.is-focus) .theme-card-blue-hour .theme-card-mark {
+  color: #8bc9c2;
+}
+.app-shell:not(.is-focus) .theme-card-blue-hour .theme-card-copy strong { color: #e2efed; }
+
+/* 淡墨宣纸：墨池只落在纸的下缘，朱印负责记住它。 */
+.app-shell:not(.is-focus) .theme-card-xuan-paper .theme-swatch::before {
+  background:
+    radial-gradient(ellipse 50% 32% at 26% 82%, rgba(49, 48, 43, .16), transparent 73%),
+    radial-gradient(ellipse 34% 18% at 77% 76%, rgba(49, 48, 43, .08), transparent 74%),
+    repeating-linear-gradient(104deg, rgba(49, 48, 43, .022) 0 1px, transparent 1px 25px),
+    #f4eee2;
+}
+.app-shell:not(.is-focus) .theme-card-xuan-paper .theme-swatch::after,
+.app-shell:not(.is-focus) .theme-card-cinnabar-scroll .theme-swatch::after {
+  top: 15%;
+  right: 15%;
+  display: grid;
+  place-items: center;
+  width: 23px;
+  height: 23px;
+  border: 1px solid rgba(141, 48, 39, .72);
+  border-radius: 1px;
+  background: rgba(141, 48, 39, .10);
+  color: rgba(141, 48, 39, .82);
+  content: "印";
+  font: 9px/1 var(--reader-font, serif);
+  transform: rotate(7deg);
+}
+
+/* 浓墨砚台：墨池、飞白和一道不规则的干笔。 */
+.app-shell:not(.is-focus) .theme-card-inkstone .theme-swatch {
+  background: #161916;
+  color: #e7e4d9;
+}
+.app-shell:not(.is-focus) .theme-card-inkstone .theme-swatch::before {
+  background:
+    radial-gradient(ellipse at 73% 20%, rgba(230, 226, 213, .16), transparent 23%),
+    radial-gradient(ellipse at 19% 88%, rgba(230, 226, 213, .07), transparent 30%),
+    repeating-linear-gradient(176deg, transparent 0 32px, rgba(230, 226, 213, .035) 33px 34px, transparent 35px 54px),
+    #161916;
+}
+.app-shell:not(.is-focus) .theme-card-inkstone .theme-swatch::after {
+  right: -10%;
+  bottom: 26%;
+  left: -10%;
+  height: 16%;
+  clip-path: polygon(0 35%, 9% 28%, 22% 38%, 34% 24%, 48% 33%, 61% 21%, 76% 31%, 89% 20%, 100% 28%, 100% 76%, 89% 68%, 74% 78%, 60% 65%, 45% 75%, 29% 63%, 14% 72%, 0 62%);
+  background: rgba(230, 226, 213, .34);
+  content: "";
+  transform: rotate(-3deg);
+}
+.app-shell:not(.is-focus) .theme-card-inkstone .theme-card-kicker,
+.app-shell:not(.is-focus) .theme-card-inkstone .theme-card-copy small,
+.app-shell:not(.is-focus) .theme-card-inkstone .theme-card-mark {
+  color: #bcb8a9;
+}
+.app-shell:not(.is-focus) .theme-card-inkstone .theme-card-copy strong { color: #f0ede3; }
+
+/* 烟雨竹影：两根竹竿、几片叶子和一团湿墨。 */
+.app-shell:not(.is-focus) .theme-card-bamboo-shadow .theme-swatch::before {
+  background:
+    linear-gradient(77deg, transparent 0 21%, rgba(64, 78, 67, .18) 21.5% 23%, transparent 23.5%),
+    linear-gradient(101deg, transparent 0 14%, rgba(64, 78, 67, .13) 14.4% 15.4%, transparent 15.9%),
+    linear-gradient(55deg, transparent 0 27%, rgba(64, 78, 67, .12) 27.4% 31%, transparent 31.5%),
+    linear-gradient(118deg, transparent 0 33%, rgba(64, 78, 67, .09) 33.5% 36%, transparent 36.5%),
+    radial-gradient(ellipse at 19% 86%, rgba(64, 78, 67, .14), transparent 32%),
+    #f0f3ec;
+}
+.app-shell:not(.is-focus) .theme-card-bamboo-shadow .theme-swatch::after {
+  right: -17px;
+  bottom: -12px;
+  width: 102px;
+  height: 82px;
+  border-radius: 60% 0 60% 0;
+  background:
+    radial-gradient(ellipse at 32% 54%, rgba(64, 78, 67, .12), transparent 68%),
+    linear-gradient(68deg, transparent 0 47%, rgba(64, 78, 67, .13) 48% 50%, transparent 51%);
+  content: "";
+  transform: rotate(-12deg);
+}
+
+/* 朱砂小笺：暖纸、墨雾和一枚明确的小印。 */
+.app-shell:not(.is-focus) .theme-card-cinnabar-scroll .theme-swatch::before {
+  background:
+    linear-gradient(90deg, transparent 0 11%, rgba(141, 48, 39, .16) 11.5% 12%, transparent 12.5%),
+    radial-gradient(ellipse 48% 30% at 28% 82%, rgba(62, 49, 42, .11), transparent 73%),
+    repeating-linear-gradient(104deg, rgba(62, 49, 42, .022) 0 1px, transparent 1px 25px),
+    #f5e9dd;
+}
+.app-shell:not(.is-focus) .theme-card-cinnabar-scroll .theme-swatch::after { transform: rotate(-7deg); }
+.app-shell:not(.is-focus) .theme-card-cinnabar-scroll .theme-card-mark { color: #8d3027; }
