@@ -1953,7 +1953,7 @@ async function requestFullscreen() {
             <div class="viewer-source-toolbar"><span>图表结构</span></div>
             <pre class="viewer-source">{{ JSON.stringify(viewer.region.metadata ?? {}, null, 2) }}</pre>
           </div>
-          <div v-else-if="viewer.type === 'image'" class="image-viewer"><img :src="String(viewer.region.metadata?.url ?? '')" :alt="viewer.region.textContent" :style="viewerImageStyle" decoding="async" @load="fitViewer" /></div>
+          <div v-else-if="viewer.type === 'image'" class="image-viewer"><img :src="String(viewer.region.metadata?.url ?? '')" :alt="viewer.region.textContent" :style="viewerImageStyle" decoding="async" referrerpolicy="no-referrer" @load="fitViewer" /></div>
           <ViewerCode v-else-if="viewer.type === 'code'" :region="viewer.region" :theme-mode="store.activeTheme?.manifest.mode" @copied="notify('代码已复制')" />
           <div v-else class="code-viewer table-viewer" v-html="viewer.region.html" />
         </div>

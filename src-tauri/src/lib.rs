@@ -1,3 +1,4 @@
+use serde::Serialize;
 use std::path::Path;
 use std::process::Command;
 use tauri::Manager;
@@ -30,6 +31,74 @@ fn allow_asset_directory(app: tauri::AppHandle, path: String) -> Result<(), Stri
     app.asset_protocol_scope()
         .allow_directory(directory, true)
         .map_err(|error| format!("授权图片目录失败：{error}"))
+}
+
+#[derive(Serialize)]
+struct RemoteImage {
+    bytes: Vec<u8>,
+    mime: String,
+}
+
+fn remote_image_referer(url: &reqwest::Url) -> Option<&'static str> {
+    let host = url.host_str()?.to_ascii_lowercase();
+    if host == "mmbiz.qpic.cn" {
+        return Some("https://mp.weixin.qq.com/");
+    }
+    if host.ends_with(".xhscdn.com") || host == "ci.xiaohongshu.com" {
+        return Some("https://www.xiaohongshu.com/");
+    }
+    None
+}
+
+#[tauri::command]
+async fn read_remote_image(url: String) -> Result<RemoteImage, String> {
+    let parsed = reqwest::Url::parse(url.trim()).map_err(|error| format!("图片地址无效：{error}"))?;
+    let referer = remote_image_referer(&parsed).ok_or_else(|| "只允许读取公众号和小红书图片".to_string())?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err("只允许通过 HTTP 或 HTTPS 读取图片".into());
+    }
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            if remote_image_referer(attempt.url()).is_some() {
+                attempt.follow()
+            } else {
+                attempt.stop()
+            }
+        }))
+        .timeout(std::time::Duration::from_secs(15))
+        .user_agent("Mozilla/5.0 MoyueReader/0.1")
+        .build()
+        .map_err(|error| format!("创建图片请求失败：{error}"))?;
+    let response = client
+        .get(parsed)
+        .header(reqwest::header::REFERER, referer)
+        .header(reqwest::header::ACCEPT, "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
+        .send()
+        .await
+        .map_err(|error| format!("下载图片失败：{error}"))?;
+    if !response.status().is_success() {
+        return Err(format!("图片服务器返回 {}", response.status()));
+    }
+    if response.content_length().unwrap_or(0) > 20 * 1024 * 1024 {
+        return Err("图片超过 20 MB，已跳过下载".into());
+    }
+    let mime = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(';').next())
+        .map(str::to_string);
+    if let Some(value) = &mime {
+        if !value.starts_with("image/") {
+            return Err("远程地址没有返回图片".into());
+        }
+    }
+    let mime = mime.unwrap_or_else(|| "image/jpeg".into());
+    let bytes = response.bytes().await.map_err(|error| format!("读取图片失败：{error}"))?;
+    if bytes.len() > 20 * 1024 * 1024 {
+        return Err("图片超过 20 MB，已跳过下载".into());
+    }
+    Ok(RemoteImage { bytes: bytes.to_vec(), mime })
 }
 
 #[tauri::command]
@@ -81,14 +150,14 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
-        .invoke_handler(tauri::generate_handler![allow_asset_directory, read_local_image, open_directory, open_external_url])
+        .invoke_handler(tauri::generate_handler![allow_asset_directory, read_local_image, read_remote_image, open_directory, open_external_url])
         .run(tauri::generate_context!())
         .expect("error while running Moyue application");
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{is_allowed_external_url, is_image};
+    use super::{is_allowed_external_url, is_image, remote_image_referer};
     use std::path::Path;
 
     #[test]
@@ -103,5 +172,12 @@ mod tests {
         assert!(is_allowed_external_url("mailto:hello@example.com"));
         assert!(!is_allowed_external_url("javascript:alert(1)"));
         assert!(!is_allowed_external_url("C:/notes/readme.md"));
+    }
+
+    #[test]
+    fn only_uses_platform_referers_for_remote_images() {
+        assert_eq!(remote_image_referer(&reqwest::Url::parse("https://mmbiz.qpic.cn/a.png").unwrap()), Some("https://mp.weixin.qq.com/"));
+        assert_eq!(remote_image_referer(&reqwest::Url::parse("https://sns-img-qc.xhscdn.com/a.png").unwrap()), Some("https://www.xiaohongshu.com/"));
+        assert_eq!(remote_image_referer(&reqwest::Url::parse("https://example.com/a.png").unwrap()), None);
     }
 }

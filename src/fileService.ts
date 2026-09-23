@@ -42,6 +42,8 @@ export async function watchMarkdownPath(path: string, onChange: () => void): Pro
 export function resolveMarkdownAssetUrl(markdownPath: string, url: string, browserAssets?: BrowserAssetMap): string {
   const value = url.trim()
   if (!value || value.startsWith('#')) return url
+  const remoteAsset = browserAssets?.[value]
+  if (remoteAsset) return remoteAsset
   const match = value.match(/^([^?#]*)(.*)$/)
   const rawPath = match?.[1] ?? value
   const localPath = localAssetPath(decodeUrlPath(rawPath))
@@ -69,6 +71,22 @@ export async function createTauriAssetMap(markdownPath: string, urls: Iterable<s
     } catch (error) { console.error(`无法读取 Markdown 图片：${absolutePath}`, error) }
   }
   return assets
+}
+
+export async function createRemoteAssetMap(urls: Iterable<string>): Promise<Record<string, string>> {
+  if (!isTauri()) return assets
+  const candidates = [...new Set(urls)].filter(isSupportedRemoteImage)
+  const entries = await Promise.all(candidates.map(async (url) => {
+    try {
+      const result = await invoke<{ bytes: number[]; mime: string }>('read_remote_image', { url })
+      const bytes = Uint8Array.from(result.bytes)
+      return [url, URL.createObjectURL(new Blob([bytes], { type: result.mime || 'image/jpeg' }))] as const
+    } catch (error) {
+      console.warn(`无法缓存远程图片：${url}`, error)
+      return null
+    }
+  }))
+  return Object.fromEntries(entries.filter((entry): entry is readonly [string, string] => Boolean(entry)))
 }
 
 export async function authorizeMarkdownAssets(markdownPath: string): Promise<void> {
@@ -260,6 +278,16 @@ function isImagePath(path: string) {
 function imageMimeType(path: string) {
   const extension = path.split('.').pop()?.toLowerCase()
   return extension === 'svg' ? 'image/svg+xml' : extension === 'jpg' || extension === 'jpeg' ? 'image/jpeg' : `image/${extension || 'png'}`
+}
+
+function isSupportedRemoteImage(url: string) {
+  try {
+    const parsed = new URL(url)
+    const host = parsed.hostname.toLowerCase()
+    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && (host === 'mmbiz.qpic.cn' || host.endsWith('.xhscdn.com') || host === 'ci.xiaohongshu.com')
+  } catch {
+    return false
+  }
 }
 
 async function scanDirectory(path: string): Promise<OpenedFile[]> {

@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { deleteAnnotation, deleteDocument, getLocalProgress, getProgress, loadAnnotations, loadDocumentSnapshots, saveAnnotation, saveDocument, saveDocumentSnapshot, saveProgress } from '../persistence'
-import { authorizeMarkdownAssets, createTauriAssetMap, openMarkdownFile, openMarkdownFolder, resolveMarkdownAssetUrl, type OpenedFile } from '../fileService'
+import { authorizeMarkdownAssets, createRemoteAssetMap, createTauriAssetMap, openMarkdownFile, openMarkdownFolder, resolveMarkdownAssetUrl, type OpenedFile } from '../fileService'
 import { builtInThemes, cssVariables, defaultTokens } from '../themes'
 import { interfaceFont } from '../fonts'
 const SESSION_KEY = 'moyue:reader-session'
@@ -60,7 +60,7 @@ export const useReaderStore = defineStore('reader', () => {
     try { await authorizeMarkdownAssets(file.path) } catch { /* binary loading below does not require the asset protocol */ }
     const urls: string[] = []
     const firstDocument = parseMarkdown(file.path, file.source, (url) => { urls.push(url); return url })
-    const assets = { ...await createTauriAssetMap(file.path, urls), ...file.assets }
+    const assets = { ...await createTauriAssetMap(file.path, urls), ...await createRemoteAssetMap(urls), ...file.assets }
     const hasPotentialLocalAsset = urls.some((url) => {
       const value = url.trim()
       return Boolean(value) && !value.startsWith('#') && !/^(?:https?:|mailto:|tel:|data:|blob:|\/\/)/i.test(value)
