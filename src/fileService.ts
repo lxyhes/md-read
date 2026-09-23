@@ -74,7 +74,7 @@ export async function createTauriAssetMap(markdownPath: string, urls: Iterable<s
 }
 
 export async function createRemoteAssetMap(urls: Iterable<string>): Promise<Record<string, string>> {
-  if (!isTauri()) return assets
+  if (!isTauri()) return {}
   const candidates = [...new Set(urls)].filter(isSupportedRemoteImage)
   const entries = await Promise.all(candidates.map(async (url) => {
     try {
