@@ -53,6 +53,72 @@ function hasStyle(element: HTMLElement, pattern: RegExp) {
   return pattern.test(element.getAttribute('style') ?? '')
 }
 
+function codeText(node: Node): string {
+  if (node.nodeType === Node.TEXT_NODE) return (node.textContent ?? '').replace(/\u00a0/g, ' ')
+  if (node.nodeType !== Node.ELEMENT_NODE) return ''
+  const element = node as HTMLElement
+  const tag = element.tagName.toLowerCase()
+  if (tag === 'br') return '\n'
+  if (['script', 'style', 'noscript'].includes(tag)) return ''
+  const value = Array.from(element.childNodes).map(codeText).join('')
+  if (['div', 'p', 'li', 'section', 'article', 'pre'].includes(tag) && value && !value.endsWith('\n')) return `${value}\n`
+  return value
+}
+
+function darkColor(value: string) {
+  const hex = value.match(/#([\da-f]{3,8})/i)?.[1]
+  if (hex) {
+    const normalized = hex.length === 3 ? hex.split('').map((part) => part + part).join('') : hex
+    const [red, green, blue] = [normalized.slice(0, 2), normalized.slice(2, 4), normalized.slice(4, 6)].map((part) => Number.parseInt(part, 16))
+    return (red * 299 + green * 587 + blue * 114) / 1000 < 125
+  }
+  const rgb = value.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i)
+  if (!rgb) return false
+  return (Number(rgb[1]) * 299 + Number(rgb[2]) * 587 + Number(rgb[3]) * 114) / 1000 < 125
+}
+
+function hasCodeStyle(element: HTMLElement) {
+  const signal = classAndId(element)
+  if (element.hasAttribute('data-code-block') || /(?:^|[-_\s])(code|code-block|codeblock|highlight|syntax|hljs|monaco|codemirror)(?:$|[-_\s])/i.test(signal)) return true
+  const style = element.getAttribute('style') ?? ''
+  const background = style.match(/background(?:-color)?\s*:\s*([^;]+)/i)?.[1] ?? ''
+  return (darkColor(background) || hasStyle(element, /font-family\s*:\s*(?:ui-)?monospace/i)) && codeText(element).split(/\r?\n/).filter((line) => line.trim()).length >= 2
+}
+
+function looksLikeDiagram(value: string) {
+  const lines = value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+  if (lines.length < 4) return false
+  const signalLines = lines.filter((line) => /[↓↑←→↔┌┐└┘├┤┬┴┼│─━═]/.test(line)).length
+  return signalLines >= 2 && (lines.some((line) => /[┌┐└┘├┤┬┴┼│─━═]/.test(line)) || signalLines >= 3)
+}
+
+function renderCodeBlock(source: string, language = 'plain') {
+  const value = source.replace(/\r\n?/g, '\n').replace(/^\n|\n$/g, '')
+  if (!value.trim()) return ''
+  const fence = value.includes('```') ? '~~~' : '```'
+  return `${fence}${language}\n${value}\n${fence}\n\n`
+}
+
+function stripDecorativeHeadingStars(value: string) {
+  let inFence = false
+  return value.split('\n').map((line) => {
+    const trimmed = line.trimStart()
+    if (/^(?:```|~~~)/.test(trimmed)) {
+      inFence = !inFence
+      return line
+    }
+    return inFence ? line : line.replace(/^((?:#{1,6}[ \t]*)?)\*{4}(?=\s*\d)/, '$1')
+  }).join('\n')
+}
+
+function isSimpleCodeCandidate(element: HTMLElement) {
+  const children = Array.from(element.children)
+  if (!children.length) return true
+  const tag = element.tagName.toLowerCase()
+  if (tag === 'p' || tag === 'span') return children.every((child) => ['br', 'span'].includes(child.tagName.toLowerCase()))
+  return children.every((child) => ['br', 'span'].includes(child.tagName.toLowerCase()))
+}
+
 function inline(node: Node): string {
   if (node.nodeType === Node.TEXT_NODE) return inlineText(node.textContent ?? '')
   if (node.nodeType !== Node.ELEMENT_NODE) return ''
@@ -169,16 +235,18 @@ function render(node: HTMLElement): string {
   if (tag === 'figure') return renderFigure(node)
   if (tag === 'pre') {
     const code = node.querySelector('code')
-    const source = (code?.textContent ?? node.textContent ?? '').replace(/\r\n?/g, '\n').replace(/^\n|\n$/g, '')
-    if (!source) return ''
-    const language = code?.className.match(/(?:language|lang)-([\w-]+)/i)?.[1] ?? ''
-    const fence = source.includes('```') ? '~~~' : '```'
-    return `${fence}${language}\n${source}\n${fence}\n\n`
+    const language = code?.className.match(/(?:language|lang)-([\w-]+)/i)?.[1] || 'plain'
+    return renderCodeBlock(codeText(code ?? node), language)
   }
   if (['script', 'style', 'noscript', 'template'].includes(tag)) return ''
   if (/^h[1-6]$/.test(tag)) return `${'#'.repeat(Number(tag[1]))} ${inline(node).trim()}\n\n`
   if (tag === 'blockquote') return `${blockquote(Array.from(node.childNodes).map((child) => child.nodeType === Node.ELEMENT_NODE ? render(child as HTMLElement) : inline(child)).join(''))}\n\n`
   if (tag === 'hr') return '---\n\n'
+  const diagramLike = isSimpleCodeCandidate(node) && looksLikeDiagram(codeText(node))
+  if (hasCodeStyle(node) || diagramLike) {
+    const language = classAndId(node).match(/(?:language|lang)[-_ ]*([\w+#-]+)/i)?.[1] || 'plain'
+    return renderCodeBlock(codeText(node), language)
+  }
   if (tag === 'details') {
     const summary = node.querySelector(':scope > summary') as HTMLElement | null
     const body = Array.from(node.childNodes).filter((child) => child !== summary).map((child) => child.nodeType === Node.ELEMENT_NODE ? render(child as HTMLElement) : inline(child)).join('').trim()
@@ -204,7 +272,7 @@ function normalizeMarkdown(value: string) {
 }
 
 export function formatPastedText(value: string) {
-  return normalizeMarkdown(value)
+  return stripDecorativeHeadingStars(normalizeMarkdown(value))
     .replace(/^[ \t]*[•◦▪][ \t]+/gm, '- ')
     .replace(/^[ \t]*(\d+)[.)][ \t]+/gm, '$1. ')
 }
@@ -214,7 +282,7 @@ export function formatClipboardToMarkdown(html: string, text: string) {
     const document = new DOMParser().parseFromString(html, 'text/html') as ClipboardDocument
     const body = removeClipboardNoise(document)
     const source = Array.from(body.childNodes).filter((node) => node.nodeType !== Node.TEXT_NODE || Boolean(node.textContent?.trim())).map((node) => node.nodeType === Node.ELEMENT_NODE ? render(node as HTMLElement) : inline(node)).join('')
-    const markdown = normalizeMarkdown(source)
+    const markdown = stripDecorativeHeadingStars(normalizeMarkdown(source))
     if (markdown) return markdown
   }
   return formatPastedText(text)

@@ -15,6 +15,17 @@ describe('Moyue markdown region parser', () => {
     expect(first.regions.map((region) => region.type)).toEqual(['heading', 'paragraph', 'mermaid'])
   })
 
+  it('styles numeric article headings like public-account chapter headings', () => {
+    const document = parseMarkdown('notes/article.md', '## 11API Key 怎么配？')
+    expect(document.regions[0].html).toContain('class="numbered-heading"')
+    expect(document.regions[0].html).toContain('<span class="heading-number">11</span>')
+    expect(document.regions[0].html).toContain('<span class="heading-text">API Key 怎么配？</span>')
+
+    const starred = parseMarkdown('notes/article-starred.md', '## ****11API Key 怎么配？')
+    expect(starred.regions[0].html).toContain('<span class="heading-number">11</span>')
+    expect(starred.regions[0].html).not.toContain('****')
+  })
+
   it('previews Mermaid wrapped inside a generic fenced code block', () => {
     const document = parseMarkdown('notes/nested.md', '~~~~text\n~~~mermaid\nflowchart TD\nA --> B\n~~~\n~~~~')
     expect(document.regions[0].type).toBe('mermaid')
@@ -59,6 +70,14 @@ $$`)
   it('preserves soft line breaks in prose paragraphs', () => {
     const document = parseMarkdown('notes/redis.md', '详情：RedisKeyUserPrefix + "aiTask:detail:{id}"\n任务列表：RedisKeyUserPrefix + "aiTask:list:{userId}:{page}"')
     expect(document.regions[0].html).toContain('<br />')
+  })
+
+  it('recognizes bold markers adjacent to Chinese prose', () => {
+    const document = parseMarkdown('notes/article-bold.md', '其实更像**“判断题”**。\n\nJev 更像***“调度员 + 质检员 + 守门员”***。\n\n```text\n中文 **代码里的标记** 保持原样\n```')
+    expect(document.regions[0].html).toContain('<strong>“判断题”</strong>')
+    expect(document.regions[1].html).toContain('<strong>“调度员 + 质检员 + 守门员”</strong>')
+    expect(document.regions[1].html).not.toContain('*')
+    expect(document.regions[2].textContent).toContain('**代码里的标记**')
   })
 
   it('preserves leading spaces that exist in the source paragraph', () => {
@@ -189,5 +208,10 @@ $$`)
 
   it('normalizes plain clipboard text into Markdown lists', () => {
     expect(formatPastedText('标题\r\n\r\n• 第一项\r\n2) 第二项\r\n\r\n')).toBe('标题\n\n- 第一项\n2. 第二项')
+  })
+
+  it('removes decorative four-star prefixes from pasted article headings', () => {
+    expect(formatPastedText('****11API Key 怎么配？\n\n#### ****12 下一节')).toBe('11API Key 怎么配？\n\n#### 12 下一节')
+    expect(formatPastedText('```text\n****11 代码内容\n```')).toBe('```text\n****11 代码内容\n```')
   })
 })
