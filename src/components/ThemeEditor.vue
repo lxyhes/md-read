@@ -25,7 +25,7 @@ watch(draft, (value) => {
   const snapshot = clone(value)
   emit('update:modelValue', snapshot)
   emit('preview', snapshot)
-}, { deep: true })
+}, { deep: true, immediate: true })
 
 function preview() { emit('preview', clone(draft.value)) }
 function apply() { emit('apply', clone(draft.value)) }

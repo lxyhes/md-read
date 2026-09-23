@@ -480,9 +480,6 @@ html, body, #app { background: var(--app-bg, #070d22); }
   scrollbar-width: thin;
   scrollbar-color: var(--accent-soft) transparent;
 }
-.reader-layout > .outline-panel .outline-list {
-  padding-bottom: 28px;
-}
 .app-shell.is-focus .focus-sidebar {
   min-height: 0;
   overflow-y: auto;
@@ -525,6 +522,7 @@ html, body, #app { background: var(--app-bg, #070d22); }
 .reader-layout > .outline-panel {
   display: flex;
   flex-direction: column;
+  height: 100%;
   overflow: hidden;
 }
 .reader-layout > .outline-panel .panel-heading {
@@ -1631,7 +1629,7 @@ html, body, #app { background: var(--app-bg, #070d22); }
 .search-scope-tabs button:disabled { cursor: not-allowed; opacity: .45; }
 .search-scope-row > span { margin-left: auto; color: var(--accent); font-family: var(--mono); }
 .search-scope-row > small { color: var(--muted); opacity: .8; }
-.resume-prompt { position: relative; left: auto; bottom: auto; z-index: 3; display: flex; align-items: center; gap: 28px; width: min(640px, calc(100% - 48px)); flex: 0 0 auto; margin: 12px auto 18px; padding: 16px 18px 16px 20px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border)); border-radius: 14px; background: linear-gradient(112deg, var(--surface-raised), color-mix(in srgb, var(--surface-raised) 92%, var(--accent))); box-shadow: 0 12px 30px color-mix(in srgb, var(--app-bg) 22%, transparent), 0 0 0 1px color-mix(in srgb, var(--accent) 6%, transparent); transform: none; animation: resume-prompt-in .3s cubic-bezier(.22, 1, .36, 1) both; }
+.resume-prompt { position: absolute; left: 50%; bottom: 18px; z-index: 3; display: flex; align-items: center; gap: 28px; width: min(640px, calc(100% - 48px)); margin: 0; padding: 16px 18px 16px 20px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border)); border-radius: 14px; background: linear-gradient(112deg, var(--surface-raised), color-mix(in srgb, var(--surface-raised) 92%, var(--accent))); box-shadow: 0 12px 30px color-mix(in srgb, var(--app-bg) 22%, transparent), 0 0 0 1px color-mix(in srgb, var(--accent) 6%, transparent); transform: translateX(-50%); animation: resume-prompt-in .3s cubic-bezier(.22, 1, .36, 1) both; }
 .resume-prompt::before { position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--accent); content: ""; }
 .resume-prompt-copy { position: relative; min-width: 0; flex: 1; padding-left: 1px; }
 .resume-prompt strong, .resume-prompt small { display: block; }
@@ -1641,10 +1639,11 @@ html, body, #app { background: var(--app-bg, #070d22); }
 .resume-prompt-actions { display: flex; gap: 8px; flex: 0 0 auto; padding-left: 20px; border-left: 1px solid color-mix(in srgb, var(--border) 82%, transparent); }
 .resume-prompt-actions button { min-height: 36px; padding: 9px 13px; border-radius: 9px; white-space: nowrap; }
 .resume-prompt-actions .ghost-button { background: color-mix(in srgb, var(--surface) 62%, transparent); }
-.resume-prompt-actions .primary-button { min-width: 88px; box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 22%, transparent); }
+.resume-prompt-actions .primary-button { min-width: 88px; border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border)); background: color-mix(in srgb, var(--accent) 12%, var(--surface-raised)); color: var(--accent); box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 14%, transparent); }
+.resume-prompt-actions .primary-button:hover { border-color: var(--accent); background: var(--accent); color: var(--app-bg); }
 .resume-prompt-actions button:hover { transform: translateY(-2px); }
 .resume-prompt-actions button:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 72%, transparent); outline-offset: 3px; }
-@keyframes resume-prompt-in { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes resume-prompt-in { from { opacity: 0; transform: translate(-50%, 10px) scale(.98); } to { opacity: 1; transform: translateX(-50%); } }
 @media (max-width: 720px) { .resume-prompt { flex-direction: column; align-items: stretch; gap: 13px; } .resume-prompt-actions { justify-content: flex-end; padding-top: 13px; padding-left: 0; border-top: 1px solid color-mix(in srgb, var(--border) 82%, transparent); border-left: 0; } .search-scope-row { flex-wrap: wrap; } .search-scope-row > span { margin-left: 0; } .search-scope-row > small { width: 100%; } }
 
 /* Mermaid: use the reader column efficiently while preserving labels in wide charts. */
@@ -3587,7 +3586,8 @@ button:focus-visible,
 .outline-view {
   display: flex;
   min-height: 0;
-  flex: 1 1 auto;
+  height: 0;
+  flex: 1 1 0;
   flex-direction: column;
 }
 .outline-search {
@@ -3660,7 +3660,8 @@ button:focus-visible,
 }
 .outline-view .outline-list {
   min-height: 0;
-  flex: 1 1 auto;
+  height: 0;
+  flex: 1 1 0;
   margin-top: 9px;
   overflow-y: auto;
 }
@@ -4107,6 +4108,12 @@ button:focus-visible,
   fill: var(--muted);
   font-family: var(--ui-font), sans-serif;
   font-size: 12px;
+}
+.mermaid-svg svg .edge-label-bg {
+  fill: var(--surface-raised);
+  stroke: color-mix(in srgb, var(--border) 90%, transparent);
+  stroke-width: .75px;
+  opacity: .96;
 }
 
 /* Reader finish: keep document navigation quiet and give the article room to breathe. */
@@ -4819,8 +4826,8 @@ body.is-resizing-outline * {
 /* Keep the resume prompt in the reader flow so it never covers document text. */
 .app-shell .reader-page > .reader-layout {
   min-height: 0;
-  height: auto;
-  flex: 1 1 auto;
+  height: 0;
+  flex: 1 1 0;
 }
 .app-shell .reader-page > .reader-tabbar {
   flex: 0 0 auto;
@@ -5568,3 +5575,185 @@ body.is-resizing-outline * {
 }
 .app-shell.theme-cinnabar-scroll:not(.is-focus) .reader-rule { height: 2px; opacity: .8; }
 .app-shell.theme-inkstone:not(.is-focus) .reader-rule { height: 1px; opacity: .72; }
+
+/* Whole-app ink skin: navigation, tools and editor surfaces must belong to the same paper. */
+.app-shell:not(.is-focus) .main-shell,
+.app-shell:not(.is-focus) .page,
+.app-shell:not(.is-focus) .reader-tabbar {
+  background: transparent;
+}
+.app-shell:not(.is-focus) .global-nav {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 92%, var(--app-bg)), var(--app-bg));
+  box-shadow: 14px 0 34px color-mix(in srgb, var(--app-bg) 22%, transparent);
+}
+.app-shell:not(.is-focus) .topbar,
+.app-shell:not(.is-focus) .reader-tabbar {
+  background: color-mix(in srgb, var(--surface) 66%, var(--app-bg));
+  backdrop-filter: blur(14px);
+}
+.app-shell:not(.is-focus) .page {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 28%, transparent), transparent 44%);
+}
+.app-shell:not(.is-focus) .theme-center-toolbar,
+.app-shell:not(.is-focus) .theme-editor,
+.app-shell:not(.is-focus) .theme-empty-state,
+.app-shell:not(.is-focus) .settings-card,
+.app-shell:not(.is-focus) .document-card,
+.app-shell:not(.is-focus) .context-card {
+  box-shadow: 0 16px 34px color-mix(in srgb, var(--app-bg) 14%, transparent);
+}
+.app-shell:not(.is-focus) .nav-item:hover,
+.app-shell:not(.is-focus) .nav-item.active {
+  box-shadow: inset 2px 0 0 var(--accent), 0 8px 18px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.app-shell.theme-xuan-paper:not(.is-focus) {
+  background:
+    radial-gradient(ellipse at 84% 12%, rgba(53, 50, 43, .08), transparent 23%),
+    repeating-linear-gradient(105deg, transparent 0 52px, rgba(53, 50, 43, .018) 53px 54px, transparent 55px 106px),
+    #e4dfd4;
+}
+.app-shell.theme-xuan-paper:not(.is-focus)::before {
+  opacity: .24;
+  background:
+    radial-gradient(ellipse at 10% 76%, rgba(53, 50, 43, .11), transparent 25%),
+    linear-gradient(157deg, transparent 0 58%, rgba(53, 50, 43, .045) 58.4% 59.2%, transparent 59.8%);
+}
+.app-shell.theme-xuan-paper:not(.is-focus) .global-nav,
+.app-shell.theme-xuan-paper:not(.is-focus) .topbar,
+.app-shell.theme-xuan-paper:not(.is-focus) .reader-tabbar {
+  background: color-mix(in srgb, #f0ece3 76%, #e4dfd4);
+}
+
+.app-shell.theme-inkstone:not(.is-focus) {
+  background:
+    radial-gradient(ellipse at 73% 5%, rgba(229, 225, 214, .08), transparent 25%),
+    repeating-linear-gradient(176deg, transparent 0 53px, rgba(229, 225, 214, .018) 54px 55px, transparent 56px 108px),
+    #121412;
+}
+.app-shell.theme-inkstone:not(.is-focus)::before {
+  opacity: .28;
+  background:
+    radial-gradient(ellipse at 88% 80%, rgba(229, 225, 214, .055), transparent 26%),
+    linear-gradient(164deg, transparent 0 53%, rgba(229, 225, 214, .04) 53.4% 54.2%, transparent 54.8%);
+}
+.app-shell.theme-inkstone:not(.is-focus) .global-nav,
+.app-shell.theme-inkstone:not(.is-focus) .topbar,
+.app-shell.theme-inkstone:not(.is-focus) .reader-tabbar {
+  background: color-mix(in srgb, #1b1d1a 82%, #121412);
+}
+.app-shell.theme-inkstone:not(.is-focus) .theme-center-toolbar,
+.app-shell.theme-inkstone:not(.is-focus) .theme-editor,
+.app-shell.theme-inkstone:not(.is-focus) .theme-empty-state,
+.app-shell.theme-inkstone:not(.is-focus) .settings-card {
+  border-color: rgba(229, 225, 214, .14);
+  background: color-mix(in srgb, #1b1d1a 90%, #121412);
+}
+
+.app-shell.theme-bamboo-shadow:not(.is-focus) {
+  background:
+    linear-gradient(90deg, transparent 0 11%, rgba(49, 61, 52, .035) 11.2% 11.7%, transparent 12%),
+    linear-gradient(90deg, transparent 0 16%, rgba(49, 61, 52, .022) 16.2% 16.5%, transparent 16.8%),
+    radial-gradient(ellipse at 16% 78%, rgba(49, 61, 52, .08), transparent 28%),
+    #dfe2dc;
+}
+.app-shell.theme-bamboo-shadow:not(.is-focus)::before {
+  opacity: .22;
+  background:
+    linear-gradient(101deg, transparent 0 14%, rgba(49, 61, 52, .08) 14.3% 14.8%, transparent 15.2%),
+    linear-gradient(76deg, transparent 0 19%, rgba(49, 61, 52, .045) 19.2% 19.6%, transparent 20%);
+}
+.app-shell.theme-bamboo-shadow:not(.is-focus) .global-nav,
+.app-shell.theme-bamboo-shadow:not(.is-focus) .topbar,
+.app-shell.theme-bamboo-shadow:not(.is-focus) .reader-tabbar {
+  background: color-mix(in srgb, #eceee7 78%, #dfe2dc);
+}
+
+.app-shell.theme-cinnabar-scroll:not(.is-focus) {
+  background:
+    radial-gradient(ellipse at 82% 8%, rgba(65, 45, 38, .08), transparent 25%),
+    repeating-linear-gradient(106deg, transparent 0 49px, rgba(65, 45, 38, .018) 50px 51px, transparent 52px 104px),
+    #e4d9ce;
+}
+.app-shell.theme-cinnabar-scroll:not(.is-focus)::before {
+  opacity: .25;
+  background:
+    radial-gradient(ellipse at 8% 82%, rgba(65, 45, 38, .09), transparent 25%),
+    linear-gradient(158deg, transparent 0 44%, rgba(65, 45, 38, .05) 44.5% 45.2%, transparent 45.8%);
+}
+.app-shell.theme-cinnabar-scroll:not(.is-focus) .global-nav,
+.app-shell.theme-cinnabar-scroll:not(.is-focus) .topbar,
+.app-shell.theme-cinnabar-scroll:not(.is-focus) .reader-tabbar {
+  background: color-mix(in srgb, #f0e6da 78%, #e4d9ce);
+}
+.app-shell.theme-cinnabar-scroll:not(.is-focus) .topbar,
+.app-shell.theme-cinnabar-scroll:not(.is-focus) .reader-tabbar {
+  box-shadow: inset 0 1px 0 rgba(141, 48, 39, .18);
+}
+
+/* Focus mode keeps the same material instead of switching to a generic dark canvas. */
+.app-shell.is-focus.theme-xuan-paper,
+.app-shell.is-focus.theme-bamboo-shadow,
+.app-shell.is-focus.theme-cinnabar-scroll {
+  background: var(--app-bg);
+}
+.app-shell.is-focus.theme-inkstone {
+  background: #121412;
+}
+.app-shell.is-focus.theme-xuan-paper .reader-page,
+.app-shell.is-focus.theme-bamboo-shadow .reader-page,
+.app-shell.is-focus.theme-cinnabar-scroll .reader-page {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 38%, var(--app-bg)), var(--app-bg));
+}
+.app-shell.is-focus.theme-inkstone .reader-page {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 55%, var(--app-bg)), var(--app-bg));
+}
+
+.app-shell:not(.is-focus) .theme-card.selected .theme-card-meta span:last-child {
+  color: var(--theme-accent);
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+
+/* Replace straight poster bands with irregular pooled ink at the card edge. */
+.app-shell:not(.is-focus) .theme-card-xuan-paper .theme-swatch::before,
+.app-shell:not(.is-focus) .theme-card-cinnabar-scroll .theme-swatch::before {
+  inset: auto -9% -10% -9%;
+  height: 68%;
+  border-radius: 58% 42% 0 0 / 31% 25% 0 0;
+  filter: blur(2.5px) saturate(.76);
+  transform: rotate(-2deg) scale(1.08);
+}
+.app-shell:not(.is-focus) .theme-card-xuan-paper .theme-swatch::before {
+  background:
+    radial-gradient(ellipse 40% 31% at 32% 68%, rgba(42, 41, 37, .15), transparent 73%),
+    radial-gradient(ellipse 30% 20% at 78% 44%, rgba(42, 41, 37, .08), transparent 76%),
+    repeating-linear-gradient(104deg, rgba(42, 41, 37, .025) 0 1px, transparent 1px 25px),
+    #eee8dc;
+}
+.app-shell:not(.is-focus) .theme-card-cinnabar-scroll .theme-swatch::before {
+  background:
+    radial-gradient(ellipse 37% 30% at 32% 69%, rgba(53, 43, 37, .13), transparent 73%),
+    radial-gradient(ellipse 28% 19% at 76% 43%, rgba(53, 43, 37, .07), transparent 76%),
+    repeating-linear-gradient(104deg, rgba(53, 43, 37, .022) 0 1px, transparent 1px 25px),
+    #f0e4d8;
+}
+.app-shell:not(.is-focus) .theme-card-inkstone .theme-swatch::after {
+  right: -10%;
+  bottom: 20%;
+  left: -10%;
+  height: 17%;
+  clip-path: polygon(0 35%, 9% 28%, 22% 38%, 34% 24%, 48% 33%, 61% 21%, 76% 31%, 89% 20%, 100% 28%, 100% 76%, 89% 68%, 74% 78%, 60% 65%, 45% 75%, 29% 63%, 14% 72%, 0 62%);
+  border: 0;
+  background: rgba(232, 228, 216, .35);
+  box-shadow: none;
+  transform: rotate(-3deg);
+}
+
+/* Accent-filled controls need a foreground that follows the active theme. */
+.profile-avatar,
+.orbit-core,
+.primary-button,
+.reader-content .region-content .task-item.is-checked .task-checkbox {
+  color: var(--app-bg);
+}

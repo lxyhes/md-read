@@ -43,6 +43,10 @@ export const useReaderStore = defineStore('reader', () => {
   }
 
   function applyTheme(theme: MoyueTheme) {
+    const existing = themes.value.some((item) => item.manifest.id === theme.manifest.id)
+    themes.value = existing
+      ? themes.value.map((item) => item.manifest.id === theme.manifest.id ? theme : item)
+      : [...themes.value, theme]
     activeThemeId.value = theme.manifest.id
     localStorage.setItem(THEME_KEY, theme.manifest.id)
     const variables = cssVariables(theme)
@@ -126,6 +130,7 @@ export const useReaderStore = defineStore('reader', () => {
   }
 
   async function bootstrap() {
+    applyTheme(activeTheme.value)
     const saved = loadDocumentSnapshots()
     if (saved.length) {
       const needsAssetRefresh = (document: ReaderDocument) => document.regions.some((region) => {
@@ -150,7 +155,6 @@ export const useReaderStore = defineStore('reader', () => {
     const availableIds = new Set(documents.value.map((document) => document.id))
     openDocumentIds.value = (session.openDocumentIds ?? []).filter((id) => availableIds.has(id))
     if (!openDocumentIds.value.length) openDocumentIds.value = [documents.value[0].id]
-    applyTheme(activeTheme.value)
     const initialId = session.currentDocumentId && openDocumentIds.value.includes(session.currentDocumentId) ? session.currentDocumentId : openDocumentIds.value[0]
     await openDocument(initialId, { deferProgress: true })
   }
@@ -161,10 +165,11 @@ export const useReaderStore = defineStore('reader', () => {
   async function openDocument(id: string, options: { deferProgress?: boolean } = {}) {
     const document = documents.value.find((item) => item.id === id)
     if (!document) return
+    const keepCleanMode = mode.value === 'clean'
     if (!openDocumentIds.value.includes(id)) openDocumentIds.value.push(id)
     currentDocumentId.value = id
     persistSession()
-    mode.value = 'normal'
+    mode.value = keepCleanMode ? 'clean' : 'normal'
     activeRegionId.value = null
     activeHeadingId.value = null
     focusedRegionId.value = null

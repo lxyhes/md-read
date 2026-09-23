@@ -8,6 +8,7 @@ describe('renderSimpleFlowchart', () => {
     expect(svg).toContain('<svg')
     expect(svg).toContain('打开文档')
     expect(svg).toContain('下一步')
+    expect(svg).toContain('edge-label-bg')
   })
 
   it('falls back for advanced Mermaid syntax', () => {
