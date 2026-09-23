@@ -1,6 +1,9 @@
 import type { Annotation, DocumentRecord, ReaderDocument, ReadingProgress } from './types'
 
 const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+const SNAPSHOT_INDEX_KEY = 'moyue:documents:index'
+const LEGACY_SNAPSHOT_KEY = 'moyue:documents:full'
+const snapshotKey = (documentId: string) => `moyue:document-snapshot:${documentId}`
 type DatabaseConnection = Awaited<ReturnType<typeof import('@tauri-apps/plugin-sql')['default']['load']>>
 let database: DatabaseConnection | null = null
 
@@ -20,6 +23,18 @@ function readJson<T>(key: string, fallback: T): T {
 
 function writeJson(key: string, value: unknown) { localStorage.setItem(key, JSON.stringify(value)) }
 
+function snapshotIndex() {
+  const saved = readJson<string[]>(SNAPSHOT_INDEX_KEY, [])
+  if (saved.length) return saved
+  const legacy = readJson<ReaderDocument[]>(LEGACY_SNAPSHOT_KEY, [])
+  if (!legacy.length) return []
+  for (const document of legacy) writeJson(snapshotKey(document.id), document)
+  const ids = legacy.map((document) => document.id)
+  writeJson(SNAPSHOT_INDEX_KEY, ids)
+  localStorage.removeItem(LEGACY_SNAPSHOT_KEY)
+  return ids
+}
+
 export async function saveDocument(document: DocumentRecord): Promise<void> {
   writeJson(`moyue:document:${document.id}`, document)
   const db = await getDatabase()
@@ -27,13 +42,15 @@ export async function saveDocument(document: DocumentRecord): Promise<void> {
 }
 
 export async function saveDocumentSnapshot(document: ReaderDocument): Promise<void> {
-  const existing = readJson<ReaderDocument[]>('moyue:documents:full', [])
-  writeJson('moyue:documents:full', [...existing.filter((item) => item.id !== document.id), document])
+  const ids = snapshotIndex()
+  writeJson(snapshotKey(document.id), document)
+  if (!ids.includes(document.id)) writeJson(SNAPSHOT_INDEX_KEY, [...ids, document.id])
 }
 
 export async function deleteDocument(documentId: string): Promise<void> {
-  const existing = readJson<ReaderDocument[]>('moyue:documents:full', [])
-  writeJson('moyue:documents:full', existing.filter((item) => item.id !== documentId))
+  const ids = snapshotIndex()
+  writeJson(SNAPSHOT_INDEX_KEY, ids.filter((id) => id !== documentId))
+  localStorage.removeItem(snapshotKey(documentId))
   localStorage.removeItem(`moyue:document:${documentId}`)
   localStorage.removeItem(`moyue:progress:${documentId}`)
   localStorage.removeItem(`moyue:annotations:${documentId}`)
@@ -44,7 +61,9 @@ export async function deleteDocument(documentId: string): Promise<void> {
 }
 
 export function loadDocumentSnapshots(): ReaderDocument[] {
-  return readJson<ReaderDocument[]>('moyue:documents:full', [])
+  return snapshotIndex()
+    .map((id) => readJson<ReaderDocument | null>(snapshotKey(id), null))
+    .filter((document): document is ReaderDocument => Boolean(document))
 }
 
 export async function saveProgress(progress: ReadingProgress): Promise<void> {

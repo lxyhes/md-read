@@ -12,7 +12,6 @@ const errorDetail = ref('')
 const root = ref<HTMLElement | null>(null)
 const diagramRatio = ref(1)
 const shouldRender = ref(Boolean(props.large))
-let shellObserver: MutationObserver | null = null
 let visibilityObserver: IntersectionObserver | null = null
 
 const diagramVariant = computed(() => {
@@ -89,15 +88,9 @@ onMounted(() => {
     }, { rootMargin: '240px 0px' })
     if (root.value) visibilityObserver.observe(root.value)
   }
-  const shell = document.querySelector('.app-shell')
-  if (shell) {
-    shellObserver = new MutationObserver(() => { void render() })
-    shellObserver.observe(shell, { attributes: true, attributeFilter: ['class'] })
-  }
 })
-onUnmounted(() => shellObserver?.disconnect())
 onUnmounted(() => visibilityObserver?.disconnect())
-watch(() => [props.code, store.activeThemeId, store.mode, props.themeKey], () => {
+watch(() => [props.code, props.themeKey, store.activeThemeId], () => {
   if (shouldRender.value) void render()
 })
 </script>
