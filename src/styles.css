@@ -3531,7 +3531,7 @@ button:focus-visible,
 .outline-actions {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: center;
   min-height: 26px;
   padding: 0 2px 8px;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 78%, transparent);

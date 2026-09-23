@@ -1716,7 +1716,7 @@ async function requestFullscreen() {
 
     <main class="main-shell">
       <header class="topbar" :class="{ faded: store.mode === 'focus' }">
-        <div class="crumbs"><span class="eyebrow">阅读空间</span><span class="crumb-separator">/</span><strong>{{ view === 'reader' ? store.currentDocument?.title : view === 'themes' ? '主题空间' : view === 'settings' ? '偏好设置' : '我的文档' }}</strong></div>
+        <div class="crumbs"><strong>{{ view === 'reader' ? store.currentDocument?.title : view === 'themes' ? '主题空间' : view === 'settings' ? '偏好设置' : '我的文档' }}</strong></div>
         <button class="command-trigger" type="button" @click="openSearch('all')"><span>搜索文档、标题、内容</span><kbd>⌘ K</kbd></button>
         <div class="top-actions">
           <IconButton icon="focus" label="专注阅读" :active="store.mode === 'focus'" @click="toggleFocusMode" />
