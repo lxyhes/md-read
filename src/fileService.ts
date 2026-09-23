@@ -29,14 +29,14 @@ export async function watchMarkdownPath(path: string, onChange: () => void): Pro
     }
   }
   await check()
-  const timer = window.setInterval(() => { void check() }, 1500)
+  let timer: number | null = null
   let stopNative = () => {}
   try {
     stopNative = await watch(directory || path, () => { void check() }, { delayMs: 700 })
   } catch {
-    // Polling remains available when the filesystem watcher is unsupported.
+    timer = window.setInterval(() => { void check() }, 1500)
   }
-  return () => { stopped = true; window.clearInterval(timer); stopNative() }
+  return () => { stopped = true; if (timer !== null) window.clearInterval(timer); stopNative() }
 }
 
 export function resolveMarkdownAssetUrl(markdownPath: string, url: string, browserAssets?: BrowserAssetMap): string {

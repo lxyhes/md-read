@@ -59,8 +59,13 @@ export const useReaderStore = defineStore('reader', () => {
     const { parseMarkdown } = await import('../parser')
     try { await authorizeMarkdownAssets(file.path) } catch { /* binary loading below does not require the asset protocol */ }
     const urls: string[] = []
-    parseMarkdown(file.path, file.source, (url) => { urls.push(url); return url })
+    const firstDocument = parseMarkdown(file.path, file.source, (url) => { urls.push(url); return url })
     const assets = { ...await createTauriAssetMap(file.path, urls), ...file.assets }
+    const hasPotentialLocalAsset = urls.some((url) => {
+      const value = url.trim()
+      return Boolean(value) && !value.startsWith('#') && !/^(?:https?:|mailto:|tel:|data:|blob:|\/\/)/i.test(value)
+    })
+    if (!Object.keys(assets).length && !hasPotentialLocalAsset) return firstDocument
     return parseMarkdown(file.path, file.source, (url) => resolveMarkdownAssetUrl(file.path, url, assets))
   }
 

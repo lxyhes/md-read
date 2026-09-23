@@ -140,6 +140,15 @@ const viewerImageStyle = computed<Record<string, string>>((): Record<string, str
 })
 const currentProgress = computed(() => store.currentDocument ? store.progress[store.currentDocument.id] : undefined)
 const currentAnnotations = computed(() => store.annotations.slice().sort((a, b) => b.createdAt - a.createdAt))
+const currentAnnotationsByRegion = computed(() => {
+  const grouped = new Map<string, Annotation[]>()
+  for (const annotation of currentAnnotations.value) {
+    const list = grouped.get(annotation.regionId)
+    if (list) list.push(annotation)
+    else grouped.set(annotation.regionId, [annotation])
+  }
+  return grouped
+})
 const filteredOpenDocuments = computed(() => {
   const needle = tabSearchQuery.value.trim().toLowerCase()
   if (!needle) return store.openDocuments
@@ -1361,8 +1370,10 @@ function toggleCleanMode() {
 function setViewerZoom(value: number) { viewerZoom.value = Math.min(3, Math.max(.1, Number(value.toFixed(2)))) }
 function resetViewerView() { viewerZoom.value = 1; viewerPan.value = { x: 0, y: 0 } }
 function openViewer(region: ReaderRegion) {
-  const generatedTree = region.type === 'code' ? asciiTreeToTree(region.textContent) : null
-  const generatedDiagram = region.type === 'code' ? asciiDiagramToMermaid(region.textContent) : null
+  const language = String(region.metadata?.language ?? 'text')
+  const asciiDiagramCandidate = region.type === 'code' && /^(?:text|plaintext|markdown|md)$/i.test(language)
+  const generatedTree = asciiDiagramCandidate ? asciiTreeToTree(region.textContent) : null
+  const generatedDiagram = asciiDiagramCandidate ? asciiDiagramToMermaid(region.textContent) : null
   if (generatedTree) {
     viewer.value = {
       type: 'tree',
@@ -1860,7 +1871,7 @@ async function requestFullscreen() {
             <div ref="readerViewport" class="reader-viewport" @scroll="onReaderScroll" @wheel="onReaderWheel" @pointerdown="onReaderPointerDown" @mouseup="captureSelection">
               <nav v-if="store.mode === 'clean' && (store.currentDocument?.headings.length ?? 0) > 0" class="reading-progress-rail" aria-label="阅读进度导航"><span class="reading-progress-rail-caption">{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}%</span><div class="reading-progress-rail-track"><span class="reading-progress-rail-fill" :style="{ height: `${(currentProgress?.scrollPercent ?? 0) * 100}%` }" /><button v-for="(heading, index) in store.currentDocument?.headings" :key="heading.id" type="button" class="reading-progress-marker" :class="{ active: store.activeHeadingId === heading.id }" :style="{ top: headingRailPosition(index) }" :aria-label="`跳转到 ${heading.text}`" :title="heading.text" @click.stop="scrollToHeading(heading.regionId)"><i /><span>{{ heading.text }}</span></button></div></nav>
               <div class="reader-content"><h1 class="reader-title">{{ store.currentDocument?.title }}</h1><div class="reader-rule" />
-              <div class="regions-stack"><RegionBlock v-for="region in readerRegions" :key="region.id" :region="region" :annotations="currentAnnotations" :focused="store.focusedRegionId === region.id" :active="store.activeRegionId === region.id" :focus-distance="focusDistanceByRegion.get(region.id)" :theme-mode="store.activeTheme?.manifest.mode" :theme-key="`${store.mode}-${store.activeThemeId}`" @focus="focusRegion(region)" @open-viewer="openViewer(region)" @open-link="openExternalLink" @code-copied="notify('代码已复制')" /></div>
+              <div class="regions-stack"><RegionBlock v-for="region in readerRegions" :key="region.id" :region="region" :annotations="currentAnnotationsByRegion.get(region.id)" :focused="store.focusedRegionId === region.id" :active="store.activeRegionId === region.id" :focus-distance="focusDistanceByRegion.get(region.id)" :theme-mode="store.activeTheme?.manifest.mode" :theme-key="`${store.mode}-${store.activeThemeId}`" @focus="focusRegion(region)" @open-viewer="openViewer(region)" @open-link="openExternalLink" @code-copied="notify('代码已复制')" /></div>
             <footer class="reader-footer"><span>墨阅 · Moyue Reader</span><span>Read → Focus → Understand</span></footer>
               </div>
             </div>
