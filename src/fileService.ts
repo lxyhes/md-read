@@ -1,5 +1,5 @@
 import { convertFileSrc, invoke, isTauri as tauriIsTauri } from '@tauri-apps/api/core'
-import { open } from '@tauri-apps/plugin-dialog'
+import { open, save } from '@tauri-apps/plugin-dialog'
 import { copyFile, mkdir, readDir, readTextFile, rename, watch, writeTextFile } from '@tauri-apps/plugin-fs'
 
 const isTauri = () => tauriIsTauri()
@@ -163,6 +163,18 @@ export async function createMarkdownFile(path: string, source = ''): Promise<voi
   if (!isTauri()) throw new Error('浏览器预览无法新建文件，请使用桌面端打开')
   if (!/\.(md|markdown)$/i.test(path)) throw new Error('只能创建 Markdown 文件')
   await writeTextFile(path, source)
+}
+
+export async function saveMarkdownFile(source: string): Promise<string | null> {
+  if (!isTauri()) throw new Error('浏览器预览无法保存文件，请使用桌面端打开')
+  const selected = await save({
+    defaultPath: `剪贴板-${Date.now()}.md`,
+    filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }],
+  })
+  if (!selected) return null
+  const path = /\.(md|markdown)$/i.test(selected) ? selected : `${selected}.md`
+  await createMarkdownFile(path, source)
+  return path
 }
 
 export async function createMarkdownDirectory(path: string): Promise<void> {
