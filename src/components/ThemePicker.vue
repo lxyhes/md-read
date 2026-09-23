@@ -40,7 +40,7 @@ function themeVars(theme: MoyueTheme) {
   <div v-else class="theme-picker-gallery">
     <button v-for="theme in props.themes" :key="theme.manifest.id" class="theme-card" :class="[`theme-card-${theme.manifest.id}`, { selected: props.selectedThemeId === theme.manifest.id }]" :style="themeVars(theme)" type="button" @click="selectTheme(theme)">
       <div class="theme-swatch"><span class="swatch-line" /><strong>墨阅</strong><small>{{ theme.manifest.name }}</small></div>
-      <div class="theme-card-meta"><span>{{ theme.manifest.name }}</span><span>{{ theme.manifest.mode === 'light' ? '浅色' : '深色' }}</span></div>
+      <div class="theme-card-meta"><span>{{ theme.manifest.name }}</span><span>{{ props.selectedThemeId === theme.manifest.id ? '当前使用' : theme.manifest.mode === 'light' ? '浅色' : '深色' }}</span></div>
     </button>
   </div>
 </template>

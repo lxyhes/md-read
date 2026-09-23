@@ -30,6 +30,10 @@ function textLines(value: string) {
   }).slice(0, 3)
 }
 
+function edgeLabelWidth(value: string) {
+  return Array.from(value).reduce((width, character) => width + (character.charCodeAt(0) > 255 ? 12 : 7), 16)
+}
+
 /** Render the common flowchart subset without loading the full Mermaid runtime. */
 export function renderSimpleFlowchart(source: string): string | null {
   const lines = source.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
@@ -76,7 +80,8 @@ export function renderSimpleFlowchart(source: string): string | null {
   const horizontal = direction === 'LR' || direction === 'RL'
   const linesPerTrack = Math.max(1, Math.ceil(Math.sqrt(nodes.length)))
   const trackCount = Math.ceil(nodes.length / linesPerTrack)
-  const cellWidth = 190
+  const maxEdgeLabelWidth = Math.max(0, ...edges.map((edge) => edge.label ? edgeLabelWidth(edge.label) : 0))
+  const cellWidth = Math.max(190, 144 + maxEdgeLabelWidth + 12)
   const cellHeight = 96
   const width = horizontal ? trackCount * cellWidth + 30 : linesPerTrack * cellWidth + 30
   const height = horizontal ? linesPerTrack * cellHeight + 30 : trackCount * cellHeight + 30
@@ -93,7 +98,10 @@ export function renderSimpleFlowchart(source: string): string | null {
     const from = positions.get(edge.from)
     const to = positions.get(edge.to)
     if (!from || !to) return ''
-    const label = edge.label ? `<text x="${(from.x + to.x) / 2}" y="${(from.y + to.y) / 2 - 7}" text-anchor="middle" class="edge-label">${escapeXml(edge.label)}</text>` : ''
+    const labelX = (from.x + to.x) / 2
+    const labelY = (from.y + to.y) / 2 - 7
+    const labelWidth = edge.label ? edgeLabelWidth(edge.label) : 0
+    const label = edge.label ? `<g class="edge-label"><rect x="${labelX - labelWidth / 2}" y="${labelY - 12}" width="${labelWidth}" height="18" rx="4" class="edge-label-bg" /><text x="${labelX}" y="${labelY}" text-anchor="middle">${escapeXml(edge.label)}</text></g>` : ''
     return `<path d="M ${from.x} ${from.y} L ${to.x} ${to.y}" class="edge" marker-end="url(#arrow)" />${label}`
   }).join('')
   const nodeSvg = nodes.map((node) => {
