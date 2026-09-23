@@ -98,7 +98,8 @@ const virtualViewportHeight = ref(0)
 const virtualRegionThreshold = 240
 const virtualGap = 8
 let focusScrollTargetId: string | null = null
-let focusWheelAt = -Infinity
+let focusWheelLocked = false
+let focusWheelReleaseTimer: number | null = null
 let stopNativeFileDrop: (() => void) | null = null
 const documentWatchers = new Map<string, () => void>()
 const documentReloadTimers = new Map<string, number>()
@@ -955,6 +956,7 @@ onUnmounted(() => {
   if (searchTimer !== null) window.clearTimeout(searchTimer)
   if (scrollFrame !== null) window.cancelAnimationFrame(scrollFrame)
   if (progressTimer !== null) window.clearTimeout(progressTimer)
+  if (focusWheelReleaseTimer !== null) window.clearTimeout(focusWheelReleaseTimer)
   regionLayoutObserver?.disconnect()
   regionMeasurementObserver?.disconnect()
   viewportResizeObserver?.disconnect()
@@ -1432,9 +1434,13 @@ function onReaderWheel(event: WheelEvent) {
   const isFocusMode = store.mode === 'region-focus' || store.mode === 'focus'
   if (!viewport || !isFocusMode || event.ctrlKey || event.deltaY === 0) return
   event.preventDefault()
-  const now = performance.now()
-  if (now - focusWheelAt < 180) return
-  focusWheelAt = now
+  if (focusWheelReleaseTimer !== null) window.clearTimeout(focusWheelReleaseTimer)
+  focusWheelReleaseTimer = window.setTimeout(() => {
+    focusWheelLocked = false
+    focusWheelReleaseTimer = null
+  }, 260)
+  if (focusWheelLocked) return
+  focusWheelLocked = true
   moveFocus(event.deltaY > 0 ? 1 : -1)
 }
 function onReaderPointerDown() { focusScrollTargetId = null }

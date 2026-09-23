@@ -99,9 +99,9 @@ export function renderSimpleFlowchart(source: string): string | null {
     const to = positions.get(edge.to)
     if (!from || !to) return ''
     const labelX = (from.x + to.x) / 2
-    const labelY = (from.y + to.y) / 2 - 7
+    const labelCenterY = from.x === to.x ? (from.y + to.y) / 2 : (from.y + to.y) / 2 - 10
     const labelWidth = edge.label ? edgeLabelWidth(edge.label) : 0
-    const label = edge.label ? `<g class="edge-label"><rect x="${labelX - labelWidth / 2}" y="${labelY - 12}" width="${labelWidth}" height="18" rx="4" class="edge-label-bg" /><text x="${labelX}" y="${labelY}" text-anchor="middle">${escapeXml(edge.label)}</text></g>` : ''
+    const label = edge.label ? `<g class="edge-label"><rect x="${labelX - labelWidth / 2}" y="${labelCenterY - 9}" width="${labelWidth}" height="18" rx="4" class="edge-label-bg" /><text x="${labelX}" y="${labelCenterY + 4}" text-anchor="middle">${escapeXml(edge.label)}</text></g>` : ''
     return `<path d="M ${from.x} ${from.y} L ${to.x} ${to.y}" class="edge" marker-end="url(#arrow)" />${label}`
   }).join('')
   const nodeSvg = nodes.map((node) => {
