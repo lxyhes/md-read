@@ -21,6 +21,31 @@ describe('Moyue markdown region parser', () => {
     expect(document.regions[0].metadata?.code).toBe('flowchart TD\nA --> B')
   })
 
+  it('renders inline and block math with KaTeX', () => {
+    const document = parseMarkdown('math.md', String.raw`Inline $x^2$.
+
+$$
+\frac{a}{b}
+$$`)
+    expect(document.regions[0].html).toContain('katex')
+    expect(document.regions[1].type).toBe('math')
+    expect(document.regions[1].html).toContain('frac')
+  })
+
+  it('renders footnotes at the end of the document', () => {
+    const document = parseMarkdown('footnotes.md', '正文[^1]。\n\n[^1]: 脚注内容。')
+    expect(document.regions[0].html).toContain('href="#footnote-1"')
+    expect(document.regions.at(-1)?.type).toBe('footnotes')
+    expect(document.regions.at(-1)?.html).toContain('脚注内容')
+  })
+
+  it('renders GitHub-style callouts', () => {
+    const document = parseMarkdown('callout.md', '> [!WARNING]\n> 这是一条提醒。')
+    expect(document.regions[0].html).toContain('markdown-callout')
+    expect(document.regions[0].html).toContain('这是一条提醒')
+    expect(document.regions[0].html).not.toContain('[!WARNING]')
+  })
+
   it('does not emit executable raw HTML', () => {
     const document = parseMarkdown('unsafe.md', '<script>alert(1)</script>\n\n[bad](javascript:alert(1))')
     expect(document.regions[0].html).not.toContain('<script>')

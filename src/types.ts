@@ -7,6 +7,8 @@ export type ReaderRegionType =
   | 'mermaid'
   | 'image'
   | 'table'
+  | 'math'
+  | 'footnotes'
   | 'thematic-break'
 
 export interface HeadingItem {
