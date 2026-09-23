@@ -4,9 +4,15 @@
 
 墨阅是一款 **本地优先、离线可用的 Markdown 沉浸式阅读器**。它不追求把编辑器做得更复杂，而是把长文档变成更容易浏览、理解和回看的阅读空间：章节导航、代码高亮、Mermaid 图表、专注模式、主题切换和阅读进度，都在一个安静的桌面窗口里完成。
 
-![墨阅产品视觉预览](./设计图/1.png)
+## 产品预览
 
-> 上图为产品视觉预览。当前项目优先验证 Windows 桌面端体验，前端结构保持 Tauri 跨平台兼容。
+以下截图来自内置浏览器中的实际运行界面，示例内容为虚构文本，不包含个人文件或隐私信息。
+
+![墨阅阅读空间](./docs/screenshots/reader-overview.png)
+
+![Mermaid 图表独立查看](./docs/screenshots/mermaid-viewer.png)
+
+![专注阅读模式](./docs/screenshots/focus-mode.png)
 
 ## 为什么是墨阅？
 
@@ -110,7 +116,7 @@ SQLite（Tauri SQL 插件）
 │  ├─ themes.ts          内置主题与主题包处理
 │  └─ styles.css         全局布局、主题和阅读排版
 ├─ src-tauri/            Tauri 2 Rust 容器与插件配置
-├─ 设计图/               产品视觉参考图
+├─ docs/screenshots/      README 产品截图
 └─ package.json
 ```
 
