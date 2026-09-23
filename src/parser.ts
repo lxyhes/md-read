@@ -34,6 +34,33 @@ function imageNode(node: MdastNode): MdastNode | null {
   return null
 }
 
+function splitArticleStrongText(node: MdastNode): MdastNode[] {
+  if (node.type !== 'text' || !node.value || !/(?:\*{2,4}|_{2,4}).+(?:\*{2,4}|_{2,4})/.test(node.value)) return [node]
+  const result: MdastNode[] = []
+  const pattern = /(\*{2,4}|_{2,4})([^\n]*?)\1/g
+  let cursor = 0
+  let match: RegExpExecArray | null
+  while ((match = pattern.exec(node.value)) !== null) {
+    const content = match[2].trim()
+    if (!content) continue
+    if (match.index > cursor) result.push({ ...node, value: node.value.slice(cursor, match.index) })
+    result.push({ type: 'strong', children: [{ type: 'text', value: content }] })
+    cursor = match.index + match[0].length
+  }
+  if (!result.length) return [node]
+  if (cursor < node.value.length) result.push({ ...node, value: node.value.slice(cursor) })
+  return result
+}
+
+function normalizeArticleStrong(node: MdastNode) {
+  if (node.type === 'code' || node.type === 'inlineCode' || node.type === 'html') return
+  if (!node.children) return
+  node.children = node.children.flatMap((child) => {
+    normalizeArticleStrong(child)
+    return child.type === 'text' ? splitArticleStrongText(child) : [child]
+  })
+}
+
 function regionType(node: MdastNode): ReaderRegionType {
   if (mermaidCode(node) !== null) return 'mermaid'
   if (imageNode(node)) return 'image'
@@ -45,6 +72,7 @@ function regionType(node: MdastNode): ReaderRegionType {
 
 export function parseMarkdown(path: string, source: string, resolveUrl: MarkdownUrlResolver = (url) => url): ReaderDocument {
   const tree = processor.parse(source) as unknown as MdastNode
+  normalizeArticleStrong(tree)
   const documentId = `doc_${hashText(path)}`
   const regions: ReaderRegion[] = []
   const headings: HeadingItem[] = []

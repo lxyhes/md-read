@@ -794,6 +794,27 @@ html, body, #app { background: var(--app-bg, #070d22); }
   vertical-align: -.04em;
   content: "";
 }
+.reader-content .region-content h2.numbered-heading,
+.reader-content .region-content h3.numbered-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.reader-content .region-content h2.numbered-heading::before,
+.reader-content .region-content h3.numbered-heading::before {
+  display: none;
+}
+.reader-content .region-content .heading-number {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--muted) 78%, var(--surface));
+  font-size: 1.42em;
+  font-weight: 700;
+  letter-spacing: -.08em;
+  line-height: .82;
+}
+.reader-content .region-content .heading-text {
+  min-width: 0;
+}
 .reader-content .region-content p {
   max-width: 72ch;
   margin: 0 0 18px;
