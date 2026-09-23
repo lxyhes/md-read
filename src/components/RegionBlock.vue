@@ -9,13 +9,14 @@ import { asciiDiagramToMermaid, asciiTreeToTree } from '../asciiDiagram'
 
 const props = defineProps<{ region: ReaderRegion; annotations?: Annotation[]; focused: boolean; active: boolean; focusDistance?: number; themeMode?: ThemeManifest['mode']; themeKey?: string }>()
 const emit = defineEmits<{ focus: []; openViewer: []; 'open-link': [url: string]; 'code-copied': [] }>()
+const codeLanguage = computed(() => String(props.region.metadata?.language ?? 'text'))
+const proseCodeLanguage = computed(() => /^(?:text|plaintext|markdown|md)$/i.test(codeLanguage.value))
 const highlighted = ref(props.region.html)
 const copied = ref(false)
-const wrapped = ref(false)
+const wrapped = ref(proseCodeLanguage.value)
 const selectedCodeText = ref('')
 const activeCodeLine = ref('')
 let copyTimer: number | null = null
-const codeLanguage = computed(() => String(props.region.metadata?.language ?? 'text'))
 const asciiTree = computed(() => props.region.type === 'code' ? asciiTreeToTree(props.region.textContent) : null)
 const asciiDiagramCode = computed(() => props.region.type === 'code' ? asciiDiagramToMermaid(props.region.textContent) : null)
 const isDiagramLike = computed(() => Boolean(asciiTree.value || asciiDiagramCode.value))
