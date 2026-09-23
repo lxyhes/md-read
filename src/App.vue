@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { useReaderStore } from './stores/reader'
 import RegionBlock from './components/RegionBlock.vue'
@@ -87,9 +87,16 @@ let scrollFrame: number | null = null
 let progressTimer: number | null = null
 let searchTimer: number | null = null
 let regionLayoutObserver: ResizeObserver | null = null
+let regionMeasurementObserver: ResizeObserver | null = null
+let viewportResizeObserver: ResizeObserver | null = null
 let regionLayoutDocumentId: string | null = null
 let regionLayoutStateKey: string | null = null
 let regionLayoutCache: Array<{ id: string; top: number; bottom: number }> = []
+const virtualMeasuredHeights = shallowRef(new Map<string, number>())
+const virtualScrollTop = ref(0)
+const virtualViewportHeight = ref(0)
+const virtualRegionThreshold = 240
+const virtualGap = 8
 let focusScrollTargetId: string | null = null
 let focusWheelAt = -Infinity
 let stopNativeFileDrop: (() => void) | null = null
@@ -160,6 +167,19 @@ const filteredLibraryDocuments = computed(() => {
   return store.documents.filter((document) => document.title.toLowerCase().includes(needle))
 })
 const currentHeading = computed(() => store.currentDocument?.headings.find((heading) => heading.id === store.activeHeadingId))
+const headingIdByRegion = computed(() => {
+  const result = new Map<string, string | null>()
+  const document = store.currentDocument
+  if (!document) return result
+  const headingByRegion = new Map(document.headings.map((heading) => [heading.regionId, heading.id]))
+  let activeHeadingId: string | null = null
+  for (const region of document.regions) {
+    const headingId = headingByRegion.get(region.id)
+    if (headingId) activeHeadingId = headingId
+    result.set(region.id, activeHeadingId)
+  }
+  return result
+})
 const collapsedOutlineHeadingIds = ref<Set<string>>(new Set())
 const outlineExpansionOverride = ref<boolean | null>(null)
 const outlineRows = computed(() => {
@@ -189,6 +209,33 @@ const readerRegions = computed(() => {
   if (!document) return []
   const first = document.regions[0]
   return first?.type === 'heading' && first.textContent.trim() === document.title.trim() ? document.regions.slice(1) : document.regions
+})
+const virtualizedReader = computed(() => readerRegions.value.length > virtualRegionThreshold)
+const virtualLayout = computed(() => {
+  const regions = readerRegions.value
+  const offsets: number[] = []
+  const heights: number[] = []
+  let cursor = 0
+  for (const [index, region] of regions.entries()) {
+    offsets.push(cursor)
+    const height = virtualMeasuredHeights.value.get(region.id) ?? estimatedRegionHeight(region)
+    heights.push(height)
+    cursor += height
+    if (index < regions.length - 1) cursor += virtualGap
+  }
+  return { regions, offsets, heights, total: cursor }
+})
+const virtualRange = computed(() => {
+  const layout = virtualLayout.value
+  if (!virtualizedReader.value || !layout.regions.length) return { start: 0, end: layout.regions.length, before: 0, after: 0, regions: layout.regions }
+  const viewportHeight = virtualViewportHeight.value || readerViewport.value?.clientHeight || 720
+  const overscan = Math.max(720, viewportHeight * 1.5)
+  const top = Math.max(0, virtualScrollTop.value - overscan)
+  const bottom = virtualScrollTop.value + viewportHeight + overscan
+  const start = Math.max(0, findVirtualIndex(layout, top) - 1)
+  const end = Math.min(layout.regions.length, findVirtualIndex(layout, bottom) + 2)
+  const renderedBottom = end > 0 ? layout.offsets[end - 1] + layout.heights[end - 1] : 0
+  return { start, end: Math.max(start, end), before: layout.offsets[start] ?? 0, after: Math.max(0, layout.total - renderedBottom), regions: layout.regions.slice(start, end) }
 })
 const focusDistanceByRegion = computed(() => {
   const focusedIndex = readerRegions.value.findIndex((region) => region.id === store.focusedRegionId)
@@ -232,6 +279,34 @@ const currentDirectoryFiles = computed(() => {
 })
 const focusTimeLabel = computed(() => `${String(Math.floor(focusRemaining.value / 60)).padStart(2, '0')}:${String(focusRemaining.value % 60).padStart(2, '0')}`)
 const focusProgress = computed(() => 1 - focusRemaining.value / (25 * 60))
+
+function estimatedRegionHeight(region: ReaderRegion) {
+  switch (region.type) {
+    case 'heading': return 92
+    case 'code': return Math.min(560, 92 + region.textContent.split(/\r?\n/).length * 22)
+    case 'image': return 320
+    case 'mermaid': return 260
+    case 'table': return 250
+    case 'math': return 140
+    case 'list': return 190
+    case 'blockquote': return 150
+    case 'footnotes': return 260
+    case 'thematic-break': return 70
+    default: return 118
+  }
+}
+
+function findVirtualIndex(layout: { offsets: number[]; heights: number[] }, target: number) {
+  if (!layout.offsets.length) return 0
+  let low = 0
+  let high = layout.offsets.length - 1
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2)
+    if (layout.offsets[middle] <= target) low = middle
+    else high = middle - 1
+  }
+  return low
+}
 
 function notify(message: string) {
   toast.value = message
@@ -850,6 +925,7 @@ async function boot() {
       view.value = 'reader'
       await nextTick()
       invalidateRegionLayout()
+      syncVirtualViewport()
       observeReaderLayout()
       if (!showResumePromptIfNeeded(store.currentDocument.id)) restoreScroll()
     }
@@ -880,6 +956,8 @@ onUnmounted(() => {
   if (scrollFrame !== null) window.cancelAnimationFrame(scrollFrame)
   if (progressTimer !== null) window.clearTimeout(progressTimer)
   regionLayoutObserver?.disconnect()
+  regionMeasurementObserver?.disconnect()
+  viewportResizeObserver?.disconnect()
 })
 watch(query, () => {
   searchIndex.value = 0
@@ -888,7 +966,17 @@ watch(query, () => {
 })
 watch(() => store.mode, (mode) => { if (mode !== 'focus') stopFocusTimer() })
 watch(() => store.currentDocument?.path, (path) => { fileSyncState.value = 'idle'; focusScrollTargetId = null; outlineQuery.value = ''; invalidateRegionLayout(); void refreshFileTree(); if (path) void syncFilesystemTreeTarget(path) }, { immediate: true })
-watch(() => store.currentDocumentId, () => { collapsedOutlineHeadingIds.value = new Set(); outlineExpansionOverride.value = null; nextTick(observeReaderLayout) })
+watch(() => store.currentDocumentId, () => {
+  collapsedOutlineHeadingIds.value = new Set()
+  outlineExpansionOverride.value = null
+  virtualMeasuredHeights.value = new Map()
+  nextTick(() => { syncVirtualViewport(); observeReaderLayout() })
+})
+watch(() => [store.mode, store.activeThemeId, store.readerSettings.fontSize, store.readerSettings.lineHeight, store.readerSettings.width], () => {
+  virtualMeasuredHeights.value = new Map()
+  nextTick(() => { syncVirtualViewport(); observeReaderLayout() })
+})
+watch(() => [virtualizedReader.value, virtualRange.value.start, virtualRange.value.end], () => { void nextTick(observeRenderedRegionSizes) })
 watch(() => store.openDocuments.map((document) => document.path).join('\n'), () => { void syncDocumentWatchers() }, { immediate: true })
 watch(() => [store.activeHeadingId, leftPanelTab.value, store.mode], () => {
   if (!store.activeHeadingId) return
@@ -987,7 +1075,13 @@ function moveFocus(delta: number) {
     if (focusScrollTargetId !== next.id) return
     const viewport = readerViewport.value
     const target = viewport ? [...viewport.querySelectorAll<HTMLElement>('[data-region-id]')].find((element) => element.dataset.regionId === next.id) : null
-    if (!viewport || !target) return
+    if (!viewport) return
+    if (!target && virtualizedReader.value) {
+      const index = virtualLayout.value.regions.findIndex((region) => region.id === next.id)
+      if (index >= 0) viewport.scrollTo({ top: Math.max(0, virtualLayout.value.offsets[index] - Math.min(viewport.clientHeight * .34, 280)), behavior: 'auto' })
+      return
+    }
+    if (!target) return
     const viewportRect = viewport.getBoundingClientRect()
     const targetRect = target.getBoundingClientRect()
     const probeOffset = Math.min(viewport.clientHeight * .34, 280)
@@ -1232,12 +1326,43 @@ function invalidateRegionLayout() {
   regionLayoutStateKey = null
   regionLayoutCache = []
 }
+function syncVirtualViewport() {
+  const viewport = readerViewport.value
+  if (!viewport) return
+  virtualScrollTop.value = viewport.scrollTop
+  virtualViewportHeight.value = viewport.clientHeight
+}
+function observeRenderedRegionSizes() {
+  if (!regionMeasurementObserver) return
+  const content = readerViewport.value?.querySelector<HTMLElement>('.reader-content')
+  if (!content) return
+  content.querySelectorAll<HTMLElement>('[data-region-id]').forEach((region) => regionMeasurementObserver?.observe(region))
+}
 function observeReaderLayout() {
   const content = readerViewport.value?.querySelector<HTMLElement>('.reader-content')
   regionLayoutObserver?.disconnect()
+  regionMeasurementObserver?.disconnect()
+  viewportResizeObserver?.disconnect()
   if (!content || typeof ResizeObserver === 'undefined') return
   regionLayoutObserver = new ResizeObserver(invalidateRegionLayout)
   regionLayoutObserver.observe(content)
+  regionMeasurementObserver = new ResizeObserver((entries) => {
+    const next = new Map(virtualMeasuredHeights.value)
+    let changed = false
+    for (const entry of entries) {
+      const region = entry.target as HTMLElement
+      const height = region.getBoundingClientRect().height
+      const id = region.dataset.regionId
+      if (!id || !height || Math.abs((next.get(id) ?? 0) - height) < 0.5) continue
+      next.set(id, height)
+      changed = true
+    }
+    if (changed) virtualMeasuredHeights.value = next
+    invalidateRegionLayout()
+  })
+  viewportResizeObserver = new ResizeObserver(syncVirtualViewport)
+  if (readerViewport.value) viewportResizeObserver.observe(readerViewport.value)
+  observeRenderedRegionSizes()
 }
 function refreshRegionLayout(element: HTMLElement, documentId: string) {
   const viewportRect = element.getBoundingClientRect()
@@ -1250,6 +1375,12 @@ function refreshRegionLayout(element: HTMLElement, documentId: string) {
   regionLayoutStateKey = `${documentId}:${store.mode}:${store.focusedRegionId ?? ''}`
 }
 function regionAtScrollPosition(element: HTMLElement, documentId: string) {
+  if (virtualizedReader.value) {
+    const layout = virtualLayout.value
+    const target = element.scrollTop + Math.min(element.clientHeight * .34, 280)
+    const index = findVirtualIndex(layout, target)
+    return layout.regions[index]?.id ?? store.activeRegionId
+  }
   const stateKey = `${documentId}:${store.mode}:${store.focusedRegionId ?? ''}`
   if (regionLayoutDocumentId !== documentId || regionLayoutStateKey !== stateKey || !regionLayoutCache.length) refreshRegionLayout(element, documentId)
   if (!regionLayoutCache.length) return store.activeRegionId
@@ -1277,6 +1408,8 @@ function restoreScroll() {
   const percent = currentProgress.value?.scrollPercent ?? 0
   readerScrollPercent.value = percent
   viewport.scrollTop = percent * (viewport.scrollHeight - viewport.clientHeight)
+  virtualScrollTop.value = viewport.scrollTop
+  virtualViewportHeight.value = viewport.clientHeight
 }
 function currentViewportPercent() {
   const viewport = readerViewport.value
@@ -1288,6 +1421,8 @@ function restoreViewportPercent(percent: number) {
     if (viewport) {
       readerScrollPercent.value = percent
       viewport.scrollTop = percent * Math.max(0, viewport.scrollHeight - viewport.clientHeight)
+      virtualScrollTop.value = viewport.scrollTop
+      virtualViewportHeight.value = viewport.clientHeight
     }
   })
 }
@@ -1310,6 +1445,8 @@ function onReaderScroll() {
     const element = readerViewport.value
     const document = store.currentDocument
     if (!element || !document) return
+    virtualScrollTop.value = element.scrollTop
+    virtualViewportHeight.value = element.clientHeight
     const percent = element.scrollHeight <= element.clientHeight ? 0 : element.scrollTop / (element.scrollHeight - element.clientHeight)
     readerScrollPercent.value = percent
     const regionId = regionAtScrollPosition(element, document.id)
@@ -1531,6 +1668,13 @@ function scrollToHeading(regionId: string) {
   const readerDocument = store.currentDocument
   const element = document.querySelector(`[data-region-id="${regionId}"]`)
   if (element) { element.scrollIntoView({ behavior: 'smooth', block: 'start' }); return }
+  if (virtualizedReader.value) {
+    const index = virtualLayout.value.regions.findIndex((region) => region.id === regionId)
+    if (index >= 0) {
+      readerViewport.value?.scrollTo({ top: virtualLayout.value.offsets[index], behavior: 'smooth' })
+      return
+    }
+  }
   const first = readerDocument?.regions[0]
   if (first?.id === regionId && readerRegions.value[0]?.id !== regionId) readerViewport.value?.scrollTo({ top: 0, behavior: 'smooth' })
 }
@@ -1573,15 +1717,7 @@ function clearRegionFocus() {
   else store.clearFocus()
 }
 function headingIdForRegion(regionId: string | null) {
-  const readerDocument = store.currentDocument
-  const targetIndex = readerDocument?.regions.findIndex((region) => region.id === regionId) ?? -1
-  if (!readerDocument || targetIndex < 0) return null
-  let headingId: string | null = null
-  for (const heading of readerDocument.headings) {
-    if (readerDocument.regions.findIndex((region) => region.id === heading.regionId) > targetIndex) break
-    headingId = heading.id
-  }
-  return headingId
+  return regionId ? headingIdByRegion.value.get(regionId) ?? null : null
 }
 function syncActiveHeading(regionId: string | null, ensureVisible = false) {
   const headingId = headingIdForRegion(regionId)
@@ -1871,7 +2007,13 @@ async function requestFullscreen() {
             <div ref="readerViewport" class="reader-viewport" @scroll="onReaderScroll" @wheel="onReaderWheel" @pointerdown="onReaderPointerDown" @mouseup="captureSelection">
               <nav v-if="store.mode === 'clean' && (store.currentDocument?.headings.length ?? 0) > 0" class="reading-progress-rail" aria-label="阅读进度导航"><span class="reading-progress-rail-caption">{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}%</span><div class="reading-progress-rail-track"><span class="reading-progress-rail-fill" :style="{ height: `${(currentProgress?.scrollPercent ?? 0) * 100}%` }" /><button v-for="(heading, index) in store.currentDocument?.headings" :key="heading.id" type="button" class="reading-progress-marker" :class="{ active: store.activeHeadingId === heading.id }" :style="{ top: headingRailPosition(index) }" :aria-label="`跳转到 ${heading.text}`" :title="heading.text" @click.stop="scrollToHeading(heading.regionId)"><i /><span>{{ heading.text }}</span></button></div></nav>
               <div class="reader-content"><h1 class="reader-title">{{ store.currentDocument?.title }}</h1><div class="reader-rule" />
-              <div class="regions-stack"><RegionBlock v-for="region in readerRegions" :key="region.id" :region="region" :annotations="currentAnnotationsByRegion.get(region.id)" :focused="store.focusedRegionId === region.id" :active="store.activeRegionId === region.id" :focus-distance="focusDistanceByRegion.get(region.id)" :theme-mode="store.activeTheme?.manifest.mode" :theme-key="`${store.mode}-${store.activeThemeId}`" @focus="focusRegion(region)" @open-viewer="openViewer(region)" @open-link="openExternalLink" @code-copied="notify('代码已复制')" /></div>
+              <div class="regions-stack" :class="{ virtualized: virtualizedReader }">
+                <div v-if="virtualRange.before" class="virtual-spacer" :style="{ height: `${virtualRange.before}px` }" aria-hidden="true" />
+                <div class="virtual-regions">
+                  <RegionBlock v-for="region in virtualRange.regions" v-memo="[region.id, store.activeRegionId === region.id, store.focusedRegionId === region.id, focusDistanceByRegion.get(region.id), store.mode, store.activeThemeId, currentAnnotationsByRegion.get(region.id)]" :key="region.id" :region="region" :annotations="currentAnnotationsByRegion.get(region.id)" :focused="store.focusedRegionId === region.id" :active="store.activeRegionId === region.id" :focus-distance="focusDistanceByRegion.get(region.id)" :theme-mode="store.activeTheme?.manifest.mode" :theme-key="`${store.mode}-${store.activeThemeId}`" @focus="focusRegion(region)" @open-viewer="openViewer(region)" @open-link="openExternalLink" @code-copied="notify('代码已复制')" />
+                </div>
+                <div v-if="virtualRange.after" class="virtual-spacer" :style="{ height: `${virtualRange.after}px` }" aria-hidden="true" />
+              </div>
             <footer class="reader-footer"><span>墨阅 · Moyue Reader</span><span>Read → Focus → Understand</span></footer>
               </div>
             </div>

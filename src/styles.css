@@ -1957,6 +1957,19 @@ html, body, #app { background: var(--app-bg, #070d22); }
     padding: 54px 0 88px;
   }
 }
+.reader-content .regions-stack.virtualized {
+  gap: 0;
+}
+.reader-content .virtual-regions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.reader-content .virtual-spacer {
+  width: 100%;
+  flex: 0 0 auto;
+  pointer-events: none;
+}
 .reader-content .region-block {
   content-visibility: auto;
   contain-intrinsic-size: auto 150px;
@@ -4072,6 +4085,28 @@ button:focus-visible,
 }
 .mermaid-svg svg .edgePath .path {
   stroke-width: 1.25px;
+}
+.mermaid-svg svg .edge {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5px;
+}
+.mermaid-svg svg marker path {
+  fill: var(--accent);
+}
+.mermaid-svg svg .node rect {
+  fill: var(--surface-raised);
+  stroke: var(--accent);
+}
+.mermaid-svg svg .node text {
+  fill: var(--ink);
+  font-family: var(--ui-font), sans-serif;
+  font-size: 14px;
+}
+.mermaid-svg svg .edge-label {
+  fill: var(--muted);
+  font-family: var(--ui-font), sans-serif;
+  font-size: 12px;
 }
 
 /* Reader finish: keep document navigation quiet and give the article room to breathe. */

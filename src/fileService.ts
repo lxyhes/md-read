@@ -56,39 +56,6 @@ export function resolveMarkdownAssetUrl(markdownPath: string, url: string, brows
   return `${convertFileSrc(absolutePath)}${match?.[2] ?? ''}`
 }
 
-export async function createTauriAssetMap(markdownPath: string, urls: Iterable<string>): Promise<Record<string, string>> {
-  const assets: Record<string, string> = {}
-  if (!isTauri()) return assets
-  for (const url of new Set(urls)) {
-    const rawPath = url.trim().match(/^([^?#]*)/)?.[1] ?? ''
-    const localPath = localAssetPath(decodeUrlPath(rawPath))
-    if (!localPath || !isImagePath(localPath)) continue
-    const absolutePath = resolveLocalAssetPath(markdownPath, localPath)
-    try {
-      const response = await invoke<ArrayBuffer | number[]>('read_local_image', { path: absolutePath })
-      const bytes = response instanceof ArrayBuffer ? new Uint8Array(response) : Uint8Array.from(response)
-      assets[assetKey(absolutePath)] = URL.createObjectURL(new Blob([bytes], { type: imageMimeType(absolutePath) }))
-    } catch (error) { console.error(`无法读取 Markdown 图片：${absolutePath}`, error) }
-  }
-  return assets
-}
-
-export async function createRemoteAssetMap(urls: Iterable<string>): Promise<Record<string, string>> {
-  if (!isTauri()) return {}
-  const candidates = [...new Set(urls)].filter(isSupportedRemoteImage)
-  const entries = await Promise.all(candidates.map(async (url) => {
-    try {
-      const result = await invoke<{ bytes: number[]; mime: string }>('read_remote_image', { url })
-      const bytes = Uint8Array.from(result.bytes)
-      return [url, URL.createObjectURL(new Blob([bytes], { type: result.mime || 'image/jpeg' }))] as const
-    } catch (error) {
-      console.warn(`无法缓存远程图片：${url}`, error)
-      return null
-    }
-  }))
-  return Object.fromEntries(entries.filter((entry): entry is readonly [string, string] => Boolean(entry)))
-}
-
 export async function authorizeMarkdownAssets(markdownPath: string): Promise<void> {
   if (!isTauri()) return
   const directory = dirnameOf(markdownPath)
@@ -273,21 +240,6 @@ function assetKey(path: string) {
 
 function isImagePath(path: string) {
   return /\.(?:avif|bmp|gif|jpe?g|png|svg|webp)$/i.test(path)
-}
-
-function imageMimeType(path: string) {
-  const extension = path.split('.').pop()?.toLowerCase()
-  return extension === 'svg' ? 'image/svg+xml' : extension === 'jpg' || extension === 'jpeg' ? 'image/jpeg' : `image/${extension || 'png'}`
-}
-
-function isSupportedRemoteImage(url: string) {
-  try {
-    const parsed = new URL(url)
-    const host = parsed.hostname.toLowerCase()
-    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && (host === 'mmbiz.qpic.cn' || host.endsWith('.xhscdn.com') || host === 'ci.xiaohongshu.com')
-  } catch {
-    return false
-  }
 }
 
 async function scanDirectory(path: string): Promise<OpenedFile[]> {
