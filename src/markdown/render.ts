@@ -78,6 +78,12 @@ function numberedHeading(value: string) {
   return match?.[2].trim() ? { number: match[1], title: match[2].trim() } : null
 }
 
+function standaloneImageNode(node: MdastNode): MdastNode | null {
+  if (node.type === 'image') return node
+  if (node.type === 'paragraph' && node.children?.length === 1 && node.children[0]?.type === 'image') return node.children[0]
+  return null
+}
+
 function blockHtml(node: MdastNode, resolveUrl: MarkdownUrlResolver = (url) => url, context = createRenderContext()): string {
   const children = () => (node.children ?? []).map((child) => blockHtml(child, resolveUrl, context)).join('')
   const inlineChildren = (preserveSoftBreaks = false) => (node.children ?? []).map((child) => inlineHtml(child, preserveSoftBreaks, resolveUrl, context)).join('')
@@ -89,7 +95,10 @@ function blockHtml(node: MdastNode, resolveUrl: MarkdownUrlResolver = (url) => u
       if (!number || !plainTextHeading) return `<h${depth}>${inlineChildren()}</h${depth}>`
       return `<h${depth} class="numbered-heading"><span class="heading-number">${escapeHtml(number.number)}</span><span class="heading-text">${escapeHtml(number.title)}</span></h${depth}>`
     }
-    case 'paragraph': return `<p>${inlineChildren(true)}</p>`
+    case 'paragraph': {
+      const standaloneImage = standaloneImageNode(node)
+      return standaloneImage ? blockHtml(standaloneImage, resolveUrl, context) : `<p>${inlineChildren(true)}</p>`
+    }
     case 'blockquote': return calloutHtml(node, resolveUrl, context) ?? `<blockquote>${children()}</blockquote>`
     case 'list': return `<${node.ordered ? 'ol' : 'ul'}>${children()}</${node.ordered ? 'ol' : 'ul'}>`
     case 'listItem': {
@@ -100,7 +109,7 @@ function blockHtml(node: MdastNode, resolveUrl: MarkdownUrlResolver = (url) => u
     }
     case 'code': return `<pre><code data-language="${escapeHtml(node.lang ?? 'text')}">${escapeHtml(node.value ?? '')}</code></pre>`
     case 'math': return `<div class="math-block">${renderMath(node.value ?? '', true)}</div>`
-    case 'image': return `<img src="${safeUrl(resolveUrl(node.url ?? ''))}" alt="${escapeHtml(node.title ?? '')}" loading="lazy" decoding="async" referrerpolicy="no-referrer" />`
+    case 'image': return `<img src="${safeUrl(resolveUrl(node.url ?? ''))}" alt="${escapeHtml(node.title ?? '')}" loading="eager" decoding="async" referrerpolicy="no-referrer" />`
     case 'thematicBreak': return '<hr />'
     case 'table': {
       const rows = node.children ?? []

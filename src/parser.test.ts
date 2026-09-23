@@ -102,6 +102,7 @@ $$`)
     const document = parseMarkdown('notes/readme.md', '![cover](https://example.com/cover.png)')
     expect(document.regions[0].type).toBe('image')
     expect(document.regions[0].metadata?.url).toBe('https://example.com/cover.png')
+    expect(document.regions[0].html).toContain('loading="eager"')
   })
 
   it('resolves browser assets relative to the Markdown file', () => {

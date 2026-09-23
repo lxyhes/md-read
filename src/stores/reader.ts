@@ -1,7 +1,7 @@
 import { computed, ref, shallowRef } from 'vue'
 import { defineStore } from 'pinia'
 import { deleteAnnotation, deleteDocument, getLocalProgress, getProgress, loadAnnotations, loadDocumentSnapshots, saveAnnotation, saveDocument, saveDocumentSnapshot, saveProgress } from '../persistence'
-import { authorizeMarkdownAssets, openMarkdownFile, openMarkdownFolder, resolveMarkdownAssetUrl, type OpenedFile } from '../fileService'
+import { authorizeMarkdownAssets, createRemoteAssetMap, createTauriAssetMap, openMarkdownFile, openMarkdownFolder, resolveMarkdownAssetUrl, type OpenedFile } from '../fileService'
 import { builtInThemes, cssVariables, defaultTokens } from '../themes'
 import { interfaceFont } from '../fonts'
 const SESSION_KEY = 'moyue:reader-session'
@@ -58,7 +58,17 @@ export const useReaderStore = defineStore('reader', () => {
   async function parseOpenedFile(file: OpenedFile) {
     const { parseMarkdown } = await import('../parser')
     try { await authorizeMarkdownAssets(file.path) } catch { /* binary loading below does not require the asset protocol */ }
-    return parseMarkdown(file.path, file.source, (url) => resolveMarkdownAssetUrl(file.path, url, file.assets))
+    const urls: string[] = []
+    const firstDocument = parseMarkdown(file.path, file.source, (url) => { urls.push(url); return url })
+    const hasImage = firstDocument.regions.some((region) => region.type === 'image' || /<img\b/i.test(region.html))
+    if (!hasImage) return firstDocument
+    const assets = { ...await createTauriAssetMap(file.path, urls), ...await createRemoteAssetMap(urls), ...file.assets }
+    const hasPotentialLocalAsset = urls.some((url) => {
+      const value = url.trim()
+      return Boolean(value) && !value.startsWith('#') && !/^(?:https?:|mailto:|tel:|data:|blob:|\/\/)/i.test(value)
+    })
+    if (!Object.keys(assets).length && !hasPotentialLocalAsset) return firstDocument
+    return parseMarkdown(file.path, file.source, (url) => resolveMarkdownAssetUrl(file.path, url, assets))
   }
 
   async function addOpenedFiles(files: OpenedFile[]) {
@@ -118,7 +128,11 @@ export const useReaderStore = defineStore('reader', () => {
   async function bootstrap() {
     const saved = loadDocumentSnapshots()
     if (saved.length) {
-      const needsAssetRefresh = (document: ReaderDocument) => document.regions.some((region) => region.type === 'image' && String(region.metadata?.url ?? '').startsWith('blob:'))
+      const needsAssetRefresh = (document: ReaderDocument) => document.regions.some((region) => {
+        if (region.type !== 'image') return false
+        const url = String(region.metadata?.url ?? '')
+        return /loading=["']lazy["']/i.test(region.html) || url.startsWith('blob:') || /asset\.localhost/i.test(url) || !/^(?:https?:|data:|blob:)/i.test(url)
+      })
       const stale = saved.filter(needsAssetRefresh)
       if (!stale.length) documents.value = saved
       else {
