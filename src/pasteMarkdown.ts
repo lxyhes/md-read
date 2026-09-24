@@ -1,6 +1,13 @@
 type ClipboardDocument = Document
 
-function inlineText(value: string) {
+function inlineText(value: string, node?: Node) {
+  let element = node?.parentElement ?? null
+  while (element) {
+    if (/white-space\s*:\s*(?:pre(?:-wrap)?|break-spaces)/i.test(element.getAttribute('style') ?? '')) {
+      return value.replace(/\r\n?/g, '\n').replace(/[ \t]+/g, ' ')
+    }
+    element = element.parentElement
+  }
   return value.replace(/\s+/g, ' ')
 }
 
@@ -120,12 +127,12 @@ function isSimpleCodeCandidate(element: HTMLElement) {
 }
 
 function inline(node: Node): string {
-  if (node.nodeType === Node.TEXT_NODE) return inlineText(node.textContent ?? '')
+  if (node.nodeType === Node.TEXT_NODE) return inlineText(node.textContent ?? '', node)
   if (node.nodeType !== Node.ELEMENT_NODE) return ''
   const element = node as HTMLElement
   const content = () => Array.from(element.childNodes).map(inline).join('')
   switch (element.tagName.toLowerCase()) {
-    case 'br': return '\n'
+    case 'br': return '\n\n'
     case 'strong':
     case 'b': return `**${content().trim()}**`
     case 'em':
@@ -271,8 +278,57 @@ function normalizeMarkdown(value: string) {
   return result.join('\n').trim()
 }
 
+function isArticleSectionHeading(value: string) {
+  const heading = value.replace(/^(?:\*\*|__)|(?:\*\*|__)$/g, '').trim()
+  const compact = heading.replace(/\s+/g, '')
+  return /^[\u3400-\u9fffA-Za-z0-9+&·“”"（）()、\s]{2,16}(?:层|阶段|方向|机制|部分|设计)[：:]\S{4,}/.test(heading)
+    || (compact.length >= 10 && /[：:]|(?:收入|玩家|方向|方案|原则|判断|优势|结果|问题|目标|逻辑|盘子|收费站)$/.test(heading))
+}
+
+function mergeAdjacentArticleHeadingSpans(value: string) {
+  return value.replace(/\*\*([^*\n]+)\*\*(\s*)\*\*([^*\n]+)\*\*/g, (match, first, gap, second) => {
+    const combined = `**${first}${gap}${second}**`
+    return isArticleSectionHeading(combined) ? combined : match
+  })
+}
+
+function normalizeArticleSections(value: string) {
+  let inFence = false
+  const lines = value.split('\n')
+  const result: string[] = []
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (/^(?:```|~~~)/.test(trimmed)) {
+      inFence = !inFence
+      result.push(line)
+      continue
+    }
+    if (inFence || !trimmed) {
+      result.push(line)
+      continue
+    }
+
+    const candidateLine = mergeAdjacentArticleHeadingSpans(line)
+    const strongHeading = Array.from(candidateLine.matchAll(/(?:\*\*|__)([^\n]+?)(?:\*\*|__)/g)).find((match) => match[0].trim() === candidateLine.trim() || isArticleSectionHeading(match[0]))
+    if (strongHeading) {
+      const before = candidateLine.slice(0, strongHeading.index).trim()
+      const heading = strongHeading[0].trim()
+      const after = candidateLine.slice(strongHeading.index + strongHeading[0].length).trim()
+      if (before) result.push(before, '')
+      if (!before && !after) result.push('')
+      result.push(heading)
+      if (after) result.push('', after)
+      if (!before && !after) result.push('')
+      continue
+    }
+    if (isArticleSectionHeading(trimmed)) result.push('', line.trim(), '')
+    else result.push(line)
+  }
+  return normalizeMarkdown(result.join('\n'))
+}
+
 export function formatPastedText(value: string) {
-  return stripDecorativeHeadingStars(normalizeMarkdown(value))
+  return normalizeArticleSections(stripDecorativeHeadingStars(normalizeMarkdown(value)))
     .replace(/^[ \t]*[•◦▪][ \t]+/gm, '- ')
     .replace(/^[ \t]*(\d+)[.)][ \t]+/gm, '$1. ')
 }
@@ -282,7 +338,7 @@ export function formatClipboardToMarkdown(html: string, text: string) {
     const document = new DOMParser().parseFromString(html, 'text/html') as ClipboardDocument
     const body = removeClipboardNoise(document)
     const source = Array.from(body.childNodes).filter((node) => node.nodeType !== Node.TEXT_NODE || Boolean(node.textContent?.trim())).map((node) => node.nodeType === Node.ELEMENT_NODE ? render(node as HTMLElement) : inline(node)).join('')
-    const markdown = stripDecorativeHeadingStars(normalizeMarkdown(source))
+    const markdown = normalizeArticleSections(stripDecorativeHeadingStars(normalizeMarkdown(source)))
     if (markdown) return markdown
   }
   return formatPastedText(text)
