@@ -6,7 +6,7 @@ import type { ThemeManifest } from './types'
 
 const languageAliases: Record<string, string> = {
   js: 'javascript', jsx: 'jsx', ts: 'typescript', tsx: 'tsx', py: 'python', sh: 'bash', shell: 'bash', cpp: 'c', 'c++': 'c',
-  yml: 'yaml', md: 'markdown', text: 'text', plaintext: 'text',
+  yml: 'yaml', md: 'markdown', text: 'text', plaintext: 'text', bat: 'bat', batch: 'bat', pgsql: 'sql', postgres: 'sql', postgresql: 'sql', hive: 'sql',
 }
 const languageLoaders: Record<string, () => Promise<unknown>> = {
   javascript: () => import('shiki/dist/langs/javascript.mjs').then((module) => module.default),
@@ -26,6 +26,12 @@ const languageLoaders: Record<string, () => Promise<unknown>> = {
   csharp: () => import('shiki/dist/langs/csharp.mjs').then((module) => module.default),
   go: () => import('shiki/dist/langs/go.mjs').then((module) => module.default),
   rust: () => import('shiki/dist/langs/rust.mjs').then((module) => module.default),
+  bat: () => import('shiki/dist/langs/bat.mjs').then((module) => module.default),
+  docker: () => import('shiki/dist/langs/docker.mjs').then((module) => module.default),
+  gherkin: () => import('shiki/dist/langs/gherkin.mjs').then((module) => module.default),
+  pascal: () => import('shiki/dist/langs/pascal.mjs').then((module) => module.default),
+  stata: () => import('shiki/dist/langs/stata.mjs').then((module) => module.default),
+  svelte: () => import('shiki/dist/langs/svelte.mjs').then((module) => module.default),
 }
 const cache = new Map<string, Promise<string>>()
 const languagePromises = new Map<string, Promise<void>>()

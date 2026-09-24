@@ -4,13 +4,35 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import remarkParse from 'remark-parse'
 import { blockHtmlWithSourceIndent, renderFootnotes } from './render'
-import { createRenderContext, type MdastNode } from './shared'
+import { createRenderContext, type MarkdownUrlResolver, type MdastNode } from './shared'
 
 export const markdownProcessor = unified()
   .use(remarkParse)
   .use(remarkGfm)
   .use(remarkFrontmatter, ['yaml', 'toml'])
   .use(remarkMath)
+
+export function normalizeLatexDelimiters(source: string): string {
+  let inFence = false
+  let inDisplayMath = false
+  return source.split(/\r?\n/).map((line) => {
+    if (/^(?:```|~~~)/.test(line.trimStart())) {
+      inFence = !inFence
+      return line
+    }
+    if (inFence) return line
+    let normalized = line.replace(/\\\(([^\n]*?)\\\)/g, (_, value: string) => `$${value}$`)
+    if (inDisplayMath) {
+      normalized = normalized.replace(/\\\]/, () => '$$')
+      if (normalized !== line && normalized.includes('$$')) inDisplayMath = false
+    } else if (normalized.includes('\\[')) {
+      normalized = normalized.replace(/\\\[/, () => '$$')
+      if (normalized.includes('\\]')) normalized = normalized.replace(/\\\]/, () => '$$')
+      else inDisplayMath = true
+    }
+    return normalized
+  }).join('\n')
+}
 
 function splitArticleStrongText(node: MdastNode): MdastNode[] {
   if (node.type !== 'text' || !node.value || !/(?:\*{2,4}|_{2,4}).+(?:\*{2,4}|_{2,4})/.test(node.value)) return [node]
@@ -39,13 +61,14 @@ export function normalizeArticleStrong(node: MdastNode) {
   })
 }
 
-export function renderMarkdownFragment(source: string): string {
-  const tree = markdownProcessor.parse(source) as unknown as MdastNode
+export function renderMarkdownFragment(source: string, resolveUrl: MarkdownUrlResolver = (url) => url): string {
+  const normalizedSource = normalizeLatexDelimiters(source)
+  const tree = markdownProcessor.parse(normalizedSource) as unknown as MdastNode
   normalizeArticleStrong(tree)
   const context = createRenderContext()
   const html = (tree.children ?? [])
     .filter((node) => node.type !== 'yaml' && node.type !== 'toml' && node.type !== 'footnoteDefinition')
-    .map((node) => blockHtmlWithSourceIndent(node, source, undefined, context))
+    .map((node) => blockHtmlWithSourceIndent(node, normalizedSource, resolveUrl, context))
     .join('')
-  return `${html}${renderFootnotes(context, (url) => url)}`
+  return `${html}${renderFootnotes(context, resolveUrl)}`
 }

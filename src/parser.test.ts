@@ -43,6 +43,17 @@ $$`)
     expect(document.regions[1].html).toContain('frac')
   })
 
+  it('accepts LaTeX parenthesis and bracket delimiters', () => {
+    const document = parseMarkdown('latex-delimiters.md', String.raw`Inline \(x^2\).
+
+\[
+\frac{a}{b}
+\]`)
+    expect(document.regions[0].html).toContain('katex')
+    expect(document.regions[1].type).toBe('math')
+    expect(document.regions[1].html).toContain('frac')
+  })
+
   it('renders footnotes at the end of the document', () => {
     const document = parseMarkdown('footnotes.md', '正文[^1]。\n\n[^1]: 脚注内容。')
     expect(document.regions[0].html).toContain('href="#footnote-1"')
