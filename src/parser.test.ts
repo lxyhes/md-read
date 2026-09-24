@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { hashText, parseMarkdown } from './parser'
-import { asciiDiagramToMermaid, asciiTreeToTree } from './asciiDiagram'
-import { formatPastedText } from './pasteMarkdown'
+import { hashText, parseMarkdown, renderMarkdownFragment } from './parser'
+import { asciiDiagramToMermaid, asciiTreeToTree, markdownToTree } from './asciiDiagram'
+import { formatClipboardToMarkdown, formatPastedText, isLikelyProseBlock, suggestPastedMarkdownName } from './pasteMarkdown'
 import { resolveMarkdownAssetUrl } from './fileService'
 
 describe('Moyue markdown region parser', () => {
@@ -78,6 +78,13 @@ $$`)
     expect(document.regions[1].html).toContain('<strong>“调度员 + 质检员 + 守门员”</strong>')
     expect(document.regions[1].html).not.toContain('*')
     expect(document.regions[2].textContent).toContain('**代码里的标记**')
+  })
+
+  it('includes standalone bold sections in the outline without replacing the document title', () => {
+    const document = parseMarkdown('notes/article.md', '引导正文\n\n**内容层：选题和情绪设计**\n\n章节内容')
+    expect(document.title).toBe('article.md')
+    expect(document.headings.map(({ text, depth }) => ({ text, depth }))).toEqual([{ text: '内容层：选题和情绪设计', depth: 2 }])
+    expect(document.regions[1]?.type).toBe('paragraph')
   })
 
   it('preserves leading spaces that exist in the source paragraph', () => {
@@ -211,6 +218,60 @@ $$`)
     expect(formatPastedText('标题\r\n\r\n• 第一项\r\n2) 第二项\r\n\r\n')).toBe('标题\n\n- 第一项\n2. 第二项')
   })
 
+  it('removes common clipboard indentation that would create a plain code block', () => {
+    const pasted = formatPastedText([
+      '    课程背景与核心价值主张 00:00',
+      '    当前AI行业现状：虽然AI火热，但真正盈利的公司寥寥无几。',
+      '    - 个体变现路径：利用AI做IP。',
+    ].join('\n'))
+    expect(pasted).toContain('课程背景与核心价值主张 00:00')
+    expect(pasted).not.toMatch(/^ {4}/m)
+    expect(parseMarkdown('pasted.md', pasted).regions[0]?.type).not.toBe('code')
+  })
+
+  it('handles non-breaking indentation from rich-text platforms', () => {
+    const pasted = formatPastedText([
+      '\u00a0\u00a0\u00a0\u00a0课程背景与核心价值主张 00:00',
+      '\u00a0\u00a0\u00a0\u00a0当前AI行业现状：虽然AI火热，但真正盈利的公司寥寥无几。',
+    ].join('\n'))
+    expect(parseMarkdown('rich-pasted.md', pasted).regions[0]?.type).not.toBe('code')
+  })
+
+  it('recognizes a rich-text prose block without swallowing real code', () => {
+    expect(isLikelyProseBlock('课程背景与核心价值主张 00:00\n当前AI行业现状：虽然AI火热，但真正盈利的公司寥寥无几。')).toBe(true)
+    expect(isLikelyProseBlock('const total = items.length\nreturn total')).toBe(false)
+  })
+
+  it('keeps Markdown plain text when clipboard HTML is also present', () => {
+    const markdown = formatClipboardToMarkdown('<p>普通 HTML 段落</p>', '- **课程结构**[**26:19**](https://example.com)\n  - 具体内容')
+    expect(markdown).toContain('- **课程结构**')
+    expect(markdown).toContain('[**26:19**](https://example.com)')
+    expect(markdown).not.toContain('普通 HTML 段落')
+
+    const nested = formatClipboardToMarkdown('<div>丢失列表结构的 HTML</div>', '• 影响力作为最高能力的论证\n  ◦ 能力层级对比\n    ▪ 销售、管理、领导力')
+    expect(nested).toContain('- 影响力作为最高能力的论证')
+    expect(nested).toContain('  - 能力层级对比')
+    expect(nested).toContain('    - 销售、管理、领导力')
+  })
+
+  it('restores timestamped section emphasis from old plain documents', () => {
+    const document = parseMarkdown('plain-course.md', '课程结构与“道法术器”体系 26:19\n\n周文强负责：IP之“道”与“法”。\n\n其他讲师负责：IP之“术”与“器”。\n\n作业执行与陪跑机制 28:06\n\n落地重要性：必须完成作业才能算结业。\n\n作业示例：通过实践获得真实感受。')
+    expect(document.regions[0]?.html).toContain('<strong>课程结构与“道法术器”体系 26:19</strong>')
+    expect(document.regions[1]?.type).toBe('list')
+    expect(document.regions[1]?.html).toContain('<li>')
+    expect(document.regions[2]?.html).toContain('<strong>作业执行与陪跑机制 28:06</strong>')
+  })
+
+  it('re-parses saved plain prose blocks as Markdown', () => {
+    const pasted = parseMarkdown('saved-paste.md', '```plain\n**课程背景与核心价值主张** 00:00\n\n- 当前AI行业现状：虽然AI火热。\n- 个体变现路径：利用AI做IP。\n```')
+    expect(pasted.regions.map((region) => region.type)).toEqual(['paragraph', 'list'])
+    expect(pasted.regions[0]?.html).toContain('<strong>课程背景与核心价值主张</strong>')
+    expect(pasted.regions[1]?.html).toContain('当前AI行业现状')
+
+    const code = parseMarkdown('real-code.md', '```plain\nconst total = items.length\nreturn total\n```')
+    expect(code.regions[0]?.type).toBe('code')
+  })
+
   it('removes decorative four-star prefixes from pasted article headings', () => {
     expect(formatPastedText('****11API Key 怎么配？\n\n#### ****12 下一节')).toBe('11API Key 怎么配？\n\n#### 12 下一节')
     expect(formatPastedText('```text\n****11 代码内容\n```')).toBe('```text\n****11 代码内容\n```')
@@ -224,5 +285,37 @@ $$`)
     expect(formatPastedText('行业利润集中在少数公司。**绝大多数创作者的真实收入**普通人的账本远比宣传残酷。')).toBe('行业利润集中在少数公司。\n\n**绝大多数创作者的真实收入**\n\n普通人的账本远比宣传残酷。')
     expect(formatPastedText('上一段正文。**钱被谁赚走了：****四个收费站** AI短剧本质上是一条流量生意链。')).toBe('上一段正文。\n\n**钱被谁赚走了：四个收费站**\n\nAI短剧本质上是一条流量生意链。')
     expect(formatPastedText('```text\n**内容层：不要拆开代码**\n```')).toBe('```text\n**内容层：不要拆开代码**\n```')
+  })
+
+  it('suggests readable names for pasted Markdown', () => {
+    expect(suggestPastedMarkdownName('# AI短剧商业化分析\n\n正文内容')).toBe('AI短剧商业化分析')
+    expect(suggestPastedMarkdownName('AI短剧的商业化能不能赚钱，答案取决于你站在产业链的哪个位置。后文')).toBe('AI短剧的商业化能不能赚钱，答案取决于你站在产业链的哪个位置')
+  })
+
+  it('builds a mind map from Markdown and bold section headings', () => {
+    expect(markdownToTree('# 文章\n导读内容\n\n## 第一部分\n第一部分内容\n\n**第二部分**\n第二部分内容\n\n### 细节\n细节内容', '文章')).toEqual({
+      label: '文章',
+      children: [
+        { label: '导读：导读内容', detail: '导读内容', children: [] },
+        { label: '第一部分', children: [{ label: '内容：第一部分内容', detail: '第一部分内容', children: [] }] },
+        { label: '第二部分', children: [
+          { label: '内容：第二部分内容', detail: '第二部分内容', children: [] },
+          { label: '细节', children: [{ label: '内容：细节内容', detail: '细节内容', children: [] }] },
+        ] },
+      ],
+    })
+
+    const tableTree = markdownToTree('# 文章\n\n## 产品\n| 场景 | 体验 |\n| --- | --- |\n| 阅读 | 清晰 |', '文章')
+    expect(tableTree?.children[0].children[0]).toEqual({ label: '内容：场景 · 体验 阅读 · 清晰', detail: '| 场景 | 体验 |\n| --- | --- |\n| 阅读 | 清晰 |', children: [] })
+
+    const pastedTree = markdownToTree('课程背景与核心价值主张 00:00\n\n当前AI行业现状：虽然AI火热。\n\n课程介绍与师资阵容 00:37\n\n课程定价与规格：价格为2800元。', '课程总结')
+    expect(pastedTree?.children.map((child) => child.label)).toEqual(['课程背景与核心价值主张 00:00', '课程介绍与师资阵容 00:37'])
+  })
+
+  it('renders Markdown syntax used inside mind map summaries', () => {
+    const html = renderMarkdownFragment('**重点**\n\n- `code`\n\n| 字段 | 值 |\n| --- | --- |\n| 状态 | 正常 |')
+    expect(html).toContain('<strong>重点</strong>')
+    expect(html).toContain('<code>code</code>')
+    expect(html).toContain('<table>')
   })
 })

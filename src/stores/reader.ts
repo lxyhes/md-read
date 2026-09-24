@@ -139,13 +139,18 @@ export const useReaderStore = defineStore('reader', () => {
         return /loading=["']lazy["']/i.test(region.html) || url.startsWith('blob:') || /asset\.localhost/i.test(url) || !/^(?:https?:|data:|blob:)/i.test(url)
       })
       const stale = saved.filter(needsAssetRefresh)
-      if (!stale.length) documents.value = saved
-      else {
-        const refreshed = await Promise.all(stale.map((document) => parseOpenedFile({ path: document.path, source: document.source })))
-        const refreshedById = new Map(refreshed.map((document) => [document.id, document]))
-        documents.value = saved.map((document) => refreshedById.get(document.id) ?? document)
-        for (const document of refreshed) await saveDocumentSnapshot(document)
-      }
+      const loaded = stale.length
+        ? await Promise.all(saved.map((document) => stale.includes(document) ? parseOpenedFile({ path: document.path, source: document.source }) : Promise.resolve(document)))
+        : saved
+      const { parseMarkdown } = await import('../parser')
+      const refreshed = loaded.map((document) => {
+        const headings = parseMarkdown(document.path, document.source).headings
+        return headings.length === document.headings.length && headings.every((heading, index) => heading.text === document.headings[index]?.text && heading.depth === document.headings[index]?.depth)
+          ? document
+          : { ...document, headings }
+      })
+      documents.value = refreshed
+      for (const document of refreshed) if (document !== loaded.find((item) => item.id === document.id)) await saveDocumentSnapshot(document)
     }
     else {
       const { parseMarkdown } = await import('../parser')

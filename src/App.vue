@@ -12,8 +12,8 @@ import { interfaceFont } from './fonts'
 import FileSystemTree, { type FileSystemTreeNode } from './components/FileSystemTree.vue'
 import { copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, listFileSystemEntries, listMarkdownFiles, openMarkdownDirectory, openMarkdownFile, readMarkdownPath, renameMarkdownPath, saveMarkdownFile, watchMarkdownPath, type WorkspaceFile } from './fileService'
 import type { Annotation, ReaderRegion, ViewerType } from './types'
-import { asciiDiagramToMermaid, asciiTreeToTree } from './asciiDiagram'
-import { formatClipboardToMarkdown } from './pasteMarkdown'
+import { asciiDiagramToMermaid, asciiTreeToTree, markdownToTree } from './asciiDiagram'
+import { formatClipboardToMarkdown, suggestPastedMarkdownName } from './pasteMarkdown'
 import logoAsset from './assets/moyue-logo-256.png'
 
 const FocusAmbiencePicker = defineAsyncComponent(() => import('./components/FocusAmbiencePicker.vue'))
@@ -205,6 +205,11 @@ const outlineRows = computed(() => {
 const readerScrollPercent = ref(0)
 const readerAtTop = computed(() => readerScrollPercent.value <= 0.01)
 const readerAtBottom = computed(() => readerScrollPercent.value >= 0.99)
+const readerDisplayMode = ref<'markdown' | 'mindmap' | 'split'>('markdown')
+const currentMindmap = computed(() => {
+  const document = store.currentDocument
+  return document ? markdownToTree(document.source, document.title) : null
+})
 const readerRegions = computed(() => {
   const document = store.currentDocument
   if (!document) return []
@@ -382,7 +387,7 @@ function onOutlinePanelResizeKeydown(event: KeyboardEvent) {
 }
 function isTypingTarget(target: EventTarget | null) {
   const element = target as HTMLElement | null
-  return !!element && (element.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(element.tagName))
+  return !!element && (element.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(element.tagName))
 }
 
 async function importClipboardContent(html: string, text: string, saveToFile = false) {
@@ -394,8 +399,15 @@ async function importClipboardContent(html: string, text: string, saveToFile = f
   }
   busyAction.value = saveToFile ? 'paste-save' : 'paste'
   try {
-    const path = saveToFile ? await saveMarkdownFile(source) : `剪贴板-${Date.now()}.md`
+    const suggestedName = suggestPastedMarkdownName(source)
+    let path = saveToFile ? await saveMarkdownFile(source, suggestedName) : `${suggestedName}.md`
     if (!path) return
+    if (!saveToFile) {
+      const usedPaths = new Set(store.documents.map((document) => normalizedPath(document.path).toLowerCase()))
+      const base = path.replace(/\.md$/i, '')
+      let suffix = 2
+      while (usedPaths.has(normalizedPath(path).toLowerCase())) path = `${base}-${suffix++}.md`
+    }
     const count = await store.addOpenedFiles([{ path, source }])
     if (count) {
       view.value = 'reader'
@@ -1958,7 +1970,7 @@ async function requestFullscreen() {
             </div>
           </div>
         </Teleport>
-        <div class="reader-layout" :class="{ 'focus-layout': store.mode === 'focus', 'clean-layout': store.mode === 'clean', 'is-resizing-outline': outlinePanelResizing }" :style="{ '--outline-panel-width': `${outlinePanelWidth}px` }">
+        <div class="reader-layout" :class="{ 'focus-layout': store.mode === 'focus', 'clean-layout': store.mode === 'clean', 'split-layout': readerDisplayMode === 'split', 'is-resizing-outline': outlinePanelResizing }" :style="{ '--outline-panel-width': `${outlinePanelWidth}px` }">
           <aside v-if="store.mode !== 'focus' && store.mode !== 'clean'" class="outline-panel">
             <div class="outline-resizer" role="separator" tabindex="0" aria-orientation="vertical" aria-label="调整文档侧栏宽度" :aria-valuemin="outlinePanelMinWidth" :aria-valuemax="outlinePanelMaxWidth" :aria-valuenow="outlinePanelWidth" title="拖动调整侧栏宽度" @pointerdown="startOutlinePanelResize" @keydown="onOutlinePanelResizeKeydown" />
             <div class="panel-heading panel-switcher">
@@ -2000,27 +2012,42 @@ async function requestFullscreen() {
           </aside>
           <div class="reader-column">
             <div class="reader-meta">
-              <span class="section-kicker reader-path" :title="store.currentDocument?.path"><AppIcon name="file" :size="13" /><span class="reader-path-value">{{ store.currentDocument?.path }}</span></span>
-              <span class="reader-stat">{{ store.currentDocument?.wordCount }} 字 · 约 {{ store.currentDocument?.estimatedReadMinutes }} 分钟</span>
-              <FontPicker compact label="正文字体" :model-value="store.readerSettings.fontFamily" :fallback-family="store.activeTheme.tokens.reader.fontFamily" @update:model-value="store.updateSettings({ fontFamily: $event })" />
-              <div class="reader-navigation" aria-label="阅读位置与跳转">
-                <span class="reader-progress-label" aria-live="polite">阅读到 {{ Math.round(readerScrollPercent * 100) }}%</span>
-                <button v-if="store.mode === 'clean' && currentHeading" type="button" @click="jumpToCurrentHeading">本章开头</button>
-                <button type="button" :disabled="readerAtTop" @click="scrollToTop">回到顶部</button>
-                <button type="button" :disabled="readerAtBottom" @click="scrollToBottom">到文末</button>
+              <div class="reader-meta-document">
+                <span class="section-kicker reader-path" :title="store.currentDocument?.path"><AppIcon name="file" :size="13" /><span class="reader-path-value">{{ store.currentDocument?.title }}</span></span>
+                <span class="reader-stat">{{ store.currentDocument?.wordCount }} 字 · 约 {{ store.currentDocument?.estimatedReadMinutes }} 分钟</span>
+              </div>
+              <div class="reader-meta-tools">
+                <FontPicker compact label="正文字体" :model-value="store.readerSettings.fontFamily" :fallback-family="store.activeTheme.tokens.reader.fontFamily" @update:model-value="store.updateSettings({ fontFamily: $event })" />
+                <div class="reader-display-switch" role="tablist" aria-label="阅读视图">
+                  <button type="button" role="tab" :aria-selected="readerDisplayMode === 'markdown'" :class="{ active: readerDisplayMode === 'markdown' }" @click="readerDisplayMode = 'markdown'">Markdown</button>
+                  <button type="button" role="tab" :aria-selected="readerDisplayMode === 'mindmap'" :class="{ active: readerDisplayMode === 'mindmap' }" @click="readerDisplayMode = 'mindmap'">思维导图</button>
+                  <button type="button" role="tab" :aria-selected="readerDisplayMode === 'split'" :class="{ active: readerDisplayMode === 'split' }" @click="readerDisplayMode = 'split'; leftPanelTab = 'outline'">并排</button>
+                </div>
+                <div class="reader-navigation" aria-label="阅读位置与跳转">
+                  <span class="reader-progress-label" aria-live="polite">阅读到 {{ Math.round(readerScrollPercent * 100) }}%</span>
+                  <button v-if="store.mode === 'clean' && currentHeading" type="button" @click="jumpToCurrentHeading">本章开头</button>
+                  <button type="button" :disabled="readerAtTop" @click="scrollToTop">回到顶部</button>
+                  <button type="button" :disabled="readerAtBottom" @click="scrollToBottom">到文末</button>
+                </div>
               </div>
             </div>
             <div ref="readerViewport" class="reader-viewport" @scroll="onReaderScroll" @wheel="onReaderWheel" @pointerdown="onReaderPointerDown" @mouseup="captureSelection">
               <nav v-if="store.mode === 'clean' && (store.currentDocument?.headings.length ?? 0) > 0" class="reading-progress-rail" aria-label="阅读进度导航"><span class="reading-progress-rail-caption">{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}%</span><div class="reading-progress-rail-track"><span class="reading-progress-rail-fill" :style="{ height: `${(currentProgress?.scrollPercent ?? 0) * 100}%` }" /><button v-for="(heading, index) in store.currentDocument?.headings" :key="heading.id" type="button" class="reading-progress-marker" :class="{ active: store.activeHeadingId === heading.id }" :style="{ top: headingRailPosition(index) }" :aria-label="`跳转到 ${heading.text}`" :title="heading.text" @click.stop="scrollToHeading(heading.regionId)"><i /><span>{{ heading.text }}</span></button></div></nav>
-              <div class="reader-content"><h1 class="reader-title">{{ store.currentDocument?.title }}</h1><div class="reader-rule" />
-              <div class="regions-stack" :class="{ virtualized: virtualizedReader }">
+              <div class="reader-content" :class="`reader-display-${readerDisplayMode}`">
+                <div v-if="readerDisplayMode !== 'mindmap'" class="reader-markdown"><h1 class="reader-title">{{ store.currentDocument?.title }}</h1><div class="reader-rule" />
+                <div class="regions-stack" :class="{ virtualized: virtualizedReader }">
                 <div v-if="virtualRange.before" class="virtual-spacer" :style="{ height: `${virtualRange.before}px` }" aria-hidden="true" />
                 <div class="virtual-regions">
                   <RegionBlock v-for="region in virtualRange.regions" v-memo="[region.id, store.activeRegionId === region.id, store.focusedRegionId === region.id, focusDistanceByRegion.get(region.id), store.mode, store.activeThemeId, currentAnnotationsByRegion.get(region.id)]" :key="region.id" :region="region" :annotations="currentAnnotationsByRegion.get(region.id)" :focused="store.focusedRegionId === region.id" :active="store.activeRegionId === region.id" :focus-distance="focusDistanceByRegion.get(region.id)" :theme-mode="store.activeTheme?.manifest.mode" :theme-key="`${store.mode}-${store.activeThemeId}`" @focus="focusRegion(region)" @open-viewer="openViewer(region)" @open-link="openExternalLink" @code-copied="notify('代码已复制')" />
                 </div>
                 <div v-if="virtualRange.after" class="virtual-spacer" :style="{ height: `${virtualRange.after}px` }" aria-hidden="true" />
-              </div>
-            <footer class="reader-footer"><span>墨阅 · Moyue Reader</span><span>Read → Focus → Understand</span></footer>
+                </div></div>
+                <div v-if="readerDisplayMode !== 'markdown'" class="reader-mindmap">
+                  <div class="reader-mindmap-heading"><span class="section-kicker">STRUCTURE MAP</span><strong>文章结构</strong><small>{{ currentMindmap ? '章节卡片默认展开，深层分支默认收起；点击 − / + 查看下一层' : '这篇文档还没有可识别的标题' }}</small></div>
+                  <TreeDiagram v-if="currentMindmap" :node="currentMindmap" root />
+                  <p v-else class="reader-mindmap-empty">请使用 Markdown 标题或独立加粗小标题来生成思维导图。</p>
+                </div>
+                <footer v-if="readerDisplayMode !== 'mindmap'" class="reader-footer"><span>墨阅 · Moyue Reader</span><span>Read → Focus → Understand</span></footer>
               </div>
             </div>
           </div>
