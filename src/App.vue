@@ -10,8 +10,10 @@ import IconButton from './components/IconButton.vue'
 import FontPicker from './components/FontPicker.vue'
 import { interfaceFont } from './fonts'
 import FileSystemTree, { type FileSystemTreeNode } from './components/FileSystemTree.vue'
-import { copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, listFileSystemEntries, listMarkdownFiles, openMarkdownDirectory, openMarkdownFile, readMarkdownPath, renameMarkdownPath, saveMarkdownFile, watchMarkdownPath, type WorkspaceFile } from './fileService'
-import type { Annotation, ReaderRegion, ViewerType } from './types'
+import { copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, listDirectoryFiles, listFileSystemEntries, openMarkdownDirectory, openMarkdownFile, readMarkdownPath, renameMarkdownPath, resolveMarkdownAssetUrl, saveExportFile, saveMarkdownFile, watchMarkdownPath, writeMarkdownFile, type WorkspaceFile } from './fileService'
+import type { Annotation, ReaderDocument, ReaderRegion, ViewerType } from './types'
+import { escapeHtml } from './markdown/shared'
+import { parseMarkdown, renderMarkdownFragment } from './parser'
 import { asciiDiagramToMermaid, asciiTreeToTree, markdownToTree } from './asciiDiagram'
 import { formatClipboardToMarkdown, suggestPastedMarkdownName } from './pasteMarkdown'
 import logoAsset from './assets/moyue-logo-256.png'
@@ -42,6 +44,9 @@ const query = ref('')
 const searchNeedle = ref('')
 const searchIndex = ref(0)
 const searchScope = ref<'all' | 'current'>('all')
+const searchRegex = ref(false)
+const replaceOpen = ref(false)
+const replaceValue = ref('')
 const toast = ref('')
 const booting = ref(true)
 const saveFailed = ref(false)
@@ -68,6 +73,8 @@ const draggingFiles = ref(false)
 const leftPanelTab = ref<'files' | 'outline'>('files')
 const outlineQuery = ref('')
 const fileBrowserMode = ref<'list' | 'tree'>('list')
+const sidebarFilter = ref<'markdown' | 'all' | 'hidden' | 'glob'>('markdown')
+const sidebarGlob = ref('*.md')
 const filesystemTree = ref<FileSystemTreeNode | null>(null)
 const filesystemTreeTarget = ref('')
 const filesystemTreeScope = ref<'system' | 'workspace'>('workspace')
@@ -78,7 +85,16 @@ const recentlyClosedTabs = ref<string[]>([])
 const tabContextMenu = ref<{ documentId: string; x: number; y: number } | null>(null)
 const fileContextMenu = ref<{ file: FileTreeEntry; x: number; y: number } | null>(null)
 const fileProperties = ref<FileTreeEntry | null>(null)
-const deleteConfirmation = ref<{ file: FileTreeEntry } | null>(null)
+const editorOpen = ref(false)
+const editorSource = ref('')
+const editorTextarea = ref<HTMLTextAreaElement | null>(null)
+const editorPreview = ref<HTMLElement | null>(null)
+const editorMode = ref<'write' | 'split' | 'preview'>('split')
+const editorCalmMode = ref(false)
+const editorContextMenu = ref<{ x: number; y: number } | null>(null)
+const exportOpen = ref(false)
+const deleteConfirmation = ref<{ files: FileTreeEntry[] } | null>(null)
+const selectedFilePaths = ref<string[]>([])
 let fileTreeRequest = 0
 const focusRemaining = ref(25 * 60)
 const focusRunning = ref(false)
@@ -126,9 +142,21 @@ const focusThemeStyles = computed<Record<string, string>>(() => {
 const searchResults = computed(() => {
   const needle = searchNeedle.value
   if (!needle) return []
+  const pattern = searchPattern.value
+  if (!pattern) return []
   const documents = searchScope.value === 'current' && store.currentDocument ? [store.currentDocument] : store.documents
-  return documents.flatMap((document) => document.regions.filter((region) => `${document.title} ${document.path} ${region.textContent}`.toLowerCase().includes(needle)).map((region) => ({ document, region }))).slice(0, 18)
+  return documents.flatMap((document) => document.regions.filter((region) => {
+    const text = `${document.title} ${document.path} ${region.textContent}`
+    pattern.lastIndex = 0
+    return pattern.test(searchRegex.value ? text : text.toLowerCase())
+  }).map((region) => ({ document, region, matchCount: countMatches(`${document.title} ${document.path} ${region.textContent}`, pattern) }))).slice(0, 18)
 })
+const searchPattern = computed(() => {
+  const needle = searchNeedle.value.trim()
+  if (!needle) return null
+  try { return new RegExp(searchRegex.value ? needle : escapeRegExp(needle), 'gi') } catch { return null }
+})
+const searchPatternError = computed(() => Boolean(searchNeedle.value.trim()) && !searchPattern.value)
 const activeViewerRegion = computed(() => viewer.value?.region ?? null)
 const activeViewerTree = computed(() => viewer.value?.type === 'tree' ? asciiTreeToTree(viewer.value.region.textContent) : null)
 const viewerCanZoom = computed(() => (viewer.value?.type === 'mermaid' || viewer.value?.type === 'image') && viewerTab.value === 'preview')
@@ -210,6 +238,34 @@ const currentMindmap = computed(() => {
   const document = store.currentDocument
   return document ? markdownToTree(document.source, document.title) : null
 })
+const editorPreviewDocument = computed(() => {
+  if (!editorSource.value.trim()) return null
+  try {
+    return parseMarkdown(store.currentDocument?.path ?? '编辑.md', editorSource.value)
+  } catch {
+    return null
+  }
+})
+const editorPreviewHtml = computed(() => {
+  if (!editorSource.value.trim()) return '<p class="editor-preview-empty">从左侧开始写作，右侧会实时出现阅读效果。</p>'
+  try {
+    return renderMarkdownFragment(editorSource.value, (url) => resolveMarkdownAssetUrl(store.currentDocument?.path ?? '', url))
+  } catch {
+    return '<p class="editor-preview-error">预览暂时无法解析，请检查 Markdown 语法。</p>'
+  }
+})
+const editorHeadings = computed(() => editorPreviewDocument.value?.headings.filter((heading) => {
+  const region = editorPreviewDocument.value?.regions.find((item) => item.id === heading.regionId)
+  return region?.type === 'heading'
+}) ?? [])
+const editorSourceStats = computed(() => {
+  const compact = editorSource.value.replace(/\s/g, '')
+  return {
+    characters: compact.length,
+    lines: editorSource.value ? editorSource.value.split(/\r?\n/).length : 0,
+    minutes: compact.length ? Math.max(1, Math.ceil(compact.length / 400)) : 0,
+  }
+})
 const readerRegions = computed(() => {
   const document = store.currentDocument
   if (!document) return []
@@ -268,6 +324,19 @@ function directoryOf(path: string) {
   return separator >= 0 ? normalized.slice(0, separator) || '/' : '当前工作区'
 }
 function fileNameOf(path: string) { return normalizedPath(path).split('/').pop() || path }
+function isHiddenFile(name: string) { return name.startsWith('.') || name.startsWith('~$') }
+function globRegExp(glob: string) {
+  const source = glob.trim().replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.')
+  return new RegExp(`^${source || '.*'}$`, 'i')
+}
+function matchesSidebarFilter(name: string) {
+  const markdown = /\.(md|markdown)$/i.test(name)
+  const hidden = isHiddenFile(name)
+  if (sidebarFilter.value === 'all') return !hidden
+  if (sidebarFilter.value === 'hidden') return markdown || hidden
+  if (sidebarFilter.value === 'glob') return globRegExp(sidebarGlob.value).test(name)
+  return markdown && !hidden
+}
 const currentDirectory = computed(() => directoryOf(store.currentDocument?.path ?? ''))
 const currentDirectoryLabel = computed(() => currentDirectory.value === '当前工作区' ? currentDirectory.value : currentDirectory.value.split('/').filter(Boolean).pop() || currentDirectory.value)
 const currentDirectoryFiles = computed(() => {
@@ -280,8 +349,19 @@ const currentDirectoryFiles = computed(() => {
     const key = normalizedPath(file.path)
     if (!files.has(key)) files.set(key, file)
   }
-  const result = [...files.values()].sort((left, right) => left.name.localeCompare(right.name, 'zh-CN'))
+  const result = [...files.values()].filter((file) => matchesSidebarFilter(file.name)).sort((left, right) => left.name.localeCompare(right.name, 'zh-CN'))
   return result.length || !store.currentDocument ? result : [{ path: store.currentDocument.path, name: fileNameOf(store.currentDocument.path), documentId: store.currentDocument.id }]
+})
+const batchDeletableFiles = computed(() => currentDirectoryFiles.value.filter(isBatchDeletableFile))
+const selectedFiles = computed(() => {
+  const selected = new Set(selectedFilePaths.value)
+  return batchDeletableFiles.value.filter((file) => selected.has(filePathKey(file.path)))
+})
+const allFilesSelected = computed(() => batchDeletableFiles.value.length > 0 && selectedFiles.value.length === batchDeletableFiles.value.length)
+const deleteConfirmationSummary = computed(() => {
+  const files = deleteConfirmation.value?.files ?? []
+  const names = files.slice(0, 3).map((file) => `“${file.name}”`).join('、')
+  return files.length > 3 ? `${names} 等 ${files.length} 个文件` : names
 })
 const focusTimeLabel = computed(() => `${String(Math.floor(focusRemaining.value / 60)).padStart(2, '0')}:${String(focusRemaining.value % 60).padStart(2, '0')}`)
 const focusProgress = computed(() => 1 - focusRemaining.value / (25 * 60))
@@ -319,6 +399,21 @@ function notify(message: string) {
   window.setTimeout(() => { if (toast.value === message) toast.value = '' }, 2600)
 }
 
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function countMatches(value: string, pattern: RegExp) {
+  const matcher = new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`)
+  let count = 0
+  let match: RegExpExecArray | null
+  while ((match = matcher.exec(value)) !== null) {
+    count += 1
+    if (!match[0]) matcher.lastIndex += 1
+  }
+  return count
+}
+
 function toggleOutlineHeading(headingId: string) {
   outlineExpansionOverride.value = null
   const next = new Set(collapsedOutlineHeadingIds.value)
@@ -336,6 +431,207 @@ function openSearch(scope: 'all' | 'current' = 'all') {
   searchScope.value = scope
   searchIndex.value = 0
   searchOpen.value = true
+}
+
+function openEditor() {
+  if (!store.currentDocument) return
+  editorSource.value = store.currentDocument.source
+  editorMode.value = 'split'
+  editorCalmMode.value = false
+  editorOpen.value = true
+  view.value = 'reader'
+  editorContextMenu.value = null
+  void nextTick(() => editorTextarea.value?.focus())
+}
+
+function closeEditor() {
+  editorOpen.value = false
+  editorContextMenu.value = null
+}
+
+function setEditorMode(mode: 'write' | 'split' | 'preview') {
+  editorMode.value = mode
+  void nextTick(() => {
+    if (mode !== 'preview') editorTextarea.value?.focus()
+    syncEditorPreviewScroll()
+  })
+}
+
+function toggleEditorCalmMode() {
+  editorCalmMode.value = !editorCalmMode.value
+  void nextTick(() => editorTextarea.value?.focus())
+}
+
+function syncEditorPreviewScroll() {
+  if (editorMode.value !== 'split') return
+  const source = editorTextarea.value
+  const preview = editorPreview.value
+  if (!source || !preview) return
+  const sourceRange = Math.max(1, source.scrollHeight - source.clientHeight)
+  const previewRange = Math.max(0, preview.scrollHeight - preview.clientHeight)
+  preview.scrollTop = (source.scrollTop / sourceRange) * previewRange
+}
+
+function jumpToEditorHeading(index: number) {
+  const heading = editorPreview.value?.querySelectorAll('h1, h2, h3, h4, h5, h6').item(index)
+  heading?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+function isRealDocumentPath(path: string) {
+  return isTauriRuntime() && (/^[A-Za-z]:[\\/]/.test(path) || path.includes('/') || path.includes('\\'))
+}
+
+async function saveEditor() {
+  const document = store.currentDocument
+  if (!document || !editorOpen.value) return
+  try {
+    if (isRealDocumentPath(document.path)) await writeMarkdownFile(document.path, editorSource.value)
+    await store.replaceDocumentSource(document.id, editorSource.value)
+    closeEditor()
+    notify('Markdown 已保存')
+  } catch (error) {
+    notify(error instanceof Error ? error.message : '保存 Markdown 失败')
+  }
+}
+
+function updateEditor(transform: (value: string, start: number, end: number) => { value: string; start: number; end: number }) {
+  const element = editorTextarea.value
+  if (!element) return
+  const result = transform(editorSource.value, element.selectionStart, element.selectionEnd)
+  editorSource.value = result.value
+  void nextTick(() => {
+    element.focus()
+    element.setSelectionRange(result.start, result.end)
+  })
+}
+
+function wrapEditorSelection(before: string, after: string, placeholder: string) {
+  updateEditor((value, start, end) => {
+    const selected = value.slice(start, end) || placeholder
+    const next = `${value.slice(0, start)}${before}${selected}${after}${value.slice(end)}`
+    return { value: next, start: start + before.length, end: start + before.length + selected.length }
+  })
+}
+
+function insertEditorLink() {
+  updateEditor((value, start, end) => {
+    const selected = value.slice(start, end) || '链接文字'
+    const next = `${value.slice(0, start)}[${selected}](https://)${value.slice(end)}`
+    const urlStart = start + selected.length + 3
+    return { value: next, start: urlStart, end: urlStart + 8 }
+  })
+}
+
+function insertEditorImage() {
+  updateEditor((value, start, end) => {
+    const selected = value.slice(start, end) || '图片描述'
+    const next = `${value.slice(0, start)}![${selected}](图片地址)${value.slice(end)}`
+    const urlStart = start + selected.length + 4
+    return { value: next, start: urlStart, end: urlStart + 4 }
+  })
+}
+
+function insertEditorTable() {
+  updateEditor((value, start, end) => {
+    const table = '| 项目 | 内容 |\n| --- | --- |\n| 示例 | 填写内容 |'
+    const next = `${value.slice(0, start)}${table}${value.slice(end)}`
+    return { value: next, start: start + table.length, end: start + table.length }
+  })
+}
+
+function insertEditorDivider() {
+  updateEditor((value, start, end) => {
+    const divider = '---'
+    const next = `${value.slice(0, start)}${divider}${value.slice(end)}`
+    return { value: next, start: start + divider.length, end: start + divider.length }
+  })
+}
+
+function prefixEditorLines(prefix: string) {
+  updateEditor((value, start, end) => {
+    const lineStart = value.lastIndexOf('\n', Math.max(0, start - 1)) + 1
+    const lineEnd = value.indexOf('\n', end)
+    const stop = lineEnd < 0 ? value.length : lineEnd
+    const lines = value.slice(lineStart, stop).split('\n').map((line) => `${prefix}${line}`)
+    const next = `${value.slice(0, lineStart)}${lines.join('\n')}${value.slice(stop)}`
+    const added = prefix.length * lines.length
+    return { value: next, start: start + prefix.length, end: end + added }
+  })
+}
+
+function moveEditorLine(delta: number) {
+  updateEditor((value, start, end) => {
+    const lines = value.split('\n')
+    const lineIndex = value.slice(0, start).split('\n').length - 1
+    const targetIndex = lineIndex + delta
+    if (targetIndex < 0 || targetIndex >= lines.length) return { value, start, end }
+    ;[lines[lineIndex], lines[targetIndex]] = [lines[targetIndex], lines[lineIndex]]
+    const next = lines.join('\n')
+    const offset = lines.slice(0, targetIndex).join('\n').length + (targetIndex ? 1 : 0)
+    return { value: next, start: offset, end: offset + lines[targetIndex].length }
+  })
+}
+
+function openEditorContextMenu(event: MouseEvent) {
+  event.preventDefault()
+  editorContextMenu.value = { x: Math.min(event.clientX, window.innerWidth - 180), y: Math.min(event.clientY, window.innerHeight - 190) }
+}
+
+function closeEditorContextMenu() { editorContextMenu.value = null }
+
+function exportHtmlSource(document: ReaderDocument) {
+  const body = document.regions.map((region) => region.html).join('\n')
+  return `<!doctype html>\n<html lang="zh-CN"><head><meta charset="utf-8"><title>${escapeHtml(document.title)}</title><style>body{max-width:860px;margin:48px auto;padding:0 24px;color:#263238;font:16px/1.8 system-ui,sans-serif}img{max-width:100%}pre{padding:16px;overflow:auto;background:#f4f6f8;border-radius:8px}blockquote{border-left:4px solid #6b63d9;padding-left:16px;color:#58616b}table{border-collapse:collapse}td,th{border:1px solid #ccd3d9;padding:6px 10px}</style></head><body><h1>${escapeHtml(document.title)}</h1>${body}</body></html>`
+}
+
+async function exportDocument(format: 'markdown' | 'html') {
+  const document = store.currentDocument
+  if (!document) return
+  const extension = format === 'html' ? 'html' : 'md'
+  const source = format === 'html' ? exportHtmlSource(document) : document.source
+  const path = await saveExportFile(source, document.title || '文档', extension, format === 'html' ? 'HTML' : 'Markdown')
+  if (path) notify(`已导出：${path}`)
+}
+
+function printDocument() {
+  if (!store.currentDocument) return
+  window.print()
+}
+
+async function replaceSearchMatches() {
+  const pattern = searchPattern.value
+  if (!pattern || !query.value.trim()) return
+  const documents = searchScope.value === 'current' && store.currentDocument ? [store.currentDocument] : store.documents
+  let changed = 0
+  try {
+    for (const document of documents) {
+      const matcher = new RegExp(pattern.source, pattern.flags)
+      const nextSource = document.source.replace(matcher, replaceValue.value)
+      if (nextSource === document.source) continue
+      if (isRealDocumentPath(document.path)) await writeMarkdownFile(document.path, nextSource)
+      await store.replaceDocumentSource(document.id, nextSource)
+      changed += 1
+    }
+    notify(changed ? `已替换 ${changed} 个文档` : '没有可替换的匹配项')
+  } catch (error) {
+    notify(error instanceof Error ? error.message : '替换失败')
+  }
+}
+
+async function toggleTask(region: ReaderRegion) {
+  const document = store.currentDocument
+  if (!document || region.type !== 'list') return
+  const original = document.source.slice(region.sourceStart, region.sourceEnd)
+  if (!/\[[ xX]\]/.test(original)) return
+  const nextRegion = original.replace(/\[([ xX])\]/, (_, mark: string) => mark.toLowerCase() === 'x' ? '[ ]' : '[x]')
+  const nextSource = `${document.source.slice(0, region.sourceStart)}${nextRegion}${document.source.slice(region.sourceEnd)}`
+  try {
+    if (isRealDocumentPath(document.path)) await writeMarkdownFile(document.path, nextSource)
+    await store.replaceDocumentSource(document.id, nextSource)
+    notify('任务状态已更新')
+  } catch (error) {
+    notify(error instanceof Error ? error.message : '任务状态保存失败')
+  }
 }
 
 function openLibrary(tab: 'home' | 'all') { libraryTab.value = tab; view.value = 'library' }
@@ -580,7 +876,7 @@ async function loadFilesystemNode(node: FileSystemTreeNode) {
   node.loading = true
   node.error = ''
   try {
-    node.children = (await listFileSystemEntries(node.path)).filter((entry) => entry.isDirectory || /\.(md|markdown)$/i.test(entry.name)).map((entry) => createFilesystemNode(entry.path, entry.name, entry.isDirectory))
+    node.children = (await listFileSystemEntries(node.path)).filter((entry) => entry.isDirectory || matchesSidebarFilter(entry.name)).map((entry) => createFilesystemNode(entry.path, entry.name, entry.isDirectory))
   } catch (error) {
     node.children = []
     node.error = error instanceof Error ? error.message : '无法读取此目录'
@@ -928,6 +1224,7 @@ async function reopenLastClosedTab() {
 function onTabOutsideClick(event: MouseEvent) {
   const target = event.target as HTMLElement | null
   if (!target?.closest('.reader-tab-actions, .tab-context-menu, .file-context-menu')) closeTabMenus()
+  if (!target?.closest('.editor-context-menu, .editor-toolbar, .editor-surface')) closeEditorContextMenu()
 }
 
 async function boot() {
@@ -976,10 +1273,14 @@ onUnmounted(() => {
 watch(query, () => {
   searchIndex.value = 0
   if (searchTimer !== null) window.clearTimeout(searchTimer)
-  searchTimer = window.setTimeout(() => { searchNeedle.value = query.value.trim().toLowerCase(); searchTimer = null }, 90)
+  searchTimer = window.setTimeout(() => { searchNeedle.value = query.value.trim(); searchTimer = null }, 90)
 })
 watch(() => store.mode, (mode) => { if (mode !== 'focus') stopFocusTimer() })
-watch(() => store.currentDocument?.path, (path) => { fileSyncState.value = 'idle'; focusScrollTargetId = null; outlineQuery.value = ''; invalidateRegionLayout(); void refreshFileTree(); if (path) void syncFilesystemTreeTarget(path) }, { immediate: true })
+watch(() => store.currentDocument?.path, (path) => { fileSyncState.value = 'idle'; focusScrollTargetId = null; outlineQuery.value = ''; selectedFilePaths.value = []; invalidateRegionLayout(); void refreshFileTree(); if (path) void syncFilesystemTreeTarget(path) }, { immediate: true })
+watch(currentDirectoryFiles, (files) => {
+  const available = new Set(files.filter(isBatchDeletableFile).map((file) => filePathKey(file.path)))
+  selectedFilePaths.value = selectedFilePaths.value.filter((path) => available.has(path))
+})
 watch(() => store.currentDocumentId, () => {
   collapsedOutlineHeadingIds.value = new Set()
   outlineExpansionOverride.value = null
@@ -1013,6 +1314,33 @@ function onKeydown(event: KeyboardEvent) {
       else resetViewerView()
     }
     return
+  }
+  if (editorOpen.value) {
+    if (event.ctrlKey || event.metaKey) {
+      const shortcut = event.key.toLowerCase()
+      if (shortcut === 'b' || shortcut === 'i' || shortcut === 'k') {
+        event.preventDefault()
+        if (shortcut === 'b') wrapEditorSelection('**', '**', '粗体')
+        if (shortcut === 'i') wrapEditorSelection('*', '*', '斜体')
+        if (shortcut === 'k') insertEditorLink()
+        return
+      }
+    }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+      event.preventDefault()
+      void saveEditor()
+      return
+    }
+    if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+      event.preventDefault()
+      moveEditorLine(event.key === 'ArrowUp' ? -1 : 1)
+      return
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      closeEditorContextMenu()
+      return
+    }
   }
   if (searchOpen.value) {
     if (event.key === 'Escape') { event.preventDefault(); searchOpen.value = false; return }
@@ -1228,7 +1556,7 @@ async function refreshFileTree() {
   const request = ++fileTreeRequest
   if (!path) { filesystemFiles.value = []; return }
   try {
-    const files = await listMarkdownFiles(path)
+    const files = await listDirectoryFiles(path)
     if (request === fileTreeRequest) filesystemFiles.value = files
   } catch {
     if (request === fileTreeRequest) filesystemFiles.value = []
@@ -1298,6 +1626,7 @@ function fileStatus(file: { documentId?: string }) {
 async function openFileTreeEntry(file: { path: string; name: string; documentId?: string }) {
   if (fileBrowserMode.value === 'tree') filesystemTreeTarget.value = file.path
   if (file.documentId) { await chooseDocument(file.documentId); return }
+  if (!/\.(md|markdown)$/i.test(file.name)) { notify('当前只支持打开 Markdown 文件'); return }
   if (busyAction.value) return
   busyAction.value = 'file'
   try {
@@ -1308,22 +1637,45 @@ async function openFileTreeEntry(file: { path: string; name: string; documentId?
     notify(error instanceof Error ? error.message : '打开文件失败')
   } finally { busyAction.value = null }
 }
-function isDeletableFile(file: { path: string }) {
-  return file.path !== '欢迎开始 · Moyue.md'
+function isDeletableFile(file: FileTreeEntry) {
+  return Boolean(file.documentId) && file.path !== '欢迎开始 · Moyue.md'
+}
+function isBatchDeletableFile(file: FileTreeEntry) {
+  return isDeletableFile(file)
+}
+function isFileSelected(file: FileTreeEntry) {
+  return selectedFilePaths.value.includes(filePathKey(file.path))
+}
+function toggleFileSelection(file: FileTreeEntry) {
+  if (!isBatchDeletableFile(file)) return
+  const key = filePathKey(file.path)
+  selectedFilePaths.value = isFileSelected(file)
+    ? selectedFilePaths.value.filter((path) => path !== key)
+    : [...selectedFilePaths.value, key]
+}
+function toggleAllFileSelection() {
+  selectedFilePaths.value = allFilesSelected.value ? [] : batchDeletableFiles.value.map((file) => filePathKey(file.path))
+}
+function requestDeleteFiles(files: FileTreeEntry[]) {
+  const deletableFiles = files.filter(isBatchDeletableFile)
+  if (!deletableFiles.length || busyAction.value) return
+  deleteConfirmation.value = { files: deletableFiles }
 }
 async function deleteFile(file: FileTreeEntry) {
   if (!isDeletableFile(file) || busyAction.value) return
-  deleteConfirmation.value = { file }
+  deleteConfirmation.value = { files: [file] }
 }
 async function confirmDeleteFile() {
   const confirmation = deleteConfirmation.value
   if (!confirmation || busyAction.value) return
+  const files = confirmation.files
   deleteConfirmation.value = null
   busyAction.value = 'delete'
   try {
-    if (confirmation.file.documentId) await store.removeDocument(confirmation.file.documentId)
+    for (const file of files) if (file.documentId) await store.removeDocument(file.documentId)
+    selectedFilePaths.value = []
     await refreshFileTree()
-    notify(`已从阅读空间移除 ${confirmation.file.name}`)
+    notify(files.length === 1 ? `已从阅读空间移除 ${files[0].name}` : `已从阅读空间移除 ${files.length} 个文件`)
   } catch (error) {
     notify(error instanceof Error ? error.message : '删除文件失败')
   } finally { busyAction.value = null }
@@ -1965,8 +2317,9 @@ async function requestFullscreen() {
           <div v-if="deleteConfirmation" class="overlay file-delete-overlay" @click.self="deleteConfirmation = null">
             <div class="file-properties-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-file-title">
               <div class="file-properties-heading"><div><span class="section-kicker">REMOVE FROM MOYUE</span><h2 id="delete-file-title">从阅读空间移除？</h2></div><IconButton icon="close" size="sm" label="取消移除" @click="deleteConfirmation = null" /></div>
-              <p class="file-delete-message">确定从 Moyue 阅读空间移除“{{ deleteConfirmation.file.name }}”？不会删除本地文件。</p>
-              <div class="file-properties-actions"><button class="ghost-button" type="button" @click="deleteConfirmation = null">取消</button><button class="primary-button" type="button" @click="confirmDeleteFile">确认移除</button></div>
+              <p v-if="deleteConfirmation.files.length === 1" class="file-delete-message">确定从 Moyue 阅读空间移除“{{ deleteConfirmation.files[0].name }}”？不会删除本地文件。</p>
+              <p v-else class="file-delete-message">确定从 Moyue 阅读空间移除 {{ deleteConfirmationSummary }}？不会删除本地文件。</p>
+              <div class="file-properties-actions"><button class="ghost-button" type="button" @click="deleteConfirmation = null">取消</button><button class="primary-button file-delete-confirm" type="button" @click="confirmDeleteFile">确认移除</button></div>
             </div>
           </div>
         </Teleport>
@@ -1982,15 +2335,26 @@ async function requestFullscreen() {
             </div>
             <div v-if="leftPanelTab === 'files'" class="file-browser-panel">
               <div class="file-location" :title="fileBrowserMode === 'tree' ? filesystemTree?.path : currentDirectory"><AppIcon name="library" :size="13" /><span>{{ fileBrowserMode === 'tree' ? filesystemTreeScope === 'system' ? '文档树' : '工作区文档树' : currentDirectoryLabel }}</span><small>{{ fileBrowserMode === 'tree' ? filesystemTreeScope === 'system' ? '当前目录' : '已授权文件' : '所在目录' }}</small><button v-if="fileBrowserMode === 'tree'" type="button" class="file-tree-back" aria-label="返回当前目录文件列表" @click="showDocumentList">返回</button></div>
+              <div class="file-filter-toolbar" aria-label="文件侧栏筛选">
+                <select v-model="sidebarFilter" aria-label="文件筛选方式"><option value="markdown">Markdown 文件</option><option value="hidden">包含隐藏文件</option><option value="all">全部文件</option><option value="glob">自定义 glob</option></select>
+                <input v-if="sidebarFilter === 'glob'" v-model="sidebarGlob" aria-label="自定义 glob" placeholder="例如 *.md" />
+              </div>
               <div v-if="fileBrowserMode === 'tree'" class="filesystem-tree-panel">
                 <div v-if="filesystemTree" class="filesystem-tree" :aria-label="filesystemTreeScope === 'system' ? '当前目录文档树' : '工作区文档树'"><FileSystemTree :node="filesystemTree" :selected-path="filesystemTreeTarget" @toggle="toggleFilesystemNode" @open="openFilesystemTreeNode" /></div>
                 <p v-else class="file-browser-note"><AppIcon name="info" :size="13" />右键文件选择“文档树”以打开文件层级</p>
               </div>
-              <nav v-else class="file-list" aria-label="当前文件夹中的 Markdown 文件">
-                <div v-for="file in currentDirectoryFiles" :key="file.path" class="file-item" :class="{ active: store.currentDocumentId === file.documentId, 'is-unloaded': !file.documentId }">
-                  <button type="button" class="file-item-open" :aria-label="file.documentId ? `打开 ${file.name}` : `载入 ${file.name}`" @click="openFileTreeEntry(file)" @contextmenu.prevent="openFileContextMenu($event, file)"><AppIcon name="file" :size="14" /><span class="file-item-copy"><strong>{{ file.name }}</strong><small>{{ fileStatus(file) }}</small></span><i v-if="store.currentDocumentId === file.documentId" class="file-active-mark" /></button><IconButton v-if="isDeletableFile(file)" class="file-delete" icon="trash" size="sm" :label="`删除 ${file.name}`" :disabled="busyAction !== null" @click="deleteFile(file)" />
+              <div v-else class="file-list-shell">
+                <div v-if="batchDeletableFiles.length" class="file-list-toolbar">
+                  <label class="file-select-all"><input type="checkbox" :checked="allFilesSelected" :indeterminate="selectedFiles.length > 0 && !allFilesSelected" aria-label="全选可移除文档" @change="toggleAllFileSelection" /><span>全选</span></label>
+                  <div class="file-list-actions"><span v-if="selectedFiles.length" class="file-selection-count" aria-live="polite">已选 {{ selectedFiles.length }}</span><button v-if="selectedFiles.length" type="button" class="file-batch-delete" :disabled="busyAction !== null" @click="requestDeleteFiles(selectedFiles)"><AppIcon name="trash" :size="12" />删除</button></div>
                 </div>
-              </nav>
+                <nav class="file-list" :aria-label="sidebarFilter === 'markdown' ? '当前文件夹中的 Markdown 文件' : '当前文件夹中的文件'">
+                  <div v-for="file in currentDirectoryFiles" :key="file.path" class="file-item" :class="{ active: store.currentDocumentId === file.documentId, selected: isFileSelected(file), 'is-unloaded': !file.documentId }">
+                    <label v-if="batchDeletableFiles.length && isBatchDeletableFile(file)" class="file-select" :aria-label="`选择 ${file.name}`"><input type="checkbox" :checked="isFileSelected(file)" @click.stop @change="toggleFileSelection(file)" /></label><span v-else-if="batchDeletableFiles.length" class="file-select-spacer" aria-hidden="true" />
+                    <button type="button" class="file-item-open" :aria-label="file.documentId ? `打开 ${file.name}` : `载入 ${file.name}`" :title="file.name" @click="openFileTreeEntry(file)" @contextmenu.prevent="openFileContextMenu($event, file)"><AppIcon name="file" :size="14" /><span class="file-item-copy"><strong>{{ file.name }}</strong><small>{{ fileStatus(file) }}</small></span><i v-if="store.currentDocumentId === file.documentId" class="file-active-mark" /></button><IconButton v-if="isDeletableFile(file)" class="file-delete" icon="trash" size="sm" :label="`删除 ${file.name}`" :disabled="busyAction !== null" @click="deleteFile(file)" />
+                  </div>
+                </nav>
+              </div>
             </div>
             <div v-else class="outline-view">
               <label class="outline-search"><AppIcon name="search" :size="13" /><input v-model="outlineQuery" type="search" placeholder="筛选章节…" aria-label="筛选章节" /><button v-if="outlineQuery" type="button" aria-label="清除章节筛选" @click="outlineQuery = ''">×</button></label>
@@ -2018,6 +2382,12 @@ async function requestFullscreen() {
               </div>
               <div class="reader-meta-tools">
                 <FontPicker compact label="正文字体" :model-value="store.readerSettings.fontFamily" :fallback-family="store.activeTheme.tokens.reader.fontFamily" @update:model-value="store.updateSettings({ fontFamily: $event })" />
+                <div class="reader-edit-actions">
+                  <button type="button" :class="{ active: editorOpen }" @click="editorOpen ? closeEditor() : openEditor()">{{ editorOpen ? '阅读' : '编辑' }}</button>
+                  <button type="button" @click="exportDocument('markdown')">导出 Markdown</button>
+                  <button type="button" @click="exportDocument('html')">导出 HTML</button>
+                  <button type="button" @click="printDocument">打印 / PDF</button>
+                </div>
                 <div class="reader-display-switch" role="tablist" aria-label="阅读视图">
                   <button type="button" role="tab" :aria-selected="readerDisplayMode === 'markdown'" :class="{ active: readerDisplayMode === 'markdown' }" @click="readerDisplayMode = 'markdown'">Markdown</button>
                   <button type="button" role="tab" :aria-selected="readerDisplayMode === 'mindmap'" :class="{ active: readerDisplayMode === 'mindmap' }" @click="readerDisplayMode = 'mindmap'">思维导图</button>
@@ -2032,13 +2402,82 @@ async function requestFullscreen() {
               </div>
             </div>
             <div ref="readerViewport" class="reader-viewport" @scroll="onReaderScroll" @wheel="onReaderWheel" @pointerdown="onReaderPointerDown" @mouseup="captureSelection">
-              <nav v-if="store.mode === 'clean' && (store.currentDocument?.headings.length ?? 0) > 0" class="reading-progress-rail" aria-label="阅读进度导航"><span class="reading-progress-rail-caption">{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}%</span><div class="reading-progress-rail-track"><span class="reading-progress-rail-fill" :style="{ height: `${(currentProgress?.scrollPercent ?? 0) * 100}%` }" /><button v-for="(heading, index) in store.currentDocument?.headings" :key="heading.id" type="button" class="reading-progress-marker" :class="{ active: store.activeHeadingId === heading.id }" :style="{ top: headingRailPosition(index) }" :aria-label="`跳转到 ${heading.text}`" :title="heading.text" @click.stop="scrollToHeading(heading.regionId)"><i /><span>{{ heading.text }}</span></button></div></nav>
-              <div class="reader-content" :class="`reader-display-${readerDisplayMode}`">
+              <div v-if="editorOpen" class="editor-surface" :class="{ 'editor-calm-mode': editorCalmMode }" @contextmenu="openEditorContextMenu">
+                <div v-if="!editorCalmMode" class="editor-studio-intro">
+                  <div>
+                    <span class="section-kicker">MOYUE WRITING DESK</span>
+                    <strong>边写边读</strong>
+                    <p>Markdown 保留控制力，实时预览负责把注意力还给内容。</p>
+                  </div>
+                  <div class="editor-studio-stats" aria-label="写作统计">
+                    <span><b>{{ editorSourceStats.characters }}</b> 字符</span>
+                    <span><b>{{ editorSourceStats.lines }}</b> 行</span>
+                    <span><b>{{ editorSourceStats.minutes || '—' }}</b> 分钟阅读</span>
+                    <span><b>{{ editorHeadings.length }}</b> 个章节</span>
+                  </div>
+                </div>
+                <div v-if="!editorCalmMode" class="editor-toolbar" aria-label="Markdown 编辑工具栏">
+                  <div class="editor-toolbar-group" aria-label="文字格式">
+                    <button class="editor-tool-button" type="button" title="粗体（Ctrl/Cmd+B）" @click="wrapEditorSelection('**', '**', '粗体')"><b>B</b></button>
+                    <button class="editor-tool-button" type="button" title="斜体（Ctrl/Cmd+I）" @click="wrapEditorSelection('*', '*', '斜体')"><i>I</i></button>
+                    <button class="editor-tool-button" type="button" title="行内代码" @click="wrapEditorSelection('`', '`', '代码')">Code</button>
+                    <button class="editor-tool-button" type="button" title="链接（Ctrl/Cmd+K）" @click="insertEditorLink">链接</button>
+                  </div>
+                  <div class="editor-toolbar-group" aria-label="块格式">
+                    <button class="editor-tool-button" type="button" title="一级标题" @click="prefixEditorLines('# ')">H1</button>
+                    <button class="editor-tool-button" type="button" title="引用" @click="prefixEditorLines('> ')">引用</button>
+                    <button class="editor-tool-button" type="button" title="无序列表" @click="prefixEditorLines('- ')">列表</button>
+                    <button class="editor-tool-button" type="button" title="任务列表" @click="prefixEditorLines('- [ ] ')">任务</button>
+                    <button class="editor-tool-button" type="button" title="代码块" @click="wrapEditorSelection('```\n', '\n```', '代码')">代码</button>
+                    <button class="editor-tool-button" type="button" title="表格" @click="insertEditorTable">表格</button>
+                    <button class="editor-tool-button" type="button" title="图片" @click="insertEditorImage">图片</button>
+                    <button class="editor-tool-button" type="button" title="分隔线" @click="insertEditorDivider">分隔线</button>
+                  </div>
+                  <div class="editor-toolbar-group" aria-label="段落移动">
+                    <button class="editor-tool-button icon-only" type="button" title="上移当前行（Alt+↑）" @click="moveEditorLine(-1)">↑</button>
+                    <button class="editor-tool-button icon-only" type="button" title="下移当前行（Alt+↓）" @click="moveEditorLine(1)">↓</button>
+                  </div>
+                  <span class="editor-toolbar-spacer" />
+                  <div class="editor-mode-switch" role="tablist" aria-label="编辑模式">
+                    <button type="button" role="tab" :aria-selected="editorMode === 'write'" :class="{ active: editorMode === 'write' }" @click="setEditorMode('write')">写作</button>
+                    <button type="button" role="tab" :aria-selected="editorMode === 'split'" :class="{ active: editorMode === 'split' }" @click="setEditorMode('split')">并排</button>
+                    <button type="button" role="tab" :aria-selected="editorMode === 'preview'" :class="{ active: editorMode === 'preview' }" @click="setEditorMode('preview')">预览</button>
+                  </div>
+                  <button class="editor-calm-toggle" type="button" :class="{ active: editorCalmMode }" :aria-pressed="editorCalmMode" @click="toggleEditorCalmMode">静写</button>
+                  <kbd>⌘/Ctrl + S</kbd>
+                  <button class="primary-button editor-save-button" type="button" @click="saveEditor">保存</button>
+                </div>
+                <button v-if="editorCalmMode" class="editor-calm-exit" type="button" @click="toggleEditorCalmMode">退出静写 · 显示工具栏</button>
+                <div class="editor-workspace" :class="`editor-mode-${editorMode}`">
+                  <section v-if="editorMode !== 'preview'" class="editor-source-pane" aria-label="Markdown 源码">
+                    <div class="editor-pane-heading"><span>源码</span><small>可随时切回纯 Markdown</small></div>
+                    <textarea ref="editorTextarea" v-model="editorSource" class="editor-textarea" spellcheck="false" aria-label="Markdown 源码编辑器" @scroll="syncEditorPreviewScroll" />
+                  </section>
+                  <section v-if="editorMode !== 'write'" class="editor-preview-pane" aria-label="实时阅读预览">
+                    <div class="editor-pane-heading"><span>阅读预览</span><small>{{ editorHeadings.length ? '结构镜已就绪' : '还没有章节标题' }}</small></div>
+                    <div ref="editorPreview" class="editor-preview-scroll">
+                      <nav v-if="editorHeadings.length" class="editor-outline" aria-label="编辑中的文档结构">
+                        <span class="editor-outline-label">结构镜</span>
+                        <button v-for="(heading, index) in editorHeadings" :key="heading.id" type="button" :style="{ paddingLeft: `${8 + (heading.depth - 1) * 12}px` }" @click="jumpToEditorHeading(index)">{{ heading.text }}</button>
+                      </nav>
+                      <article class="editor-preview" v-html="editorPreviewHtml" />
+                    </div>
+                  </section>
+                </div>
+                <div class="editor-statusbar">
+                  <span>{{ editorMode === 'write' ? '源码写作' : editorMode === 'preview' ? '阅读预览' : '边写边读' }}</span>
+                  <span class="editor-status-spacer" />
+                  <span>支持 Markdown / GFM / 数学公式</span>
+                  <span>Alt+↑↓ 移动当前行</span>
+                </div>
+              </div>
+              <nav v-if="!editorOpen && store.mode === 'clean' && (store.currentDocument?.headings.length ?? 0) > 0" class="reading-progress-rail" aria-label="阅读进度导航"><span class="reading-progress-rail-caption">{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}%</span><div class="reading-progress-rail-track"><span class="reading-progress-rail-fill" :style="{ height: `${(currentProgress?.scrollPercent ?? 0) * 100}%` }" /><button v-for="(heading, index) in store.currentDocument?.headings" :key="heading.id" type="button" class="reading-progress-marker" :class="{ active: store.activeHeadingId === heading.id }" :style="{ top: headingRailPosition(index) }" :aria-label="`跳转到 ${heading.text}`" :title="heading.text" @click.stop="scrollToHeading(heading.regionId)"><i /><span>{{ heading.text }}</span></button></div></nav>
+              <div v-if="!editorOpen" class="reader-content" :class="`reader-display-${readerDisplayMode}`">
                 <div v-if="readerDisplayMode !== 'mindmap'" class="reader-markdown"><h1 class="reader-title">{{ store.currentDocument?.title }}</h1><div class="reader-rule" />
                 <div class="regions-stack" :class="{ virtualized: virtualizedReader }">
                 <div v-if="virtualRange.before" class="virtual-spacer" :style="{ height: `${virtualRange.before}px` }" aria-hidden="true" />
                 <div class="virtual-regions">
-                  <RegionBlock v-for="region in virtualRange.regions" v-memo="[region.id, store.activeRegionId === region.id, store.focusedRegionId === region.id, focusDistanceByRegion.get(region.id), store.mode, store.activeThemeId, currentAnnotationsByRegion.get(region.id)]" :key="region.id" :region="region" :annotations="currentAnnotationsByRegion.get(region.id)" :focused="store.focusedRegionId === region.id" :active="store.activeRegionId === region.id" :focus-distance="focusDistanceByRegion.get(region.id)" :theme-mode="store.activeTheme?.manifest.mode" :theme-key="`${store.mode}-${store.activeThemeId}`" @focus="focusRegion(region)" @open-viewer="openViewer(region)" @open-link="openExternalLink" @code-copied="notify('代码已复制')" />
+                  <RegionBlock v-for="region in virtualRange.regions" v-memo="[region.id, store.currentDocument?.sourceHash, store.activeRegionId === region.id, store.focusedRegionId === region.id, focusDistanceByRegion.get(region.id), store.mode, store.activeThemeId, currentAnnotationsByRegion.get(region.id)]" :key="region.id" :region="region" :annotations="currentAnnotationsByRegion.get(region.id)" :focused="store.focusedRegionId === region.id" :active="store.activeRegionId === region.id" :focus-distance="focusDistanceByRegion.get(region.id)" :theme-mode="store.activeTheme?.manifest.mode" :theme-key="`${store.mode}-${store.activeThemeId}`" @focus="focusRegion(region)" @open-viewer="openViewer(region)" @open-link="openExternalLink" @code-copied="notify('代码已复制')" @toggle-task="toggleTask(region)" />
                 </div>
                 <div v-if="virtualRange.after" class="virtual-spacer" :style="{ height: `${virtualRange.after}px` }" aria-hidden="true" />
                 </div></div>
@@ -2051,6 +2490,15 @@ async function requestFullscreen() {
               </div>
             </div>
           </div>
+          <Teleport to="body">
+            <div v-if="editorContextMenu" class="editor-context-menu" :style="{ top: `${editorContextMenu.y}px`, left: `${editorContextMenu.x}px` }" role="menu">
+              <button type="button" role="menuitem" @click="wrapEditorSelection('**', '**', '粗体'); closeEditorContextMenu()">粗体</button>
+              <button type="button" role="menuitem" @click="wrapEditorSelection('*', '*', '斜体'); closeEditorContextMenu()">斜体</button>
+              <button type="button" role="menuitem" @click="prefixEditorLines('# '); closeEditorContextMenu()">一级标题</button>
+              <button type="button" role="menuitem" @click="prefixEditorLines('- '); closeEditorContextMenu()">无序列表</button>
+              <button type="button" role="menuitem" @click="prefixEditorLines('> '); closeEditorContextMenu()">引用</button>
+            </div>
+          </Teleport>
         <aside v-if="store.mode !== 'focus' && store.mode !== 'clean'" class="context-panel">
           <div class="context-top"><span class="section-kicker">阅读上下文</span><button class="text-button" type="button" @click="view = 'themes'">主题 <AppIcon name="external" :size="12" /></button></div>
           <div class="context-card current-context"><span class="section-kicker">CURRENT REGION</span><strong>{{ currentHeading?.text || '开篇' }}</strong><small>{{ store.currentDocument?.regions.length ?? 0 }} 个阅读区域 · {{ currentAnnotations.length }} 条批注</small></div>
@@ -2089,7 +2537,7 @@ async function requestFullscreen() {
         <div class="settings-card"><span class="section-kicker">READER</span><h2>阅读偏好</h2><label class="setting-row"><span>正文宽度 <b>{{ store.readerSettings.width }}px</b></span><input :value="store.readerSettings.width" type="range" min="620" max="980" step="10" @input="changeSetting('width', Number(($event.target as HTMLInputElement).value))" /></label><label class="setting-row"><span>字号 <b>{{ store.readerSettings.fontSize }}px</b></span><input :value="store.readerSettings.fontSize" type="range" min="15" max="24" step="1" @input="changeSetting('fontSize', Number(($event.target as HTMLInputElement).value))" /></label><label class="setting-row"><span>行距 <b>{{ store.readerSettings.lineHeight }}</b></span><input :value="store.readerSettings.lineHeight" type="range" min="1.4" max="2.2" step=".05" @input="changeSetting('lineHeight', Number(($event.target as HTMLInputElement).value))" /></label><div class="setting-toggle-row"><span>显示阅读进度</span><i class="toggle-on" /></div><div class="setting-toggle-row"><span>启用专注模式</span><i class="toggle-on" /></div></div><div class="settings-card"><span class="section-kicker">ASSISTANCE</span><h2>翻译与解释</h2><p class="muted-copy">V1 使用适配器接口，不内置固定服务。配置后，划词工具栏即可调用。</p><label class="setting-input">服务标识<input v-model="customProvider" placeholder="例如：local-llm / my-translator" /></label><button class="primary-button" type="button" @click="notify(customProvider ? '适配器标识已保存' : '保持未配置状态')"><AppIcon name="check" :size="14" />保存配置</button></div><div class="settings-card"><span class="section-kicker">SHORTCUTS</span><h2>快捷键</h2><div class="shortcut-row"><span>全局搜索</span><kbd>Ctrl / Cmd + K</kbd></div><div class="shortcut-row"><span>当前文档搜索</span><kbd>Ctrl / Cmd + F</kbd></div><div class="shortcut-row"><span>阅读缩放</span><kbd>Ctrl / Cmd + + / -</kbd></div><div class="shortcut-row"><span>专注模式</span><kbd>F</kbd></div><div class="shortcut-row"><span>退出聚焦</span><kbd>Esc</kbd></div><div class="shortcut-row"><span>切换区域</span><kbd>↑ ↓</kbd></div></div><div class="settings-card extensions-card"><div class="extensions-head"><div><span class="section-kicker">EXTENSION CENTER</span><h2>插件扩展</h2></div><button class="ghost-button" type="button" @click="notify('插件运行时将在后续版本启用')"><AppIcon name="plugin" :size="14" />打开插件目录</button></div><div class="extension-filter"><AppIcon name="search" :size="14" /><span>探索无限可能，让阅读更强大</span></div><div class="extension-list"><div class="extension-item"><span class="extension-icon purple"><AppIcon name="sparkle" :size="17" /></span><span><b>AI 阅读助手</b><small>总结、解释与问答适配器</small></span><button type="button" @click="notify('请先在翻译与解释中配置服务')">配置</button></div><div class="extension-item"><span class="extension-icon green"><AppIcon name="download" :size="17" /></span><span><b>导出增强</b><small>为阅读内容准备更多导出格式</small></span><button type="button" @click="notify('导出增强将在下一阶段接入')">安装</button></div><div class="extension-item"><span class="extension-icon pink"><AppIcon name="components" :size="17" /></span><span><b>思维导图</b><small>把长文转换为结构化视图</small></span><button type="button" @click="notify('插件运行时暂未启用')">安装</button></div></div></div></div></section>
     </main>
 
-    <div v-if="searchOpen" class="overlay search-overlay" @click.self="searchOpen = false"><div class="search-dialog"><div class="search-input-row"><AppIcon name="search" :size="17" /><input v-model="query" autofocus :placeholder="searchScope === 'current' ? '搜索当前文档…' : '搜索文档、标题、内容…'" aria-label="搜索内容" @keydown.esc="searchOpen = false" /><kbd>ESC</kbd></div><div class="search-scope-row"><div class="search-scope-tabs" role="tablist" aria-label="搜索范围"><button type="button" :class="{ active: searchScope === 'all' }" @click="searchScope = 'all'">全部文档</button><button type="button" :class="{ active: searchScope === 'current' }" :disabled="!store.currentDocument" @click="searchScope = 'current'">当前文档</button></div><span>{{ searchResults.length }} 个结果</span><small>Ctrl/Cmd + F 搜当前文档</small></div><div v-if="searchResults.length" class="search-results"><button v-for="(result, index) in searchResults" :key="`${result.document.id}-${result.region.id}`" type="button" :class="{ selected: searchIndex === index }" @click="chooseSearchResult(result.document.id, result.region.id)"><span class="result-kind">{{ result.region.type }}</span><span><b>{{ result.document.title }}</b><small>{{ result.region.textContent.slice(0, 100) }}</small></span><AppIcon name="external" :size="14" /></button></div><div v-else class="empty-search">{{ query ? '没有找到相关内容' : searchScope === 'current' ? '输入关键词，搜索当前文档' : '输入关键词，搜索你的阅读空间' }}</div></div></div>
+    <div v-if="searchOpen" class="overlay search-overlay" @click.self="searchOpen = false"><div class="search-dialog"><div class="search-input-row"><AppIcon name="search" :size="17" /><input v-model="query" autofocus :placeholder="searchScope === 'current' ? '搜索当前文档…' : '搜索文档、标题、内容…'" aria-label="搜索内容" @keydown.esc="searchOpen = false" /><kbd>ESC</kbd></div><div class="search-scope-row"><div class="search-scope-tabs" role="tablist" aria-label="搜索范围"><button type="button" :class="{ active: searchScope === 'all' }" @click="searchScope = 'all'">全部文档</button><button type="button" :class="{ active: searchScope === 'current' }" :disabled="!store.currentDocument" @click="searchScope = 'current'">当前文档</button><button type="button" :class="{ active: replaceOpen }" @click="replaceOpen = !replaceOpen">查找替换</button></div><span>{{ searchResults.reduce((total, result) => total + result.matchCount, 0) }} 个匹配</span><small>Ctrl/Cmd + F 搜当前文档</small></div><div v-if="replaceOpen" class="replace-row"><input v-model="replaceValue" placeholder="替换为…" aria-label="替换内容" /><label><input v-model="searchRegex" type="checkbox" /> 正则</label><button type="button" :disabled="!searchPattern || searchPatternError" @click="replaceSearchMatches">全部替换</button></div><p v-if="searchPatternError" class="search-error">正则表达式无效</p><div v-if="searchResults.length" class="search-results"><button v-for="(result, index) in searchResults" :key="`${result.document.id}-${result.region.id}`" type="button" :class="{ selected: searchIndex === index }" @click="chooseSearchResult(result.document.id, result.region.id)"><span class="result-kind">{{ result.region.type }}</span><span><b>{{ result.document.title }}</b><small>{{ result.region.textContent.slice(0, 100) }} · {{ result.matchCount }} 处匹配</small></span><AppIcon name="external" :size="14" /></button></div><div v-else class="empty-search">{{ query ? '没有找到相关内容' : searchScope === 'current' ? '输入关键词，搜索当前文档' : '输入关键词，搜索你的阅读空间' }}</div></div></div>
 
 <div v-if="viewer" class="overlay viewer-overlay" :class="{ 'is-viewer-fullscreen': viewerFullscreen }" @click.self="closeViewer">
       <div class="viewer-shell" role="dialog" aria-modal="true" :aria-label="`${viewerKind(viewer.type)}独立查看`" :class="{ 'is-fullscreen': viewerFullscreen }">

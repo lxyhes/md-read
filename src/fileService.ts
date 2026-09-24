@@ -163,6 +163,17 @@ export async function listMarkdownFiles(path: string): Promise<WorkspaceFile[]> 
     .sort((left, right) => left.name.localeCompare(right.name, 'zh-CN'))
 }
 
+export async function listDirectoryFiles(path: string): Promise<WorkspaceFile[]> {
+  if (!isTauri()) return []
+  const directory = dirnameOf(path)
+  if (!directory) return []
+  const entries = await readDir(directory)
+  return entries
+    .filter((entry) => !entry.isDirectory)
+    .map((entry) => ({ name: entry.name, path: `${directory}/${entry.name}` }))
+    .sort((left, right) => left.name.localeCompare(right.name, 'zh-CN'))
+}
+
 export async function listFileSystemEntries(path: string): Promise<FileSystemEntry[]> {
   if (!isTauri()) throw new Error('浏览器预览无法读取系统文件树，请使用桌面端打开')
   const directory = path.replace(/\\/g, '/').replace(/\/+$/, '') || '/'
@@ -192,6 +203,30 @@ export async function saveMarkdownFile(source: string, defaultName = '剪贴板'
   if (!selected) return null
   const path = /\.(md|markdown)$/i.test(selected) ? selected : `${selected}.md`
   await createMarkdownFile(path, source)
+  return path
+}
+
+export async function writeMarkdownFile(path: string, source: string): Promise<void> {
+  if (!isTauri()) throw new Error('浏览器预览无法写入文件，请使用桌面端打开')
+  if (!/\.(md|markdown)$/i.test(path)) throw new Error('只能写入 Markdown 文件')
+  await writeTextFile(path, source)
+}
+
+export async function saveExportFile(source: string, defaultName: string, extension: string, filterName: string): Promise<string | null> {
+  if (!isTauri()) {
+    const blob = new Blob([source], { type: filterName === 'HTML' ? 'text/html;charset=utf-8' : 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `${defaultName}.${extension}`
+    anchor.click()
+    URL.revokeObjectURL(url)
+    return anchor.download
+  }
+  const selected = await save({ defaultPath: `${defaultName}.${extension}`, filters: [{ name: filterName, extensions: [extension] }] })
+  if (!selected) return null
+  const path = selected.toLowerCase().endsWith(`.${extension.toLowerCase()}`) ? selected : `${selected}.${extension}`
+  await writeTextFile(path, source)
   return path
 }
 

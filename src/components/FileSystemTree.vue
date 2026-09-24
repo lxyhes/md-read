@@ -36,6 +36,26 @@ function selectNode() {
   else emit('open', props.node)
 }
 
+function onKeydown(event: KeyboardEvent) {
+  const rows = [...document.querySelectorAll<HTMLButtonElement>('.filesystem-tree-row')]
+  const current = event.currentTarget as HTMLButtonElement
+  const index = rows.indexOf(current)
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault()
+    rows[index + (event.key === 'ArrowDown' ? 1 : -1)]?.focus()
+    return
+  }
+  if (event.key === 'ArrowRight' && props.node.isDirectory && !props.node.expanded) {
+    event.preventDefault()
+    emit('toggle', props.node)
+    return
+  }
+  if (event.key === 'ArrowLeft' && props.node.isDirectory && props.node.expanded) {
+    event.preventDefault()
+    emit('toggle', props.node)
+  }
+}
+
 function revealSelectedRow() {
   if (pathKey(props.node.path) !== pathKey(props.selectedPath)) return
   void nextTick(() => selectedRow.value?.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'nearest' }))
@@ -57,6 +77,7 @@ watch(() => props.node.expanded, revealSelectedRow)
       :aria-expanded="node.isDirectory ? node.expanded : undefined"
       :aria-label="node.isDirectory ? `${node.expanded ? '收起' : '展开'} ${node.name}` : `打开 ${node.name}`"
       @click="selectNode"
+      @keydown="onKeydown"
     >
       <span class="filesystem-tree-chevron"><AppIcon v-if="node.isDirectory" :name="node.expanded ? 'chevron-down' : 'chevron-right'" :size="11" /><i v-else /></span>
       <AppIcon :name="node.isDirectory ? 'library' : 'file'" :size="13" />

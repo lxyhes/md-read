@@ -2,7 +2,7 @@ import type { HeadingItem, ReaderDocument, ReaderRegion, ReaderRegionType } from
 import { blockHtmlWithSourceIndent, renderFootnotes } from './markdown/render'
 import { createRenderContext, nodeText, type MarkdownUrlResolver, type MdastNode } from './markdown/shared'
 import { formatPastedText, isLikelyProseBlock } from './pasteMarkdown'
-import { markdownProcessor as processor, normalizeArticleStrong } from './markdown/fragment'
+import { markdownProcessor as processor, normalizeArticleStrong, normalizeLatexDelimiters } from './markdown/fragment'
 
 export type { MarkdownUrlResolver } from './markdown/shared'
 export { renderMarkdownFragment } from './markdown/fragment'
@@ -138,7 +138,8 @@ function expandProseCodeBlock(node: MdastNode, source: string): MdastNode[] {
 }
 
 export function parseMarkdown(path: string, source: string, resolveUrl: MarkdownUrlResolver = (url) => url): ReaderDocument {
-  const tree = processor.parse(source) as unknown as MdastNode
+  const normalizedSource = normalizeLatexDelimiters(source)
+  const tree = processor.parse(normalizedSource) as unknown as MdastNode
   promoteTimestampedParagraphs(tree)
   restoreTimestampedLists(tree)
   normalizeArticleStrong(tree)
@@ -164,7 +165,7 @@ export function parseMarkdown(path: string, source: string, resolveUrl: Markdown
     if (type === 'image') metadata.url = resolveUrl(imageNode(node)?.url ?? '')
     const region: ReaderRegion = {
       id, documentId, type, index: regions.length, textContent, sourceStart: start, sourceEnd: end,
-      html: blockHtmlWithSourceIndent(node, source, resolveUrl, context), metadata
+      html: blockHtmlWithSourceIndent(node, normalizedSource, resolveUrl, context), metadata
     }
     regions.push(region)
     const boldSection = standaloneStrongText(node)

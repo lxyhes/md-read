@@ -8,7 +8,7 @@ import IconButton from './IconButton.vue'
 import { asciiDiagramToMermaid, asciiTreeToTree } from '../asciiDiagram'
 
 const props = defineProps<{ region: ReaderRegion; annotations?: Annotation[]; focused: boolean; active: boolean; focusDistance?: number; themeMode?: ThemeManifest['mode']; themeKey?: string }>()
-const emit = defineEmits<{ focus: []; openViewer: []; 'open-link': [url: string]; 'code-copied': [] }>()
+const emit = defineEmits<{ focus: []; openViewer: []; 'open-link': [url: string]; 'code-copied': []; 'toggle-task': [] }>()
 const codeLanguage = computed(() => String(props.region.metadata?.language ?? 'text'))
 const proseCodeLanguage = computed(() => /^(?:text|plaintext|markdown|md)$/i.test(codeLanguage.value))
 const asciiDiagramCandidate = computed(() => props.region.type === 'code' && proseCodeLanguage.value)
@@ -133,6 +133,12 @@ function copyActiveCodeLine() { void copyCodeText(activeCodeLine.value) }
 function handleContentClick(event: MouseEvent) {
   const target = event.target
   if (!(target instanceof Element)) return
+  if (target.closest('.task-checkbox')) {
+    event.preventDefault()
+    event.stopPropagation()
+    emit('toggle-task')
+    return
+  }
   const link = target.closest<HTMLAnchorElement>('a[href]')
   const url = link?.getAttribute('href')?.trim()
   if (link) {

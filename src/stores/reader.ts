@@ -102,6 +102,21 @@ export const useReaderStore = defineStore('reader', () => {
     return document
   }
 
+  async function replaceDocumentSource(id: string, source: string) {
+    const existing = documents.value.find((item) => item.id === id)
+    if (!existing) return null
+    const document = await parseOpenedFile({ path: existing.path, source })
+    documents.value = [...documents.value.filter((item) => item.id !== id), document]
+    await saveDocumentSnapshot(document)
+    await saveDocument({ id: document.id, path: document.path, title: document.title, sourceHash: document.sourceHash, updatedAt: document.updatedAt, source: document.source })
+    if (currentDocumentId.value === id) {
+      annotations.value = loadAnnotations(id)
+      activeRegionId.value = progress.value[id]?.regionId ?? null
+      activeHeadingId.value = progress.value[id]?.headingId ?? null
+    }
+    return document
+  }
+
   async function renameDocument(id: string, nextPath: string) {
     const existing = documents.value.find((item) => item.id === id)
     if (!existing) return null
@@ -267,7 +282,7 @@ export const useReaderStore = defineStore('reader', () => {
 
   const openDocuments = computed(() => openDocumentIds.value.map((id) => documents.value.find((document) => document.id === id)).filter((document): document is ReaderDocument => Boolean(document)))
 
-  return { documents, openDocuments, openDocumentIds, currentDocumentId, currentDocument, mode, activeRegionId, focusedRegionId, activeHeadingId, selection, progress, annotations, themes, activeThemeId, activeTheme, readerSettings, bootstrap, importFiles, importFolder, addOpenedFiles, reloadDocument, renameDocument, openDocument, closeDocument, removeDocument, setProgress, setFocusedRegion, clearFocusedRegion, focusRegion, clearFocus, setMode, addAnnotation, removeAnnotation, applyTheme, installTheme, updateSettings }
+  return { documents, openDocuments, openDocumentIds, currentDocumentId, currentDocument, mode, activeRegionId, focusedRegionId, activeHeadingId, selection, progress, annotations, themes, activeThemeId, activeTheme, readerSettings, bootstrap, importFiles, importFolder, addOpenedFiles, reloadDocument, replaceDocumentSource, renameDocument, openDocument, closeDocument, removeDocument, setProgress, setFocusedRegion, clearFocusedRegion, focusRegion, clearFocus, setMode, addAnnotation, removeAnnotation, applyTheme, installTheme, updateSettings }
 })
 
 function readSettings() {
