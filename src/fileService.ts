@@ -183,10 +183,10 @@ export async function createMarkdownFile(path: string, source = ''): Promise<voi
   await writeTextFile(path, source)
 }
 
-export async function saveMarkdownFile(source: string): Promise<string | null> {
+export async function saveMarkdownFile(source: string, defaultName = '剪贴板'): Promise<string | null> {
   if (!isTauri()) throw new Error('浏览器预览无法保存文件，请使用桌面端打开')
   const selected = await save({
-    defaultPath: `剪贴板-${Date.now()}.md`,
+    defaultPath: `${defaultName}.md`,
     filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }],
   })
   if (!selected) return null

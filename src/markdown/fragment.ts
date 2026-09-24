@@ -1,0 +1,51 @@
+import { unified } from 'unified'
+import remarkFrontmatter from 'remark-frontmatter'
+import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import remarkParse from 'remark-parse'
+import { blockHtmlWithSourceIndent, renderFootnotes } from './render'
+import { createRenderContext, type MdastNode } from './shared'
+
+export const markdownProcessor = unified()
+  .use(remarkParse)
+  .use(remarkGfm)
+  .use(remarkFrontmatter, ['yaml', 'toml'])
+  .use(remarkMath)
+
+function splitArticleStrongText(node: MdastNode): MdastNode[] {
+  if (node.type !== 'text' || !node.value || !/(?:\*{2,4}|_{2,4}).+(?:\*{2,4}|_{2,4})/.test(node.value)) return [node]
+  const result: MdastNode[] = []
+  const pattern = /(\*{2,4}|_{2,4})([^\n]*?)\1/g
+  let cursor = 0
+  let match: RegExpExecArray | null
+  while ((match = pattern.exec(node.value)) !== null) {
+    const content = match[2].trim()
+    if (!content) continue
+    if (match.index > cursor) result.push({ ...node, value: node.value.slice(cursor, match.index) })
+    result.push({ type: 'strong', children: [{ type: 'text', value: content }] })
+    cursor = match.index + match[0].length
+  }
+  if (!result.length) return [node]
+  if (cursor < node.value.length) result.push({ ...node, value: node.value.slice(cursor) })
+  return result
+}
+
+export function normalizeArticleStrong(node: MdastNode) {
+  if (node.type === 'code' || node.type === 'inlineCode' || node.type === 'html') return
+  if (!node.children) return
+  node.children = node.children.flatMap((child) => {
+    normalizeArticleStrong(child)
+    return child.type === 'text' ? splitArticleStrongText(child) : [child]
+  })
+}
+
+export function renderMarkdownFragment(source: string): string {
+  const tree = markdownProcessor.parse(source) as unknown as MdastNode
+  normalizeArticleStrong(tree)
+  const context = createRenderContext()
+  const html = (tree.children ?? [])
+    .filter((node) => node.type !== 'yaml' && node.type !== 'toml' && node.type !== 'footnoteDefinition')
+    .map((node) => blockHtmlWithSourceIndent(node, source, undefined, context))
+    .join('')
+  return `${html}${renderFootnotes(context, (url) => url)}`
+}

@@ -1,15 +1,11 @@
-import { unified } from 'unified'
-import remarkParse from 'remark-parse'
-import remarkGfm from 'remark-gfm'
-import remarkFrontmatter from 'remark-frontmatter'
-import remarkMath from 'remark-math'
 import type { HeadingItem, ReaderDocument, ReaderRegion, ReaderRegionType } from './types'
 import { blockHtmlWithSourceIndent, renderFootnotes } from './markdown/render'
 import { createRenderContext, nodeText, type MarkdownUrlResolver, type MdastNode } from './markdown/shared'
+import { formatPastedText, isLikelyProseBlock } from './pasteMarkdown'
+import { markdownProcessor as processor, normalizeArticleStrong } from './markdown/fragment'
 
 export type { MarkdownUrlResolver } from './markdown/shared'
-
-const processor = unified().use(remarkParse).use(remarkGfm).use(remarkFrontmatter, ['yaml', 'toml']).use(remarkMath)
+export { renderMarkdownFragment } from './markdown/fragment'
 
 export function hashText(value: string): string {
   let hash = 2166136261
@@ -28,37 +24,16 @@ function mermaidCode(node: MdastNode): string | null {
   return match?.[1] ?? null
 }
 
+function standaloneStrongText(node: MdastNode): string | null {
+  if (node.type !== 'paragraph' || node.children?.length !== 1 || node.children[0]?.type !== 'strong') return null
+  const text = nodeText(node).trim()
+  return text || null
+}
+
 function imageNode(node: MdastNode): MdastNode | null {
   if (node.type === 'image') return node
   if (node.type === 'paragraph' && node.children?.length === 1 && node.children[0]?.type === 'image') return node.children[0]
   return null
-}
-
-function splitArticleStrongText(node: MdastNode): MdastNode[] {
-  if (node.type !== 'text' || !node.value || !/(?:\*{2,4}|_{2,4}).+(?:\*{2,4}|_{2,4})/.test(node.value)) return [node]
-  const result: MdastNode[] = []
-  const pattern = /(\*{2,4}|_{2,4})([^\n]*?)\1/g
-  let cursor = 0
-  let match: RegExpExecArray | null
-  while ((match = pattern.exec(node.value)) !== null) {
-    const content = match[2].trim()
-    if (!content) continue
-    if (match.index > cursor) result.push({ ...node, value: node.value.slice(cursor, match.index) })
-    result.push({ type: 'strong', children: [{ type: 'text', value: content }] })
-    cursor = match.index + match[0].length
-  }
-  if (!result.length) return [node]
-  if (cursor < node.value.length) result.push({ ...node, value: node.value.slice(cursor) })
-  return result
-}
-
-function normalizeArticleStrong(node: MdastNode) {
-  if (node.type === 'code' || node.type === 'inlineCode' || node.type === 'html') return
-  if (!node.children) return
-  node.children = node.children.flatMap((child) => {
-    normalizeArticleStrong(child)
-    return child.type === 'text' ? splitArticleStrongText(child) : [child]
-  })
 }
 
 function regionType(node: MdastNode): ReaderRegionType {
@@ -70,17 +45,112 @@ function regionType(node: MdastNode): ReaderRegionType {
   return node.type as ReaderRegionType
 }
 
+function isProseCodeBlock(node: MdastNode) {
+  if (node.type !== 'code') return false
+  const language = node.lang?.trim() ?? ''
+  return (!language || /^(?:plain|plaintext|text|txt)$/i.test(language)) && isLikelyProseBlock(node.value ?? '')
+}
+
+function promoteTimestampedParagraph(node: MdastNode): MdastNode {
+  if (node.type !== 'paragraph') return node
+  const text = nodeText(node).trim()
+  const match = text.match(/^(.+?)\s+(\d{1,2}:\d{2})$/)
+  const title = match?.[1]?.trim() ?? ''
+  if (!match || !title || title.length > 48 || !/[\u3400-\u9fff]/.test(title) || /[。！？!?]$/.test(title)) return node
+  return { ...node, children: [{ type: 'strong', children: node.children ?? [] }] }
+}
+
+function isTimestampedParagraph(node: MdastNode) {
+  if (node.type !== 'paragraph') return false
+  const text = nodeText(node).trim()
+  const match = text.match(/^(.+?)\s+(\d{1,2}:\d{2})$/)
+  const title = match?.[1]?.trim() ?? ''
+  return Boolean(match && title && title.length <= 48 && /[\u3400-\u9fff]/.test(title) && !/[。！？!?]$/.test(title))
+}
+
+function promoteTimestampedParagraphs(tree: MdastNode) {
+  if (tree.children) tree.children = tree.children.map(promoteTimestampedParagraph)
+}
+
+function restoreTimestampedLists(tree: MdastNode) {
+  const children = tree.children ?? []
+  const restored: MdastNode[] = []
+  let sectionParagraphs: MdastNode[] = []
+  let inTimestampedSection = false
+
+  const flush = () => {
+    if (!sectionParagraphs.length) return
+    if (sectionParagraphs.length < 2) {
+      restored.push(...sectionParagraphs)
+    } else {
+      restored.push({
+        type: 'list',
+        ordered: false,
+        children: sectionParagraphs.map((paragraph) => ({ type: 'listItem', children: [paragraph], position: paragraph.position })),
+        position: { start: sectionParagraphs[0]?.position?.start, end: sectionParagraphs.at(-1)?.position?.end },
+      })
+    }
+    sectionParagraphs = []
+  }
+
+  for (const node of children) {
+    if (isTimestampedParagraph(node)) {
+      flush()
+      restored.push(node)
+      inTimestampedSection = true
+      continue
+    }
+    if (inTimestampedSection && node.type === 'paragraph') {
+      sectionParagraphs.push(node)
+      continue
+    }
+    flush()
+    restored.push(node)
+    inTimestampedSection = false
+  }
+  flush()
+  tree.children = restored
+}
+
+function offsetNodePosition(node: MdastNode, offset: number): MdastNode {
+  if (!node.position) return node
+  return {
+    ...node,
+    position: {
+      start: node.position.start ? { ...node.position.start, offset: (node.position.start.offset ?? 0) + offset } : undefined,
+      end: node.position.end ? { ...node.position.end, offset: (node.position.end.offset ?? 0) + offset } : undefined,
+    },
+    children: node.children?.map((child) => offsetNodePosition(child, offset)),
+  }
+}
+
+function expandProseCodeBlock(node: MdastNode, source: string): MdastNode[] {
+  if (!isProseCodeBlock(node)) return [node]
+  const value = formatPastedText(node.value ?? '')
+  const innerTree = processor.parse(value) as unknown as MdastNode
+  normalizeArticleStrong(innerTree)
+  const nodeStart = node.position?.start?.offset ?? 0
+  const nodeEnd = node.position?.end?.offset ?? nodeStart
+  const valueOffset = source.slice(nodeStart, nodeEnd).indexOf(value)
+  const base = valueOffset >= 0 ? nodeStart + valueOffset : nodeStart
+  const innerNodes = (innerTree.children ?? []).map((child) => offsetNodePosition(child, base))
+  return innerNodes.length ? innerNodes : [{ type: 'paragraph', children: [{ type: 'text', value }], position: node.position }]
+}
+
 export function parseMarkdown(path: string, source: string, resolveUrl: MarkdownUrlResolver = (url) => url): ReaderDocument {
   const tree = processor.parse(source) as unknown as MdastNode
+  promoteTimestampedParagraphs(tree)
+  restoreTimestampedLists(tree)
   normalizeArticleStrong(tree)
   const documentId = `doc_${hashText(path)}`
   const regions: ReaderRegion[] = []
   const headings: HeadingItem[] = []
+  let documentTitle = ''
   const children = tree.children ?? []
   const footnotes = new Map(children.filter((node) => node.type === 'footnoteDefinition' && (node.identifier ?? node.label)).map((node) => [node.identifier ?? node.label ?? '', node]))
   const context = createRenderContext(footnotes)
 
-  children.forEach((node) => {
+  children.flatMap((node) => expandProseCodeBlock(node, source)).forEach((node) => {
     if (node.type === 'yaml' || node.type === 'toml' || node.type === 'footnoteDefinition') return
     const type = regionType(node)
     const diagramCode = type === 'mermaid' ? mermaidCode(node) ?? '' : null
@@ -97,7 +167,13 @@ export function parseMarkdown(path: string, source: string, resolveUrl: Markdown
       html: blockHtmlWithSourceIndent(node, source, resolveUrl, context), metadata
     }
     regions.push(region)
-    if (type === 'heading') headings.push({ id: `heading_${hashText(`${id}:${textContent}`)}`, text: textContent, depth: node.depth ?? 1, regionId: id })
+    const boldSection = standaloneStrongText(node)
+    if (type === 'heading') {
+      if (!documentTitle) documentTitle = textContent
+      headings.push({ id: `heading_${hashText(`${id}:${textContent}`)}`, text: textContent, depth: node.depth ?? 1, regionId: id })
+    } else if (boldSection) {
+      headings.push({ id: `heading_${hashText(`${id}:${boldSection}`)}`, text: boldSection, depth: 2, regionId: id })
+    }
   })
 
   const footnotesHtml = renderFootnotes(context, resolveUrl)
@@ -106,7 +182,7 @@ export function parseMarkdown(path: string, source: string, resolveUrl: Markdown
     regions.push({ id, documentId, type: 'footnotes', index: regions.length, textContent: '脚注', sourceStart: source.length, sourceEnd: source.length, html: footnotesHtml, metadata: {} })
   }
 
-  const title = headings[0]?.text || path.split(/[\\/]/).pop()?.replace(/\.markdown?$/i, '') || '未命名文档'
+  const title = documentTitle || path.split(/[\\/]/).pop()?.replace(/\.markdown?$/i, '') || '未命名文档'
   const wordCount = source.replace(/```[\s\S]*?```/g, '').trim().length
   return {
     id: documentId,

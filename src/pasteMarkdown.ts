@@ -106,6 +106,20 @@ function renderCodeBlock(source: string, language = 'plain') {
   return `${fence}${language}\n${value}\n${fence}\n\n`
 }
 
+export function isLikelyProseBlock(value: string) {
+  const text = value.replace(/\u00a0/g, ' ').trim()
+  const lines = text.split(/\r?\n/).filter((line) => line.trim())
+  if (lines.length < 2) return false
+  const visibleCharacters = Array.from(text).filter((character) => !/\s/.test(character)).length
+  const proseCharacters = (text.match(/[\u3400-\u9fff]/g) ?? []).length
+  const codeSignals = /[{}]|=>|<\/?[a-z][^>]*>|\b(?:const|let|function|import|select|from|class)\b/i.test(text)
+  return proseCharacters >= 12 && proseCharacters / Math.max(visibleCharacters, 1) >= 0.35 && !codeSignals
+}
+
+function isPlainTextLanguage(language: string) {
+  return /^(?:plain|plaintext|text|txt)$/i.test(language.trim())
+}
+
 function stripDecorativeHeadingStars(value: string) {
   let inFence = false
   return value.split('\n').map((line) => {
@@ -243,7 +257,9 @@ function render(node: HTMLElement): string {
   if (tag === 'pre') {
     const code = node.querySelector('code')
     const language = code?.className.match(/(?:language|lang)-([\w-]+)/i)?.[1] || 'plain'
-    return renderCodeBlock(codeText(code ?? node), language)
+    const value = codeText(code ?? node)
+    if (isPlainTextLanguage(language) && isLikelyProseBlock(value)) return `${value.trim()}\n\n`
+    return renderCodeBlock(value, language)
   }
   if (['script', 'style', 'noscript', 'template'].includes(tag)) return ''
   if (/^h[1-6]$/.test(tag)) return `${'#'.repeat(Number(tag[1]))} ${inline(node).trim()}\n\n`
@@ -252,7 +268,9 @@ function render(node: HTMLElement): string {
   const diagramLike = isSimpleCodeCandidate(node) && looksLikeDiagram(codeText(node))
   if (hasCodeStyle(node) || diagramLike) {
     const language = classAndId(node).match(/(?:language|lang)[-_ ]*([\w+#-]+)/i)?.[1] || 'plain'
-    return renderCodeBlock(codeText(node), language)
+    const value = codeText(node)
+    if (isPlainTextLanguage(language) && isLikelyProseBlock(value)) return `${value.trim()}\n\n`
+    return renderCodeBlock(value, language)
   }
   if (tag === 'details') {
     const summary = node.querySelector(':scope > summary') as HTMLElement | null
@@ -276,6 +294,23 @@ function normalizeMarkdown(value: string) {
     result.push(line.replace(/[ \t]+$/g, ''))
   }
   return result.join('\n').trim()
+}
+
+function hasMarkdownSyntax(value: string) {
+  return /(?:^|\n)\s*(?:#{1,6}\s|[-*+]\s|[•◦▪]\s|\d+[.)]\s|>\s|```|~~~)|\*\*[^*\n]+\*\*|__[^_\n]+__|\[[^\]\n]+\]\([^\n)]+\)|`[^`\n]+`/m.test(value)
+}
+
+function stripAccidentalClipboardIndent(value: string) {
+  const lines = value.replace(/\u00a0/g, ' ').replace(/\r\n?/g, '\n').split('\n')
+  const contentLines = lines.filter((line) => line.trim())
+  if (!contentLines.length || lines.some((line) => /^\s*(?:```|~~~)/.test(line))) return value
+
+  const indentation = contentLines.map((line) => line.match(/^[ \t]*/)?.[0].length ?? 0)
+  const commonIndent = Math.min(...indentation)
+  const proseLines = contentLines.filter((line) => /[\u3400-\u9fff]/.test(line)).length
+  if (commonIndent < 4 || proseLines < Math.ceil(contentLines.length / 2)) return value
+
+  return lines.map((line) => line.slice(Math.min(commonIndent, line.match(/^[ \t]*/)?.[0].length ?? 0))).join('\n')
 }
 
 function isArticleSectionHeading(value: string) {
@@ -327,18 +362,51 @@ function normalizeArticleSections(value: string) {
   return normalizeMarkdown(result.join('\n'))
 }
 
+function normalizeTimestampedHeadings(value: string) {
+  let inFence = false
+  return value.split('\n').map((line) => {
+    const trimmed = line.trim()
+    if (/^(?:```|~~~)/.test(trimmed)) {
+      inFence = !inFence
+      return line
+    }
+    if (inFence) return line
+    const match = trimmed.match(/^(.+?)\s+(\d{1,2}:\d{2})$/)
+    const title = match?.[1]?.trim() ?? ''
+    if (!match || !title || title.length > 48 || !/[\u3400-\u9fff]/.test(title) || /[。！？!?]$/.test(title)) return line
+    return `**${title} ${match[2]}**`
+  }).join('\n')
+}
+
 export function formatPastedText(value: string) {
-  return normalizeArticleSections(stripDecorativeHeadingStars(normalizeMarkdown(value)))
-    .replace(/^[ \t]*[•◦▪][ \t]+/gm, '- ')
-    .replace(/^[ \t]*(\d+)[.)][ \t]+/gm, '$1. ')
+  return normalizeTimestampedHeadings(normalizeArticleSections(stripDecorativeHeadingStars(normalizeMarkdown(stripAccidentalClipboardIndent(value)))))
+    .replace(/^([ \t]*)[•◦▪][ \t]+/gm, '$1- ')
+    .replace(/^([ \t]*)(\d+)[.)][ \t]+/gm, '$1$2. ')
+}
+
+export function suggestPastedMarkdownName(source: string) {
+  const heading = source.match(/^\s*#{1,6}\s+(.+)$/m)?.[1]
+  const firstBlock = source.split(/\n\s*\n/).find((block) => block.trim()) ?? ''
+  const candidate = heading ?? firstBlock
+  const firstSentence = candidate.split(/[。！？!?]/)[0] || candidate
+  const name = firstSentence
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/[\*_~`>#]/g, '')
+    .replace(/[\\/:*?"<>|]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[. ]+$/g, '')
+  return Array.from(name || '未命名粘贴').slice(0, 32).join('')
 }
 
 export function formatClipboardToMarkdown(html: string, text: string) {
+  if (text.trim() && hasMarkdownSyntax(text)) return formatPastedText(text)
   if (html.trim() && typeof DOMParser !== 'undefined') {
     const document = new DOMParser().parseFromString(html, 'text/html') as ClipboardDocument
     const body = removeClipboardNoise(document)
     const source = Array.from(body.childNodes).filter((node) => node.nodeType !== Node.TEXT_NODE || Boolean(node.textContent?.trim())).map((node) => node.nodeType === Node.ELEMENT_NODE ? render(node as HTMLElement) : inline(node)).join('')
-    const markdown = normalizeArticleSections(stripDecorativeHeadingStars(normalizeMarkdown(source)))
+    const markdown = normalizeArticleSections(stripDecorativeHeadingStars(normalizeMarkdown(stripAccidentalClipboardIndent(source))))
     if (markdown) return markdown
   }
   return formatPastedText(text)
