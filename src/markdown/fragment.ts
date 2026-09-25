@@ -5,6 +5,7 @@ import remarkMath from 'remark-math'
 import remarkParse from 'remark-parse'
 import { blockHtmlWithSourceIndent, renderFootnotes } from './render'
 import { createRenderContext, nodeText, type MarkdownUrlResolver, type MdastNode } from './shared'
+import { normalizeMixedOrderedListSource } from '../pasteMarkdown'
 
 export const markdownProcessor = unified()
   .use(remarkParse)
@@ -78,6 +79,29 @@ export function promoteTimestampedParagraphs(tree: MdastNode) {
   if (tree.children) tree.children = tree.children.map(promoteTimestampedParagraph)
 }
 
+function normalizeMixedOrderedList(node: MdastNode): MdastNode {
+  if (node.children) node.children = node.children.map(normalizeMixedOrderedList)
+  if (node.type !== 'list' || node.ordered || (node.children?.length ?? 0) < 2) return node
+
+  const nestedLists = (node.children ?? []).map((item) => {
+    if (item.type !== 'listItem' || item.children?.length !== 1) return null
+    const child = item.children[0]
+    return child?.type === 'list' && child.ordered && child.children?.length === 1 ? child : null
+  })
+  if (nestedLists.some((list) => !list)) return node
+  return {
+    ...node,
+    ordered: true,
+    start: nestedLists[0]?.start ?? 1,
+    children: nestedLists.flatMap((list) => list?.children ?? []),
+  }
+}
+
+/** Treat pasted `- 1. item` rows as one ordered list instead of nested lists. */
+export function normalizeMixedOrderedLists(tree: MdastNode) {
+  if (tree.children) tree.children = tree.children.map(normalizeMixedOrderedList)
+}
+
 /**
  * Older imported notes often use a timestamped line as a chapter marker
  * without writing a Markdown heading. Keep that reader heuristic, but offer
@@ -112,8 +136,9 @@ export function makeImplicitMarkdownHeadingsExplicit(source: string): { source: 
 }
 
 export function renderMarkdownFragment(source: string, resolveUrl: MarkdownUrlResolver = (url) => url): string {
-  const normalizedSource = normalizeLatexDelimiters(source)
+  const normalizedSource = normalizeMixedOrderedListSource(normalizeLatexDelimiters(source)).source
   const tree = markdownProcessor.parse(normalizedSource) as unknown as MdastNode
+  normalizeMixedOrderedLists(tree)
   promoteTimestampedParagraphs(tree)
   normalizeArticleStrong(tree)
   const context = createRenderContext()

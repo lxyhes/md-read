@@ -1,8 +1,8 @@
 import type { HeadingItem, ReaderDocument, ReaderRegion, ReaderRegionType } from './types'
 import { blockHtmlWithSourceIndent, renderFootnotes } from './markdown/render'
 import { createRenderContext, nodeText, type MarkdownUrlResolver, type MdastNode } from './markdown/shared'
-import { formatPastedText, isLikelyProseBlock } from './pasteMarkdown'
-import { isTimestampedParagraph, markdownProcessor as processor, normalizeArticleStrong, normalizeLatexDelimiters, promoteTimestampedParagraphs } from './markdown/fragment'
+import { formatPastedText, isLikelyProseBlock, normalizeMixedOrderedListSource } from './pasteMarkdown'
+import { isTimestampedParagraph, markdownProcessor as processor, normalizeArticleStrong, normalizeLatexDelimiters, normalizeMixedOrderedLists, promoteTimestampedParagraphs } from './markdown/fragment'
 
 export type { MarkdownUrlResolver } from './markdown/shared'
 export { makeImplicitMarkdownHeadingsExplicit, renderMarkdownFragment } from './markdown/fragment'
@@ -117,8 +117,9 @@ function expandProseCodeBlock(node: MdastNode, source: string): MdastNode[] {
 }
 
 export function parseMarkdown(path: string, source: string, resolveUrl: MarkdownUrlResolver = (url) => url): ReaderDocument {
-  const normalizedSource = normalizeLatexDelimiters(source)
+  const normalizedSource = normalizeMixedOrderedListSource(normalizeLatexDelimiters(source)).source
   const tree = processor.parse(normalizedSource) as unknown as MdastNode
+  normalizeMixedOrderedLists(tree)
   promoteTimestampedParagraphs(tree)
   restoreTimestampedLists(tree)
   normalizeArticleStrong(tree)

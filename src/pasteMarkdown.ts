@@ -384,6 +384,60 @@ export function formatPastedText(value: string) {
     .replace(/^([ \t]*)(\d+)[.)][ \t]+/gm, '$1$2. ')
 }
 
+export function normalizeMixedOrderedListSource(value: string): { source: string; converted: number } {
+  const lines = value.replace(/\r\n?/g, '\n').split('\n')
+  const result: string[] = []
+  let converted = 0
+  let index = 0
+  while (index < lines.length) {
+    const first = matchMixedOrderedListLine(lines[index] ?? '')
+    if (!first || first.kind !== 'mixed') {
+      result.push(lines[index] ?? '')
+      index += 1
+      continue
+    }
+    const group: Array<{ indent: string; number: number; content: string; kind: 'mixed' | 'ordered' }> = []
+    let cursor = index
+    while (cursor < lines.length) {
+      const match = matchMixedOrderedListLine(lines[cursor] ?? '')
+      if (match && match.indent === first.indent) {
+        group.push(match)
+        cursor += 1
+        continue
+      }
+      if (lines[cursor]?.trim() === '' && group.length) {
+        cursor += 1
+        continue
+      }
+      break
+    }
+    if (group.length < 2 || !group.some((line) => line.kind === 'mixed')) {
+      result.push(...lines.slice(index, cursor))
+    } else {
+      const start = group[0]?.number || 1
+      let itemIndex = 0
+      result.push(...lines.slice(index, cursor).map((line) => {
+        const match = matchMixedOrderedListLine(line)
+        if (!match || match.indent !== first.indent) return line
+        const normalized = `${match.indent}${start + itemIndex}. ${match.content}`
+        itemIndex += 1
+        return normalized
+      }))
+      converted += group.length
+    }
+    index = cursor
+  }
+  return { source: result.join('\n'), converted }
+}
+
+function matchMixedOrderedListLine(line: string): { indent: string; number: number; content: string; kind: 'mixed' | 'ordered' } | null {
+  const mixed = line.match(/^([ \t]*)[-+*][ \t]+(\d+)[.)][ \t]+(.+)$/)
+  if (mixed) return { indent: mixed[1], number: Number(mixed[2]), content: mixed[3], kind: 'mixed' }
+  const ordered = line.match(/^([ \t]*)(\d+)[.)][ \t]+(.+)$/)
+  if (ordered) return { indent: ordered[1], number: Number(ordered[2]), content: ordered[3], kind: 'ordered' }
+  return null
+}
+
 export function suggestPastedMarkdownName(source: string) {
   const heading = source.match(/^\s*#{1,6}\s+(.+)$/m)?.[1]
   const firstBlock = source.split(/\n\s*\n/).find((block) => block.trim()) ?? ''

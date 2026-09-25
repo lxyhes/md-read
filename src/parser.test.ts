@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { hashText, makeImplicitMarkdownHeadingsExplicit, parseMarkdown, renderMarkdownFragment } from './parser'
 import { asciiDiagramToMermaid, asciiTreeToTree, markdownToTree } from './asciiDiagram'
-import { formatClipboardImage, formatClipboardToMarkdown, formatPastedText, isLikelyProseBlock, suggestPastedMarkdownName } from './pasteMarkdown'
+import { formatClipboardImage, formatClipboardToMarkdown, formatPastedText, isLikelyProseBlock, normalizeMixedOrderedListSource, suggestPastedMarkdownName } from './pasteMarkdown'
 import { resolveMarkdownAssetUrl } from './fileService'
 
 describe('Moyue markdown region parser', () => {
@@ -227,6 +227,25 @@ $$`)
 
   it('normalizes plain clipboard text into Markdown lists', () => {
     expect(formatPastedText('标题\r\n\r\n• 第一项\r\n2) 第二项\r\n\r\n')).toBe('标题\n\n- 第一项\n2. 第二项')
+  })
+
+  it('repairs mixed bullet and ordered markers before editor paste', () => {
+    expect(normalizeMixedOrderedListSource('- 1. 第一项\n\n- 1. 第二项\n\n- 1. 第三项')).toEqual({
+      source: '1. 第一项\n\n2. 第二项\n\n3. 第三项',
+      converted: 3,
+    })
+    expect(normalizeMixedOrderedListSource('- 1. 第一项\n2. 第二项\n3. 第三项')).toEqual({
+      source: '1. 第一项\n2. 第二项\n3. 第三项',
+      converted: 3,
+    })
+  })
+
+  it('flattens mixed list markers into one ordered list', () => {
+    const document = parseMarkdown('mixed-list.md', '- 1. 第一项\n2. 第二项\n3. 第三项')
+    expect(document.regions[0]?.html).toContain('<ol>')
+    expect(document.regions[0]?.html).not.toContain('<ul>')
+    expect(document.regions[0]?.html).toContain('第一项')
+    expect(document.regions[0]?.html).toContain('第二项')
   })
 
   it('removes common clipboard indentation that would create a plain code block', () => {

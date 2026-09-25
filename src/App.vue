@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
-import { invoke } from '@tauri-apps/api/core'
+import { invoke, isTauri as tauriIsTauri } from '@tauri-apps/api/core'
 import { useReaderStore } from './stores/reader'
 import RegionBlock from './components/RegionBlock.vue'
 import MermaidBlock from './components/MermaidBlock.vue'
@@ -16,7 +16,7 @@ import type { Annotation, ReaderDocument, ReaderRegion, ViewerType } from './typ
 import { escapeHtml } from './markdown/shared'
 import { makeImplicitMarkdownHeadingsExplicit, parseMarkdown, renderMarkdownFragment } from './parser'
 import { asciiDiagramToMermaid, asciiTreeToTree, markdownToTree } from './asciiDiagram'
-import { formatClipboardImage, formatClipboardToMarkdown, suggestPastedMarkdownName } from './pasteMarkdown'
+import { formatClipboardImage, formatClipboardToMarkdown, normalizeMixedOrderedListSource, suggestPastedMarkdownName } from './pasteMarkdown'
 import logoAsset from './assets/moyue-logo-256.png'
 
 const FocusAmbiencePicker = defineAsyncComponent(() => import('./components/FocusAmbiencePicker.vue'))
@@ -101,7 +101,9 @@ const editorInlineAssetSources = new Map<string, string>()
 const editorSplitRatio = ref(58)
 const editorSplitResizing = ref(false)
 let editorSplitResizeCleanup: (() => void) | null = null
-const editorDirty = computed(() => editorOpen.value && restoreEditorInlineImages(editorSource.value) !== editorOriginalSource.value)
+const editorListNormalization = computed(() => normalizeMixedOrderedListSource(restoreEditorInlineImages(editorSource.value)))
+const editorSourceForSave = computed(() => editorListNormalization.value.source)
+const editorDirty = computed(() => editorOpen.value && editorSourceForSave.value !== editorOriginalSource.value)
 const editorSourceStats = computed(() => {
   const source = editorSource.value
   return {
@@ -317,7 +319,7 @@ const focusPosition = computed(() => {
   const index = readerRegions.value.findIndex((region) => region.id === store.focusedRegionId)
   return index < 0 ? '' : `${index + 1} / ${readerRegions.value.length}`
 })
-function isTauriRuntime() { return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window }
+function isTauriRuntime() { return tauriIsTauri() }
 function openExternalLink(url: string) {
   const normalized = url.trim()
   if (!normalized) return
@@ -468,6 +470,8 @@ async function openEditor() {
     if (migrated.count) migrationMode = 'memory'
     else notify('内嵌图片转换失败，可继续编辑并稍后重试')
   }
+  const repairedList = normalizeMixedOrderedListSource(migrated.source)
+  if (repairedList.converted) migrated = { ...migrated, source: repairedList.source }
   editorSource.value = migrated.source
   editorOriginalSource.value = store.currentDocument.source
   editorCursor.value = { line: 1, column: 1 }
@@ -481,6 +485,7 @@ async function openEditor() {
       ? `已将 ${migrated.count} 张内嵌图片转换为本地图片，请保存文档`
       : `已将 ${migrated.count} 张内嵌图片收纳为短引用`)
   }
+  if (repairedList.converted) notify(`已整理 ${repairedList.converted} 行列表编号，请保存文档`)
   void nextTick(() => editorTextarea.value?.focus())
 }
 
@@ -567,10 +572,10 @@ async function saveEditor() {
   if (!document || !editorOpen.value || editorSaving.value) return
   editorSaving.value = true
   try {
-    const sourceToSave = restoreEditorInlineImages(editorSource.value)
+    const sourceToSave = editorSourceForSave.value
     if (isRealDocumentPath(document.path)) await writeMarkdownFile(document.path, sourceToSave)
     await store.replaceDocumentSource(document.id, sourceToSave)
-    editorOriginalSource.value = editorSource.value
+    editorOriginalSource.value = sourceToSave
     closeEditor()
     notify('Markdown 已保存')
   } catch (error) {
@@ -625,6 +630,20 @@ function normalizeEditorMarkdown() {
   notify(`已补全 ${result.converted} 个 Markdown 章节标记`)
 }
 
+function normalizeEditorLists() {
+  const result = editorListNormalization.value
+  if (!result.converted || result.source === editorSource.value) return
+  const element = editorTextarea.value
+  const cursor = element?.selectionStart ?? result.source.length
+  editorSource.value = result.source
+  void nextTick(() => {
+    element?.focus()
+    const nextCursor = Math.min(result.source.length, cursor)
+    element?.setSelectionRange(nextCursor, nextCursor)
+  })
+  notify(`已整理 ${result.converted} 行列表编号`)
+}
+
 function indentEditorSelection(outdent: boolean) {
   const element = editorTextarea.value
   if (!element) return
@@ -668,6 +687,17 @@ function continueEditorList() {
   const content = line.slice(prefix.length).trim()
   if (!content) {
     applyEditorChange(`${value.slice(0, lineStart)}${value.slice(end)}`, lineStart)
+    return true
+  }
+  const mixed = line.match(/^(\s*)[-+*]\s+(\d+)[.)]\s+(.+)$/)
+  if (mixed) {
+    const normalizedLine = `${mixed[1]}${mixed[2]}. ${mixed[3]}`
+    const oldPrefixLength = mixed[0].length - mixed[3].length
+    const newPrefixLength = mixed[1].length + mixed[2].length + 2
+    const normalizedCursor = cursor + (cursor > lineStart + oldPrefixLength ? newPrefixLength - oldPrefixLength : 0)
+    const normalizedValue = `${value.slice(0, lineStart)}${normalizedLine}${value.slice(end)}`
+    const insertion = `\n${mixed[1]}${Number(mixed[2]) + 1}. `
+    applyEditorChange(`${normalizedValue.slice(0, normalizedCursor)}${insertion}${normalizedValue.slice(normalizedCursor)}`, normalizedCursor + insertion.length)
     return true
   }
   const ordered = match[2].match(/^(\d+)([.)])$/)
@@ -728,8 +758,18 @@ async function onEditorPaste(event: ClipboardEvent) {
   if (!element) return
   const clipboard = event.clipboardData
   const imageItem = Array.from(clipboard?.items ?? []).find((item) => item.kind === 'file' && /^image\//i.test(item.type))
-  const hasText = Boolean(clipboard?.getData('text/html') || clipboard?.getData('text/plain'))
-  if (!imageItem && hasText) return
+  const plainText = clipboard?.getData('text/plain') ?? ''
+  const hasText = Boolean(clipboard?.getData('text/html') || plainText)
+  if (!imageItem && hasText) {
+    const normalized = normalizeMixedOrderedListSource(plainText)
+    if (normalized.converted) {
+      event.preventDefault()
+      event.stopPropagation()
+      insertEditorTextAt(normalized.source, element.selectionStart, element.selectionEnd)
+      notify(`已修正 ${normalized.converted} 行列表编号`)
+    }
+    return
+  }
 
   // The page-level handler intentionally ignores typing targets. Stop this
   // event here so an image is handled exactly once by the editor.
@@ -804,7 +844,11 @@ function prefixEditorLines(prefix: string) {
     const lineStart = value.lastIndexOf('\n', Math.max(0, start - 1)) + 1
     const lineEnd = value.indexOf('\n', end)
     const stop = lineEnd < 0 ? value.length : lineEnd
-    const lines = value.slice(lineStart, stop).split('\n').map((line) => `${prefix}${line}`)
+    const lines = value.slice(lineStart, stop).split('\n').map((line) => {
+      if (prefix !== '- ' && prefix !== '- [ ] ') return `${prefix}${line}`
+      const content = line.replace(/^(\s*)(?:(?:[-+*]\s+)?\d+[.)]\s+|[-+*]\s+)(?:\[[ xX]\]\s*)?/, '$1')
+      return `${prefix}${content}`
+    })
     const next = `${value.slice(0, lineStart)}${lines.join('\n')}${value.slice(stop)}`
     const added = prefix.length * lines.length
     return { value: next, start: start + prefix.length, end: end + added }
@@ -2807,10 +2851,11 @@ async function requestFullscreen() {
                       <span class="editor-pane-title"><i class="editor-pane-dot editor-pane-dot-source" />Markdown 源码</span>
                       <span class="editor-pane-heading-actions">
                         <button v-if="editorMarkdownNormalization.converted" type="button" title="把智能识别的章节转换为明确的 ## Markdown 标题，不改普通正文" @click="normalizeEditorMarkdown">补全 MD</button>
+                        <button v-if="editorListNormalization.converted" type="button" title="把 - 1.、- 2. 这类混合编号整理为标准有序列表" @click="normalizeEditorLists">整理列表</button>
                         <small>{{ editorSourceStats.lines }} 行 · {{ editorSourceStats.characters }} 字符</small>
                       </span>
                     </div>
-                    <textarea ref="editorTextarea" v-model="editorSource" class="editor-textarea" spellcheck="false" aria-label="Markdown 源码编辑器" @paste="onEditorPaste" @keydown="onEditorKeydown" @input="updateEditorCursor" @keyup="updateEditorCursor" @click="updateEditorCursor" @select="updateEditorCursor" />
+                    <textarea ref="editorTextarea" v-model="editorSource" class="editor-textarea" spellcheck="false" aria-label="Markdown 源码编辑器" @focus="normalizeEditorLists" @paste="onEditorPaste" @keydown="onEditorKeydown" @input="updateEditorCursor" @keyup="updateEditorCursor" @click="updateEditorCursor" @select="updateEditorCursor" />
                   </section>
                   <div v-if="editorMode === 'split'" class="editor-split-divider" role="separator" tabindex="0" aria-orientation="vertical" :aria-valuemin="36" :aria-valuemax="70" :aria-valuenow="Math.round(editorSplitRatio)" aria-label="调整源码与预览宽度" title="拖动调整源码与预览宽度，左右方向键微调" @pointerdown="startEditorSplitResize" @keydown="onEditorSplitResizeKeydown"><span /></div>
                   <section v-if="editorMode !== 'write'" class="editor-preview-pane" aria-label="实时阅读预览">
