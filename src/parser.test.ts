@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { hashText, parseMarkdown, renderMarkdownFragment } from './parser'
+import { hashText, makeImplicitMarkdownHeadingsExplicit, parseMarkdown, renderMarkdownFragment } from './parser'
 import { asciiDiagramToMermaid, asciiTreeToTree, markdownToTree } from './asciiDiagram'
 import { formatClipboardImage, formatClipboardToMarkdown, formatPastedText, isLikelyProseBlock, suggestPastedMarkdownName } from './pasteMarkdown'
 import { resolveMarkdownAssetUrl } from './fileService'
@@ -271,6 +271,16 @@ $$`)
     expect(document.regions[1]?.type).toBe('list')
     expect(document.regions[1]?.html).toContain('<li>')
     expect(document.regions[2]?.html).toContain('<strong>作业执行与陪跑机制 28:06</strong>')
+  })
+
+  it('can make legacy implicit headings explicit in the Markdown source', () => {
+    const source = '课程主旨与IP四维模型 00:02\n\n普通正文。\n\n**平台规则与起心动念 03:02**\n\n```text\n不要改动 04:00\n```'
+    const result = makeImplicitMarkdownHeadingsExplicit(source)
+    expect(result.converted).toBe(2)
+    expect(result.source).toContain('## 课程主旨与IP四维模型 00:02')
+    expect(result.source).toContain('## **平台规则与起心动念 03:02**')
+    expect(result.source).toContain('不要改动 04:00')
+    expect(result.source).toContain('普通正文。')
   })
 
   it('re-parses saved plain prose blocks as Markdown', () => {

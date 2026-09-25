@@ -5,7 +5,7 @@ import { formatPastedText, isLikelyProseBlock } from './pasteMarkdown'
 import { isTimestampedParagraph, markdownProcessor as processor, normalizeArticleStrong, normalizeLatexDelimiters, promoteTimestampedParagraphs } from './markdown/fragment'
 
 export type { MarkdownUrlResolver } from './markdown/shared'
-export { renderMarkdownFragment } from './markdown/fragment'
+export { makeImplicitMarkdownHeadingsExplicit, renderMarkdownFragment } from './markdown/fragment'
 
 export function hashText(value: string): string {
   let hash = 2166136261
