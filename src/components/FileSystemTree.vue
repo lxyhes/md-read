@@ -24,6 +24,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   toggle: [node: FileSystemTreeNode]
   open: [node: FileSystemTreeNode]
+  contextmenu: [event: MouseEvent, node: FileSystemTreeNode]
 }>()
 const selectedRow = ref<HTMLButtonElement | null>(null)
 
@@ -34,6 +35,11 @@ function pathKey(path: string) {
 function selectNode() {
   if (props.node.isDirectory) emit('toggle', props.node)
   else emit('open', props.node)
+}
+
+function openContextMenu(event: MouseEvent) {
+  event.preventDefault()
+  emit('contextmenu', event, props.node)
 }
 
 function onKeydown(event: KeyboardEvent) {
@@ -77,6 +83,7 @@ watch(() => props.node.expanded, revealSelectedRow)
       :aria-expanded="node.isDirectory ? node.expanded : undefined"
       :aria-label="node.isDirectory ? `${node.expanded ? '收起' : '展开'} ${node.name}` : `打开 ${node.name}`"
       @click="selectNode"
+      @contextmenu="openContextMenu"
       @keydown="onKeydown"
     >
       <span class="filesystem-tree-chevron"><AppIcon v-if="node.isDirectory" :name="node.expanded ? 'chevron-down' : 'chevron-right'" :size="11" /><i v-else /></span>
@@ -86,7 +93,7 @@ watch(() => props.node.expanded, revealSelectedRow)
     </button>
     <div v-if="node.expanded && node.error" class="filesystem-tree-error" :style="{ paddingLeft: `${38 + depth * 15}px` }">{{ node.error }}</div>
     <div v-if="node.expanded && node.children?.length" class="filesystem-tree-children">
-      <FileSystemTree v-for="child in node.children" :key="child.path" :node="child" :depth="depth + 1" :selected-path="selectedPath" @toggle="emit('toggle', $event)" @open="emit('open', $event)" />
+      <FileSystemTree v-for="child in node.children" :key="child.path" :node="child" :depth="depth + 1" :selected-path="selectedPath" @toggle="emit('toggle', $event)" @open="emit('open', $event)" @contextmenu="(event, item) => emit('contextmenu', event, item)" />
     </div>
     <div v-else-if="node.expanded && !node.loading && !node.error" class="filesystem-tree-empty" :style="{ paddingLeft: `${38 + depth * 15}px` }">空目录</div>
   </div>

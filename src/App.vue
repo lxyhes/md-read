@@ -11,7 +11,7 @@ import FontPicker from './components/FontPicker.vue'
 import { interfaceFont } from './fonts'
 import FileSystemTree, { type FileSystemTreeNode } from './components/FileSystemTree.vue'
 import ClipboardManager from './components/ClipboardManager.vue'
-import { copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, listDirectoryFiles, listFileSystemEntries, openMarkdownDirectory, openMarkdownFile, readMarkdownPath, renameMarkdownPath, resolveMarkdownAssetUrl, saveClipboardImage, saveExportFile, saveMarkdownFile, watchMarkdownPath, writeMarkdownFile, type WorkspaceFile } from './fileService'
+import { copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, listDirectoryFiles, listFileSystemEntries, openFileSystemDirectory, openMarkdownDirectory, openMarkdownFile, readMarkdownPath, renameMarkdownPath, resolveMarkdownAssetUrl, saveClipboardImage, saveExportFile, saveMarkdownFile, watchMarkdownPath, writeMarkdownFile, type WorkspaceFile } from './fileService'
 import type { Annotation, ReaderDocument, ReaderRegion, ViewerType } from './types'
 import { escapeHtml } from './markdown/shared'
 import { makeImplicitMarkdownHeadingsExplicit, parseMarkdown, renderMarkdownFragment } from './parser'
@@ -26,7 +26,7 @@ const ViewerCode = defineAsyncComponent(() => import('./components/ViewerCode.vu
 type View = 'library' | 'reader' | 'clipboard' | 'themes' | 'settings'
 type BusyAction = 'file' | 'folder' | 'drop' | 'paste' | 'paste-save' | 'paste-image' | 'delete' | null
 type FileSyncState = 'idle' | 'syncing' | 'updated' | 'error'
-type FileTreeEntry = { path: string; name: string; documentId?: string }
+type FileTreeEntry = { path: string; name: string; documentId?: string; isDirectory?: boolean }
 const store = useReaderStore()
 const view = ref<View>('library')
 const libraryTab = ref<'home' | 'all'>('all')
@@ -85,6 +85,7 @@ const tabSearchQuery = ref('')
 const recentlyClosedTabs = ref<string[]>([])
 const tabContextMenu = ref<{ documentId: string; x: number; y: number } | null>(null)
 const fileContextMenu = ref<{ file: FileTreeEntry; x: number; y: number } | null>(null)
+const fileContextMenuElement = ref<HTMLElement | null>(null)
 const fileProperties = ref<FileTreeEntry | null>(null)
 const editorOpen = ref(false)
 const editorSource = ref('')
@@ -336,6 +337,8 @@ function directoryOf(path: string) {
   return separator >= 0 ? normalized.slice(0, separator) || '/' : '当前工作区'
 }
 function fileNameOf(path: string) { return normalizedPath(path).split('/').pop() || path }
+function isMarkdownEntry(file: FileTreeEntry) { return !file.isDirectory && /\.(md|markdown)$/i.test(file.name) }
+function hasRealFilesystemPath(path: string) { return Boolean(filesystemRoot(path)) }
 function isHiddenFile(name: string) { return name.startsWith('.') || name.startsWith('~$') }
 function globRegExp(glob: string) {
   const source = glob.trim().replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.')
@@ -1191,14 +1194,31 @@ function openTabContextMenu(event: MouseEvent, documentId: string) {
 }
 
 function openFileContextMenu(event: MouseEvent, file: FileTreeEntry) {
-  const width = 246
-  const height = 520
+  event.preventDefault()
   closeTabMenus()
   fileContextMenu.value = {
     file,
-    x: Math.min(event.clientX, Math.max(8, window.innerWidth - width - 8)),
-    y: Math.min(event.clientY, Math.max(8, window.innerHeight - height - 8)),
+    x: event.clientX,
+    y: event.clientY,
   }
+  void nextTick(() => {
+    const current = fileContextMenu.value
+    const menu = fileContextMenuElement.value
+    if (!current || !menu || current.file.path !== file.path) return
+    const bounds = menu.getBoundingClientRect()
+    const x = Math.min(event.clientX, Math.max(8, window.innerWidth - bounds.width - 8))
+    const y = Math.min(event.clientY, Math.max(8, window.innerHeight - bounds.height - 8))
+    fileContextMenu.value = { ...current, x, y }
+  })
+}
+
+function openFilesystemContextMenu(event: MouseEvent, node: FileSystemTreeNode) {
+  openFileContextMenu(event, {
+    path: node.path,
+    name: node.name,
+    documentId: node.documentId,
+    isDirectory: node.isDirectory,
+  })
 }
 
 function joinFilePath(directory: string, name: string) {
@@ -1307,23 +1327,69 @@ async function expandFilesystemTree(node: FileSystemTreeNode) {
   }
 }
 
+async function refreshFilesystemDirectory(path: string) {
+  if (fileBrowserMode.value !== 'tree') return
+  const node = filesystemNodeAt(path)
+  if (!node?.isDirectory) return
+  node.children = null
+  await loadFilesystemNode(node)
+  node.expanded = true
+}
+
 function fileDirectoryPath(path: string) {
   const normalized = normalizedPath(path)
   const separator = normalized.lastIndexOf('/')
-  return separator > 0 ? normalized.slice(0, separator) : ''
+  if (separator < 0) return ''
+  const parent = normalized.slice(0, separator)
+  return /^[A-Za-z]:$/.test(parent) ? `${parent}/` : parent || '/'
+}
+
+function contextDirectoryPath(file: FileTreeEntry) {
+  return file.isDirectory ? file.path : fileDirectoryPath(file.path)
+}
+
+function canCreateInContext(file: FileTreeEntry) {
+  return isTauriRuntime() && hasRealFilesystemPath(contextDirectoryPath(file))
+}
+
+function canManageMarkdownEntry(file: FileTreeEntry) {
+  return isTauriRuntime() && hasRealFilesystemPath(file.path) && isMarkdownEntry(file)
+}
+
+function filesystemNodeAt(path: string, node = filesystemTree.value): FileSystemTreeNode | null {
+  if (!node) return null
+  if (filesystemPathKey(node.path) === filesystemPathKey(path)) return node
+  for (const child of node.children ?? []) {
+    const match = filesystemNodeAt(path, child)
+    if (match) return match
+  }
+  return null
+}
+
+function filesystemNodeExpanded(path: string) {
+  return filesystemNodeAt(path)?.expanded ?? false
+}
+
+async function writeTextToClipboard(value: string) {
+  if (isTauriRuntime()) {
+    await invoke('write_clipboard_snapshot', { kind: 'text', text: value, bytes: null })
+    return
+  }
+  if (!navigator.clipboard?.writeText) throw new Error('clipboard-unavailable')
+  await navigator.clipboard.writeText(value)
 }
 
 async function copyFileContextValue(kind: 'name' | 'file' | 'directory') {
   const file = fileContextMenu.value?.file
   if (!file) return
-  const value = kind === 'name' ? file.name : kind === 'file' ? file.path : fileDirectoryPath(file.path)
+  const value = kind === 'name' ? file.name : kind === 'file' ? file.path : contextDirectoryPath(file)
   fileContextMenu.value = null
-  if (!value) {
+  if (!value || (kind === 'directory' && !hasRealFilesystemPath(value))) {
     notify('当前工作区没有可复制的实际目录路径')
     return
   }
   try {
-    await navigator.clipboard.writeText(value)
+    await writeTextToClipboard(value)
     notify(kind === 'name' ? '文件名已复制' : kind === 'file' ? '文件路径已复制' : '目录路径已复制')
   } catch {
     notify('复制失败，请检查剪贴板权限')
@@ -1333,20 +1399,27 @@ async function copyFileContextValue(kind: 'name' | 'file' | 'directory') {
 async function openFileContextEntry() {
   const file = fileContextMenu.value?.file
   fileContextMenu.value = null
-  if (file) await openFileTreeEntry(file)
+  if (!file) return
+  if (file.isDirectory) {
+    await toggleFileContextDirectory(file)
+    return
+  }
+  await openFileTreeEntry(file)
 }
 
 async function openFileContextNewTab() {
   const file = fileContextMenu.value?.file
   fileContextMenu.value = null
-  if (file) await openFileTreeEntry(file)
+  if (!file || file.isDirectory) return
+  await openFileTreeEntry(file)
+  if (file.documentId && store.openDocumentIds.includes(file.documentId)) notify('已切换到该文档标签')
 }
 
 async function createFileContextFile() {
   const file = fileContextMenu.value?.file
   fileContextMenu.value = null
   if (!file) return
-  const directory = fileDirectoryPath(file.path)
+  const directory = contextDirectoryPath(file)
   const value = window.prompt('新建 Markdown 文件', '新建文本文档.md')
   if (value === null) return
   const name = markdownName(value)
@@ -1358,6 +1431,7 @@ async function createFileContextFile() {
   try {
     await createMarkdownFile(path, `# ${name.replace(/\.(md|markdown)$/i, '')}\n\n`)
     await refreshFileTree()
+    await refreshFilesystemDirectory(directory)
     notify(`已新建 ${name}`)
   } catch (error) {
     notify(error instanceof Error ? error.message : '新建文件失败')
@@ -1368,7 +1442,7 @@ async function createFileContextFolder() {
   const file = fileContextMenu.value?.file
   fileContextMenu.value = null
   if (!file) return
-  const directory = fileDirectoryPath(file.path)
+  const directory = contextDirectoryPath(file)
   const name = window.prompt('新建文件夹', '新建文件夹')
   if (name === null) return
   if (!validEntryName(name)) { notify('文件夹名称不能为空，且不能包含路径分隔符'); return }
@@ -1377,6 +1451,7 @@ async function createFileContextFolder() {
   busyAction.value = 'file'
   try {
     await createMarkdownDirectory(joinFilePath(directory, name.trim()))
+    await refreshFilesystemDirectory(directory)
     notify(`已新建文件夹 ${name.trim()}`)
   } catch (error) {
     notify(error instanceof Error ? error.message : '新建文件夹失败')
@@ -1386,7 +1461,7 @@ async function createFileContextFolder() {
 function searchFileContextEntry() {
   const file = fileContextMenu.value?.file
   fileContextMenu.value = null
-  if (!file) return
+  if (!file || !isMarkdownEntry(file)) return
   query.value = file.name.replace(/\.(md|markdown)$/i, '')
   openSearch('all')
 }
@@ -1401,7 +1476,7 @@ async function copyFilePropertiesPath() {
   const file = fileProperties.value
   if (!file) return
   try {
-    await navigator.clipboard.writeText(file.path)
+    await writeTextToClipboard(file.path)
     fileProperties.value = null
     notify('文件路径已复制')
   } catch {
@@ -1430,12 +1505,37 @@ async function openFilesystemTreeForFile(file: FileTreeEntry) {
   notify(root.error ? '当前目录文档树已打开，但目录读取受限' : '已打开当前目录的文档树')
 }
 
-async function showDocumentTree() {
-  const file = fileContextMenu.value?.file
+async function toggleFileContextDirectory(file: FileTreeEntry) {
+  if (!file.isDirectory) return
+  if (fileBrowserMode.value !== 'tree') {
+    fileBrowserMode.value = 'tree'
+    leftPanelTab.value = 'files'
+    if (!isTauriRuntime() || !hasRealFilesystemPath(file.path)) {
+      filesystemTreeScope.value = 'workspace'
+      filesystemTreeTarget.value = file.path
+      filesystemTree.value = createWorkspaceTree()
+      notify('已打开已授权工作区的文件树')
+      return
+    }
+    filesystemTreeScope.value = 'system'
+    filesystemTreeTarget.value = file.path
+    filesystemTree.value = createFilesystemNode(file.path, file.name, true)
+    await expandFilesystemTree(filesystemTree.value)
+    return
+  }
+  const node = filesystemNodeAt(file.path)
+  if (node) {
+    await toggleFilesystemNode(node)
+    filesystemTreeTarget.value = file.path
+  } else {
+    await showDocumentTreeForEntry(file)
+  }
+}
+
+async function showDocumentTreeForEntry(file: FileTreeEntry) {
   fileContextMenu.value = null
   fileBrowserMode.value = 'tree'
   leftPanelTab.value = 'files'
-  if (!file) return
   if (!isTauriRuntime()) {
     filesystemTreeScope.value = 'workspace'
     filesystemTreeTarget.value = file.path
@@ -1443,7 +1543,15 @@ async function showDocumentTree() {
     notify('已打开已授权工作区的文件树')
     return
   }
-  if (!filesystemRoot(file.path) && isTauriRuntime()) {
+  if (file.isDirectory && isTauriRuntime() && hasRealFilesystemPath(file.path)) {
+    filesystemTreeScope.value = 'system'
+    filesystemTreeTarget.value = file.path
+    filesystemTree.value = createFilesystemNode(file.path, file.name, true)
+    await expandFilesystemTree(filesystemTree.value)
+    notify('已打开当前目录的文档树')
+    return
+  }
+  if (!filesystemRoot(file.path)) {
     const selected = await openMarkdownFile()
     const matched = selected.find((item) => fileNameOf(item.path).toLowerCase() === file.name.toLowerCase()) ?? selected[0]
     if (!matched) {
@@ -1455,6 +1563,12 @@ async function showDocumentTree() {
     return
   }
   await openFilesystemTreeForFile(file)
+}
+
+async function showDocumentTree() {
+  const file = fileContextMenu.value?.file
+  if (!file) return
+  await showDocumentTreeForEntry(file)
 }
 
 async function syncFilesystemTreeTarget(path: string) {
@@ -1489,7 +1603,7 @@ async function openFilesystemTreeNode(node: FileSystemTreeNode) {
 async function renameFileContextEntry() {
   const file = fileContextMenu.value?.file
   fileContextMenu.value = null
-  if (!file) return
+  if (!file || !canManageMarkdownEntry(file)) return
   const value = window.prompt('重命名 Markdown 文件', file.name)
   if (value === null) return
   const name = markdownName(value)
@@ -1503,6 +1617,7 @@ async function renameFileContextEntry() {
     await renameMarkdownPath(file.path, nextPath)
     if (file.documentId) await store.renameDocument(file.documentId, nextPath)
     await refreshFileTree()
+    await refreshFilesystemDirectory(fileDirectoryPath(file.path))
     notify(`已重命名为 ${name}`)
   } catch (error) {
     notify(error instanceof Error ? error.message : '重命名失败')
@@ -1512,7 +1627,7 @@ async function renameFileContextEntry() {
 async function duplicateFileContextEntry() {
   const file = fileContextMenu.value?.file
   fileContextMenu.value = null
-  if (!file) return
+  if (!file || !canManageMarkdownEntry(file)) return
   const base = file.name.replace(/\.(md|markdown)$/i, '')
   const extension = file.name.match(/\.(md|markdown)$/i)?.[0] ?? '.md'
   const value = window.prompt('创建文件副本', `${base} - 副本${extension}`)
@@ -1526,6 +1641,7 @@ async function duplicateFileContextEntry() {
   try {
     await copyMarkdownPath(file.path, nextPath)
     await refreshFileTree()
+    await refreshFilesystemDirectory(fileDirectoryPath(file.path))
     notify(`已创建副本 ${name}`)
   } catch (error) {
     notify(error instanceof Error ? error.message : '创建副本失败')
@@ -1535,7 +1651,7 @@ async function duplicateFileContextEntry() {
 async function reloadFileContextEntry() {
   const file = fileContextMenu.value?.file
   fileContextMenu.value = null
-  if (!file) return
+  if (!file || !isMarkdownEntry(file)) return
   if (!file.documentId) {
     await openFileTreeEntry(file)
     return
@@ -1568,8 +1684,13 @@ async function openFileContextDirectory() {
   if (!file) return
   fileContextMenu.value = null
   try {
-    await openMarkdownDirectory(file.path)
-    notify('已打开文件所在目录')
+    if (file.isDirectory) {
+      await openFileSystemDirectory(file.path)
+      notify('已打开文件夹')
+    } else {
+      await openMarkdownDirectory(file.path)
+      notify('已打开文件所在目录')
+    }
   } catch (error) {
     notify(error instanceof Error ? error.message : '打开目录失败')
   }
@@ -2020,6 +2141,7 @@ async function syncDocumentWatchers() {
   }
 }
 function fileStatus(file: { documentId?: string }) {
+  if ('isDirectory' in file && file.isDirectory) return '文件夹'
   if (!file.documentId) return '点击打开'
   if (store.currentDocumentId === file.documentId) return '正在阅读'
   return `${store.documents.find((document) => document.id === file.documentId)?.regions.length ?? 0} 个阅读区域`
@@ -2039,7 +2161,7 @@ async function openFileTreeEntry(file: { path: string; name: string; documentId?
   } finally { busyAction.value = null }
 }
 function isDeletableFile(file: FileTreeEntry) {
-  return Boolean(file.documentId) && file.path !== '欢迎开始 · Moyue.md'
+  return !file.isDirectory && Boolean(file.documentId) && file.path !== '欢迎开始 · Moyue.md'
 }
 function isBatchDeletableFile(file: FileTreeEntry) {
   return isDeletableFile(file)
@@ -2683,34 +2805,39 @@ async function requestFullscreen() {
           </div>
         </Teleport>
         <Teleport to="body">
-          <div v-if="fileContextMenu" class="file-context-menu" :style="{ top: `${fileContextMenu.y}px`, left: `${fileContextMenu.x}px` }" role="menu" @click.stop>
-            <div class="file-context-title">{{ fileContextMenu.file.name }}</div>
-            <button type="button" role="menuitem" @click="openFileContextEntry"><AppIcon name="reader" :size="13" />打开文件</button>
-            <button type="button" role="menuitem" @click="openFileContextNewTab"><AppIcon name="external" :size="13" />在新标签中打开</button>
-            <button v-if="fileContextMenu.file.documentId" type="button" role="menuitem" @click="reloadFileContextEntry"><AppIcon name="sync" :size="13" />重新载入</button>
+          <div v-if="fileContextMenu" ref="fileContextMenuElement" class="file-context-menu" :style="{ top: `${fileContextMenu.y}px`, left: `${fileContextMenu.x}px` }" role="menu" @click.stop>
+            <div class="file-context-title">{{ fileContextMenu.file.isDirectory ? '文件夹 · ' : '' }}{{ fileContextMenu.file.name }}</div>
+            <template v-if="fileContextMenu.file.isDirectory">
+              <button type="button" role="menuitem" @click="openFileContextEntry"><AppIcon :name="filesystemNodeExpanded(fileContextMenu.file.path) ? 'chevron-down' : 'chevron-right'" :size="13" />{{ filesystemNodeExpanded(fileContextMenu.file.path) ? '收起文件夹' : '展开文件夹' }}</button>
+            </template>
+            <template v-else>
+              <button type="button" role="menuitem" :disabled="!isMarkdownEntry(fileContextMenu.file)" :title="isMarkdownEntry(fileContextMenu.file) ? undefined : '当前只支持打开 Markdown 文件'" @click="openFileContextEntry"><AppIcon name="reader" :size="13" />打开文件</button>
+              <button type="button" role="menuitem" :disabled="!isMarkdownEntry(fileContextMenu.file)" :title="isMarkdownEntry(fileContextMenu.file) ? undefined : '当前只支持打开 Markdown 文件'" @click="openFileContextNewTab"><AppIcon name="external" :size="13" />{{ fileContextMenu.file.documentId && store.openDocumentIds.includes(fileContextMenu.file.documentId) ? '转到已打开标签' : '在新标签中打开' }}</button>
+              <button v-if="fileContextMenu.file.documentId && isMarkdownEntry(fileContextMenu.file)" type="button" role="menuitem" @click="reloadFileContextEntry"><AppIcon name="sync" :size="13" />重新载入</button>
+            </template>
             <div class="file-context-divider" />
-            <button type="button" role="menuitem" @click="createFileContextFile"><AppIcon name="plus" :size="13" />新建文件</button>
-            <button type="button" role="menuitem" @click="createFileContextFolder"><AppIcon name="library" :size="13" />新建文件夹</button>
-            <button type="button" role="menuitem" @click="searchFileContextEntry"><AppIcon name="search" :size="13" />搜索</button>
+            <button type="button" role="menuitem" :disabled="!canCreateInContext(fileContextMenu.file)" :title="canCreateInContext(fileContextMenu.file) ? undefined : '请在桌面端的真实文件夹中使用'" @click="createFileContextFile"><AppIcon name="plus" :size="13" />新建文件</button>
+            <button type="button" role="menuitem" :disabled="!canCreateInContext(fileContextMenu.file)" :title="canCreateInContext(fileContextMenu.file) ? undefined : '请在桌面端的真实文件夹中使用'" @click="createFileContextFolder"><AppIcon name="library" :size="13" />新建文件夹</button>
+            <button v-if="isMarkdownEntry(fileContextMenu.file)" type="button" role="menuitem" @click="searchFileContextEntry"><AppIcon name="search" :size="13" />搜索</button>
             <div class="file-context-divider" />
             <button type="button" role="menuitem" @click="showDocumentList"><AppIcon name="file" :size="13" />文档列表</button>
-            <button type="button" role="menuitem" @click="showDocumentTree"><AppIcon name="library" :size="13" />文档树</button>
+            <button type="button" role="menuitem" @click="showDocumentTreeForEntry(fileContextMenu.file)"><AppIcon name="library" :size="13" />文档树</button>
             <div class="file-context-divider" />
-            <button type="button" role="menuitem" @click="renameFileContextEntry"><AppIcon name="edit" :size="13" />重命名</button>
-            <button type="button" role="menuitem" @click="duplicateFileContextEntry"><AppIcon name="copy" :size="13" />创建副本</button>
-            <button type="button" role="menuitem" @click="openFileContextDirectory"><AppIcon name="library" :size="13" />打开所在目录</button>
-            <button type="button" role="menuitem" @click="copyFileContextValue('name')"><AppIcon name="copy" :size="13" />复制文件名</button>
-            <button type="button" role="menuitem" @click="copyFileContextValue('file')"><AppIcon name="copy" :size="13" />复制文件路径</button>
-            <button type="button" role="menuitem" @click="copyFileContextValue('directory')"><AppIcon name="copy" :size="13" />复制目录路径</button>
+            <button v-if="canManageMarkdownEntry(fileContextMenu.file)" type="button" role="menuitem" @click="renameFileContextEntry"><AppIcon name="edit" :size="13" />重命名</button>
+            <button v-if="canManageMarkdownEntry(fileContextMenu.file)" type="button" role="menuitem" @click="duplicateFileContextEntry"><AppIcon name="copy" :size="13" />创建副本</button>
+            <button v-if="isTauriRuntime() && hasRealFilesystemPath(fileContextMenu.file.path)" type="button" role="menuitem" @click="openFileContextDirectory"><AppIcon name="library" :size="13" />{{ fileContextMenu.file.isDirectory ? '打开文件夹' : '打开所在目录' }}</button>
+            <button type="button" role="menuitem" @click="copyFileContextValue('name')"><AppIcon name="copy" :size="13" />复制名称</button>
+            <button type="button" role="menuitem" @click="copyFileContextValue('file')"><AppIcon name="copy" :size="13" />复制路径</button>
+            <button type="button" role="menuitem" :disabled="!hasRealFilesystemPath(contextDirectoryPath(fileContextMenu.file))" title="只对真实系统目录提供目录路径" @click="copyFileContextValue('directory')"><AppIcon name="copy" :size="13" />复制目录路径</button>
             <button type="button" role="menuitem" @click="showFileProperties"><AppIcon name="info" :size="13" />属性</button>
-            <button v-if="isDeletableFile(fileContextMenu.file)" type="button" role="menuitem" class="file-context-danger" @click="deleteContextFile"><AppIcon name="trash" :size="13" />删除文件</button>
+            <button v-if="isDeletableFile(fileContextMenu.file)" type="button" role="menuitem" class="file-context-danger" @click="deleteContextFile"><AppIcon name="trash" :size="13" />从阅读空间移除</button>
           </div>
         </Teleport>
         <Teleport to="body">
           <div v-if="fileProperties" class="overlay file-properties-overlay" @click.self="fileProperties = null">
             <div class="file-properties-dialog" role="dialog" aria-modal="true" aria-label="文件属性">
               <div class="file-properties-heading"><div><span class="section-kicker">FILE PROPERTIES</span><h2>{{ fileProperties.name }}</h2></div><IconButton icon="close" size="sm" label="关闭文件属性" @click="fileProperties = null" /></div>
-              <dl class="file-properties-list"><div><dt>位置</dt><dd>{{ fileProperties.path }}</dd></div><div><dt>类型</dt><dd>Markdown 文档</dd></div><div><dt>状态</dt><dd>{{ fileStatus(fileProperties) }}</dd></div><div><dt>当前目录</dt><dd>{{ fileDirectoryPath(fileProperties.path) || '当前工作区' }}</dd></div></dl>
+              <dl class="file-properties-list"><div><dt>位置</dt><dd>{{ fileProperties.path }}</dd></div><div><dt>类型</dt><dd>{{ fileProperties.isDirectory ? '文件夹' : 'Markdown 文档' }}</dd></div><div><dt>状态</dt><dd>{{ fileStatus(fileProperties) }}</dd></div><div><dt>当前目录</dt><dd>{{ contextDirectoryPath(fileProperties) || '当前工作区' }}</dd></div></dl>
               <div class="file-properties-actions"><button class="ghost-button" type="button" @click="fileProperties = null">关闭</button><button class="primary-button" type="button" @click="copyFilePropertiesPath"><AppIcon name="copy" :size="13" />复制文件路径</button></div>
             </div>
           </div>
@@ -2742,7 +2869,7 @@ async function requestFullscreen() {
                 <input v-if="sidebarFilter === 'glob'" v-model="sidebarGlob" aria-label="自定义 glob" placeholder="例如 *.md" />
               </div>
               <div v-if="fileBrowserMode === 'tree'" class="filesystem-tree-panel">
-                <div v-if="filesystemTree" class="filesystem-tree" :aria-label="filesystemTreeScope === 'system' ? '当前目录文档树' : '工作区文档树'"><FileSystemTree :node="filesystemTree" :selected-path="filesystemTreeTarget" @toggle="toggleFilesystemNode" @open="openFilesystemTreeNode" /></div>
+                <div v-if="filesystemTree" class="filesystem-tree" :aria-label="filesystemTreeScope === 'system' ? '当前目录文档树' : '工作区文档树'"><FileSystemTree :node="filesystemTree" :selected-path="filesystemTreeTarget" @toggle="toggleFilesystemNode" @open="openFilesystemTreeNode" @contextmenu="openFilesystemContextMenu" /></div>
                 <p v-else class="file-browser-note"><AppIcon name="info" :size="13" />右键文件选择“文档树”以打开文件层级</p>
               </div>
               <div v-else class="file-list-shell">

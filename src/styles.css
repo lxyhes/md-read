@@ -2904,7 +2904,10 @@ button:focus-visible,
 .file-context-menu {
   position: fixed;
   width: 246px;
+  max-height: calc(100vh - 16px);
   padding: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .tab-context-title,
 .file-context-title {

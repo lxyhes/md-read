@@ -274,6 +274,13 @@ export async function openMarkdownDirectory(path: string): Promise<void> {
   await invoke('open_directory', { path: directory })
 }
 
+export async function openFileSystemDirectory(path: string): Promise<void> {
+  if (!isTauri()) throw new Error('浏览器预览无法打开系统目录，请使用桌面端打开')
+  const normalized = path.replace(/\\/g, '/')
+  const directory = /^[A-Za-z]:\/$/.test(normalized) ? normalized : normalized.replace(/\/+$/, '') || '/'
+  await invoke('open_directory', { path: directory })
+}
+
 async function filesToOpened(files: FileList | null): Promise<OpenedFile[]> {
   if (!files) return []
   const selectedFiles = Array.from(files)
@@ -284,7 +291,9 @@ async function filesToOpened(files: FileList | null): Promise<OpenedFile[]> {
 function dirnameOf(path: string) {
   const normalized = path.replace(/\\/g, '/')
   const separator = normalized.lastIndexOf('/')
-  return separator > 0 ? normalized.slice(0, separator) : ''
+  if (separator < 0) return ''
+  const parent = normalized.slice(0, separator)
+  return /^[A-Za-z]:$/.test(parent) ? `${parent}/` : parent || '/'
 }
 
 function normalizeLocalPath(path: string) {
