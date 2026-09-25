@@ -1,6 +1,7 @@
 import type { Annotation, DocumentRecord, ReaderDocument, ReadingProgress } from './types'
+import { isTauri as tauriIsTauri } from '@tauri-apps/api/core'
 
-const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+const isTauri = () => tauriIsTauri()
 const SNAPSHOT_INDEX_KEY = 'moyue:documents:index'
 const LEGACY_SNAPSHOT_KEY = 'moyue:documents:full'
 const snapshotKey = (documentId: string) => `moyue:document-snapshot:${documentId}`
