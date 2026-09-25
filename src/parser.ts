@@ -2,7 +2,7 @@ import type { HeadingItem, ReaderDocument, ReaderRegion, ReaderRegionType } from
 import { blockHtmlWithSourceIndent, renderFootnotes } from './markdown/render'
 import { createRenderContext, nodeText, type MarkdownUrlResolver, type MdastNode } from './markdown/shared'
 import { formatPastedText, isLikelyProseBlock } from './pasteMarkdown'
-import { markdownProcessor as processor, normalizeArticleStrong, normalizeLatexDelimiters } from './markdown/fragment'
+import { isTimestampedParagraph, markdownProcessor as processor, normalizeArticleStrong, normalizeLatexDelimiters, promoteTimestampedParagraphs } from './markdown/fragment'
 
 export type { MarkdownUrlResolver } from './markdown/shared'
 export { renderMarkdownFragment } from './markdown/fragment'
@@ -49,27 +49,6 @@ function isProseCodeBlock(node: MdastNode) {
   if (node.type !== 'code') return false
   const language = node.lang?.trim() ?? ''
   return (!language || /^(?:plain|plaintext|text|txt)$/i.test(language)) && isLikelyProseBlock(node.value ?? '')
-}
-
-function promoteTimestampedParagraph(node: MdastNode): MdastNode {
-  if (node.type !== 'paragraph') return node
-  const text = nodeText(node).trim()
-  const match = text.match(/^(.+?)\s+(\d{1,2}:\d{2})$/)
-  const title = match?.[1]?.trim() ?? ''
-  if (!match || !title || title.length > 48 || !/[\u3400-\u9fff]/.test(title) || /[。！？!?]$/.test(title)) return node
-  return { ...node, children: [{ type: 'strong', children: node.children ?? [] }] }
-}
-
-function isTimestampedParagraph(node: MdastNode) {
-  if (node.type !== 'paragraph') return false
-  const text = nodeText(node).trim()
-  const match = text.match(/^(.+?)\s+(\d{1,2}:\d{2})$/)
-  const title = match?.[1]?.trim() ?? ''
-  return Boolean(match && title && title.length <= 48 && /[\u3400-\u9fff]/.test(title) && !/[。！？!?]$/.test(title))
-}
-
-function promoteTimestampedParagraphs(tree: MdastNode) {
-  if (tree.children) tree.children = tree.children.map(promoteTimestampedParagraph)
 }
 
 function restoreTimestampedLists(tree: MdastNode) {

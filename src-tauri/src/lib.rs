@@ -1,4 +1,6 @@
 use arboard::{Clipboard, ImageData};
+#[cfg(target_os = "macos")]
+use objc2_app_kit::NSPasteboard;
 use serde::Serialize;
 use std::borrow::Cow;
 use std::collections::hash_map::DefaultHasher;
@@ -6,6 +8,8 @@ use std::hash::{Hash, Hasher};
 use std::path::Path;
 use std::process::Command;
 use tauri::Manager;
+#[cfg(target_os = "windows")]
+use windows_sys::Win32::System::DataExchange::GetClipboardSequenceNumber;
 
 fn is_image(path: &Path) -> bool {
     matches!(
@@ -40,10 +44,43 @@ struct ClipboardSnapshot {
     mime: Option<String>,
 }
 
+#[derive(Serialize)]
+struct ClipboardSignature {
+    kind: String,
+    signature: String,
+}
+
 fn clipboard_signature<T: Hash>(value: &T) -> String {
     let mut hasher = DefaultHasher::new();
     value.hash(&mut hasher);
     format!("{:016x}", hasher.finish())
+}
+
+fn text_clipboard_signature(text: &str) -> String {
+    let head: String = text.chars().take(256).collect();
+    let tail: String = text.chars().rev().take(256).collect::<String>().chars().rev().collect();
+    clipboard_signature(&(text.len(), head, tail))
+}
+
+fn image_clipboard_signature(width: usize, height: usize, bytes: &[u8]) -> String {
+    let head = &bytes[..bytes.len().min(4096)];
+    let tail_start = bytes.len().saturating_sub(4096);
+    clipboard_signature(&(width, height, bytes.len(), head, &bytes[tail_start..]))
+}
+
+#[cfg(target_os = "macos")]
+fn platform_clipboard_marker() -> Option<String> {
+    Some(format!("macos-change:{}", NSPasteboard::generalPasteboard().changeCount()))
+}
+
+#[cfg(target_os = "windows")]
+fn platform_clipboard_marker() -> Option<String> {
+    Some(format!("windows-sequence:{}", unsafe { GetClipboardSequenceNumber() }))
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn platform_clipboard_marker() -> Option<String> {
+    None
 }
 
 fn read_clipboard_snapshot_inner() -> Result<ClipboardSnapshot, String> {
@@ -51,7 +88,7 @@ fn read_clipboard_snapshot_inner() -> Result<ClipboardSnapshot, String> {
     if let Ok(text) = clipboard.get_text() {
         if !text.is_empty() {
             return Ok(ClipboardSnapshot {
-                signature: format!("text:{}", clipboard_signature(&text)),
+                signature: format!("text:{}", text_clipboard_signature(&text)),
                 kind: "text".into(),
                 text: Some(text),
                 bytes: None,
@@ -72,7 +109,7 @@ fn read_clipboard_snapshot_inner() -> Result<ClipboardSnapshot, String> {
         .write_to(&mut std::io::Cursor::new(&mut encoded), image::ImageFormat::Png)
         .map_err(|error| format!("编码剪贴板图片失败：{error}"))?;
     Ok(ClipboardSnapshot {
-        signature: format!("image:{}", clipboard_signature(&raw)),
+        signature: format!("image:{}", image_clipboard_signature(image.width, image.height, &raw)),
         kind: "image".into(),
         text: None,
         bytes: Some(encoded),
@@ -80,9 +117,46 @@ fn read_clipboard_snapshot_inner() -> Result<ClipboardSnapshot, String> {
     })
 }
 
+fn read_clipboard_signature_inner() -> Result<Option<ClipboardSignature>, String> {
+    if let Some(marker) = platform_clipboard_marker() {
+        return Ok(Some(ClipboardSignature {
+            kind: "system".into(),
+            signature: marker,
+        }));
+    }
+
+    let mut clipboard = Clipboard::new().map_err(|error| format!("连接系统剪贴板失败：{error}"))?;
+    if let Ok(text) = clipboard.get_text() {
+        if !text.is_empty() {
+            return Ok(Some(ClipboardSignature {
+                kind: "text".into(),
+                signature: format!("text:{}", text_clipboard_signature(&text)),
+            }));
+        }
+    }
+
+    let image = match clipboard.get_image() {
+        Ok(image) => image,
+        Err(_) => return Ok(None),
+    };
+    let bytes = image.bytes.into_owned();
+    if bytes.is_empty() || image.width == 0 || image.height == 0 {
+        return Ok(None);
+    }
+    Ok(Some(ClipboardSignature {
+        kind: "image".into(),
+        signature: format!("image:{}", image_clipboard_signature(image.width, image.height, &bytes)),
+    }))
+}
+
 #[tauri::command]
-fn read_clipboard_snapshot() -> Result<ClipboardSnapshot, String> {
-    read_clipboard_snapshot_inner()
+fn read_clipboard_snapshot() -> Result<Option<ClipboardSnapshot>, String> {
+    Ok(read_clipboard_snapshot_inner().ok())
+}
+
+#[tauri::command]
+fn read_clipboard_signature() -> Result<Option<ClipboardSignature>, String> {
+    read_clipboard_signature_inner()
 }
 
 #[tauri::command]
@@ -245,7 +319,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
-        .invoke_handler(tauri::generate_handler![allow_asset_directory, read_local_image, read_clipboard_image, read_clipboard_snapshot, write_clipboard_snapshot, read_remote_image, open_directory, open_external_url])
+        .invoke_handler(tauri::generate_handler![allow_asset_directory, read_local_image, read_clipboard_image, read_clipboard_snapshot, read_clipboard_signature, write_clipboard_snapshot, read_remote_image, open_directory, open_external_url])
         .run(tauri::generate_context!())
         .expect("error while running Moyue application");
 }

@@ -11,7 +11,7 @@ import FontPicker from './components/FontPicker.vue'
 import { interfaceFont } from './fonts'
 import FileSystemTree, { type FileSystemTreeNode } from './components/FileSystemTree.vue'
 import ClipboardManager from './components/ClipboardManager.vue'
-import { copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, listDirectoryFiles, listFileSystemEntries, openMarkdownDirectory, openMarkdownFile, readMarkdownPath, renameMarkdownPath, resolveMarkdownAssetUrl, saveExportFile, saveMarkdownFile, watchMarkdownPath, writeMarkdownFile, type WorkspaceFile } from './fileService'
+import { copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, listDirectoryFiles, listFileSystemEntries, openMarkdownDirectory, openMarkdownFile, readMarkdownPath, renameMarkdownPath, resolveMarkdownAssetUrl, saveClipboardImage, saveExportFile, saveMarkdownFile, watchMarkdownPath, writeMarkdownFile, type WorkspaceFile } from './fileService'
 import type { Annotation, ReaderDocument, ReaderRegion, ViewerType } from './types'
 import { escapeHtml } from './markdown/shared'
 import { parseMarkdown, renderMarkdownFragment } from './parser'
@@ -93,6 +93,22 @@ const editorPreview = ref<HTMLElement | null>(null)
 const editorMode = ref<'write' | 'split' | 'preview'>('split')
 const editorCalmMode = ref(false)
 const editorContextMenu = ref<{ x: number; y: number } | null>(null)
+const editorOriginalSource = ref('')
+const editorSaving = ref(false)
+const editorCursor = ref({ line: 1, column: 1 })
+const editorInlineAssets = ref<Record<string, string>>({})
+const editorInlineAssetSources = new Map<string, string>()
+const editorSplitRatio = ref(58)
+const editorSplitResizing = ref(false)
+let editorSplitResizeCleanup: (() => void) | null = null
+const editorDirty = computed(() => editorOpen.value && restoreEditorInlineImages(editorSource.value) !== editorOriginalSource.value)
+const editorSourceStats = computed(() => {
+  const source = editorSource.value
+  return {
+    characters: source.replace(/\s/g, '').length,
+    lines: source ? source.split(/\r?\n/).length : 1,
+  }
+})
 const exportOpen = ref(false)
 const deleteConfirmation = ref<{ files: FileTreeEntry[] } | null>(null)
 const selectedFilePaths = ref<string[]>([])
@@ -101,7 +117,6 @@ const focusRemaining = ref(25 * 60)
 const focusRunning = ref(false)
 let focusTimer: number | null = null
 let scrollFrame: number | null = null
-let editorScrollSyncing = false
 let progressTimer: number | null = null
 let searchTimer: number | null = null
 let regionLayoutObserver: ResizeObserver | null = null
@@ -243,7 +258,8 @@ const currentMindmap = computed(() => {
 const editorPreviewDocument = computed(() => {
   if (!editorSource.value.trim()) return null
   try {
-    return parseMarkdown(store.currentDocument?.path ?? '编辑.md', editorSource.value)
+    const path = store.currentDocument?.path ?? '编辑.md'
+    return parseMarkdown(path, editorSource.value, (url) => resolveMarkdownAssetUrl(path, url, editorInlineAssets.value))
   } catch {
     return null
   }
@@ -251,23 +267,14 @@ const editorPreviewDocument = computed(() => {
 const editorPreviewHtml = computed(() => {
   if (!editorSource.value.trim()) return '<p class="editor-preview-empty">从左侧开始写作，右侧会实时出现阅读效果。</p>'
   try {
-    return renderMarkdownFragment(editorSource.value, (url) => resolveMarkdownAssetUrl(store.currentDocument?.path ?? '', url))
+    const path = store.currentDocument?.path ?? ''
+    const html = renderMarkdownFragment(editorSource.value, (url) => resolveMarkdownAssetUrl(path, url, editorInlineAssets.value))
+    return html.replace(/<p><strong>([\s\S]*?)<\/strong><\/p>/g, '<h2 class="editor-semantic-heading">$1</h2>')
   } catch {
     return '<p class="editor-preview-error">预览暂时无法解析，请检查 Markdown 语法。</p>'
   }
 })
-const editorHeadings = computed(() => editorPreviewDocument.value?.headings.filter((heading) => {
-  const region = editorPreviewDocument.value?.regions.find((item) => item.id === heading.regionId)
-  return region?.type === 'heading'
-}) ?? [])
-const editorSourceStats = computed(() => {
-  const compact = editorSource.value.replace(/\s/g, '')
-  return {
-    characters: compact.length,
-    lines: editorSource.value ? editorSource.value.split(/\r?\n/).length : 0,
-    minutes: compact.length ? Math.max(1, Math.ceil(compact.length / 400)) : 0,
-  }
-})
+const editorHeadings = computed(() => editorPreviewDocument.value?.headings ?? [])
 const readerRegions = computed(() => {
   const document = store.currentDocument
   if (!document) return []
@@ -435,57 +442,104 @@ function openSearch(scope: 'all' | 'current' = 'all') {
   searchOpen.value = true
 }
 
-function openEditor() {
+async function openEditor() {
   if (!store.currentDocument) return
-  editorSource.value = store.currentDocument.source
+  const originalSource = store.currentDocument.source
+  const realPath = isRealDocumentPath(store.currentDocument.path)
+  let migrated = { source: originalSource, count: 0 }
+  let migrationMode: 'file' | 'memory' | 'none' = 'none'
+  clearEditorInlineAssets()
+  try {
+    if (realPath) {
+      migrated = await migrateEmbeddedEditorImages(originalSource, store.currentDocument.path)
+      if (migrated.count) {
+        migrationMode = 'file'
+      } else {
+        migrated = compactEmbeddedEditorImages(originalSource)
+        if (migrated.count) migrationMode = 'memory'
+      }
+    } else {
+      migrated = compactEmbeddedEditorImages(originalSource)
+      if (migrated.count) migrationMode = 'memory'
+    }
+  } catch {
+    migrated = compactEmbeddedEditorImages(originalSource)
+    if (migrated.count) migrationMode = 'memory'
+    else notify('内嵌图片转换失败，可继续编辑并稍后重试')
+  }
+  editorSource.value = migrated.source
+  editorOriginalSource.value = store.currentDocument.source
+  editorCursor.value = { line: 1, column: 1 }
   editorMode.value = 'split'
   editorCalmMode.value = false
   editorOpen.value = true
   view.value = 'reader'
   editorContextMenu.value = null
+  if (migrated.count) {
+    notify(migrationMode === 'file'
+      ? `已将 ${migrated.count} 张内嵌图片转换为本地图片，请保存文档`
+      : `已将 ${migrated.count} 张内嵌图片收纳为短引用`)
+  }
   void nextTick(() => editorTextarea.value?.focus())
 }
 
 function closeEditor() {
+  if (editorDirty.value && !window.confirm('还有未保存的编辑内容，确定要退出吗？')) return
   editorOpen.value = false
   editorContextMenu.value = null
+  clearEditorInlineAssets()
 }
 
 function setEditorMode(mode: 'write' | 'split' | 'preview') {
+  if (mode !== 'split') stopEditorSplitResize()
   editorMode.value = mode
   void nextTick(() => {
     if (mode !== 'preview') editorTextarea.value?.focus()
-    syncEditorPreviewScroll()
   })
+}
+
+function onEditorSplitResizeKeydown(event: KeyboardEvent) {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+  event.preventDefault()
+  if (event.key === 'Home') editorSplitRatio.value = 36
+  else if (event.key === 'End') editorSplitRatio.value = 70
+  else editorSplitRatio.value = Math.min(70, Math.max(36, editorSplitRatio.value + (event.key === 'ArrowLeft' ? -2 : 2)))
+}
+
+function stopEditorSplitResize() {
+  editorSplitResizeCleanup?.()
+  editorSplitResizeCleanup = null
+  editorSplitResizing.value = false
+}
+
+function startEditorSplitResize(event: PointerEvent) {
+  if (editorMode.value !== 'split') return
+  const handle = event.currentTarget as HTMLElement | null
+  const workspace = handle?.parentElement
+  if (!handle || !workspace) return
+  event.preventDefault()
+  stopEditorSplitResize()
+  const bounds = workspace.getBoundingClientRect()
+  const updateRatio = (moveEvent: PointerEvent) => {
+    const ratio = ((moveEvent.clientX - bounds.left) / bounds.width) * 100
+    editorSplitRatio.value = Math.min(70, Math.max(36, ratio))
+  }
+  const finish = () => stopEditorSplitResize()
+  editorSplitResizing.value = true
+  window.addEventListener('pointermove', updateRatio)
+  window.addEventListener('pointerup', finish)
+  window.addEventListener('pointercancel', finish)
+  editorSplitResizeCleanup = () => {
+    window.removeEventListener('pointermove', updateRatio)
+    window.removeEventListener('pointerup', finish)
+    window.removeEventListener('pointercancel', finish)
+  }
+  updateRatio(event)
 }
 
 function toggleEditorCalmMode() {
   editorCalmMode.value = !editorCalmMode.value
   void nextTick(() => editorTextarea.value?.focus())
-}
-
-function syncEditorPreviewScroll() {
-  if (editorMode.value !== 'split' || editorScrollSyncing) return
-  const source = editorTextarea.value
-  const preview = editorPreview.value
-  if (!source || !preview) return
-  const sourceRange = Math.max(1, source.scrollHeight - source.clientHeight)
-  const previewRange = Math.max(0, preview.scrollHeight - preview.clientHeight)
-  editorScrollSyncing = true
-  preview.scrollTop = (source.scrollTop / sourceRange) * previewRange
-  requestAnimationFrame(() => { editorScrollSyncing = false })
-}
-
-function syncEditorSourceScroll() {
-  if (editorMode.value !== 'split' || editorScrollSyncing) return
-  const source = editorTextarea.value
-  const preview = editorPreview.value
-  if (!source || !preview) return
-  const sourceRange = Math.max(0, source.scrollHeight - source.clientHeight)
-  const previewRange = Math.max(1, preview.scrollHeight - preview.clientHeight)
-  editorScrollSyncing = true
-  source.scrollTop = (preview.scrollTop / previewRange) * sourceRange
-  requestAnimationFrame(() => { editorScrollSyncing = false })
 }
 
 function openEditorPreviewImage(event: MouseEvent) {
@@ -499,7 +553,7 @@ function openEditorPreviewImage(event: MouseEvent) {
 }
 
 function jumpToEditorHeading(index: number) {
-  const heading = editorPreview.value?.querySelectorAll('h1, h2, h3, h4, h5, h6').item(index)
+  const heading = editorPreview.value?.querySelectorAll('h1, h2, h3, h4, h5, h6, .editor-semantic-heading').item(index)
   heading?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
@@ -509,14 +563,31 @@ function isRealDocumentPath(path: string) {
 
 async function saveEditor() {
   const document = store.currentDocument
-  if (!document || !editorOpen.value) return
+  if (!document || !editorOpen.value || editorSaving.value) return
+  editorSaving.value = true
   try {
-    if (isRealDocumentPath(document.path)) await writeMarkdownFile(document.path, editorSource.value)
-    await store.replaceDocumentSource(document.id, editorSource.value)
+    const sourceToSave = restoreEditorInlineImages(editorSource.value)
+    if (isRealDocumentPath(document.path)) await writeMarkdownFile(document.path, sourceToSave)
+    await store.replaceDocumentSource(document.id, sourceToSave)
+    editorOriginalSource.value = editorSource.value
     closeEditor()
     notify('Markdown 已保存')
   } catch (error) {
     notify(error instanceof Error ? error.message : '保存 Markdown 失败')
+  } finally {
+    editorSaving.value = false
+  }
+}
+
+function updateEditorCursor() {
+  const element = editorTextarea.value
+  if (!element) return
+  const position = element.selectionStart
+  const before = editorSource.value.slice(0, position)
+  const lastBreak = before.lastIndexOf('\n')
+  editorCursor.value = {
+    line: (before.match(/\n/g)?.length ?? 0) + 1,
+    column: position - lastBreak,
   }
 }
 
@@ -529,6 +600,98 @@ function updateEditor(transform: (value: string, start: number, end: number) => 
     element.focus()
     element.setSelectionRange(result.start, result.end)
   })
+}
+
+function applyEditorChange(value: string, start: number, end = start) {
+  const element = editorTextarea.value
+  editorSource.value = value
+  void nextTick(() => {
+    element?.focus()
+    element?.setSelectionRange(start, end)
+    updateEditorCursor()
+  })
+}
+
+function indentEditorSelection(outdent: boolean) {
+  const element = editorTextarea.value
+  if (!element) return
+  const value = editorSource.value
+  const start = element.selectionStart
+  const end = element.selectionEnd
+  const lineStart = value.lastIndexOf('\n', Math.max(0, start - 1)) + 1
+  const lineEnd = value.indexOf('\n', end)
+  const blockEnd = lineEnd < 0 ? value.length : lineEnd
+  const block = value.slice(lineStart, blockEnd)
+  if (start === end) {
+    if (!outdent) {
+      applyEditorChange(`${value.slice(0, start)}  ${value.slice(start)}`, start + 2)
+      return
+    }
+    const line = value.slice(lineStart, start)
+    const removed = line.match(/^ {1,2}/)?.[0].length ?? 0
+    if (!removed) return
+    applyEditorChange(`${value.slice(0, lineStart)}${value.slice(lineStart + removed)}`, Math.max(lineStart, start - removed))
+    return
+  }
+  const lines = block.split('\n')
+  const nextLines = outdent ? lines.map((line) => line.replace(/^ {1,2}/, '')) : lines.map((line) => `  ${line}`)
+  const nextBlock = nextLines.join('\n')
+  const delta = nextBlock.length - block.length
+  applyEditorChange(`${value.slice(0, lineStart)}${nextBlock}${value.slice(blockEnd)}`, Math.max(lineStart, start + (outdent ? nextLines[0].length - lines[0].length : 2)), Math.max(lineStart, end + delta))
+}
+
+function continueEditorList() {
+  const element = editorTextarea.value
+  if (!element || element.selectionStart !== element.selectionEnd) return false
+  const value = editorSource.value
+  const cursor = element.selectionStart
+  const lineStart = value.lastIndexOf('\n', Math.max(0, cursor - 1)) + 1
+  const lineEnd = value.indexOf('\n', cursor)
+  const end = lineEnd < 0 ? value.length : lineEnd
+  const line = value.slice(lineStart, end)
+  const match = line.match(/^(\s*)([-+*]|\d+[.)]|>)(\s+)(\[[ xX]\]\s*)?/)
+  if (!match) return false
+  const prefix = match[0]
+  const content = line.slice(prefix.length).trim()
+  if (!content) {
+    applyEditorChange(`${value.slice(0, lineStart)}${value.slice(end)}`, lineStart)
+    return true
+  }
+  const ordered = match[2].match(/^(\d+)([.)])$/)
+  const nextPrefix = ordered ? `${Number(ordered[1]) + 1}${ordered[2]}${match[3]}${match[4] ?? ''}` : prefix
+  const insertion = `\n${nextPrefix}`
+  applyEditorChange(`${value.slice(0, cursor)}${insertion}${value.slice(cursor)}`, cursor + insertion.length)
+  return true
+}
+
+function onEditorKeydown(event: KeyboardEvent) {
+  if (event.key === 'Tab') {
+    event.preventDefault()
+    indentEditorSelection(event.shiftKey)
+    return
+  }
+  if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey && continueEditorList()) {
+    event.preventDefault()
+    return
+  }
+  if (event.ctrlKey || event.metaKey || event.altKey) return
+  const element = editorTextarea.value
+  if (!element) return
+  const pairs: Record<string, string> = { '(': ')', '[': ']', '{': '}', '`': '`' }
+  const closing = new Set(Object.values(pairs))
+  if (pairs[event.key]) {
+    event.preventDefault()
+    const start = element.selectionStart
+    const end = element.selectionEnd
+    const selected = editorSource.value.slice(start, end)
+    const insertion = `${event.key}${selected}${pairs[event.key]}`
+    applyEditorChange(`${editorSource.value.slice(0, start)}${insertion}${editorSource.value.slice(end)}`, start + 1, start + 1 + selected.length)
+    return
+  }
+  if (closing.has(event.key) && element.selectionStart === element.selectionEnd && editorSource.value[element.selectionStart] === event.key) {
+    event.preventDefault()
+    applyEditorChange(editorSource.value, element.selectionStart + 1)
+  }
 }
 
 function insertEditorTextAt(text: string, start: number, end: number, block = false) {
@@ -568,9 +731,12 @@ async function onEditorPaste(event: ClipboardEvent) {
       notify('剪贴板里没有可读取的图片')
       return
     }
-    const imageMarkdown = formatClipboardImage(await blobToDataUrl(image))
+    const imagePath = store.currentDocument?.path && isRealDocumentPath(store.currentDocument.path)
+      ? await saveClipboardImage(store.currentDocument.path, image)
+      : null
+    const imageMarkdown = formatClipboardImage(imagePath ?? await blobToDataUrl(image))
     insertEditorTextAt(imageMarkdown, start, end, true)
-    notify('图片已插入 Markdown 编辑器')
+    notify(imagePath ? '图片已保存并插入 Markdown 编辑器' : '图片已插入 Markdown 编辑器')
   } catch (error) {
     notify(error instanceof Error ? error.message : '插入剪贴板图片失败')
   } finally {
@@ -766,6 +932,73 @@ function blobToDataUrl(blob: Blob): Promise<string> {
     reader.onerror = () => reject(reader.error ?? new Error('clipboard-image-read-failed'))
     reader.readAsDataURL(blob)
   })
+}
+
+function dataUrlToBlob(value: string): Blob | null {
+  const match = value.match(/^data:(image\/[\w.+-]+);base64,([\s\S]*)$/i)
+  if (!match) return null
+  try {
+    const binary = atob(match[2].replace(/\s/g, ''))
+    const bytes = new Uint8Array(binary.length)
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index)
+    return new Blob([bytes], { type: match[1] })
+  } catch {
+    return null
+  }
+}
+
+function clearEditorInlineAssets() {
+  for (const url of Object.values(editorInlineAssets.value)) URL.revokeObjectURL(url)
+  editorInlineAssets.value = {}
+  editorInlineAssetSources.clear()
+}
+
+function compactEmbeddedEditorImages(source: string) {
+  if (!/data:image\//i.test(source)) return { source, count: 0 }
+  const pattern = /data:image\/[\w.+-]+;base64,[A-Za-z0-9+/=\s]*?(?=\s*[\)"'])/gi
+  let nextSource = ''
+  let lastIndex = 0
+  let count = 0
+  for (const match of source.matchAll(pattern)) {
+    const index = match.index ?? -1
+    if (index < 0) continue
+    const dataUrl = match[0].trim()
+    const image = dataUrlToBlob(dataUrl)
+    if (!image) continue
+    const key = `moyue-editor://image-${Date.now().toString(36)}-${count + 1}`
+    editorInlineAssets.value[key] = URL.createObjectURL(image)
+    editorInlineAssetSources.set(key, dataUrl)
+    nextSource += source.slice(lastIndex, index) + key
+    lastIndex = index + match[0].length
+    count += 1
+  }
+  return count ? { source: nextSource + source.slice(lastIndex), count } : { source, count: 0 }
+}
+
+function restoreEditorInlineImages(source: string) {
+  let restored = source
+  for (const [key, dataUrl] of editorInlineAssetSources) restored = restored.split(key).join(dataUrl)
+  return restored
+}
+
+async function migrateEmbeddedEditorImages(source: string, markdownPath: string) {
+  if (!isRealDocumentPath(markdownPath) || !/data:image\//i.test(source)) return { source, count: 0 }
+  const pattern = /data:image\/[\w.+-]+;base64,[A-Za-z0-9+/=\s]*?(?=\s*[\)"'])/gi
+  let nextSource = ''
+  let lastIndex = 0
+  let count = 0
+  for (const match of source.matchAll(pattern)) {
+    const index = match.index ?? -1
+    if (index < 0) continue
+    const image = dataUrlToBlob(match[0].trim())
+    if (!image) continue
+    const imagePath = await saveClipboardImage(markdownPath, image)
+    if (!imagePath) continue
+    nextSource += source.slice(lastIndex, index) + imagePath
+    lastIndex = index + match[0].length
+    count += 1
+  }
+  return count ? { source: nextSource + source.slice(lastIndex), count } : { source, count: 0 }
 }
 
 async function readNativeClipboardImage(): Promise<Blob | null> {
@@ -1365,6 +1598,7 @@ onMounted(() => {
 })
 onUnmounted(() => {
   stopOutlinePanelResize()
+  stopEditorSplitResize()
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('paste', onPaste)
   document.removeEventListener('fullscreenchange', onFullscreenChange)
@@ -2307,7 +2541,7 @@ async function requestFullscreen() {
 </script>
 
 <template>
-  <div class="app-shell" :aria-busy="booting || busyAction !== null" :class="{ 'is-focus': store.mode === 'focus', 'is-clean': store.mode === 'clean', 'is-region-focus': store.mode === 'region-focus', 'has-focus-region': Boolean(store.focusedRegionId), 'is-dragging': draggingFiles, 'nav-collapsed': navCollapsed, [`theme-${store.activeThemeId}`]: true }" :style="store.mode === 'focus' ? focusThemeStyles : undefined" @dragover.prevent @dragenter.prevent="onDragEnter" @dragleave.prevent="onDragLeave" @drop.prevent="onDrop">
+  <div class="app-shell" :aria-busy="booting || busyAction !== null" :class="{ 'is-focus': store.mode === 'focus', 'is-clean': store.mode === 'clean', 'is-editor-studio': editorOpen, 'is-region-focus': store.mode === 'region-focus', 'has-focus-region': Boolean(store.focusedRegionId), 'is-dragging': draggingFiles, 'nav-collapsed': navCollapsed, [`theme-${store.activeThemeId}`]: true }" :style="store.mode === 'focus' ? focusThemeStyles : undefined" @dragover.prevent @dragenter.prevent="onDragEnter" @dragleave.prevent="onDragLeave" @drop.prevent="onDrop">
     <aside class="global-nav">
       <div class="brand-mark"><img class="brand-mark-logo" :src="logoAsset" alt="墨阅 Moyue" /></div>
       <button class="nav-collapse-toggle" type="button" :aria-label="navCollapsed ? '展开侧栏' : '收起侧栏'" :title="navCollapsed ? '展开侧栏' : '收起侧栏'" @click="toggleNavCollapsed"><AppIcon name="chevron-right" :size="15" /></button>
@@ -2491,7 +2725,7 @@ async function requestFullscreen() {
                 <span class="section-kicker reader-path" :title="store.currentDocument?.path"><AppIcon name="file" :size="13" /><span class="reader-path-value">{{ store.currentDocument?.title }}</span></span>
                 <span class="reader-stat">{{ store.currentDocument?.wordCount }} 字 · 约 {{ store.currentDocument?.estimatedReadMinutes }} 分钟</span>
               </div>
-              <div class="reader-meta-tools">
+              <div v-if="!editorOpen" class="reader-meta-tools">
                 <FontPicker compact label="正文字体" :model-value="store.readerSettings.fontFamily" :fallback-family="store.activeTheme.tokens.reader.fontFamily" @update:model-value="store.updateSettings({ fontFamily: $event })" />
                 <div class="reader-edit-actions">
                   <button type="button" :class="{ active: editorOpen }" @click="editorOpen ? closeEditor() : openEditor()">{{ editorOpen ? '阅读' : '编辑' }}</button>
@@ -2511,27 +2745,20 @@ async function requestFullscreen() {
                   <button type="button" :disabled="readerAtBottom" @click="scrollToBottom">到文末</button>
                 </div>
               </div>
+              <div v-else class="reader-editing-meta">
+                <span class="section-kicker">WRITING MODE</span>
+                <strong>编辑中</strong>
+                <span>{{ editorDirty ? '未保存更改' : '已保存' }}</span>
+                <button type="button" @click="closeEditor">退出编辑</button>
+              </div>
             </div>
             <div ref="readerViewport" class="reader-viewport" @scroll="onReaderScroll" @wheel="onReaderWheel" @pointerdown="onReaderPointerDown" @mouseup="captureSelection">
               <div v-if="editorOpen" class="editor-surface" :class="{ 'editor-calm-mode': editorCalmMode }" @contextmenu="openEditorContextMenu">
-                <div v-if="!editorCalmMode" class="editor-studio-intro">
-                  <div>
-                    <span class="section-kicker">MOYUE WRITING DESK</span>
-                    <strong>边写边读</strong>
-                    <p>Markdown 保留控制力，实时预览负责把注意力还给内容。</p>
-                  </div>
-                  <div class="editor-studio-stats" aria-label="写作统计">
-                    <span><b>{{ editorSourceStats.characters }}</b> 字符</span>
-                    <span><b>{{ editorSourceStats.lines }}</b> 行</span>
-                    <span><b>{{ editorSourceStats.minutes || '—' }}</b> 分钟阅读</span>
-                    <span><b>{{ editorHeadings.length }}</b> 个章节</span>
-                  </div>
-                </div>
                 <div v-if="!editorCalmMode" class="editor-toolbar" aria-label="Markdown 编辑工具栏">
                   <div class="editor-toolbar-group" aria-label="文字格式">
                     <button class="editor-tool-button" type="button" title="粗体（Ctrl/Cmd+B）" @click="wrapEditorSelection('**', '**', '粗体')"><b>B</b></button>
                     <button class="editor-tool-button" type="button" title="斜体（Ctrl/Cmd+I）" @click="wrapEditorSelection('*', '*', '斜体')"><i>I</i></button>
-                    <button class="editor-tool-button" type="button" title="行内代码" @click="wrapEditorSelection('`', '`', '代码')">Code</button>
+                    <button class="editor-tool-button" type="button" title="行内代码" @click="wrapEditorSelection('`', '`', '代码')">行内码</button>
                     <button class="editor-tool-button" type="button" title="链接（Ctrl/Cmd+K）" @click="insertEditorLink">链接</button>
                   </div>
                   <div class="editor-toolbar-group" aria-label="块格式">
@@ -2549,24 +2776,36 @@ async function requestFullscreen() {
                     <button class="editor-tool-button icon-only" type="button" title="下移当前行（Alt+↓）" @click="moveEditorLine(1)">↓</button>
                   </div>
                   <span class="editor-toolbar-spacer" />
-                  <div class="editor-mode-switch" role="tablist" aria-label="编辑模式">
-                    <button type="button" role="tab" :aria-selected="editorMode === 'write'" :class="{ active: editorMode === 'write' }" @click="setEditorMode('write')">写作</button>
-                    <button type="button" role="tab" :aria-selected="editorMode === 'split'" :class="{ active: editorMode === 'split' }" @click="setEditorMode('split')">并排</button>
-                    <button type="button" role="tab" :aria-selected="editorMode === 'preview'" :class="{ active: editorMode === 'preview' }" @click="setEditorMode('preview')">预览</button>
+                  <div class="editor-toolbar-actions">
+                    <div class="editor-mode-switch" role="tablist" aria-label="编辑模式">
+                      <button type="button" role="tab" :aria-selected="editorMode === 'write'" :class="{ active: editorMode === 'write' }" @click="setEditorMode('write')">写作</button>
+                      <button type="button" role="tab" :aria-selected="editorMode === 'split'" :class="{ active: editorMode === 'split' }" @click="setEditorMode('split')">并排</button>
+                      <button type="button" role="tab" :aria-selected="editorMode === 'preview'" :class="{ active: editorMode === 'preview' }" @click="setEditorMode('preview')">预览</button>
+                    </div>
+                    <button class="editor-calm-toggle" type="button" :class="{ active: editorCalmMode }" :aria-pressed="editorCalmMode" @click="toggleEditorCalmMode">静写</button>
+                    <kbd>⌘/Ctrl + S</kbd>
+                    <button class="primary-button editor-save-button" type="button" :disabled="!editorDirty || editorSaving" @click="saveEditor">{{ editorSaving ? '保存中…' : '保存' }}</button>
                   </div>
-                  <button class="editor-calm-toggle" type="button" :class="{ active: editorCalmMode }" :aria-pressed="editorCalmMode" @click="toggleEditorCalmMode">静写</button>
-                  <kbd>⌘/Ctrl + S</kbd>
-                  <button class="primary-button editor-save-button" type="button" @click="saveEditor">保存</button>
                 </div>
                 <button v-if="editorCalmMode" class="editor-calm-exit" type="button" @click="toggleEditorCalmMode">退出静写 · 显示工具栏</button>
-                <div class="editor-workspace" :class="`editor-mode-${editorMode}`">
+                <div class="editor-workspace" :class="[`editor-mode-${editorMode}`, { 'is-resizing-split': editorSplitResizing }]" :style="editorMode === 'split' ? { '--editor-split-ratio': `${editorSplitRatio}%` } : undefined">
                   <section v-if="editorMode !== 'preview'" class="editor-source-pane" aria-label="Markdown 源码">
-                    <div class="editor-pane-heading"><span>源码</span><small>可随时切回纯 Markdown</small></div>
-                    <textarea ref="editorTextarea" v-model="editorSource" class="editor-textarea" spellcheck="false" aria-label="Markdown 源码编辑器" @scroll="syncEditorPreviewScroll" @paste="onEditorPaste" />
+                    <div class="editor-pane-heading">
+                      <span class="editor-pane-title"><i class="editor-pane-dot editor-pane-dot-source" />Markdown 源码</span>
+                      <small>{{ editorSourceStats.lines }} 行 · {{ editorSourceStats.characters }} 字符</small>
+                    </div>
+                    <textarea ref="editorTextarea" v-model="editorSource" class="editor-textarea" spellcheck="false" aria-label="Markdown 源码编辑器" @paste="onEditorPaste" @keydown="onEditorKeydown" @input="updateEditorCursor" @keyup="updateEditorCursor" @click="updateEditorCursor" @select="updateEditorCursor" />
                   </section>
+                  <div v-if="editorMode === 'split'" class="editor-split-divider" role="separator" tabindex="0" aria-orientation="vertical" :aria-valuemin="36" :aria-valuemax="70" :aria-valuenow="Math.round(editorSplitRatio)" aria-label="调整源码与预览宽度" title="拖动调整源码与预览宽度，左右方向键微调" @pointerdown="startEditorSplitResize" @keydown="onEditorSplitResizeKeydown"><span /></div>
                   <section v-if="editorMode !== 'write'" class="editor-preview-pane" aria-label="实时阅读预览">
-                    <div class="editor-pane-heading"><span>阅读预览</span><small>{{ editorHeadings.length ? '结构镜已就绪' : '还没有章节标题' }}</small></div>
-                    <div ref="editorPreview" class="editor-preview-scroll" @scroll="syncEditorSourceScroll">
+                    <div class="editor-pane-heading">
+                      <span class="editor-pane-title"><i class="editor-pane-dot editor-pane-dot-preview" />阅读预览</span>
+                      <span class="editor-pane-heading-actions">
+                        <small>{{ editorMode === 'preview' ? '仅阅读预览' : editorHeadings.length ? `${editorHeadings.length} 个章节` : '无标题结构' }}</small>
+                        <button v-if="editorMode === 'preview'" type="button" @click="setEditorMode('split')">显示源码</button>
+                      </span>
+                    </div>
+                    <div ref="editorPreview" class="editor-preview-scroll">
                       <nav v-if="editorHeadings.length" class="editor-outline" aria-label="编辑中的文档结构">
                         <span class="editor-outline-label">结构镜</span>
                         <button v-for="(heading, index) in editorHeadings" :key="heading.id" type="button" :style="{ paddingLeft: `${8 + (heading.depth - 1) * 12}px` }" @click="jumpToEditorHeading(index)">{{ heading.text }}</button>
@@ -2577,6 +2816,8 @@ async function requestFullscreen() {
                 </div>
                 <div class="editor-statusbar">
                   <span>{{ editorMode === 'write' ? '源码写作' : editorMode === 'preview' ? '阅读预览' : '边写边读' }}</span>
+                  <span :class="{ 'editor-dirty': editorDirty }">{{ editorDirty ? '未保存更改' : '已保存' }}</span>
+                  <span>Ln {{ editorCursor.line }}, Col {{ editorCursor.column }}</span>
                   <span class="editor-status-spacer" />
                   <span>支持 Markdown / GFM / 数学公式</span>
                   <span>Alt+↑↓ 移动当前行</span>
@@ -2605,8 +2846,10 @@ async function requestFullscreen() {
             <div v-if="editorContextMenu" class="editor-context-menu" :style="{ top: `${editorContextMenu.y}px`, left: `${editorContextMenu.x}px` }" role="menu">
               <button type="button" role="menuitem" @click="wrapEditorSelection('**', '**', '粗体'); closeEditorContextMenu()">粗体</button>
               <button type="button" role="menuitem" @click="wrapEditorSelection('*', '*', '斜体'); closeEditorContextMenu()">斜体</button>
+              <button type="button" role="menuitem" @click="wrapEditorSelection('`', '`', '代码'); closeEditorContextMenu()">行内代码</button>
               <button type="button" role="menuitem" @click="prefixEditorLines('# '); closeEditorContextMenu()">一级标题</button>
               <button type="button" role="menuitem" @click="prefixEditorLines('- '); closeEditorContextMenu()">无序列表</button>
+              <button type="button" role="menuitem" @click="prefixEditorLines('- [ ] '); closeEditorContextMenu()">任务列表</button>
               <button type="button" role="menuitem" @click="prefixEditorLines('> '); closeEditorContextMenu()">引用</button>
             </div>
           </Teleport>

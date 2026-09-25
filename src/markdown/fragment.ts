@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import remarkParse from 'remark-parse'
 import { blockHtmlWithSourceIndent, renderFootnotes } from './render'
-import { createRenderContext, type MarkdownUrlResolver, type MdastNode } from './shared'
+import { createRenderContext, nodeText, type MarkdownUrlResolver, type MdastNode } from './shared'
 
 export const markdownProcessor = unified()
   .use(remarkParse)
@@ -61,9 +61,27 @@ export function normalizeArticleStrong(node: MdastNode) {
   })
 }
 
+export function isTimestampedParagraph(node: MdastNode) {
+  if (node.type !== 'paragraph') return false
+  const text = nodeText(node).trim()
+  const match = text.match(/^(.+?)\s+(\d{1,2}:\d{2})$/)
+  const title = match?.[1]?.trim() ?? ''
+  return Boolean(match && title && title.length <= 48 && /[\u3400-\u9fff]/.test(title) && !/[。！？!?]$/.test(title))
+}
+
+export function promoteTimestampedParagraph(node: MdastNode): MdastNode {
+  if (!isTimestampedParagraph(node)) return node
+  return { ...node, children: [{ type: 'strong', children: node.children ?? [] }] }
+}
+
+export function promoteTimestampedParagraphs(tree: MdastNode) {
+  if (tree.children) tree.children = tree.children.map(promoteTimestampedParagraph)
+}
+
 export function renderMarkdownFragment(source: string, resolveUrl: MarkdownUrlResolver = (url) => url): string {
   const normalizedSource = normalizeLatexDelimiters(source)
   const tree = markdownProcessor.parse(normalizedSource) as unknown as MdastNode
+  promoteTimestampedParagraphs(tree)
   normalizeArticleStrong(tree)
   const context = createRenderContext()
   const html = (tree.children ?? [])

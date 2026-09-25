@@ -1,6 +1,6 @@
 import { convertFileSrc, invoke, isTauri as tauriIsTauri } from '@tauri-apps/api/core'
 import { open, save } from '@tauri-apps/plugin-dialog'
-import { copyFile, mkdir, readDir, readTextFile, rename, watch, writeTextFile } from '@tauri-apps/plugin-fs'
+import { copyFile, mkdir, readDir, readTextFile, rename, watch, writeFile, writeTextFile } from '@tauri-apps/plugin-fs'
 
 const isTauri = () => tauriIsTauri()
 
@@ -94,6 +94,26 @@ export async function authorizeMarkdownAssets(markdownPath: string): Promise<voi
   const directory = dirnameOf(markdownPath)
   if (!directory) return
   await invoke('allow_asset_directory', { path: directory })
+}
+
+/**
+ * Persist an image pasted into a real Markdown file next to that file.
+ * Keeping the image out of the Markdown source avoids enormous base64 strings
+ * making the editor difficult to navigate and keeps the document portable.
+ */
+export async function saveClipboardImage(markdownPath: string, image: Blob): Promise<string | null> {
+  if (!isTauri()) return null
+  const directory = dirnameOf(markdownPath)
+  if (!directory) return null
+
+  const assetDirectory = `${directory}/.moyue-assets`
+  await mkdir(assetDirectory, { recursive: true })
+  const extension = clipboardImageExtension(image.type)
+  const fileName = `pasted-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.${extension}`
+  const absolutePath = `${assetDirectory}/${fileName}`
+  await writeFile(absolutePath, new Uint8Array(await image.arrayBuffer()), { createNew: true })
+  await authorizeMarkdownAssets(markdownPath)
+  return `.moyue-assets/${fileName}`
 }
 
 export function createBrowserAssetMap(files: File[]): Record<string, string> {
@@ -313,6 +333,18 @@ function isImagePath(path: string) {
 function imageMimeType(path: string) {
   const extension = path.split('.').pop()?.toLowerCase()
   return extension === 'svg' ? 'image/svg+xml' : extension === 'jpg' || extension === 'jpeg' ? 'image/jpeg' : `image/${extension || 'png'}`
+}
+
+function clipboardImageExtension(mime: string) {
+  switch (mime.split(';', 1)[0].toLowerCase()) {
+    case 'image/jpeg': return 'jpg'
+    case 'image/webp': return 'webp'
+    case 'image/gif': return 'gif'
+    case 'image/avif': return 'avif'
+    case 'image/bmp': return 'bmp'
+    case 'image/svg+xml': return 'svg'
+    default: return 'png'
+  }
 }
 
 function isSupportedRemoteImage(url: string) {
