@@ -75,15 +75,17 @@ export const useReaderStore = defineStore('reader', () => {
     return parseMarkdown(file.path, file.source, (url) => resolveMarkdownAssetUrl(file.path, url, assets))
   }
 
-  async function addOpenedFiles(files: OpenedFile[]) {
+  async function addOpenedFiles(files: OpenedFile[], options: { persist?: boolean } = {}) {
     if (!files.length) return 0
     const openedIds: string[] = []
     for (const file of files) {
       const document = await parseOpenedFile(file)
       documents.value = [...documents.value.filter((item) => item.id !== document.id), document]
       openedIds.push(document.id)
-      await saveDocumentSnapshot(document)
-      await saveDocument({ id: document.id, path: document.path, title: document.title, sourceHash: document.sourceHash, updatedAt: document.updatedAt, source: document.source })
+      if (options.persist !== false) {
+        await saveDocumentSnapshot(document)
+        await saveDocument({ id: document.id, path: document.path, title: document.title, sourceHash: document.sourceHash, updatedAt: document.updatedAt, source: document.source })
+      }
     }
     openDocumentIds.value = [...new Set([...openDocumentIds.value, ...openedIds])]
     await openDocument(openedIds[openedIds.length - 1])

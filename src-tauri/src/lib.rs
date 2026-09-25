@@ -1,4 +1,8 @@
+use arboard::{Clipboard, ImageData};
 use serde::Serialize;
+use std::borrow::Cow;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::path::Path;
 use std::process::Command;
 use tauri::Manager;
@@ -19,6 +23,97 @@ fn read_local_image(path: String) -> Result<tauri::ipc::Response, String> {
     std::fs::read(image)
         .map(tauri::ipc::Response::new)
         .map_err(|error| format!("读取图片失败：{error}"))
+}
+
+#[derive(Serialize)]
+struct ClipboardImage {
+    bytes: Vec<u8>,
+    mime: String,
+}
+
+#[derive(Serialize)]
+struct ClipboardSnapshot {
+    kind: String,
+    signature: String,
+    text: Option<String>,
+    bytes: Option<Vec<u8>>,
+    mime: Option<String>,
+}
+
+fn clipboard_signature<T: Hash>(value: &T) -> String {
+    let mut hasher = DefaultHasher::new();
+    value.hash(&mut hasher);
+    format!("{:016x}", hasher.finish())
+}
+
+fn read_clipboard_snapshot_inner() -> Result<ClipboardSnapshot, String> {
+    let mut clipboard = Clipboard::new().map_err(|error| format!("连接系统剪贴板失败：{error}"))?;
+    if let Ok(text) = clipboard.get_text() {
+        if !text.is_empty() {
+            return Ok(ClipboardSnapshot {
+                signature: format!("text:{}", clipboard_signature(&text)),
+                kind: "text".into(),
+                text: Some(text),
+                bytes: None,
+                mime: None,
+            });
+        }
+    }
+
+    let image = clipboard.get_image().map_err(|error| format!("读取系统剪贴板失败：{error}"))?;
+    let raw = image.bytes.into_owned();
+    if raw.is_empty() || image.width == 0 || image.height == 0 {
+        return Err("剪贴板里没有可读取的内容".into());
+    }
+    let rgba = image::RgbaImage::from_raw(image.width as u32, image.height as u32, raw.clone())
+        .ok_or_else(|| "剪贴板图片格式无效".to_string())?;
+    let mut encoded = Vec::new();
+    image::DynamicImage::ImageRgba8(rgba)
+        .write_to(&mut std::io::Cursor::new(&mut encoded), image::ImageFormat::Png)
+        .map_err(|error| format!("编码剪贴板图片失败：{error}"))?;
+    Ok(ClipboardSnapshot {
+        signature: format!("image:{}", clipboard_signature(&raw)),
+        kind: "image".into(),
+        text: None,
+        bytes: Some(encoded),
+        mime: Some("image/png".into()),
+    })
+}
+
+#[tauri::command]
+fn read_clipboard_snapshot() -> Result<ClipboardSnapshot, String> {
+    read_clipboard_snapshot_inner()
+}
+
+#[tauri::command]
+fn read_clipboard_image() -> Result<ClipboardImage, String> {
+    let snapshot = read_clipboard_snapshot_inner()?;
+    if snapshot.kind != "image" {
+        return Err("剪贴板里没有图片".into());
+    }
+    Ok(ClipboardImage {
+        bytes: snapshot.bytes.unwrap_or_default(),
+        mime: snapshot.mime.unwrap_or_else(|| "image/png".into()),
+    })
+}
+
+#[tauri::command]
+fn write_clipboard_snapshot(kind: String, text: Option<String>, bytes: Option<Vec<u8>>) -> Result<(), String> {
+    let mut clipboard = Clipboard::new().map_err(|error| format!("连接系统剪贴板失败：{error}"))?;
+    match kind.as_str() {
+        "text" => clipboard.set_text(text.unwrap_or_default()).map_err(|error| format!("写入系统剪贴板失败：{error}")),
+        "image" => {
+            let encoded = bytes.ok_or_else(|| "剪贴板图片数据为空".to_string())?;
+            let rgba = image::load_from_memory(&encoded)
+                .map_err(|error| format!("解析剪贴板图片失败：{error}"))?
+                .to_rgba8();
+            let (width, height) = rgba.dimensions();
+            clipboard
+                .set_image(ImageData { width: width as usize, height: height as usize, bytes: Cow::Owned(rgba.into_raw()) })
+                .map_err(|error| format!("写入系统剪贴板失败：{error}"))
+        }
+        _ => Err("不支持的剪贴板内容类型".into()),
+    }
 }
 
 #[tauri::command]
@@ -150,7 +245,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
-        .invoke_handler(tauri::generate_handler![allow_asset_directory, read_local_image, read_remote_image, open_directory, open_external_url])
+        .invoke_handler(tauri::generate_handler![allow_asset_directory, read_local_image, read_clipboard_image, read_clipboard_snapshot, write_clipboard_snapshot, read_remote_image, open_directory, open_external_url])
         .run(tauri::generate_context!())
         .expect("error while running Moyue application");
 }

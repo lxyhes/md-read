@@ -10,20 +10,21 @@ import IconButton from './components/IconButton.vue'
 import FontPicker from './components/FontPicker.vue'
 import { interfaceFont } from './fonts'
 import FileSystemTree, { type FileSystemTreeNode } from './components/FileSystemTree.vue'
+import ClipboardManager from './components/ClipboardManager.vue'
 import { copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, listDirectoryFiles, listFileSystemEntries, openMarkdownDirectory, openMarkdownFile, readMarkdownPath, renameMarkdownPath, resolveMarkdownAssetUrl, saveExportFile, saveMarkdownFile, watchMarkdownPath, writeMarkdownFile, type WorkspaceFile } from './fileService'
 import type { Annotation, ReaderDocument, ReaderRegion, ViewerType } from './types'
 import { escapeHtml } from './markdown/shared'
 import { parseMarkdown, renderMarkdownFragment } from './parser'
 import { asciiDiagramToMermaid, asciiTreeToTree, markdownToTree } from './asciiDiagram'
-import { formatClipboardToMarkdown, suggestPastedMarkdownName } from './pasteMarkdown'
+import { formatClipboardImage, formatClipboardToMarkdown, suggestPastedMarkdownName } from './pasteMarkdown'
 import logoAsset from './assets/moyue-logo-256.png'
 
 const FocusAmbiencePicker = defineAsyncComponent(() => import('./components/FocusAmbiencePicker.vue'))
 const ThemeCenter = defineAsyncComponent(() => import('./components/ThemeCenter.vue'))
 const ViewerCode = defineAsyncComponent(() => import('./components/ViewerCode.vue'))
 
-type View = 'library' | 'reader' | 'themes' | 'settings'
-type BusyAction = 'file' | 'folder' | 'drop' | 'paste' | 'paste-save' | 'delete' | null
+type View = 'library' | 'reader' | 'clipboard' | 'themes' | 'settings'
+type BusyAction = 'file' | 'folder' | 'drop' | 'paste' | 'paste-save' | 'paste-image' | 'delete' | null
 type FileSyncState = 'idle' | 'syncing' | 'updated' | 'error'
 type FileTreeEntry = { path: string; name: string; documentId?: string }
 const store = useReaderStore()
@@ -100,6 +101,7 @@ const focusRemaining = ref(25 * 60)
 const focusRunning = ref(false)
 let focusTimer: number | null = null
 let scrollFrame: number | null = null
+let editorScrollSyncing = false
 let progressTimer: number | null = null
 let searchTimer: number | null = null
 let regionLayoutObserver: ResizeObserver | null = null
@@ -463,13 +465,37 @@ function toggleEditorCalmMode() {
 }
 
 function syncEditorPreviewScroll() {
-  if (editorMode.value !== 'split') return
+  if (editorMode.value !== 'split' || editorScrollSyncing) return
   const source = editorTextarea.value
   const preview = editorPreview.value
   if (!source || !preview) return
   const sourceRange = Math.max(1, source.scrollHeight - source.clientHeight)
   const previewRange = Math.max(0, preview.scrollHeight - preview.clientHeight)
+  editorScrollSyncing = true
   preview.scrollTop = (source.scrollTop / sourceRange) * previewRange
+  requestAnimationFrame(() => { editorScrollSyncing = false })
+}
+
+function syncEditorSourceScroll() {
+  if (editorMode.value !== 'split' || editorScrollSyncing) return
+  const source = editorTextarea.value
+  const preview = editorPreview.value
+  if (!source || !preview) return
+  const sourceRange = Math.max(0, source.scrollHeight - source.clientHeight)
+  const previewRange = Math.max(1, preview.scrollHeight - preview.clientHeight)
+  editorScrollSyncing = true
+  source.scrollTop = (preview.scrollTop / previewRange) * sourceRange
+  requestAnimationFrame(() => { editorScrollSyncing = false })
+}
+
+function openEditorPreviewImage(event: MouseEvent) {
+  const image = event.target instanceof HTMLImageElement ? event.target : null
+  const document = editorPreviewDocument.value
+  if (!image || !document) return
+  const source = image.currentSrc || image.getAttribute('src') || ''
+  const region = document.regions.find((item) => item.type === 'image' && (String(item.metadata?.url ?? '') === source || item.html.includes(source)))
+  if (!region) return
+  openViewer({ ...region, metadata: { ...(region.metadata ?? {}), url: source } })
 }
 
 function jumpToEditorHeading(index: number) {
@@ -503,6 +529,53 @@ function updateEditor(transform: (value: string, start: number, end: number) => 
     element.focus()
     element.setSelectionRange(result.start, result.end)
   })
+}
+
+function insertEditorTextAt(text: string, start: number, end: number, block = false) {
+  const element = editorTextarea.value
+  if (!element) return
+  const before = editorSource.value.slice(0, start)
+  const after = editorSource.value.slice(end)
+  const value = block
+    ? `${before && !before.endsWith('\n') ? '\n' : ''}${text}${after && !after.startsWith('\n') ? '\n' : ''}`
+    : text
+  editorSource.value = `${before}${value}${after}`
+  const cursor = start + value.length
+  void nextTick(() => {
+    element.focus()
+    element.setSelectionRange(cursor, cursor)
+  })
+}
+
+async function onEditorPaste(event: ClipboardEvent) {
+  const element = event.currentTarget as HTMLTextAreaElement | null
+  if (!element) return
+  const clipboard = event.clipboardData
+  const imageItem = Array.from(clipboard?.items ?? []).find((item) => item.kind === 'file' && /^image\//i.test(item.type))
+  const hasText = Boolean(clipboard?.getData('text/html') || clipboard?.getData('text/plain'))
+  if (!imageItem && hasText) return
+
+  // The page-level handler intentionally ignores typing targets. Stop this
+  // event here so an image is handled exactly once by the editor.
+  event.preventDefault()
+  event.stopPropagation()
+  const start = element.selectionStart
+  const end = element.selectionEnd
+  busyAction.value = 'paste-image'
+  try {
+    const image = imageItem?.getAsFile() ?? await readNativeClipboardImage()
+    if (!image) {
+      notify('剪贴板里没有可读取的图片')
+      return
+    }
+    const imageMarkdown = formatClipboardImage(await blobToDataUrl(image))
+    insertEditorTextAt(imageMarkdown, start, end, true)
+    notify('图片已插入 Markdown 编辑器')
+  } catch (error) {
+    notify(error instanceof Error ? error.message : '插入剪贴板图片失败')
+  } finally {
+    busyAction.value = null
+  }
 }
 
 function wrapEditorSelection(before: string, after: string, placeholder: string) {
@@ -686,14 +759,35 @@ function isTypingTarget(target: EventTarget | null) {
   return !!element && (element.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(element.tagName))
 }
 
-async function importClipboardContent(html: string, text: string, saveToFile = false) {
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
+    reader.onerror = () => reject(reader.error ?? new Error('clipboard-image-read-failed'))
+    reader.readAsDataURL(blob)
+  })
+}
+
+async function readNativeClipboardImage(): Promise<Blob | null> {
+  try {
+    const result = await invoke<{ bytes: number[]; mime: string }>('read_clipboard_image')
+    const bytes = Uint8Array.from(result.bytes)
+    return bytes.length ? new Blob([bytes], { type: result.mime || 'image/png' }) : null
+  } catch {
+    return null
+  }
+}
+
+async function importClipboardContent(html: string, text: string, saveToFile = false, image: Blob | null = null, action: BusyAction = null) {
   if (busyAction.value) return
-  const source = formatClipboardToMarkdown(html, text)
+  let source = formatClipboardToMarkdown(html, text)
+  if (!source && !image) image = await readNativeClipboardImage()
+  if (!source && image) source = formatClipboardImage(await blobToDataUrl(image))
   if (!source) {
-    notify('剪贴板里没有可格式化的文字')
+    notify('剪贴板里没有可格式化的内容')
     return
   }
-  busyAction.value = saveToFile ? 'paste-save' : 'paste'
+  busyAction.value = action ?? (saveToFile ? 'paste-save' : 'paste')
   try {
     const suggestedName = suggestPastedMarkdownName(source)
     let path = saveToFile ? await saveMarkdownFile(source, suggestedName) : `${suggestedName}.md`
@@ -704,7 +798,10 @@ async function importClipboardContent(html: string, text: string, saveToFile = f
       let suffix = 2
       while (usedPaths.has(normalizedPath(path).toLowerCase())) path = `${base}-${suffix++}.md`
     }
-    const count = await store.addOpenedFiles([{ path, source }])
+    // Clipboard images are opened as session documents first. Persisting a
+    // large data URL in the local snapshot can exceed WebKit's storage quota
+    // and leave the default document selected.
+    const count = await store.addOpenedFiles([{ path, source }], { persist: !image })
     if (count) {
       view.value = 'reader'
       await nextTick()
@@ -723,9 +820,10 @@ function onPaste(event: ClipboardEvent) {
   const clipboard = event.clipboardData
   const html = clipboard?.getData('text/html') ?? ''
   const text = clipboard?.getData('text/plain') ?? ''
-  if (!html && !text) return
+  const imageItem = Array.from(clipboard?.items ?? []).find((item) => item.kind === 'file' && /^image\//i.test(item.type))
+  const image = imageItem?.getAsFile() ?? null
   event.preventDefault()
-  void importClipboardContent(html, text)
+  void importClipboardContent(html, text, false, image)
 }
 
 async function pasteFromClipboard(saveToFile = false) {
@@ -738,7 +836,9 @@ async function pasteFromClipboard(saveToFile = false) {
       if (item) {
         const htmlBlob = item.types.includes('text/html') ? await item.getType('text/html') : null
         const textBlob = item.types.includes('text/plain') ? await item.getType('text/plain') : null
-        await importClipboardContent(htmlBlob ? await htmlBlob.text() : '', textBlob ? await textBlob.text() : '', saveToFile)
+        const imageType = item.types.find((type) => /^image\//i.test(type))
+        const image = imageType ? await item.getType(imageType) : null
+        await importClipboardContent(htmlBlob ? await htmlBlob.text() : '', textBlob ? await textBlob.text() : '', saveToFile, image)
         return
       }
     }
@@ -747,6 +847,16 @@ async function pasteFromClipboard(saveToFile = false) {
   } catch (error) {
     notify(error instanceof Error ? '无法读取剪贴板，请直接按 Ctrl/Cmd+V' : '无法读取剪贴板')
   }
+}
+
+async function pasteImageFromClipboard() {
+  if (busyAction.value) return
+  const image = await readNativeClipboardImage()
+  if (!image) {
+    notify('剪贴板里没有可读取的图片，请先复制一张图片')
+    return
+  }
+  await importClipboardContent('', '', false, image, 'paste-image')
 }
 
 function onFullscreenChange() {
@@ -2206,6 +2316,7 @@ async function requestFullscreen() {
         <button class="nav-item" :class="{ active: view === 'library' && libraryTab === 'home' }" type="button" title="我的空间" aria-label="我的空间" @click="openLibrary('home')"><span class="nav-icon"><AppIcon name="home" /></span><span>我的空间</span></button>
         <button class="nav-item" :class="{ active: view === 'library' && libraryTab === 'all' }" type="button" title="全部文档" aria-label="全部文档" @click="openLibrary('all')"><span class="nav-icon"><AppIcon name="library" /></span><span>全部文档</span></button>
         <button class="nav-item" :class="{ active: view === 'reader' }" type="button" title="最近阅读" aria-label="最近阅读" @click="view = 'reader'"><span class="nav-icon"><AppIcon name="history" /></span><span>最近阅读</span></button>
+        <button class="nav-item" :class="{ active: view === 'clipboard' }" type="button" title="剪贴板" aria-label="剪贴板" @click="view = 'clipboard'"><span class="nav-icon"><AppIcon name="clipboard" /></span><span>剪贴板</span></button>
         <button class="nav-item" type="button" title="收藏夹" aria-label="收藏夹" @click="notify('收藏夹将在下一阶段接入')"><span class="nav-icon"><AppIcon name="star" /></span><span>收藏夹</span></button>
         <button class="nav-item" type="button" title="AI 知识库" aria-label="AI 知识库" @click="notify('AI 知识库将在适配器完成后接入')"><span class="nav-icon"><AppIcon name="sparkle" /></span><span>AI 知识库</span></button>
         <button class="nav-item" type="button" title="个人笔记" aria-label="个人笔记" @click="notify('个人笔记将在下一阶段接入')"><span class="nav-icon"><AppIcon name="note" /></span><span>个人笔记</span></button>
@@ -2222,7 +2333,7 @@ async function requestFullscreen() {
 
     <main class="main-shell">
       <header class="topbar" :class="{ faded: store.mode === 'focus' }">
-        <div class="crumbs"><strong>{{ view === 'reader' ? store.currentDocument?.title : view === 'themes' ? '主题空间' : view === 'settings' ? '偏好设置' : '我的文档' }}</strong></div>
+        <div class="crumbs"><strong>{{ view === 'reader' ? store.currentDocument?.title : view === 'themes' ? '主题空间' : view === 'clipboard' ? '剪贴板' : view === 'settings' ? '偏好设置' : '我的文档' }}</strong></div>
         <button class="command-trigger" type="button" @click="openSearch('all')"><span>搜索文档、标题、内容</span><kbd>⌘ K</kbd></button>
         <div class="top-actions">
           <IconButton icon="focus" label="专注阅读" :active="store.mode === 'focus'" @click="toggleFocusMode" />
@@ -2233,7 +2344,7 @@ async function requestFullscreen() {
 
       <section v-if="view === 'library'" class="page library-page">
         <div class="library-hero reveal-1"><div><p class="section-kicker">LOCAL READING STUDIO</p><h1>给一个想法<br /><em>足够的时间。</em></h1><p class="hero-copy">墨阅把 Markdown 变成一个可以停留的空间。<br />离线、安静、属于你的阅读节奏。</p></div><div class="hero-orbit"><span class="orbit-core">读</span><span class="orbit-label label-one">Region Focus</span><span class="orbit-label label-two">Theme Package</span><span class="orbit-label label-three">Offline First</span></div></div>
-        <div class="page-toolbar reveal-2"><div class="library-toolbar-heading"><div><span class="section-kicker">YOUR SHELF</span><h2>最近阅读 <span>{{ filteredLibraryDocuments.length }}<i v-if="librarySearchQuery.trim()"> / {{ store.documents.length }}</i></span></h2></div><div class="library-search"><AppIcon name="search" :size="14" /><input v-model="librarySearchQuery" type="search" placeholder="搜索已打开的 Markdown…" aria-label="按名称搜索已打开的 Markdown" /><button v-if="librarySearchQuery" type="button" aria-label="清空搜索" @click="librarySearchQuery = ''"><AppIcon name="close" :size="12" /></button></div></div><div class="toolbar-actions"><button class="ghost-button" type="button" :disabled="busyAction !== null" @click="() => pasteFromClipboard()"><AppIcon name="copy" :size="14" />{{ busyAction === 'paste' ? '格式化中…' : '粘贴并格式化' }}</button><button class="ghost-button" type="button" :disabled="busyAction !== null" @click="() => pasteFromClipboard(true)"><AppIcon name="download" :size="14" />{{ busyAction === 'paste-save' ? '保存中…' : '粘贴并保存' }}</button><button class="ghost-button" type="button" :disabled="busyAction !== null" @click="openFolder"><AppIcon name="library" :size="14" />{{ busyAction === 'folder' ? '扫描中…' : '打开文件夹' }}</button><button class="primary-button" type="button" :disabled="busyAction !== null" @click="openFile"><AppIcon name="plus" :size="14" />{{ busyAction === 'file' ? '打开中…' : '导入 Markdown' }}</button></div></div>
+        <div class="page-toolbar reveal-2"><div class="library-toolbar-heading"><div><span class="section-kicker">YOUR SHELF</span><h2>最近阅读 <span>{{ filteredLibraryDocuments.length }}<i v-if="librarySearchQuery.trim()"> / {{ store.documents.length }}</i></span></h2></div><div class="library-search"><AppIcon name="search" :size="14" /><input v-model="librarySearchQuery" type="search" placeholder="搜索已打开的 Markdown…" aria-label="按名称搜索已打开的 Markdown" /><button v-if="librarySearchQuery" type="button" aria-label="清空搜索" @click="librarySearchQuery = ''"><AppIcon name="close" :size="12" /></button></div></div><div class="toolbar-actions"><button class="ghost-button" type="button" :disabled="busyAction !== null" @click="() => pasteFromClipboard()"><AppIcon name="copy" :size="14" />{{ busyAction === 'paste' ? '格式化中…' : '粘贴并格式化' }}</button><button class="ghost-button" type="button" :disabled="busyAction !== null" @click="() => pasteImageFromClipboard()"><AppIcon name="image" :size="14" />{{ busyAction === 'paste-image' ? '读取中…' : '粘贴图片' }}</button><button class="ghost-button" type="button" :disabled="busyAction !== null" @click="() => pasteFromClipboard(true)"><AppIcon name="download" :size="14" />{{ busyAction === 'paste-save' ? '保存中…' : '粘贴并保存' }}</button><button class="ghost-button" type="button" :disabled="busyAction !== null" @click="openFolder"><AppIcon name="library" :size="14" />{{ busyAction === 'folder' ? '扫描中…' : '打开文件夹' }}</button><button class="primary-button" type="button" :disabled="busyAction !== null" @click="openFile"><AppIcon name="plus" :size="14" />{{ busyAction === 'file' ? '打开中…' : '导入 Markdown' }}</button></div></div>
         <div class="document-grid reveal-3">
           <div v-if="librarySearchQuery.trim() && !filteredLibraryDocuments.length" class="library-empty"><AppIcon name="search" :size="20" /><strong>没有找到匹配的文档</strong><span>试试搜索其他 Markdown 名称</span></div>
           <button v-for="document in filteredLibraryDocuments" :key="document.id" class="document-card" type="button" @click="chooseDocument(document.id)"><div class="card-topline"><span class="file-badge">MD</span><span>{{ document.id === store.documents[0]?.id ? '刚刚' : '本地文档' }}</span></div><h3>{{ document.title }}</h3><p>{{ document.regions.length }} 个阅读区域 · {{ document.estimatedReadMinutes }} 分钟</p><div class="card-footer"><span>{{ document.path }}</span><span class="arrow"><AppIcon name="external" :size="14" /></span></div></button>
@@ -2451,16 +2562,16 @@ async function requestFullscreen() {
                 <div class="editor-workspace" :class="`editor-mode-${editorMode}`">
                   <section v-if="editorMode !== 'preview'" class="editor-source-pane" aria-label="Markdown 源码">
                     <div class="editor-pane-heading"><span>源码</span><small>可随时切回纯 Markdown</small></div>
-                    <textarea ref="editorTextarea" v-model="editorSource" class="editor-textarea" spellcheck="false" aria-label="Markdown 源码编辑器" @scroll="syncEditorPreviewScroll" />
+                    <textarea ref="editorTextarea" v-model="editorSource" class="editor-textarea" spellcheck="false" aria-label="Markdown 源码编辑器" @scroll="syncEditorPreviewScroll" @paste="onEditorPaste" />
                   </section>
                   <section v-if="editorMode !== 'write'" class="editor-preview-pane" aria-label="实时阅读预览">
                     <div class="editor-pane-heading"><span>阅读预览</span><small>{{ editorHeadings.length ? '结构镜已就绪' : '还没有章节标题' }}</small></div>
-                    <div ref="editorPreview" class="editor-preview-scroll">
+                    <div ref="editorPreview" class="editor-preview-scroll" @scroll="syncEditorSourceScroll">
                       <nav v-if="editorHeadings.length" class="editor-outline" aria-label="编辑中的文档结构">
                         <span class="editor-outline-label">结构镜</span>
                         <button v-for="(heading, index) in editorHeadings" :key="heading.id" type="button" :style="{ paddingLeft: `${8 + (heading.depth - 1) * 12}px` }" @click="jumpToEditorHeading(index)">{{ heading.text }}</button>
                       </nav>
-                      <article class="editor-preview" v-html="editorPreviewHtml" />
+                      <article class="editor-preview" v-html="editorPreviewHtml" @click="openEditorPreviewImage" />
                     </div>
                   </section>
                 </div>
@@ -2525,7 +2636,7 @@ async function requestFullscreen() {
 
       <ThemeCenter v-else-if="view === 'themes'" :themes="store.themes" :active-theme-id="store.activeThemeId" :active-theme="store.activeTheme" @apply="applyReaderTheme" @install="store.installTheme" @notify="notify" />
 
-        <section v-else class="page settings-page"><div class="page-heading"><div><p class="section-kicker">PREFERENCES / EXTENSIONS</p><h1>让阅读<br /><em>顺手一点。</em></h1></div><button class="ghost-button" type="button" @click="notify('设置已保存在本地')"><AppIcon name="check" :size="14" />保存设置</button></div><div class="settings-tabs"><button :class="{ active: settingsTab === 'reading' }" type="button" @click="settingsTab = 'reading'">阅读偏好</button><button :class="{ active: settingsTab === 'shortcuts' }" type="button" @click="settingsTab = 'shortcuts'">快捷键</button><button :class="{ active: settingsTab === 'extensions' }" type="button" @click="settingsTab = 'extensions'">插件扩展</button><button type="button" @click="notify('文件关联设置将在桌面端接入')">文件关联</button><button type="button" @click="notify('同步与备份暂不启用')">同步与备份</button></div><div class="settings-grid">
+        <section v-else-if="view === 'settings'" class="page settings-page"><div class="page-heading"><div><p class="section-kicker">PREFERENCES / EXTENSIONS</p><h1>让阅读<br /><em>顺手一点。</em></h1></div><button class="ghost-button" type="button" @click="notify('设置已保存在本地')"><AppIcon name="check" :size="14" />保存设置</button></div><div class="settings-tabs"><button :class="{ active: settingsTab === 'reading' }" type="button" @click="settingsTab = 'reading'">阅读偏好</button><button :class="{ active: settingsTab === 'shortcuts' }" type="button" @click="settingsTab = 'shortcuts'">快捷键</button><button :class="{ active: settingsTab === 'extensions' }" type="button" @click="settingsTab = 'extensions'">插件扩展</button><button type="button" @click="notify('文件关联设置将在桌面端接入')">文件关联</button><button type="button" @click="notify('同步与备份暂不启用')">同步与备份</button></div><div class="settings-grid">
         <div class="settings-card font-settings-card">
           <div class="font-settings-heading"><div><span class="section-kicker">阅读偏好</span><h2>字体与排版</h2></div><span>自动保存</span></div>
           <FontPicker label="正文字体" :model-value="store.readerSettings.fontFamily" :fallback-family="store.activeTheme.tokens.reader.fontFamily" @update:model-value="store.updateSettings({ fontFamily: $event })" />
@@ -2535,6 +2646,7 @@ async function requestFullscreen() {
           </div>
         </div>
         <div class="settings-card"><span class="section-kicker">READER</span><h2>阅读偏好</h2><label class="setting-row"><span>正文宽度 <b>{{ store.readerSettings.width }}px</b></span><input :value="store.readerSettings.width" type="range" min="620" max="980" step="10" @input="changeSetting('width', Number(($event.target as HTMLInputElement).value))" /></label><label class="setting-row"><span>字号 <b>{{ store.readerSettings.fontSize }}px</b></span><input :value="store.readerSettings.fontSize" type="range" min="15" max="24" step="1" @input="changeSetting('fontSize', Number(($event.target as HTMLInputElement).value))" /></label><label class="setting-row"><span>行距 <b>{{ store.readerSettings.lineHeight }}</b></span><input :value="store.readerSettings.lineHeight" type="range" min="1.4" max="2.2" step=".05" @input="changeSetting('lineHeight', Number(($event.target as HTMLInputElement).value))" /></label><div class="setting-toggle-row"><span>显示阅读进度</span><i class="toggle-on" /></div><div class="setting-toggle-row"><span>启用专注模式</span><i class="toggle-on" /></div></div><div class="settings-card"><span class="section-kicker">ASSISTANCE</span><h2>翻译与解释</h2><p class="muted-copy">V1 使用适配器接口，不内置固定服务。配置后，划词工具栏即可调用。</p><label class="setting-input">服务标识<input v-model="customProvider" placeholder="例如：local-llm / my-translator" /></label><button class="primary-button" type="button" @click="notify(customProvider ? '适配器标识已保存' : '保持未配置状态')"><AppIcon name="check" :size="14" />保存配置</button></div><div class="settings-card"><span class="section-kicker">SHORTCUTS</span><h2>快捷键</h2><div class="shortcut-row"><span>全局搜索</span><kbd>Ctrl / Cmd + K</kbd></div><div class="shortcut-row"><span>当前文档搜索</span><kbd>Ctrl / Cmd + F</kbd></div><div class="shortcut-row"><span>阅读缩放</span><kbd>Ctrl / Cmd + + / -</kbd></div><div class="shortcut-row"><span>专注模式</span><kbd>F</kbd></div><div class="shortcut-row"><span>退出聚焦</span><kbd>Esc</kbd></div><div class="shortcut-row"><span>切换区域</span><kbd>↑ ↓</kbd></div></div><div class="settings-card extensions-card"><div class="extensions-head"><div><span class="section-kicker">EXTENSION CENTER</span><h2>插件扩展</h2></div><button class="ghost-button" type="button" @click="notify('插件运行时将在后续版本启用')"><AppIcon name="plugin" :size="14" />打开插件目录</button></div><div class="extension-filter"><AppIcon name="search" :size="14" /><span>探索无限可能，让阅读更强大</span></div><div class="extension-list"><div class="extension-item"><span class="extension-icon purple"><AppIcon name="sparkle" :size="17" /></span><span><b>AI 阅读助手</b><small>总结、解释与问答适配器</small></span><button type="button" @click="notify('请先在翻译与解释中配置服务')">配置</button></div><div class="extension-item"><span class="extension-icon green"><AppIcon name="download" :size="17" /></span><span><b>导出增强</b><small>为阅读内容准备更多导出格式</small></span><button type="button" @click="notify('导出增强将在下一阶段接入')">安装</button></div><div class="extension-item"><span class="extension-icon pink"><AppIcon name="components" :size="17" /></span><span><b>思维导图</b><small>把长文转换为结构化视图</small></span><button type="button" @click="notify('插件运行时暂未启用')">安装</button></div></div></div></div></section>
+      <ClipboardManager v-show="view === 'clipboard'" @notify="notify" />
     </main>
 
     <div v-if="searchOpen" class="overlay search-overlay" @click.self="searchOpen = false"><div class="search-dialog"><div class="search-input-row"><AppIcon name="search" :size="17" /><input v-model="query" autofocus :placeholder="searchScope === 'current' ? '搜索当前文档…' : '搜索文档、标题、内容…'" aria-label="搜索内容" @keydown.esc="searchOpen = false" /><kbd>ESC</kbd></div><div class="search-scope-row"><div class="search-scope-tabs" role="tablist" aria-label="搜索范围"><button type="button" :class="{ active: searchScope === 'all' }" @click="searchScope = 'all'">全部文档</button><button type="button" :class="{ active: searchScope === 'current' }" :disabled="!store.currentDocument" @click="searchScope = 'current'">当前文档</button><button type="button" :class="{ active: replaceOpen }" @click="replaceOpen = !replaceOpen">查找替换</button></div><span>{{ searchResults.reduce((total, result) => total + result.matchCount, 0) }} 个匹配</span><small>Ctrl/Cmd + F 搜当前文档</small></div><div v-if="replaceOpen" class="replace-row"><input v-model="replaceValue" placeholder="替换为…" aria-label="替换内容" /><label><input v-model="searchRegex" type="checkbox" /> 正则</label><button type="button" :disabled="!searchPattern || searchPatternError" @click="replaceSearchMatches">全部替换</button></div><p v-if="searchPatternError" class="search-error">正则表达式无效</p><div v-if="searchResults.length" class="search-results"><button v-for="(result, index) in searchResults" :key="`${result.document.id}-${result.region.id}`" type="button" :class="{ selected: searchIndex === index }" @click="chooseSearchResult(result.document.id, result.region.id)"><span class="result-kind">{{ result.region.type }}</span><span><b>{{ result.document.title }}</b><small>{{ result.region.textContent.slice(0, 100) }} · {{ result.matchCount }} 处匹配</small></span><AppIcon name="external" :size="14" /></button></div><div v-else class="empty-search">{{ query ? '没有找到相关内容' : searchScope === 'current' ? '输入关键词，搜索当前文档' : '输入关键词，搜索你的阅读空间' }}</div></div></div>

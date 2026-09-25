@@ -64,7 +64,7 @@ const custom = computed(() => props.modelValue && !fontPresets.some((font) => fo
 .font-reading-preview p { margin: 12px 0 0; font-size: var(--reader-size, 18px); line-height: var(--reader-leading, 1.8); }
 .font-reading-preview p[lang="en"] { margin-top: 7px; font-size: 16px; }
 .font-picker-compact { flex-shrink: 0; }
-.font-picker-compact .font-select-label { gap: 7px; font-size: 11px; }
-.font-picker-compact select { min-width: 118px; padding: 5px 8px; }
+.font-picker-compact .font-select-label { min-width: 0; gap: 7px; font-size: 11px; }
+.font-picker-compact select { width: 118px; min-width: 118px; flex: 0 1 154px; padding: 5px 8px; }
 @media (max-width: 1180px) { .font-samples { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>

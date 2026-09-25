@@ -400,6 +400,11 @@ export function suggestPastedMarkdownName(source: string) {
   return Array.from(name || '未命名粘贴').slice(0, 32).join('')
 }
 
+export function formatClipboardImage(dataUrl: string, alt = '剪贴板图片') {
+  const value = dataUrl.trim()
+  return value ? `![${alt}](${value})` : ''
+}
+
 export function formatClipboardToMarkdown(html: string, text: string) {
   if (text.trim() && hasMarkdownSyntax(text)) return formatPastedText(text)
   if (html.trim() && typeof DOMParser !== 'undefined') {
