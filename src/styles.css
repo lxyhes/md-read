@@ -4140,6 +4140,7 @@ button:focus-visible,
 .tree-root {
   display: inline-flex;
   align-items: center;
+  max-width: 100%;
   min-height: 34px;
   padding: 5px 12px;
   cursor: pointer;
@@ -4158,6 +4159,50 @@ button:focus-visible,
 }
 .tree-root.collapsed::after {
   content: "+";
+}
+.tree-node-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.tree-node-row,
+.tree-leaf-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  min-width: 0;
+}
+.tree-node-row > details {
+  min-width: 0;
+}
+.tree-timestamp-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 22px;
+  margin-top: 5px;
+  padding: 0 7px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+  color: var(--accent);
+  font: 700 11px/1 var(--ui-font);
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color .18s ease, background .18s ease, transform .18s ease;
+}
+.tree-timestamp-link:hover {
+  border-color: color-mix(in srgb, var(--accent) 65%, var(--border));
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  transform: translateY(-1px);
+}
+.tree-timestamp-link:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 56%, transparent);
+  outline-offset: 2px;
+  border-radius: 3px;
 }
 .tree-children {
   margin: 9px 0 0 12px;
@@ -6483,9 +6528,10 @@ body.is-resizing-outline * {
 .tree-root-children > .tree-item:first-child {
   grid-column: 1 / -1;
 }
-.tree-root-children > .tree-item > details > summary {
+.tree-root-children > .tree-item > .tree-node-row > details > summary {
   display: flex;
   align-items: center;
+  min-width: 0;
   min-height: 34px;
   padding: 7px 10px 7px 7px;
   border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
@@ -6496,16 +6542,19 @@ body.is-resizing-outline * {
   font-weight: 600;
   transition: border-color .18s ease, background .18s ease, transform .18s ease;
 }
-.tree-root-children > .tree-item > details > summary:hover {
+.tree-root-children > .tree-item > .tree-node-row > details > summary::before {
+  flex: 0 0 18px;
+}
+.tree-root-children > .tree-item > .tree-node-row > details > summary:hover {
   border-color: color-mix(in srgb, var(--accent) 58%, var(--border));
   background: color-mix(in srgb, var(--accent) 8%, var(--surface-raised));
   transform: translateY(-1px);
 }
-.tree-root-children > .tree-item > details[open] > summary {
+.tree-root-children > .tree-item > .tree-node-row > details[open] > summary {
   border-color: color-mix(in srgb, var(--accent) 46%, var(--border));
   background: color-mix(in srgb, var(--accent) 9%, var(--surface-raised));
 }
-.tree-root-children > .tree-item > details > .tree-children {
+.tree-root-children > .tree-item > .tree-node-row > details > .tree-children {
   margin-top: 8px;
 }
 .tree-summary-leaf {

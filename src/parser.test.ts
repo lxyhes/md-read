@@ -290,6 +290,42 @@ $$`)
     expect(document.regions[1]?.type).toBe('list')
     expect(document.regions[1]?.html).toContain('<li>')
     expect(document.regions[2]?.html).toContain('<strong>作业执行与陪跑机制 28:06</strong>')
+
+    const linked = parseMarkdown('linked-course.md', '课程主旨与IP四维模型 [00:02](https://example.com/watch?debug=0&fid=doc#?seek_t=2)\n\n章节内容一。\n\n章节内容二。\n\n下一章 [00:36](https://example.com/watch?debug=0&fid=doc#?seek_t=36)\n\n下一章内容。')
+    expect(linked.regions[0]?.html).toContain('<strong>课程主旨与IP四维模型')
+    expect(linked.regions[0]?.html).toContain('href="https://example.com/watch?debug=0&amp;fid=doc#?seek_t=2"')
+    expect(linked.regions[1]?.type).toBe('list')
+    expect(linked.regions[1]?.html).toContain('章节内容一。')
+    expect(linked.regions[2]?.html).toContain('<strong>下一章')
+  })
+
+  it('keeps linked chapter lists and nested points together', () => {
+    const source = String.raw`- **课程主旨与IP四维模型&#xA0;**[**00:02**](https://b.quark.cn/apps/5AZ7aRopS/routes/Gj8VNtRtS?debug=0\&fid=example#?seek_t=2)
+  - 介绍课程内容。
+  - **录制艰辛**：
+    - 利用间隙录制。
+- **下一章&#xA0;**[**00:36**](https://b.quark.cn/apps/5AZ7aRopS/routes/Gj8VNtRtS?debug=0\&fid=example#?seek_t=36)
+  - 解释“道”的本质。`
+    const document = parseMarkdown('chapter-list.md', source)
+    expect(document.regions.map((region) => region.type)).toEqual(['list'])
+    const html = document.regions[0].html
+    expect(html).toContain('课程主旨与IP四维模型')
+    expect(html).toContain('<strong>录制艰辛</strong>')
+    expect(html).toContain('利用间隙录制。')
+    expect(html).toContain('href="https://b.quark.cn/apps/5AZ7aRopS/routes/Gj8VNtRtS?debug=0&amp;fid=example#?seek_t=2"')
+    expect((html.match(/<li(?:\s|>)/g) ?? []).length).toBe(6)
+    expect(formatPastedText(source)).toContain('  - **录制艰辛**：\n    - 利用间隙录制。')
+    const tree = markdownToTree(source, '视频')
+    expect(tree?.children.map((child) => child.label)).toEqual(['课程主旨与IP四维模型 [00:02]', '下一章 [00:36]'])
+    expect(tree?.children[0]?.children[0]?.detail).toContain('  - **录制艰辛**：\n    - 利用间隙录制。')
+  })
+
+  it('removes empty list rows left by trailing bullet markers', () => {
+    const document = parseMarkdown('empty-list-row.md', '- P4：承担过某一模块负责人或核心开发人员。\n- P5：担任过一个以上中型研发项目负责人。\n  - 能力要求\n    - 具备培训和教导新员工的能力。\n-')
+    expect(document.regions[0]?.html).toContain('P4：承担过某一模块负责人或核心开发人员。')
+    expect(document.regions[0]?.html).toContain('具备培训和教导新员工的能力。')
+    expect(document.regions[0]?.html).not.toContain('<li></li>')
+    expect(document.regions[0]?.html).not.toContain('<li><p></p></li>')
   })
 
   it('can make legacy implicit headings explicit in the Markdown source', () => {
@@ -353,6 +389,37 @@ $$`)
 
     const tableTree = markdownToTree('# 文章\n\n## 产品\n| 场景 | 体验 |\n| --- | --- |\n| 阅读 | 清晰 |', '文章')
     expect(tableTree?.children[0].children[0]).toEqual({ label: '内容：场景 · 体验 阅读 · 清晰', detail: '| 场景 | 体验 |\n| --- | --- |\n| 阅读 | 清晰 |', children: [] })
+
+    const linkTree = markdownToTree('# 文章\n\n## 产品介绍 [00:00] (https://example.com/watch?seek_t=0)\n正文\n-', '文章')
+    expect(linkTree?.children[0]).toMatchObject({ label: '产品介绍 [00:00]', href: 'https://example.com/watch?seek_t=0' })
+    expect(linkTree?.children[0].children[0]).toEqual({ label: '内容：正文', detail: '正文', children: [] })
+
+    const linkedListTree = markdownToTree('# 文章\n\n- **产品介绍 [00:00](https://example.com/watch?seek_t=0)**\n  - 正文\n\n- **下一章 [00:43](https://example.com/watch?seek_t=43)**', '文章')
+    expect(linkedListTree?.children[0]).toMatchObject({ label: '产品介绍 [00:00]', href: 'https://example.com/watch?seek_t=0' })
+    expect(linkedListTree?.children[1]).toMatchObject({ label: '下一章 [00:43]', href: 'https://example.com/watch?seek_t=43' })
+
+    const quarkTree = markdownToTree(String.raw`# 视频
+
+视频导读。
+
+- **课程主旨与IP四维模型&#xA0;**[**00:02**](https://b.quark.cn/apps/5AZ7aRopS/routes/Gj8VNtRtS?debug=0\&fid=b108e6f648e84c199fde76713d570f81#?seek_t=2)
+  - 介绍课程内容。
+
+- **“道”的本质与合道的重要性&#xA0;**[**00:36**](https://b.quark.cn/apps/5AZ7aRopS/routes/Gj8VNtRtS?debug=0\&fid=b108e6f648e84c199fde76713d570f81#?seek_t=36)
+  - 解释“道”的本质。`, '视频')
+    expect(quarkTree?.children[1]).toMatchObject({
+      label: '课程主旨与IP四维模型 [00:02]',
+      href: 'https://b.quark.cn/apps/5AZ7aRopS/routes/Gj8VNtRtS?debug=0&fid=b108e6f648e84c199fde76713d570f81#?seek_t=2',
+      linkText: '[00:02]',
+    })
+    expect(quarkTree?.children[2]).toMatchObject({ label: '“道”的本质与合道的重要性 [00:36]', linkText: '[00:36]' })
+
+    const plainLinkedTree = markdownToTree('# 视频\n\n课程主旨与IP四维模型 [00:02](https://example.com/watch?seek_t=2)\n介绍课程内容。', '视频')
+    expect(plainLinkedTree?.children[0]).toMatchObject({
+      label: '课程主旨与IP四维模型 [00:02]',
+      href: 'https://example.com/watch?seek_t=2',
+      linkText: '[00:02]',
+    })
 
     const pastedTree = markdownToTree('课程背景与核心价值主张 00:00\n\n当前AI行业现状：虽然AI火热。\n\n课程介绍与师资阵容 00:37\n\n课程定价与规格：价格为2800元。', '课程总结')
     expect(pastedTree?.children.map((child) => child.label)).toEqual(['课程背景与核心价值主张 00:00', '课程介绍与师资阵容 00:37'])

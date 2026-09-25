@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, ref } from 'vue'
 import type { AsciiTreeNode } from '../asciiDiagram'
 
 const props = defineProps<{ node: AsciiTreeNode; root?: boolean; depth?: number }>()
+const emit = defineEmits<{ 'open-link': [url: string] }>()
 const expanded = ref(true)
 const summaryOpen = ref(false)
 const summaryHover = ref(false)
@@ -16,6 +17,17 @@ const isSummaryLeaf = (label: string) => label.startsWith('内容：') || label.
 const summaryKind = (label: string) => label.startsWith('导读：') ? '导读' : '摘要'
 const summaryText = (label: string) => label.replace(/^(?:内容|导读)：/, '')
 const summaryVisible = computed(() => summaryOpen.value || summaryHover.value)
+const nodeLinkLabel = (label: string) => `打开章节链接：${label}`
+const linkText = computed(() => props.node.href ? props.node.linkText || '↗' : '')
+const linkStart = computed(() => linkText.value && linkText.value !== '↗' ? props.node.label.indexOf(linkText.value) : -1)
+const nodeLabel = computed(() => linkStart.value >= 0
+  ? `${props.node.label.slice(0, linkStart.value)}${props.node.label.slice(linkStart.value + linkText.value.length)}`.trim()
+  : props.node.label)
+const openNodeLink = (event: MouseEvent) => {
+  event.preventDefault()
+  event.stopPropagation()
+  if (props.node.href) emit('open-link', props.node.href)
+}
 const loadSummaryHtml = async () => {
   const source = props.node.detail || summaryText(props.node.label)
   if (summarySource === source && summaryHtml.value) return
@@ -90,25 +102,31 @@ onBeforeUnmount(() => {
 
 <template>
   <div v-if="root" class="tree-diagram" role="tree">
-    <button class="tree-root" :class="{ collapsed: !expanded }" type="button" :aria-expanded="expanded" @click="expanded = !expanded">{{ node.label }}</button>
+    <button class="tree-root" :class="{ collapsed: !expanded }" type="button" :aria-expanded="expanded" @click="expanded = !expanded"><span class="tree-node-label">{{ node.label }}</span></button>
     <ul v-if="expanded && node.children.length" class="tree-children tree-root-children">
-      <TreeDiagram v-for="(child, index) in node.children" :key="`${child.label}-${index}`" :node="child" :depth="branchDepth + 1" />
+      <TreeDiagram v-for="(child, index) in node.children" :key="`${child.label}-${index}`" :node="child" :depth="branchDepth + 1" @open-link="emit('open-link', $event)" />
     </ul>
   </div>
   <li v-else class="tree-item" role="treeitem">
-    <details v-if="node.children.length" :open="branchDepth <= 1">
-      <summary>{{ node.label }}</summary>
-      <ul class="tree-children">
-        <TreeDiagram v-for="(child, index) in node.children" :key="`${child.label}-${index}`" :node="child" :depth="branchDepth + 1" />
-      </ul>
-    </details>
-      <span v-else class="tree-leaf" :class="{ 'tree-summary-leaf': isSummaryLeaf(node.label), 'is-summary-open': summaryOpen }" :title="isSummaryLeaf(node.label) ? '悬浮查看完整内容，点击固定' : node.label" :tabindex="isSummaryLeaf(node.label) ? 0 : undefined" :role="isSummaryLeaf(node.label) ? 'button' : undefined" :aria-expanded="isSummaryLeaf(node.label) ? summaryVisible : undefined" @mouseenter="showSummary" @mouseleave="scheduleHideSummary" @focus="showSummary" @blur="scheduleHideSummary" @click="toggleSummary" @keydown.enter.prevent="toggleSummary" @keydown.space.prevent="toggleSummary" @keydown.esc="summaryOpen = false; hideSummary()">
-      <template v-if="isSummaryLeaf(node.label)">
-        <span class="tree-leaf-kicker">{{ summaryKind(node.label) }}</span>
-        <span class="tree-leaf-text">{{ summaryText(node.label) }}</span>
-      </template>
-      <template v-else>{{ node.label }}</template>
-    </span>
+    <div v-if="node.children.length" class="tree-node-row">
+      <details :open="branchDepth <= 1">
+        <summary><span class="tree-node-label">{{ nodeLabel }}</span></summary>
+        <ul class="tree-children">
+          <TreeDiagram v-for="(child, index) in node.children" :key="`${child.label}-${index}`" :node="child" :depth="branchDepth + 1" @open-link="emit('open-link', $event)" />
+        </ul>
+      </details>
+      <a v-if="node.href" class="tree-timestamp-link" :href="node.href" target="_blank" rel="noreferrer" :aria-label="nodeLinkLabel(node.label)" :title="node.href" @click="openNodeLink">{{ linkText }}</a>
+    </div>
+    <div v-else class="tree-leaf-row">
+      <span class="tree-leaf" :class="{ 'tree-summary-leaf': isSummaryLeaf(node.label), 'is-summary-open': summaryOpen }" :title="isSummaryLeaf(node.label) ? '悬浮查看完整内容，点击固定' : node.label" :tabindex="isSummaryLeaf(node.label) ? 0 : undefined" :role="isSummaryLeaf(node.label) ? 'button' : undefined" :aria-expanded="isSummaryLeaf(node.label) ? summaryVisible : undefined" @mouseenter="showSummary" @mouseleave="scheduleHideSummary" @focus="showSummary" @blur="scheduleHideSummary" @click="toggleSummary" @keydown.enter.prevent="toggleSummary" @keydown.space.prevent="toggleSummary" @keydown.esc="summaryOpen = false; hideSummary()">
+        <template v-if="isSummaryLeaf(node.label)">
+          <span class="tree-leaf-kicker">{{ summaryKind(node.label) }}</span>
+          <span class="tree-leaf-text">{{ nodeLabel }}</span>
+        </template>
+        <template v-else>{{ nodeLabel }}</template>
+      </span>
+      <a v-if="node.href" class="tree-timestamp-link" :href="node.href" target="_blank" rel="noreferrer" :aria-label="nodeLinkLabel(node.label)" :title="node.href" @click="openNodeLink">{{ linkText }}</a>
+    </div>
     <Teleport to="body">
       <div v-if="isSummaryLeaf(node.label) && summaryVisible" class="tree-summary-popover" role="tooltip" :style="summaryPopoverStyle" @mouseenter="cancelHideSummary" @mouseleave="scheduleHideSummary">
         <div class="tree-summary-popover-heading">完整内容</div>
