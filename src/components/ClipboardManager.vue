@@ -14,6 +14,11 @@ interface NativeClipboardSnapshot {
   mime?: string | null
 }
 
+interface NativeClipboardSignature {
+  kind: ClipboardKind | 'system'
+  signature: string
+}
+
 interface ClipboardRecord {
   id: string
   signature: string
@@ -30,6 +35,7 @@ const STORAGE_KEY = 'moyue:clipboard-history'
 const CAPTURE_KEY = 'moyue:clipboard-capture-enabled'
 const MAX_ITEMS = 80
 const MAX_IMAGE_BYTES = 6 * 1024 * 1024
+const POLL_INTERVAL = 2000
 const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
 function readStoredItems(): ClipboardRecord[] {
@@ -82,8 +88,10 @@ const lastReadAt = ref<number | null>(null)
 const errorMessage = ref('')
 const statusMessage = ref('')
 let pollTimer: number | null = null
+let lastClipboardMarker = ''
 let lastSignature = items.value[0]?.signature ?? ''
 let statusTimer: number | null = null
+let persistTimer: number | null = null
 
 const platformLabel = computed(() => {
   const agent = typeof navigator === 'undefined' ? '' : navigator.userAgent
@@ -106,12 +114,20 @@ const textCount = computed(() => items.value.filter((item) => item.kind === 'tex
 const imageCount = computed(() => items.value.filter((item) => item.kind === 'image').length)
 const captureStatus = computed(() => captureEnabled.value ? '正在监测系统剪贴板' : '监测已暂停')
 
-function persist() {
+function persistNow() {
   const ordered = [...items.value].sort((left, right) => Number(right.pinned) - Number(left.pinned) || right.createdAt - left.createdAt)
   items.value = ordered.slice(0, MAX_ITEMS)
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(items.value)) } catch {
     errorMessage.value = '历史保存空间不足，图片条目可能无法保留'
   }
+}
+
+function persist() {
+  if (persistTimer !== null) return
+  persistTimer = window.setTimeout(() => {
+    persistTimer = null
+    persistNow()
+  }, 160)
 }
 
 function flash(message: string) {
@@ -122,10 +138,17 @@ function flash(message: string) {
 }
 
 async function readClipboard(): Promise<NativeClipboardSnapshot | null> {
-  if (isTauri()) return await invoke<NativeClipboardSnapshot>('read_clipboard_snapshot')
+  if (isTauri()) return await invoke<NativeClipboardSnapshot | null>('read_clipboard_snapshot')
   if (!navigator.clipboard?.readText) return null
   const text = await navigator.clipboard.readText()
   return { kind: 'text', text, signature: `text:${hashText(text)}` }
+}
+
+async function readClipboardSignature(): Promise<NativeClipboardSignature | null> {
+  if (isTauri()) return await invoke<NativeClipboardSignature | null>('read_clipboard_signature')
+  if (!navigator.clipboard?.readText) return null
+  const text = await navigator.clipboard.readText()
+  return text ? { kind: 'text', signature: `text:${hashText(text)}` } : null
 }
 
 async function checkClipboard(manual = false) {
@@ -133,9 +156,15 @@ async function checkClipboard(manual = false) {
   isReading.value = true
   errorMessage.value = ''
   try {
+    const marker = await readClipboardSignature()
+    if (!marker || marker.signature === lastClipboardMarker) return
     const snapshot = await readClipboard()
-    if (!snapshot || (snapshot.kind === 'text' && !snapshot.text?.length)) return
-    const signature = snapshot.signature || browserSignature(snapshot)
+    if (!snapshot || (snapshot.kind === 'text' && !snapshot.text?.length)) {
+      lastClipboardMarker = marker.signature
+      return
+    }
+    lastClipboardMarker = marker.signature
+    const signature = snapshot.signature || marker.signature || browserSignature(snapshot)
     if (signature === lastSignature) return
     lastSignature = signature
     if (snapshot.kind === 'image' && !snapshot.bytes?.length) return
@@ -174,7 +203,7 @@ function startPolling() {
   stopPolling()
   if (!captureEnabled.value) return
   void checkClipboard()
-  pollTimer = window.setInterval(() => { void checkClipboard() }, 900)
+  pollTimer = window.setInterval(() => { void checkClipboard() }, POLL_INTERVAL)
 }
 
 function toggleCapture() {
@@ -252,6 +281,10 @@ onMounted(() => startPolling())
 onUnmounted(() => {
   stopPolling()
   if (statusTimer !== null) window.clearTimeout(statusTimer)
+  if (persistTimer !== null) {
+    window.clearTimeout(persistTimer)
+    persistNow()
+  }
 })
 </script>
 

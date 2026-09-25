@@ -9,6 +9,7 @@
     "fs:default",
     { "identifier": "fs:allow-read-dir", "allow": [{ "path": "**" }] },
     { "identifier": "fs:allow-read-text-file", "allow": [{ "path": "**" }] },
+    { "identifier": "fs:allow-write-file", "allow": [{ "path": "**" }] },
     { "identifier": "fs:allow-write-text-file", "allow": [{ "path": "**" }] },
     "fs:allow-watch",
     "sql:default",
