@@ -162,7 +162,7 @@ function handleContentClick(event: MouseEvent) {
       <button class="inline-view-action image-zoom-action" type="button" aria-label="放大查看原图" @click.stop="emit('openViewer')">放大查看 <AppIcon name="expand" :size="12" /></button>
     </div>
       <div v-else-if="region.type === 'code' && asciiTree" class="region-content auto-tree-region" @click.stop>
-      <TreeDiagram :node="asciiTree" root />
+      <TreeDiagram :node="asciiTree" root @open-link="emit('open-link', $event)" />
     </div>
     <div v-else-if="region.type === 'code' && asciiDiagramCode" class="region-content auto-diagram-region" @click.stop="emit('openViewer')">
       <MermaidBlock :code="asciiDiagramCode" :theme-key="themeKey" native-labels />

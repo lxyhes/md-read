@@ -102,6 +102,25 @@ export function normalizeMixedOrderedLists(tree: MdastNode) {
   if (tree.children) tree.children = tree.children.map(normalizeMixedOrderedList)
 }
 
+/** Remove placeholder list rows left behind by pasted rich text or a trailing bullet marker. */
+export function removeEmptyListItems(node: MdastNode) {
+  if (!node.children) return
+  node.children = node.children
+    .map((child) => {
+      removeEmptyListItems(child)
+      return child
+    })
+    .filter((child) => {
+      if (node.type !== 'list' || child.type !== 'listItem') return true
+      const children = child.children ?? []
+      if (children.some((grandchild) => grandchild.type === 'list')) return true
+      return children.length > 0 && children.some((grandchild) => {
+        if (grandchild.type === 'paragraph' || grandchild.type === 'heading' || grandchild.type === 'blockquote') return Boolean(nodeText(grandchild).trim())
+        return grandchild.type === 'image' || grandchild.type === 'code' || grandchild.type === 'table' || grandchild.type === 'math' || grandchild.type === 'thematicBreak' || Boolean(nodeText(grandchild).trim())
+      })
+    })
+}
+
 /**
  * Older imported notes often use a timestamped line as a chapter marker
  * without writing a Markdown heading. Keep that reader heuristic, but offer
@@ -140,6 +159,7 @@ export function renderMarkdownFragment(source: string, resolveUrl: MarkdownUrlRe
   const tree = markdownProcessor.parse(normalizedSource) as unknown as MdastNode
   normalizeMixedOrderedLists(tree)
   promoteTimestampedParagraphs(tree)
+  removeEmptyListItems(tree)
   normalizeArticleStrong(tree)
   const context = createRenderContext()
   const html = (tree.children ?? [])

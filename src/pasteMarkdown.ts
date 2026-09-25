@@ -343,6 +343,13 @@ function normalizeArticleSections(value: string) {
       continue
     }
 
+    // Existing Markdown list items already have a hierarchy. Rewriting bold
+    // spans inside them as section headings breaks nested lists and links.
+    if (/^\s*(?:[-+*]|\d+[.)])\s+/.test(line)) {
+      result.push(line)
+      continue
+    }
+
     const candidateLine = mergeAdjacentArticleHeadingSpans(line)
     const strongHeading = Array.from(candidateLine.matchAll(/(?:\*\*|__)([^\n]+?)(?:\*\*|__)/g)).find((match) => match[0].trim() === candidateLine.trim() || isArticleSectionHeading(match[0]))
     if (strongHeading) {

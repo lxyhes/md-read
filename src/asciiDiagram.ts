@@ -16,17 +16,43 @@ type DiagramRelation = {
 
 export type AsciiTreeNode = {
   label: string
+  href?: string
+  linkText?: string
   detail?: string
   children: AsciiTreeNode[]
 }
 
-type MarkdownHeading = { depth: number; label: string; line: number }
+type MarkdownHeading = { depth: number; label: string; href?: string; linkText?: string; line: number }
+
+function decodeMindmapEntities(value: string) {
+  return value
+    .replace(/&#(?:x([\da-f]{1,6})|(\d{1,7}));/gi, (entity, hex: string | undefined, decimal: string | undefined) => {
+      const codePoint = Number.parseInt(hex ?? decimal ?? '', hex ? 16 : 10)
+      return Number.isFinite(codePoint) && codePoint <= 0x10ffff ? String.fromCodePoint(codePoint) : entity
+    })
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\u00a0/g, ' ')
+}
+
+function mindmapLink(value: string) {
+  const match = value.match(/\[(?:\*\*)?(\d{1,2}:\d{2})(?:\*\*)?\]\((https?:\/\/[^)\s]+)\)/i)
+  if (!match) return undefined
+  return {
+    text: `[${match[1]}]`,
+    index: match.index,
+    href: match[2].replace(/\\&/g, '&').replace(/&amp;/gi, '&'),
+  }
+}
 
 function mindmapText(value: string) {
-  const line = value.trim()
+  const decoded = decodeMindmapEntities(value)
+  const line = decoded.trim()
   if (/^\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?$/.test(line)) return ''
-  return value
+  if (/^[-+*•◦▪]\s*$/.test(line)) return ''
+  return decoded
     .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/\[(?:\*\*)?(\d{1,2}:\d{2})(?:\*\*)?\]\([^)]*\)/g, '[$1]')
+    .replace(/\[(\d{1,2}:\d{2})\]\([^)]*\)/g, '[$1]')
     .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
     .replace(/[\*_~`>#]/g, '')
     .replace(/^\|+|\|+$/g, '')
@@ -36,9 +62,21 @@ function mindmapText(value: string) {
     .trim()
 }
 
+function mindmapHeading(value: string) {
+  return mindmapText(value)
+    .replace(/\s*\(?\s*(https?:\/\/[^\s)]+)\s*\)?/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function mindmapHref(value: string) {
+  return mindmapLink(value)?.href ?? value.match(/https?:\/\/[^\s)]+/i)?.[0]?.replace(/\\&/g, '&')
+}
+
 function mindmapSummary(lines: string[]) {
-  const text = lines.map(mindmapText).filter(Boolean).join(' ')
-  const full = lines.join('\n').trim()
+  const cleanedLines = lines.filter((line) => !/^\s*[-+*•◦▪]\s*$/.test(line))
+  const text = cleanedLines.map(mindmapText).filter(Boolean).join(' ')
+  const full = cleanedLines.join('\n').trim()
   const characters = Array.from(text)
   return characters.length ? {
     preview: `${characters.slice(0, 72).join('')}${characters.length > 72 ? '…' : ''}`,
@@ -52,9 +90,26 @@ export function markdownToTree(source: string, title: string): AsciiTreeNode | n
   const headings: MarkdownHeading[] = []
   for (const [lineIndex, line] of lines.entries()) {
     const heading = line.match(/^\s*(#{1,6})\s+(.+?)\s*$/)
-    const bold = line.match(/^\s*(?:\*\*|__)(.+?)(?:\*\*|__)\s*$/)
-    const match = heading ? { depth: heading[1].length, label: heading[2] } : bold ? { depth: 2, label: bold[1] } : null
-    if (match && match.label.trim() !== title.trim()) headings.push({ depth: match.depth, label: match.label.trim(), line: lineIndex })
+    const isNestedListItem = /^\s+[-+*]\s+/.test(line)
+    if (isNestedListItem) continue
+    const linkedTime = mindmapLink(line)
+    const listContent = line.replace(/^\s*[-+*]\s+/, '')
+    const bold = listContent.match(/^(?:\*\*|__)(.+?)(?:\*\*|__)\s*$/)
+    const boldTitleBeforeLink = linkedTime && line.slice(0, linkedTime.index).match(/^\s*[-+*]?\s*(?:\*\*|__)([\s\S]*?)(?:\*\*|__)\s*$/)
+    const isTimestampedBold = Boolean(bold && /(?:\[\s*\d{1,2}:\d{2}\s*\]|\b\d{1,2}:\d{2}\b)/.test(bold[1]))
+    const match = heading
+      ? { depth: heading[1].length, label: heading[2] }
+      : boldTitleBeforeLink
+        ? { depth: 2, label: `${boldTitleBeforeLink[1]} ${linkedTime?.text ?? ''}` }
+        : bold && (listContent.startsWith('**') || listContent.startsWith('__') || isTimestampedBold)
+          ? { depth: 2, label: bold[1] }
+          : linkedTime
+            ? { depth: 2, label: `${mindmapText(line.slice(0, linkedTime.index))} ${linkedTime.text}` }
+        : null
+    const label = match ? mindmapHeading(match.label) : ''
+    const href = match ? mindmapHref(line) ?? mindmapHref(match.label) : undefined
+    const linkText = linkedTime?.text ?? (href ? label.match(/\[\d{1,2}:\d{2}\]/)?.[0] : undefined)
+    if (match && label && label !== title.trim()) headings.push({ depth: match.depth, label, href, linkText, line: lineIndex })
   }
   if (!headings.length) return null
 
@@ -68,7 +123,12 @@ export function markdownToTree(source: string, title: string): AsciiTreeNode | n
   if (intro) root.children.push({ label: `导读：${intro.preview}`, detail: intro.full, children: [] })
   for (const [index, heading] of headings.entries()) {
     while (stack.length > 1 && heading.depth <= stack[stack.length - 1].depth) stack.pop()
-    const node: AsciiTreeNode = { label: heading.label, children: [] }
+    const node: AsciiTreeNode = {
+      label: heading.label,
+      ...(heading.href ? { href: heading.href } : {}),
+      ...(heading.linkText ? { linkText: heading.linkText } : {}),
+      children: [],
+    }
     const bodyEnd = headings[index + 1]?.line ?? lines.length
     const summary = mindmapSummary(lines.slice(heading.line + 1, bodyEnd))
     if (summary) node.children.push({ label: `内容：${summary.preview}`, detail: summary.full, children: [] })

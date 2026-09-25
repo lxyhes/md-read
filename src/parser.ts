@@ -2,7 +2,7 @@ import type { HeadingItem, ReaderDocument, ReaderRegion, ReaderRegionType } from
 import { blockHtmlWithSourceIndent, renderFootnotes } from './markdown/render'
 import { createRenderContext, nodeText, type MarkdownUrlResolver, type MdastNode } from './markdown/shared'
 import { formatPastedText, isLikelyProseBlock, normalizeMixedOrderedListSource } from './pasteMarkdown'
-import { isTimestampedParagraph, markdownProcessor as processor, normalizeArticleStrong, normalizeLatexDelimiters, normalizeMixedOrderedLists, promoteTimestampedParagraphs } from './markdown/fragment'
+import { isTimestampedParagraph, markdownProcessor as processor, normalizeArticleStrong, normalizeLatexDelimiters, normalizeMixedOrderedLists, promoteTimestampedParagraphs, removeEmptyListItems } from './markdown/fragment'
 
 export type { MarkdownUrlResolver } from './markdown/shared'
 export { makeImplicitMarkdownHeadingsExplicit, renderMarkdownFragment } from './markdown/fragment'
@@ -122,6 +122,7 @@ export function parseMarkdown(path: string, source: string, resolveUrl: Markdown
   normalizeMixedOrderedLists(tree)
   promoteTimestampedParagraphs(tree)
   restoreTimestampedLists(tree)
+  removeEmptyListItems(tree)
   normalizeArticleStrong(tree)
   const documentId = `doc_${hashText(path)}`
   const regions: ReaderRegion[] = []
