@@ -5,6 +5,7 @@ export type AppIconName =
   | 'logo'
   | 'home'
   | 'library'
+  | 'clipboard'
   | 'history'
   | 'star'
   | 'sparkle'
@@ -69,6 +70,10 @@ withDefaults(defineProps<{ name: AppIconName; size?: number; strokeWidth?: numbe
     <template v-else-if="name === 'library'">
       <rect x="4" y="4" width="16" height="16" rx="2" />
       <path d="M8 8h8M8 12h8M8 16h5" />
+    </template>
+    <template v-else-if="name === 'clipboard'">
+      <rect x="5" y="4.5" width="14" height="17" rx="2" />
+      <path d="M9 4.5v-1h6v1M8.5 9h7M8.5 13h7M8.5 17h4" />
     </template>
     <template v-else-if="name === 'history'">
       <path d="M4.5 11a7.5 7.5 0 1 0 2.2-5.3" />

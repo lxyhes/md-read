@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { hashText, parseMarkdown, renderMarkdownFragment } from './parser'
 import { asciiDiagramToMermaid, asciiTreeToTree, markdownToTree } from './asciiDiagram'
-import { formatClipboardToMarkdown, formatPastedText, isLikelyProseBlock, suggestPastedMarkdownName } from './pasteMarkdown'
+import { formatClipboardImage, formatClipboardToMarkdown, formatPastedText, isLikelyProseBlock, suggestPastedMarkdownName } from './pasteMarkdown'
 import { resolveMarkdownAssetUrl } from './fileService'
 
 describe('Moyue markdown region parser', () => {
@@ -301,6 +301,12 @@ $$`)
   it('suggests readable names for pasted Markdown', () => {
     expect(suggestPastedMarkdownName('# AI短剧商业化分析\n\n正文内容')).toBe('AI短剧商业化分析')
     expect(suggestPastedMarkdownName('AI短剧的商业化能不能赚钱，答案取决于你站在产业链的哪个位置。后文')).toBe('AI短剧的商业化能不能赚钱，答案取决于你站在产业链的哪个位置')
+  })
+
+  it('keeps pasted raster images renderable as Markdown data URLs', () => {
+    const source = formatClipboardImage('data:image/png;base64,aGVsbG8=')
+    expect(source).toBe('![剪贴板图片](data:image/png;base64,aGVsbG8=)')
+    expect(parseMarkdown('clipboard-image.md', source).regions[0]?.html).toContain('src="data:image/png;base64,aGVsbG8="')
   })
 
   it('builds a mind map from Markdown and bold section headings', () => {

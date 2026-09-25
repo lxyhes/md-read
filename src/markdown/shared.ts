@@ -34,6 +34,13 @@ export function safeUrl(value: string): string {
   return escapeHtml(value)
 }
 
+export function safeImageUrl(value: string): string {
+  const normalized = value.trim().toLowerCase()
+  if (!normalized.startsWith('data:')) return safeUrl(value)
+  if (!/^data:image\/(?:png|jpe?g|gif|webp|avif|bmp);base64,[a-z\d+/=\s]+$/i.test(value.trim())) return ''
+  return escapeHtml(value)
+}
+
 export function nodeText(node: MdastNode): string {
   if (typeof node.value === 'string') return node.value
   return (node.children ?? []).map(nodeText).join('')
