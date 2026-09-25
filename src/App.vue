@@ -14,7 +14,7 @@ import ClipboardManager from './components/ClipboardManager.vue'
 import { copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, listDirectoryFiles, listFileSystemEntries, openMarkdownDirectory, openMarkdownFile, readMarkdownPath, renameMarkdownPath, resolveMarkdownAssetUrl, saveClipboardImage, saveExportFile, saveMarkdownFile, watchMarkdownPath, writeMarkdownFile, type WorkspaceFile } from './fileService'
 import type { Annotation, ReaderDocument, ReaderRegion, ViewerType } from './types'
 import { escapeHtml } from './markdown/shared'
-import { parseMarkdown, renderMarkdownFragment } from './parser'
+import { makeImplicitMarkdownHeadingsExplicit, parseMarkdown, renderMarkdownFragment } from './parser'
 import { asciiDiagramToMermaid, asciiTreeToTree, markdownToTree } from './asciiDiagram'
 import { formatClipboardImage, formatClipboardToMarkdown, suggestPastedMarkdownName } from './pasteMarkdown'
 import logoAsset from './assets/moyue-logo-256.png'
@@ -109,6 +109,7 @@ const editorSourceStats = computed(() => {
     lines: source ? source.split(/\r?\n/).length : 1,
   }
 })
+const editorMarkdownNormalization = computed(() => makeImplicitMarkdownHeadingsExplicit(editorSource.value))
 const exportOpen = ref(false)
 const deleteConfirmation = ref<{ files: FileTreeEntry[] } | null>(null)
 const selectedFilePaths = ref<string[]>([])
@@ -610,6 +611,18 @@ function applyEditorChange(value: string, start: number, end = start) {
     element?.setSelectionRange(start, end)
     updateEditorCursor()
   })
+}
+
+function normalizeEditorMarkdown() {
+  const result = editorMarkdownNormalization.value
+  if (!result.converted) return
+  const element = editorTextarea.value
+  const start = element?.selectionStart ?? editorSource.value.length
+  const end = element?.selectionEnd ?? start
+  const deltaBefore = result.insertedOffsets.filter((offset) => offset < start).length * 3
+  const deltaToEnd = result.insertedOffsets.filter((offset) => offset < end).length * 3
+  applyEditorChange(result.source, start + deltaBefore, end + deltaToEnd)
+  notify(`已补全 ${result.converted} 个 Markdown 章节标记`)
 }
 
 function indentEditorSelection(outdent: boolean) {
@@ -2792,7 +2805,10 @@ async function requestFullscreen() {
                   <section v-if="editorMode !== 'preview'" class="editor-source-pane" aria-label="Markdown 源码">
                     <div class="editor-pane-heading">
                       <span class="editor-pane-title"><i class="editor-pane-dot editor-pane-dot-source" />Markdown 源码</span>
-                      <small>{{ editorSourceStats.lines }} 行 · {{ editorSourceStats.characters }} 字符</small>
+                      <span class="editor-pane-heading-actions">
+                        <button v-if="editorMarkdownNormalization.converted" type="button" title="把智能识别的章节转换为明确的 ## Markdown 标题，不改普通正文" @click="normalizeEditorMarkdown">补全 MD</button>
+                        <small>{{ editorSourceStats.lines }} 行 · {{ editorSourceStats.characters }} 字符</small>
+                      </span>
                     </div>
                     <textarea ref="editorTextarea" v-model="editorSource" class="editor-textarea" spellcheck="false" aria-label="Markdown 源码编辑器" @paste="onEditorPaste" @keydown="onEditorKeydown" @input="updateEditorCursor" @keyup="updateEditorCursor" @click="updateEditorCursor" @select="updateEditorCursor" />
                   </section>
@@ -2807,7 +2823,7 @@ async function requestFullscreen() {
                     </div>
                     <div ref="editorPreview" class="editor-preview-scroll">
                       <nav v-if="editorHeadings.length" class="editor-outline" aria-label="编辑中的文档结构">
-                        <span class="editor-outline-label">结构镜</span>
+                        <span class="editor-outline-label">章节导航</span>
                         <button v-for="(heading, index) in editorHeadings" :key="heading.id" type="button" :style="{ paddingLeft: `${8 + (heading.depth - 1) * 12}px` }" @click="jumpToEditorHeading(index)">{{ heading.text }}</button>
                       </nav>
                       <article class="editor-preview" v-html="editorPreviewHtml" @click="openEditorPreviewImage" />

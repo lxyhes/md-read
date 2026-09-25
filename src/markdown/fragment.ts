@@ -78,6 +78,39 @@ export function promoteTimestampedParagraphs(tree: MdastNode) {
   if (tree.children) tree.children = tree.children.map(promoteTimestampedParagraph)
 }
 
+/**
+ * Older imported notes often use a timestamped line as a chapter marker
+ * without writing a Markdown heading. Keep that reader heuristic, but offer
+ * an explicit source-level conversion when the user wants canonical Markdown.
+ */
+export function makeImplicitMarkdownHeadingsExplicit(source: string): { source: string; converted: number; insertedOffsets: number[] } {
+  if (!source.trim()) return { source, converted: 0, insertedOffsets: [] }
+  const tree = markdownProcessor.parse(source) as unknown as MdastNode
+  const insertOffsets: number[] = []
+
+  for (const node of tree.children ?? []) {
+    if (node.type !== 'paragraph' || node.position?.start?.offset == null || node.position.end?.offset == null) continue
+    const start = node.position.start.offset
+    const end = node.position.end.offset
+    const raw = source.slice(start, end)
+    if (!raw || /\r?\n/.test(raw)) continue
+
+    const lineStart = source.lastIndexOf('\n', start - 1) + 1
+    const lineEnd = source.indexOf('\n', start)
+    const line = source.slice(lineStart, lineEnd < 0 ? source.length : lineEnd)
+    if (!line.trim() || line.trimStart() !== line || line.trimStart().startsWith('#')) continue
+
+    const standaloneStrong = node.children?.length === 1 && node.children[0]?.type === 'strong'
+    if (isTimestampedParagraph(node) || standaloneStrong) insertOffsets.push(lineStart)
+  }
+
+  if (!insertOffsets.length) return { source, converted: 0, insertedOffsets: [] }
+  const uniqueOffsets = [...new Set(insertOffsets)].sort((a, b) => b - a)
+  let normalized = source
+  for (const offset of uniqueOffsets) normalized = `${normalized.slice(0, offset)}## ${normalized.slice(offset)}`
+  return { source: normalized, converted: uniqueOffsets.length, insertedOffsets: uniqueOffsets.sort((a, b) => a - b) }
+}
+
 export function renderMarkdownFragment(source: string, resolveUrl: MarkdownUrlResolver = (url) => url): string {
   const normalizedSource = normalizeLatexDelimiters(source)
   const tree = markdownProcessor.parse(normalizedSource) as unknown as MdastNode
