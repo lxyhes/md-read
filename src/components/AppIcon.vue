@@ -162,9 +162,9 @@ withDefaults(defineProps<{ name: AppIconName; size?: number; strokeWidth?: numbe
       <path d="m9 5-4 4M5 5v4h4M15 19l4-4M19 19v-4h-4" />
     </template>
     <template v-else-if="name === 'more'">
-      <circle cx="5" cy="12" r="1" fill="currentColor" stroke="none" />
-      <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
-      <circle cx="19" cy="12" r="1" fill="currentColor" stroke="none" />
+      <circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
+      <circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none" />
     </template>
     <template v-else-if="name === 'download'">
       <path d="M12 3v11M8 10l4 4 4-4M5 19h14" />

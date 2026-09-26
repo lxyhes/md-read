@@ -7710,3 +7710,35 @@ a:active > .app-icon-vector { transform: scale(.92); }
   font: 700 11px var(--ui-font);
   box-shadow: 0 5px 14px color-mix(in srgb, var(--theme-bg) 24%, transparent);
 }
+
+/* Keep region actions quiet until the reader is interacting with a region. */
+.app-shell .reader-content .region-more {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-raised) 90%, var(--accent-soft));
+  color: var(--accent);
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: none;
+  transition: opacity .18s ease, background-color .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+.app-shell .reader-content .region-more .app-icon-vector {
+  width: 17px;
+  height: 17px;
+}
+.app-shell .reader-content .region-more:hover,
+.app-shell .reader-content .region-more:focus-visible,
+.app-shell .reader-content .region-block:hover .region-more,
+.app-shell .reader-content .region-block.active .region-more {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface-raised));
+  color: color-mix(in srgb, var(--accent) 88%, var(--ink));
+  opacity: 1;
+  pointer-events: auto;
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--accent) 18%, transparent);
+}
