@@ -36,7 +36,7 @@
 
 ### 直接运行桌面版（推荐）
 
-环境要求：Node.js 18+、Rust stable、Windows 10 / 11。
+环境要求：Node.js 20+、Rust stable、Windows 10 / 11。
 
 ```bash
 # 进入项目目录后执行
@@ -62,6 +62,7 @@ npm run dev
 - 支持标题、大纲、段落、软换行、引用、列表、任务列表、表格、图片、链接和分隔线。
 - 支持搜索全部文档或当前文档，按结果直接跳转到对应阅读区域。
 - 支持多文档标签、文件树、全屏、纯净阅读和专注计时。
+- 支持 Markdown 编辑、分栏预览、粘贴内容格式化和编辑器内图片处理。
 - 支持划词高亮、批注、复制为 Markdown 引用。
 
 ### 让代码与图表更容易理解
@@ -97,6 +98,7 @@ Vue 3 + TypeScript + Vite
 Tauri 2 + Rust
 Pinia
 remark-parse + remark-gfm + unified
+remark-math + KaTeX
 Shiki
 Mermaid
 SQLite（Tauri SQL 插件）
@@ -128,6 +130,7 @@ npm run tauri dev   # Tauri 桌面开发模式
 npm run test         # 运行单元测试
 npm run build        # 类型检查并构建前端
 npm run preview      # 预览生产构建
+npm run tauri build  # 构建桌面端安装包
 ```
 
 ## 当前状态
