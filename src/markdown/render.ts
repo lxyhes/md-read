@@ -10,6 +10,21 @@ import {
   type RenderContext,
 } from './shared'
 
+function bareExternalLinkLabel(node: MdastNode): string | null {
+  const url = node.url?.trim() ?? ''
+  const visible = nodeText(node).trim()
+  if (!/^https?:\/\//i.test(url)) return null
+  if (visible !== url && visible !== url.replace(/^https?:\/\//i, '')) return null
+  try {
+    const parsed = new URL(url)
+    const parts = parsed.pathname.split('/').filter(Boolean)
+    const tail = parts.at(-1)
+    return tail ? `${parsed.hostname}/…/${tail.length > 22 ? `${tail.slice(0, 20)}…` : tail}` : parsed.hostname
+  } catch {
+    return visible.length > 42 ? `${visible.slice(0, 40)}…` : visible
+  }
+}
+
 function inlineHtml(node: MdastNode, preserveSoftBreaks = false, resolveUrl: MarkdownUrlResolver = (url) => url, context = createRenderContext()): string {
   const children = () => (node.children ?? []).map((child) => inlineHtml(child, preserveSoftBreaks, resolveUrl, context)).join('')
   switch (node.type) {
@@ -18,7 +33,12 @@ function inlineHtml(node: MdastNode, preserveSoftBreaks = false, resolveUrl: Mar
     case 'strong': return `<strong>${children()}</strong>`
     case 'delete': return `<del>${children()}</del>`
     case 'inlineCode': return `<code>${escapeHtml(node.value ?? '')}</code>`
-    case 'link': return `<a href="${safeUrl(resolveUrl(node.url ?? ''))}" target="_blank" rel="noreferrer">${children()}</a>`
+    case 'link': {
+      const resolved = resolveUrl(node.url ?? '')
+      const compactLabel = bareExternalLinkLabel(node)
+      if (compactLabel) return `<a class="bare-url" href="${safeUrl(resolved)}" target="_blank" rel="noreferrer" title="${escapeHtml(node.url ?? '')}" aria-label="打开链接：${escapeHtml(node.url ?? '')}">${escapeHtml(compactLabel)}</a>`
+      return `<a href="${safeUrl(resolved)}" target="_blank" rel="noreferrer">${children()}</a>`
+    }
     case 'image': return `<img src="${safeImageUrl(resolveUrl(node.url ?? ''))}" alt="${escapeHtml(node.title ?? nodeText(node))}" loading="lazy" decoding="async" referrerpolicy="no-referrer" />`
     case 'break': return '<br />'
     case 'inlineMath': return renderMath(node.value ?? '', false)

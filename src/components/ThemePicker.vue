@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { MoyueTheme } from '../types'
+import AppIcon from './AppIcon.vue'
 
 const props = withDefaults(defineProps<{
   themes: MoyueTheme[]
@@ -48,7 +49,7 @@ function themeVars(theme: MoyueTheme) {
     <button v-for="theme in props.themes" :key="theme.manifest.id" class="theme-mini-option" :class="[`theme-mini-option-${theme.manifest.id}`, { selected: props.selectedThemeId === theme.manifest.id }]" :style="themeVars(theme)" type="button" :aria-pressed="props.selectedThemeId === theme.manifest.id" :title="`切换到${theme.manifest.name}`" @click="selectTheme(theme)">
       <span class="theme-mini-option-art"><i /><b>{{ theme.manifest.name.slice(0, 1) }}</b></span>
       <span class="theme-mini-option-copy"><strong>{{ theme.manifest.name }}</strong><small>{{ theme.manifest.mode === 'light' ? '白昼阅读' : '夜间阅读' }}</small></span>
-      <span class="theme-mini-option-check">✓</span>
+      <span class="theme-mini-option-check" aria-hidden="true"><AppIcon name="check" :size="10" :stroke-width="2.2" /></span>
     </button>
   </div>
 

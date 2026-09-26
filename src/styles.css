@@ -6515,8 +6515,31 @@ body.is-resizing-outline * {
 .tree-root-children {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px 26px;
+  gap: 18px 26px;
   align-items: start;
+}
+.tree-root {
+  max-width: min(480px, 100%);
+}
+.tree-root .tree-node-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tree-node-row,
+.tree-leaf-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.tree-node-row > details,
+.tree-leaf-row > .tree-leaf {
+  min-width: 0;
+  flex: 0 1 auto;
+}
+.tree-timestamp-link {
+  flex: 0 0 auto;
+  margin-top: 6px;
 }
 .tree-root-children > .tree-item {
   min-width: 0;
@@ -6536,9 +6559,9 @@ body.is-resizing-outline * {
   padding: 7px 10px 7px 7px;
   border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
   border-radius: 9px;
-  background: color-mix(in srgb, var(--surface-raised) 62%, transparent);
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface-raised));
   color: var(--ink);
-  font-size: .86em;
+  font-size: .9em;
   font-weight: 600;
   transition: border-color .18s ease, background .18s ease, transform .18s ease;
 }
@@ -6552,7 +6575,7 @@ body.is-resizing-outline * {
 }
 .tree-root-children > .tree-item > .tree-node-row > details[open] > summary {
   border-color: color-mix(in srgb, var(--accent) 46%, var(--border));
-  background: color-mix(in srgb, var(--accent) 9%, var(--surface-raised));
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface-raised));
 }
 .tree-root-children > .tree-item > .tree-node-row > details > .tree-children {
   margin-top: 8px;
@@ -6560,26 +6583,34 @@ body.is-resizing-outline * {
 .tree-summary-leaf {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 8px;
+  gap: 10px;
   align-items: start;
   max-width: 100%;
-  margin-top: 6px;
-  padding: 7px 10px 7px 11px;
-  border-left-width: 2px;
-  border-radius: 0 7px 7px 0;
-  background: color-mix(in srgb, var(--surface) 52%, transparent);
-  font-size: .79em;
+  margin-top: 3px;
+  padding: 6px 2px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  font-size: .8em;
   line-height: 1.55;
 }
+.tree-summary-leaf:hover,
+.tree-summary-leaf.is-summary-open {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
 .tree-leaf-kicker {
-  margin-top: 1px;
+  margin-top: 2px;
   color: var(--accent);
-  font: 600 .65em/1.4 var(--ui-font);
+  font: 700 .76em/1.4 var(--ui-font);
   white-space: nowrap;
 }
 .tree-leaf-text {
   min-width: 0;
-  color: color-mix(in srgb, var(--muted) 88%, var(--ink));
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--muted);
   overflow-wrap: break-word;
   word-break: normal;
 }
@@ -6598,12 +6629,12 @@ body.is-resizing-outline * {
   grid-template-rows: auto 1fr;
   gap: 6px;
   box-sizing: border-box;
-  padding: 12px 14px;
+  padding: 16px 18px;
   overflow: auto;
-  border: 1px solid color-mix(in srgb, var(--accent) 52%, var(--border));
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--surface-raised) 96%, transparent);
-  box-shadow: 0 14px 34px color-mix(in srgb, var(--app-bg) 24%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--border));
+  border-radius: 12px;
+  background: var(--surface-raised);
+  box-shadow: 0 22px 56px color-mix(in srgb, var(--ink) 22%, transparent), 0 3px 12px color-mix(in srgb, var(--ink) 9%, transparent);
   color: var(--ink);
   font-size: calc(var(--reader-size) * .75);
   line-height: 1.65;
@@ -6620,7 +6651,7 @@ body.is-resizing-outline * {
 .tree-summary-markdown {
   min-width: 0;
   color: var(--ink);
-  font: 12px/1.65 var(--body-font);
+  font: 13px/1.7 var(--body-font);
   overflow-wrap: anywhere;
 }
 .tree-summary-markdown > :first-child { margin-top: 0; }
@@ -6680,6 +6711,77 @@ body.is-resizing-outline * {
 .tree-item details .tree-item::before {
   left: -14px;
   width: 9px;
+}
+.tree-diagram.is-compact {
+  min-height: 0;
+  padding: 14px 16px 18px;
+  border-radius: 11px;
+  font-size: calc(var(--reader-size) * .78);
+}
+.tree-diagram.is-compact .tree-root {
+  display: flex;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  min-height: 38px;
+  padding: 7px 10px;
+}
+.tree-diagram.is-compact .tree-root-children {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin: 14px 0 0 7px;
+  padding: 2px 0 2px 16px;
+}
+.tree-diagram.is-compact .tree-root-children > .tree-item {
+  width: 100%;
+}
+.tree-diagram.is-compact .tree-root-children > .tree-item::before {
+  top: 19px;
+  left: -16px;
+  width: 12px;
+}
+.tree-diagram.is-compact .tree-node-row,
+.tree-diagram.is-compact .tree-leaf-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px;
+  width: 100%;
+}
+.tree-diagram.is-compact .tree-node-row > details {
+  width: 100%;
+}
+.tree-diagram.is-compact .tree-root-children > .tree-item > .tree-node-row > details > summary {
+  min-height: 36px;
+  padding: 7px 9px 7px 6px;
+  font-size: .94em;
+  line-height: 1.45;
+}
+.tree-diagram.is-compact .tree-node-label {
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+.tree-diagram.is-compact .tree-timestamp-link {
+  align-self: start;
+  min-height: 24px;
+  margin-top: 6px;
+  padding-inline: 7px;
+}
+.tree-diagram.is-compact .tree-item details > .tree-children {
+  margin-top: 6px;
+  margin-left: 5px;
+  padding-left: 12px;
+}
+.tree-diagram.is-compact .tree-summary-leaf {
+  padding: 5px 2px;
+  font-size: .82em;
+}
+.reader-display-split .reader-mindmap-heading {
+  gap: 5px;
+  margin: 12px 0 14px;
+}
+.reader-display-split .reader-mindmap-heading strong {
+  font-size: clamp(22px, calc(var(--reader-size) * 1.35), 28px);
 }
 @media (max-width: 760px) {
   .tree-root-children {
@@ -7028,4 +7130,583 @@ body.is-resizing-outline * {
 .app-shell.is-editor-studio .reader-editing-meta > span:not(.section-kicker) {
   padding: 0;
   background: transparent;
+}
+
+/* Ink collection — four related papers, each with its own material character. */
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) {
+  --ink-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", STSong, serif;
+  background: var(--app-bg);
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus)::before {
+  opacity: .34;
+  background:
+    repeating-linear-gradient(92deg, transparent 0 7px, rgba(70, 66, 54, .017) 8px, transparent 9px 15px),
+    repeating-linear-gradient(2deg, transparent 0 11px, rgba(255, 255, 255, .045) 12px, transparent 13px 21px);
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .global-nav {
+  background: color-mix(in srgb, var(--surface) 88%, var(--app-bg));
+  border-right-color: var(--border);
+  box-shadow: 10px 0 30px rgba(54, 49, 39, .045);
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .topbar,
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .reader-tabbar {
+  background: color-mix(in srgb, var(--surface-raised) 76%, transparent);
+  border-color: var(--border);
+  backdrop-filter: blur(18px) saturate(.72);
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .reader-page {
+  background: var(--surface-raised);
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .reader-page::before {
+  opacity: .8;
+  background:
+    radial-gradient(ellipse at 12% 5%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 28%),
+    radial-gradient(ellipse at 92% 82%, rgba(88, 75, 56, .045), transparent 34%),
+    repeating-linear-gradient(87deg, transparent 0 13px, rgba(54, 49, 39, .014) 14px, transparent 15px 26px);
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .reader-viewport {
+  background: linear-gradient(90deg, rgba(83, 76, 61, .025), transparent 9%, transparent 91%, rgba(83, 76, 61, .025));
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .reader-content {
+  font-family: var(--ink-serif);
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .reader-title {
+  max-width: 18ch;
+  letter-spacing: -.045em;
+  text-wrap: balance;
+  text-shadow: none;
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .outline-panel,
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .context-panel {
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  border-color: var(--border);
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .region-block:hover {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 8%, transparent), transparent 76%);
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .reader-content .region-content blockquote {
+  border-left: 0;
+  border-radius: 0 12px 12px 0;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 10%, transparent), transparent 92%);
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent) 74%, transparent);
+}
+
+/* 淡墨宣纸: a wet-to-dry title stroke and one restrained cinnabar seal. */
+.app-shell.theme-xuan-paper:not(.is-focus) .reader-rule {
+  position: relative;
+  width: min(100%, 720px);
+  height: 9px;
+  margin-top: 30px;
+  background:
+    radial-gradient(ellipse at 3% 50%, rgba(41, 43, 40, .74) 0 2px, transparent 5px),
+    linear-gradient(90deg, rgba(41, 43, 40, .76), rgba(83, 102, 91, .3) 56%, transparent 92%);
+  clip-path: polygon(0 39%, 8% 31%, 18% 43%, 31% 34%, 47% 44%, 64% 38%, 82% 47%, 100% 51%, 82% 60%, 63% 53%, 43% 62%, 21% 54%, 0 65%);
+}
+.app-shell.theme-xuan-paper:not(.is-focus) .reader-rule::after {
+  position: absolute;
+  right: 4px;
+  top: -13px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(151, 53, 43, .66);
+  color: rgba(151, 53, 43, .82);
+  content: "墨阅";
+  font: 9px/1 var(--ink-serif);
+  letter-spacing: -.08em;
+  transform: rotate(-4deg);
+}
+.app-shell.theme-xuan-paper:not(.is-focus) .reader-content .region-content h2::before,
+.app-shell.theme-xuan-paper:not(.is-focus) .reader-content .region-content h3::before {
+  background: #53665b;
+  box-shadow: 0 0 0 4px rgba(83, 102, 91, .09);
+}
+.app-shell.theme-xuan-paper:not(.is-focus) .reader-content .code-frame {
+  border-radius: 4px 12px 12px 4px;
+  box-shadow: 0 13px 32px rgba(55, 49, 39, .07);
+}
+
+/* 浓墨砚台: deep mineral black, with a quiet warm edge instead of neon glow. */
+.app-shell.theme-inkstone:not(.is-focus) {
+  background: #0f1110;
+}
+.app-shell.theme-inkstone:not(.is-focus)::before {
+  opacity: .5;
+  background:
+    radial-gradient(circle at 74% 12%, rgba(183, 173, 145, .075), transparent 26%),
+    radial-gradient(ellipse at 16% 92%, rgba(230, 226, 214, .035), transparent 34%);
+}
+.app-shell.theme-inkstone:not(.is-focus) .global-nav {
+  background: linear-gradient(180deg, #171916, #0f1110);
+  border-right-color: rgba(232, 228, 216, .1);
+  box-shadow: 12px 0 38px rgba(0, 0, 0, .28);
+}
+.app-shell.theme-inkstone:not(.is-focus) .topbar,
+.app-shell.theme-inkstone:not(.is-focus) .reader-tabbar {
+  background: rgba(18, 20, 17, .88);
+  border-color: rgba(232, 228, 216, .1);
+  backdrop-filter: blur(18px);
+}
+.app-shell.theme-inkstone:not(.is-focus) .reader-page {
+  background: radial-gradient(ellipse at 50% -8%, rgba(183, 173, 145, .07), transparent 36%), #121411;
+}
+.app-shell.theme-inkstone:not(.is-focus) .reader-title {
+  color: #efebdf;
+  text-shadow: 0 10px 40px rgba(0, 0, 0, .48);
+}
+.app-shell.theme-inkstone:not(.is-focus) .reader-rule {
+  height: 2px;
+  background: linear-gradient(90deg, #b7ad91, rgba(183, 173, 145, .18) 58%, transparent);
+  box-shadow: 0 4px 18px rgba(183, 173, 145, .08);
+}
+.app-shell.theme-inkstone:not(.is-focus) .reader-content .region-content blockquote {
+  border-left-color: #b7ad91;
+  background: linear-gradient(90deg, rgba(183, 173, 145, .095), transparent);
+}
+
+/* 烟雨竹影: a pale rain wash with two abstract bamboo stems at the margin. */
+.app-shell.theme-bamboo-shadow:not(.is-focus) .reader-page::before {
+  opacity: .72;
+  background:
+    linear-gradient(94deg, transparent 0 88%, rgba(62, 91, 73, .07) 88.2% 88.45%, transparent 88.65%),
+    linear-gradient(87deg, transparent 0 91%, rgba(62, 91, 73, .045) 91.2% 91.45%, transparent 91.7%),
+    radial-gradient(ellipse at 92% 18%, rgba(82, 107, 92, .13), transparent 15%),
+    radial-gradient(ellipse at 86% 46%, rgba(82, 107, 92, .08), transparent 14%),
+    linear-gradient(180deg, rgba(255, 255, 255, .22), transparent 45%);
+}
+.app-shell.theme-bamboo-shadow:not(.is-focus) .reader-title {
+  font-family: FangSong, STFangsong, var(--ink-serif);
+  letter-spacing: -.02em;
+}
+.app-shell.theme-bamboo-shadow:not(.is-focus) .reader-rule {
+  width: 70%;
+  background: linear-gradient(90deg, #526b5c, rgba(82, 107, 92, .26) 50%, transparent);
+}
+
+/* 朱砂小笺: warmer stationery with editorial red used only for wayfinding. */
+.app-shell.theme-cinnabar-scroll:not(.is-focus) .reader-page {
+  background: #f8f0e5;
+}
+.app-shell.theme-cinnabar-scroll:not(.is-focus) .reader-content {
+  position: relative;
+}
+.app-shell.theme-cinnabar-scroll:not(.is-focus) .reader-content::before {
+  position: absolute;
+  top: 44px;
+  bottom: 70px;
+  left: -26px;
+  width: 1px;
+  background: rgba(150, 58, 47, .22);
+  content: "";
+}
+.app-shell.theme-cinnabar-scroll:not(.is-focus) .reader-title {
+  color: #342f2b;
+}
+.app-shell.theme-cinnabar-scroll:not(.is-focus) .reader-rule {
+  height: 2px;
+  background: linear-gradient(90deg, #963a2f 0 12%, rgba(150, 58, 47, .18) 12% 64%, transparent);
+}
+.app-shell.theme-cinnabar-scroll:not(.is-focus) .reader-content .region-content h2::before,
+.app-shell.theme-cinnabar-scroll:not(.is-focus) .reader-content .region-content h3::before {
+  border-radius: 1px;
+  background: #963a2f;
+}
+
+/* Theme cards preview the material, not just the palette. */
+.theme-card:is(.theme-card-xuan-paper, .theme-card-bamboo-shadow, .theme-card-cinnabar-scroll) .theme-swatch::before {
+  background:
+    repeating-linear-gradient(87deg, transparent 0 11px, rgba(64, 57, 46, .025) 12px, transparent 13px 23px),
+    radial-gradient(ellipse at 82% 18%, color-mix(in srgb, var(--theme-accent) 24%, transparent), transparent 24%),
+    linear-gradient(150deg, var(--theme-bg), var(--theme-surface));
+}
+.theme-card.theme-card-xuan-paper .theme-card-mark,
+.theme-card.theme-card-cinnabar-scroll .theme-card-mark {
+  border-radius: 2px;
+  background: #963a2f;
+  color: #f7eadc;
+  transform: rotate(-5deg);
+}
+.theme-card.theme-card-bamboo-shadow .theme-swatch::before {
+  background:
+    linear-gradient(93deg, transparent 0 82%, rgba(50, 80, 61, .14) 82.3% 82.8%, transparent 83%),
+    radial-gradient(ellipse at 80% 22%, rgba(50, 80, 61, .2), transparent 18%),
+    linear-gradient(150deg, var(--theme-bg), var(--theme-surface));
+}
+.theme-card.theme-card-inkstone .theme-swatch::before {
+  background: radial-gradient(circle at 72% 25%, rgba(183, 173, 145, .16), transparent 27%), linear-gradient(145deg, #0d0f0d, #252822);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone):not(.is-focus) .reader-title {
+    animation: ink-title-arrive .62s cubic-bezier(.22, .8, .22, 1) both;
+  }
+  @keyframes ink-title-arrive {
+    from { opacity: 0; filter: blur(3px); transform: translateY(7px); }
+    to { opacity: 1; filter: blur(0); transform: translateY(0); }
+  }
+}
+
+/* Icon system v2 — one optical grid, quiet ink-seal states, no font glyph fallbacks. */
+.app-icon-vector {
+  overflow: visible;
+  shape-rendering: geometricPrecision;
+  transform-origin: center;
+}
+.app-icon-vector * { vector-effect: non-scaling-stroke; }
+button > .app-icon-vector,
+a > .app-icon-vector {
+  transition: opacity .16s ease, transform .16s cubic-bezier(.2, .8, .2, 1);
+}
+button:not(:disabled):active > .app-icon-vector,
+a:active > .app-icon-vector { transform: scale(.92); }
+
+.icon-button {
+  position: relative;
+  isolation: isolate;
+  cursor: pointer;
+}
+.icon-button::before {
+  position: absolute;
+  inset: 3px;
+  z-index: -1;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  content: "";
+  opacity: 0;
+  transform: scale(.72);
+  transition: opacity .16s ease, transform .2s cubic-bezier(.2, .8, .2, 1);
+}
+.icon-button:hover::before,
+.icon-button.active::before { opacity: 1; transform: scale(1); }
+.icon-button.active {
+  border-color: color-mix(in srgb, var(--accent) 44%, var(--border));
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.icon-button:disabled { cursor: not-allowed; opacity: .42; }
+.icon-button:disabled::before { display: none; }
+
+.nav-icon {
+  border: 1px solid transparent;
+  border-radius: 6px;
+  transition: color .18s ease, background-color .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+.nav-item:hover .nav-icon {
+  border-color: color-mix(in srgb, var(--accent) 16%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.nav-item.active .nav-icon {
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.theme-mini-option-check {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid color-mix(in srgb, var(--theme-accent, #9b91ff) 48%, transparent);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--theme-accent, #9b91ff) 14%, var(--theme-surface, transparent));
+}
+.outline-search button {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  padding: 0;
+  border-radius: 5px;
+}
+.outline-search button:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.editor-tool-button.icon-only { display: inline-grid; place-items: center; }
+
+@media (prefers-reduced-motion: reduce) {
+  button > .app-icon-vector,
+  a > .app-icon-vector,
+  .icon-button::before,
+  .nav-icon { transition: none; }
+}
+
+/* Ink collection refinement — typography and interaction share the same quiet grammar. */
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) {
+  --ink-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", STSong, serif;
+  --ink-ui: "Noto Sans SC", "Source Han Sans SC", "PingFang SC", system-ui, sans-serif;
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) ::selection {
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+  color: var(--ink);
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) :is(button, a, input, select, textarea):focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 66%, transparent);
+  outline-offset: 3px;
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .reader-viewport {
+  scrollbar-color: color-mix(in srgb, var(--accent) 46%, transparent) transparent;
+}
+
+/* Navigation becomes a slim ink annotation instead of a generic filled pill. */
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone):not(.is-focus) .nav-item {
+  position: relative;
+  border-radius: 8px;
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone):not(.is-focus) .nav-item.active {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 14%, transparent), transparent 92%);
+  box-shadow: none;
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone):not(.is-focus) .nav-item.active::before {
+  position: absolute;
+  top: 9px;
+  bottom: 9px;
+  left: -4px;
+  width: 2px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 9px color-mix(in srgb, var(--accent) 24%, transparent);
+  content: "";
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone):not(.is-focus) .nav-item.active .nav-icon {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone):not(.is-focus) .reader-tab.active {
+  background: color-mix(in srgb, var(--surface-raised) 78%, transparent);
+  box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--accent) 74%, transparent);
+}
+
+/* Book typography: calm line endings, restrained links, and a more deliberate hierarchy. */
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .reader-markdown {
+  font-family: var(--ink-serif);
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .reader-title {
+  position: relative;
+  max-width: 17ch;
+  font-weight: 600;
+  line-height: 1.08;
+  letter-spacing: -.045em;
+  text-wrap: balance;
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .region-content :is(h1, h2, h3, h4) {
+  font-family: var(--ink-serif);
+  font-weight: 600;
+  text-wrap: pretty;
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .region-content :is(h1, h2, h3, h4) a {
+  color: inherit;
+  text-decoration-color: color-mix(in srgb, var(--accent) 44%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: .16em;
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .region-content :is(h1, h2, h3, h4) a:hover {
+  color: var(--accent);
+  text-decoration-color: currentColor;
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .region-content :is(h2, h3) a[href^="http"] {
+  font-family: var(--ink-ui);
+  font-size: .58em;
+  font-weight: 500;
+  letter-spacing: -.015em;
+  overflow-wrap: anywhere;
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .region-content p {
+  letter-spacing: .012em;
+  text-align: justify;
+  text-justify: inter-ideograph;
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .region-content a {
+  text-decoration-thickness: 1px;
+  text-underline-offset: .18em;
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .reader-footer {
+  opacity: .78;
+  font-family: var(--ink-ui);
+  letter-spacing: .08em;
+}
+
+/* Fix the seal: it belongs to the title, outside the clipped dry-brush rule. */
+.app-shell.theme-xuan-paper:not(.is-focus) .reader-rule::after,
+.app-shell.theme-xuan-paper.is-focus .reader-rule::after {
+  display: none;
+}
+.app-shell.theme-xuan-paper .reader-title::after {
+  position: absolute;
+  right: -45px;
+  bottom: .12em;
+  display: grid;
+  place-items: center;
+  width: 31px;
+  height: 31px;
+  border: 1px solid rgba(151, 53, 43, .7);
+  border-radius: 2px;
+  background: rgba(151, 53, 43, .035);
+  color: rgba(151, 53, 43, .84);
+  content: "墨阅";
+  font: 9px/1 var(--ink-serif);
+  letter-spacing: -.08em;
+  transform: rotate(-4deg);
+}
+.app-shell.theme-xuan-paper .reader-content .region-content blockquote {
+  color: #43534a;
+}
+.app-shell.theme-xuan-paper .reader-content .region-content > p:first-child::first-letter {
+  color: #3f5148;
+}
+
+/* Tables and code should feel placed on the paper, not pasted on top of it. */
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .reader-content .code-frame,
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .reader-content .table-scroll {
+  border-color: color-mix(in srgb, var(--ink) 12%, transparent);
+  background: color-mix(in srgb, var(--code-bg) 88%, var(--surface-raised));
+  box-shadow: 0 12px 30px rgba(53, 47, 37, .055);
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .reader-content .code-toolbar,
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .reader-content .table-region-toolbar {
+  border-bottom-color: color-mix(in srgb, var(--ink) 10%, transparent);
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .reader-content .table-scroll tbody tr:hover td {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+.app-shell.theme-inkstone:not(.is-focus) .reader-content .code-frame,
+.app-shell.theme-inkstone:not(.is-focus) .reader-content .table-scroll {
+  border-color: rgba(232, 228, 216, .11);
+  background: #0d0f0d;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, .25);
+}
+.app-shell.theme-inkstone:not(.is-focus) .reader-content .code-toolbar,
+.app-shell.theme-inkstone:not(.is-focus) .reader-content .table-region-toolbar {
+  background: rgba(183, 173, 145, .055);
+}
+
+/* Focus mode keeps the chosen material instead of reverting to the generic ambience. */
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll).is-focus {
+  --focus-page-bg: var(--surface-raised);
+  --focus-sidebar-bg: linear-gradient(180deg, color-mix(in srgb, var(--surface) 94%, var(--surface-raised)), var(--app-bg));
+  --focus-card-bg: color-mix(in srgb, var(--surface-raised) 76%, var(--surface));
+  background: var(--surface-raised);
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll).is-focus .reader-viewport {
+  background:
+    radial-gradient(ellipse at 12% 4%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 28%),
+    repeating-linear-gradient(88deg, transparent 0 15px, rgba(55, 49, 39, .012) 16px, transparent 17px 27px);
+}
+.app-shell.theme-inkstone.is-focus {
+  --focus-page-bg: radial-gradient(ellipse at 50% 0%, rgba(183, 173, 145, .06), transparent 36%), #121411;
+  --focus-sidebar-bg: linear-gradient(180deg, #1b1d19, #10120f);
+  --focus-card-bg: #232620;
+  background: #10120f;
+}
+.app-shell.theme-inkstone.is-focus .focus-sidebar {
+  box-shadow: -18px 0 44px rgba(0, 0, 0, .18);
+}
+
+/* Individual finishing notes. */
+.app-shell.theme-bamboo-shadow .reader-content .region-content blockquote {
+  color: #405a4b;
+}
+.app-shell.theme-bamboo-shadow .reader-content .region-content h2::before,
+.app-shell.theme-bamboo-shadow .reader-content .region-content h3::before {
+  width: 3px;
+  border-radius: 999px;
+  background: #526b5c;
+}
+.app-shell.theme-cinnabar-scroll .reader-content .region-content blockquote {
+  color: #674b43;
+}
+.app-shell.theme-cinnabar-scroll .reader-title::after {
+  display: inline-block;
+  margin-left: .38em;
+  color: #963a2f;
+  content: "笺";
+  font-size: .28em;
+  font-weight: 500;
+  letter-spacing: 0;
+  vertical-align: top;
+  transform: translateY(.4em);
+}
+.app-shell.theme-inkstone .region-content a:not(:hover) {
+  color: #c8bea0;
+}
+
+@media (max-width: 1260px) {
+  .app-shell.theme-xuan-paper .reader-title::after { display: none; }
+}
+
+/* Bare URLs read as marginalia: destination stays intact, visual noise does not. */
+.reader-content .region-content .bare-url {
+  display: inline-flex;
+  align-items: center;
+  max-width: min(34ch, 100%);
+  padding: .12em .48em .16em;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  color: color-mix(in srgb, var(--accent) 82%, var(--ink));
+  font-family: var(--ink-ui, var(--ui-font));
+  font-size: .78em;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.35;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: .08em;
+  transition: border-color .18s ease, background-color .18s ease, color .18s ease;
+}
+.reader-content .region-content .bare-url::after {
+  margin-left: .34em;
+  content: "↗";
+  font-size: .86em;
+  opacity: .72;
+}
+.reader-content .region-content .bare-url:hover {
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--border));
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .region-content :is(h2, h3) .bare-url {
+  font-size: .5em;
+  vertical-align: .18em;
+}
+
+/* Theme center opens as a working surface, with the current paper already selected. */
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone):not(.is-focus) .theme-editor {
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 18px 46px rgba(50, 45, 36, .07);
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .theme-editor::before {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: .42;
+  background: repeating-linear-gradient(88deg, transparent 0 13px, rgba(58, 52, 42, .018) 14px, transparent 15px 25px);
+  content: "";
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .theme-editor > * {
+  position: relative;
+  z-index: 1;
+}
+.app-shell.theme-inkstone:not(.is-focus) .theme-editor {
+  box-shadow: 0 18px 48px rgba(0, 0, 0, .22);
+}
+.theme-card:is(.theme-card-xuan-paper, .theme-card-inkstone, .theme-card-bamboo-shadow, .theme-card-cinnabar-scroll).selected::after {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 64%, transparent);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--theme-surface-raised) 88%, transparent);
+  color: var(--theme-accent);
+  content: "✓";
+  font: 700 11px var(--ui-font);
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--theme-bg) 24%, transparent);
 }
