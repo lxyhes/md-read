@@ -72,7 +72,7 @@ async function onThemeFile(event: Event) {
 <template>
   <section class="page themes-page">
     <div class="page-heading">
-      <div><p class="section-kicker">阅读设置</p><h1>主题中心</h1><p class="theme-page-lede">管理阅读界面的颜色和排版。</p></div>
+      <div><h1>主题中心</h1><p class="theme-page-lede">先选一种纸，再调整它的颜色与排版。</p></div>
       <div class="toolbar-actions">
         <input ref="themeInput" type="file" accept=".moyue-theme,.zip" hidden @change="onThemeFile" />
         <button class="ghost-button" type="button" @click="themeInput?.click()"><AppIcon name="upload" :size="14" />导入主题包</button>
@@ -82,7 +82,6 @@ async function onThemeFile(event: Event) {
     <div class="theme-center-toolbar">
       <div class="segmented-tabs">
         <button :class="{ active: themeTab === 'official' }" type="button" @click="themeTab = 'official'">官方主题</button>
-        <button type="button" @click="emit('notify', '社区主题市场暂未开放')">社区主题</button>
         <button :class="{ active: themeTab === 'mine' }" type="button" @click="themeTab = 'mine'">我的主题</button>
       </div>
       <label class="theme-search"><AppIcon name="search" :size="14" /><input v-model="themeSearch" placeholder="搜索主题、风格、作者…" /></label>

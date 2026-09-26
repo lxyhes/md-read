@@ -4836,7 +4836,7 @@ button:focus-visible,
 /* Reader zoom: keep every layer of the document tied to the same readable size. */
 .app-shell:not(.is-focus) .reader-content .reader-title,
 .app-shell.is-focus .reader-content .reader-title {
-  font-size: clamp(32px, calc(var(--reader-size) * 2.8), 68px);
+  font-size: clamp(32px, calc(var(--reader-size) * 2.6), 54px);
 }
 
 .app-shell:not(.is-focus) .reader-content .reader-deck,
@@ -7056,6 +7056,349 @@ body.is-resizing-outline * {
   }
 }
 
+/* Settings read like a paper index: one active section, separated by rules. */
+.app-shell:not(.is-focus) .settings-page {
+  padding-top: clamp(34px, 5vh, 54px);
+  background: var(--app-bg);
+}
+.app-shell:not(.is-focus) .settings-page .page-heading {
+  width: min(1120px, 100%);
+  min-height: 190px;
+  margin-inline: auto;
+  padding-bottom: 30px;
+  border-bottom: 1px solid var(--border);
+}
+.app-shell:not(.is-focus) .settings-page .page-heading h1 {
+  max-width: none;
+  margin-top: 12px;
+  font-family: var(--ink-serif, inherit);
+  font-size: clamp(42px, 4.6vw, 60px);
+  line-height: 1.02;
+  letter-spacing: -.055em;
+  white-space: nowrap;
+}
+.app-shell:not(.is-focus) .settings-tabs {
+  width: min(1120px, 100%);
+  max-width: none;
+  margin: 0 auto;
+  padding: 0;
+  overflow-x: auto;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.app-shell:not(.is-focus) .settings-tabs button {
+  flex: 0 0 auto;
+  min-width: 112px;
+  padding: 15px 18px 13px;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  font-size: 11px;
+}
+.app-shell:not(.is-focus) .settings-tabs button.active,
+.app-shell:not(.is-focus) .settings-tabs button:hover {
+  border-bottom-color: var(--accent);
+  background: transparent;
+  color: var(--ink);
+  box-shadow: none;
+}
+.app-shell:not(.is-focus) .settings-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 42px;
+  width: min(1120px, 100%);
+  max-width: none;
+  margin: 0 auto 54px;
+}
+.app-shell:not(.is-focus) .settings-card {
+  min-height: 0;
+  padding: 27px 2px 31px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.app-shell:not(.is-focus) .settings-card h2 {
+  margin: 8px 0 21px;
+  font-family: var(--ink-serif, inherit);
+  font-size: 22px;
+}
+.app-shell:not(.is-focus) .settings-grid .font-settings-card,
+.app-shell:not(.is-focus) .settings-grid .shortcuts-card,
+.app-shell:not(.is-focus) .settings-grid .extensions-card {
+  grid-column: 1 / -1;
+  background: transparent;
+}
+.app-shell:not(.is-focus) .shortcuts-card {
+  max-width: none;
+}
+.app-shell:not(.is-focus) .shortcut-row {
+  min-height: 42px;
+  margin: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+.app-shell:not(.is-focus) .shortcut-row:last-child {
+  border-bottom: 0;
+}
+.app-shell:not(.is-focus) .extension-filter {
+  padding: 12px 0;
+  border: 0;
+  border-block: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+}
+.app-shell:not(.is-focus) .extension-list {
+  grid-template-columns: 1fr;
+  gap: 0;
+  margin-top: 8px;
+}
+.app-shell:not(.is-focus) .extension-item {
+  padding: 13px 0;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+}
+.app-shell:not(.is-focus) .extension-item button {
+  min-width: 58px;
+  padding: 7px 10px;
+  border-radius: 5px;
+  font-size: 11px;
+}
+
+@media (max-width: 760px) {
+  .app-shell:not(.is-focus) .settings-page .page-heading {
+    min-height: 150px;
+  }
+  .app-shell:not(.is-focus) .settings-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .app-shell:not(.is-focus) .settings-card {
+    grid-column: 1 !important;
+  }
+  .app-shell:not(.is-focus) .settings-page .page-heading h1 {
+    white-space: normal;
+  }
+}
+
+/* Theme workshop: a paper index beside the working controls, not a card shop. */
+.themes-page .theme-layout {
+  grid-template-columns: 290px minmax(0, 1fr);
+  gap: 34px;
+  max-width: 1160px;
+  margin-top: 24px;
+}
+.themes-page .theme-gallery {
+  grid-template-columns: 1fr;
+  gap: 0;
+  border-top: 1px solid var(--border);
+}
+.app-shell:not(.is-focus) .themes-page .theme-card:not(.create-theme) {
+  display: grid;
+  grid-template-columns: 102px minmax(0, 1fr);
+  min-height: 82px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.app-shell:not(.is-focus) .themes-page .theme-card:not(.create-theme):hover,
+.app-shell:not(.is-focus) .themes-page .theme-card:not(.create-theme).selected {
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--theme-accent) 7%, transparent);
+  box-shadow: inset 2px 0 0 var(--theme-accent);
+}
+.app-shell:not(.is-focus) .themes-page .theme-card .theme-swatch {
+  min-height: 81px;
+  padding: 0;
+  border-right: 1px solid color-mix(in srgb, var(--theme-ink) 12%, transparent);
+}
+.app-shell:not(.is-focus) .themes-page .theme-card :is(.swatch-line, .theme-card-kicker, .theme-card-copy) {
+  display: none;
+}
+.app-shell:not(.is-focus) .themes-page .theme-card .theme-card-mark {
+  top: 50%;
+  right: 50%;
+  width: 29px;
+  height: 29px;
+  transform: translate(50%, -50%) rotate(-4deg);
+}
+.app-shell:not(.is-focus) .themes-page .theme-card .theme-card-meta {
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  min-height: 81px;
+  padding: 14px 16px;
+  border: 0;
+  background: transparent;
+}
+.app-shell:not(.is-focus) .themes-page .theme-card .theme-card-meta span:first-child {
+  color: var(--ink);
+  font: 600 13px var(--ui-font);
+}
+.app-shell:not(.is-focus) .themes-page .theme-card .theme-card-meta span:last-child {
+  color: var(--muted);
+  font: 11px var(--ui-font);
+}
+.app-shell:not(.is-focus) .themes-page .theme-card.selected .theme-card-meta span:last-child {
+  color: var(--accent);
+}
+.app-shell:not(.is-focus) .themes-page .theme-card.create-theme {
+  min-height: 62px;
+  grid-template-columns: 30px 1fr;
+  justify-content: start;
+  padding: 13px 16px;
+  border-width: 0 0 1px;
+  border-radius: 0;
+  text-align: left;
+}
+.app-shell:not(.is-focus) .themes-page .theme-center-toolbar {
+  padding: 0 0 13px;
+  border-width: 0 0 1px;
+  border-radius: 0;
+  background: transparent;
+}
+.app-shell:not(.is-focus) .themes-page .segmented-tabs {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.app-shell:not(.is-focus) .themes-page .segmented-tabs button {
+  min-width: auto;
+  padding: 9px 12px;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  font-size: 11px;
+}
+.app-shell:not(.is-focus) .themes-page .segmented-tabs button.active,
+.app-shell:not(.is-focus) .themes-page .segmented-tabs button:hover {
+  border-bottom-color: var(--accent);
+  background: transparent;
+}
+.app-shell:not(.is-focus) .themes-page .theme-search,
+.app-shell:not(.is-focus) .themes-page .theme-filter {
+  border-width: 0 0 1px;
+  border-radius: 0;
+  background: transparent;
+}
+.app-shell:not(.is-focus) .themes-page .theme-editor {
+  min-height: 0;
+  padding: 2px 0 0;
+  border-width: 1px 0 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.theme-preview {
+  border: 1px solid var(--preview-border, var(--border));
+}
+.theme-preview blockquote {
+  margin: 14px 0;
+  padding: 8px 14px;
+  border-left: 2px solid var(--preview-accent, var(--accent));
+  color: inherit;
+  font-size: 14px;
+  line-height: 1.7;
+}
+.theme-preview code {
+  display: block;
+  padding: 10px 12px;
+  background: var(--preview-code, var(--code-bg));
+  color: var(--preview-accent, var(--accent));
+}
+
+/* Four papers, four reading grammars. */
+.app-shell.theme-xuan-paper .reader-content .region-content blockquote {
+  padding-block: 17px;
+  border-block: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+  background: transparent;
+  box-shadow: none;
+}
+.app-shell.theme-inkstone .reader-content .region-content blockquote {
+  padding: 16px 20px;
+  border: 0;
+  border-block: 1px solid rgba(232, 228, 216, .18);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.app-shell.theme-inkstone .reader-content .code-frame {
+  border-left: 2px solid #b7ad91;
+  border-radius: 0 8px 8px 0;
+}
+.app-shell.theme-inkstone .reader-content .region-content :is(h2, h3) {
+  letter-spacing: .025em;
+}
+.app-shell.theme-bamboo-shadow .reader-content .region-content blockquote {
+  margin-left: clamp(18px, 4vw, 48px);
+  padding: 14px 20px;
+  border: 0;
+  border-right: 1px solid color-mix(in srgb, var(--accent) 42%, transparent);
+  border-left: 1px solid color-mix(in srgb, var(--accent) 42%, transparent);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  font-family: FangSong, STFangsong, var(--ink-serif);
+}
+.app-shell.theme-bamboo-shadow .reader-content .region-content :is(h2, h3)::before {
+  width: 2px;
+  height: .9em;
+  border-radius: 0;
+  box-shadow: 4px 4px 0 color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.app-shell.theme-bamboo-shadow .reader-content .code-frame {
+  border-radius: 0 14px 0 14px;
+}
+.app-shell.theme-cinnabar-scroll .reader-content {
+  max-width: 760px;
+}
+.app-shell.theme-cinnabar-scroll .reader-content .region-content blockquote {
+  position: relative;
+  padding: 18px 22px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+  box-shadow: none;
+}
+.app-shell.theme-cinnabar-scroll .reader-content .region-content blockquote::before {
+  position: absolute;
+  top: -10px;
+  right: 14px;
+  padding: 2px 5px;
+  background: var(--surface-raised);
+  color: var(--accent);
+  content: "摘";
+  font: 10px var(--ink-serif);
+}
+.app-shell.theme-cinnabar-scroll .reader-content .region-content th {
+  border-bottom-color: color-mix(in srgb, var(--accent) 42%, transparent);
+  color: var(--accent);
+}
+
+/* Ink themes keep quiet type readable instead of shrinking it into decoration. */
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) :is(.section-kicker, .reader-meta-tools button, .reader-meta-tools summary, .reader-progress-label, .theme-card-meta, .theme-page-lede, .editor-subtitle, .editor-fields label, .outline-list button) {
+  font-size: 11px;
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) :is(.nav-item, .reader-meta, .theme-page-lede, .editor-subtitle, .theme-card-meta, .outline-list button) {
+  color: color-mix(in srgb, var(--muted) 72%, var(--ink));
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) :is(.ghost-button, .primary-button, .reader-display-switch button, .reader-navigation button) {
+  min-height: 34px;
+}
+
+@media (max-width: 1080px) {
+  .themes-page .theme-layout {
+    grid-template-columns: 1fr;
+  }
+  .themes-page .theme-gallery {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 /* Borderless writing canvas: structure comes from spacing, not nested cards. */
 .app-shell.is-editor-studio .editor-toolbar {
   padding-inline: 0;
@@ -7740,66 +8083,151 @@ a:active > .app-icon-vector { transform: scale(.92); }
   }
 }
 
-/* Library landing: one clear reading gesture, then a calm shelf. */
+/* Reader chrome stays secondary until the reader asks for it. */
+.app-shell:not(.is-focus) .reader-layout:not(.focus-layout):not(.clean-layout) {
+  grid-template-columns: var(--outline-panel-width, 204px) minmax(0, 1fr);
+}
+.app-shell:not(.is-focus) .reader-layout.context-open:not(.focus-layout):not(.clean-layout) {
+  grid-template-columns: var(--outline-panel-width, 204px) minmax(0, 1fr) 220px;
+}
+.reader-more-menu,
+.library-more-menu {
+  position: relative;
+}
+.app-shell:not(.is-focus) .reader-column > .reader-meta,
+.app-shell:not(.is-focus) .page-toolbar {
+  position: relative;
+  z-index: 10;
+  overflow: visible;
+}
+.reader-more-menu summary,
+.library-more-menu summary {
+  cursor: var(--moyue-cursor-pointer);
+  list-style: none;
+}
+.reader-more-menu summary::-webkit-details-marker,
+.library-more-menu summary::-webkit-details-marker {
+  display: none;
+}
+.reader-more-menu summary {
+  padding: 6px 8px;
+  color: var(--muted);
+  font: 10px var(--ui-font);
+}
+.reader-more-menu[open] summary,
+.reader-more-menu summary:hover {
+  color: var(--ink);
+}
+.reader-more-popover,
+.library-more-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  display: grid;
+  min-width: 210px;
+  gap: 3px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  box-shadow: 0 16px 36px color-mix(in srgb, var(--app-bg) 24%, transparent);
+}
+.reader-more-popover {
+  right: auto;
+  left: 0;
+}
+.reader-more-popover .font-picker-compact {
+  justify-content: space-between;
+  margin-bottom: 4px;
+  padding: 4px 5px 9px;
+  border-bottom: 1px solid var(--border);
+}
+.reader-edit-actions .reader-more-popover button,
+.library-more-popover button {
+  width: 100%;
+  padding: 8px 9px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  text-align: left;
+}
+.reader-edit-actions .reader-more-popover button:hover,
+.library-more-popover button:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--ink);
+}
+
+/* Library landing: one useful reading gesture, then the shelf. */
 .app-shell:not(.is-focus) .library-page {
-  padding-top: clamp(44px, 6vh, 64px);
+  padding-top: clamp(38px, 5vh, 54px);
   padding-bottom: 56px;
 }
 .app-shell:not(.is-focus) .library-hero {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(220px, 270px);
-  gap: clamp(32px, 7vw, 112px);
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+  gap: clamp(40px, 7vw, 96px);
   align-items: center;
   width: min(1160px, 100%);
-  min-height: clamp(250px, 31vh, 300px);
+  min-height: clamp(210px, 27vh, 260px);
   margin-inline: auto;
 }
 .app-shell:not(.is-focus) .library-hero .section-kicker {
   margin: 0;
+  font-size: 11px;
+  letter-spacing: .08em;
 }
 .app-shell:not(.is-focus) .library-hero h1 {
-  max-width: 10.5ch;
-  margin: 16px 0 18px;
+  max-width: 12ch;
+  margin: 14px 0 17px;
   font-family: var(--ink-serif, inherit);
-  font-size: clamp(52px, 5.1vw, 72px);
-  line-height: .96;
-  letter-spacing: -.06em;
+  font-size: clamp(44px, 4.4vw, 62px);
+  line-height: 1.04;
+  letter-spacing: -.055em;
   text-wrap: balance;
 }
 .app-shell:not(.is-focus) .hero-copy {
-  max-width: 32em;
+  max-width: 34em;
   margin: 0;
   font-size: 15px;
   line-height: 1.75;
 }
-.app-shell:not(.is-focus) .hero-orbit {
-  width: min(250px, 100%);
-  height: min(250px, 100%);
-  margin: 0 auto;
-  border-color: color-mix(in srgb, var(--accent) 34%, transparent);
-  transform: rotate(-8deg);
+.hero-continue {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 7px 16px;
+  padding: 22px 2px;
+  border-block: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
 }
-.app-shell:not(.is-focus) .hero-orbit::before {
-  inset: 18px;
-  border-color: color-mix(in srgb, var(--accent) 18%, transparent);
+.hero-continue > span,
+.hero-continue > small {
+  color: var(--muted);
+  font: 11px var(--ui-font);
 }
-.app-shell:not(.is-focus) .hero-orbit::after {
-  inset: 64px;
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+.hero-continue > strong {
+  grid-column: 1;
+  overflow: hidden;
+  font: 600 20px/1.35 var(--ink-serif, var(--ui-font));
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.app-shell:not(.is-focus) .orbit-core {
-  inset: 96px;
-  font-size: 25px;
-  box-shadow: 0 8px 22px color-mix(in srgb, var(--accent) 18%, transparent);
+.hero-continue > .app-icon {
+  grid-row: 1 / 4;
+  grid-column: 2;
+  align-self: center;
+  color: var(--accent);
+  transition: transform .18s ease;
 }
-.app-shell:not(.is-focus) .orbit-label {
-  padding: 6px 9px;
-  font-size: 9px;
-  letter-spacing: .01em;
+.hero-continue:hover > .app-icon {
+  transform: translateX(4px);
 }
 .app-shell:not(.is-focus) .page-toolbar {
   width: min(1160px, 100%);
-  margin-top: 24px;
+  margin-top: 20px;
   margin-bottom: 18px;
   column-gap: 12px;
   align-items: center;
@@ -7812,7 +8240,7 @@ a:active > .app-icon-vector { transform: scale(.92); }
   flex: 0 0 auto;
 }
 .app-shell:not(.is-focus) .page-toolbar h2 {
-  margin: 7px 0 0;
+  margin: 0;
   font-size: 24px;
   letter-spacing: -.025em;
   white-space: nowrap;
@@ -7852,15 +8280,8 @@ a:active > .app-icon-vector { transform: scale(.92); }
 
 @media (max-width: 1320px) {
   .app-shell:not(.is-focus) .library-hero {
-    grid-template-columns: minmax(0, 1fr) 230px;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
     gap: 34px;
-  }
-  .app-shell:not(.is-focus) .hero-orbit {
-    width: 220px;
-    height: 220px;
-  }
-  .app-shell:not(.is-focus) .orbit-core {
-    inset: 84px;
   }
   .app-shell:not(.is-focus) .library-toolbar-heading {
     gap: 14px;
@@ -7872,25 +8293,20 @@ a:active > .app-icon-vector { transform: scale(.92); }
 
 @media (max-width: 980px) {
   .app-shell:not(.is-focus) .library-hero {
-    grid-template-columns: minmax(0, 1fr) 190px;
-    gap: 24px;
+    grid-template-columns: 1fr;
+    gap: 28px;
   }
-  .app-shell:not(.is-focus) .hero-orbit {
-    width: 190px;
-    height: 190px;
-  }
-  .app-shell:not(.is-focus) .hero-orbit::before { inset: 14px; }
-  .app-shell:not(.is-focus) .hero-orbit::after { inset: 50px; }
-  .app-shell:not(.is-focus) .orbit-core { inset: 73px; }
-  .app-shell:not(.is-focus) .orbit-label { padding: 5px 7px; font-size: 8px; }
-  .app-shell:not(.is-focus) .label-one { top: 2px; right: 4px; }
-  .app-shell:not(.is-focus) .label-two { bottom: 14px; left: -20px; }
-  .app-shell:not(.is-focus) .label-three { right: -14px; bottom: 58px; }
   .app-shell:not(.is-focus) .page-toolbar {
     align-items: flex-end;
   }
   .app-shell:not(.is-focus) .toolbar-actions {
     flex-wrap: wrap;
     justify-content: flex-end;
+  }
+  .app-shell:not(.is-focus) .reader-layout.context-open:not(.focus-layout):not(.clean-layout) {
+    grid-template-columns: var(--outline-panel-width, 180px) minmax(0, 1fr);
+  }
+  .app-shell:not(.is-focus) .reader-layout.context-open .context-panel {
+    display: none;
   }
 }

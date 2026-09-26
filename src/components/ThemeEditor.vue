@@ -78,10 +78,11 @@ function apply() { emit('apply', clone(draft.value)) }
       </template>
     </div>
 
-    <div class="theme-preview" :style="{ fontFamily: draft.tokens.reader.fontFamily || 'serif' }">
+    <div class="theme-preview" :style="{ fontFamily: draft.tokens.reader.fontFamily || 'serif', background: draft.tokens.color.surfaceRaised, color: draft.tokens.color.text, '--preview-accent': draft.tokens.color.accent, '--preview-border': draft.tokens.color.border, '--preview-code': draft.tokens.color.codeBackground }">
       <span class="section-kicker">预览</span>
       <h3>正文预览</h3>
-      <p>主题会应用到正文、代码块和辅助面板。</p>
+      <p>文字应该先被读见，主题才在纸面与行间慢慢显现。</p>
+      <blockquote>留白不是空缺，而是让一句话停下来的地方。</blockquote>
       <code>const focus = region =&gt; reader.enter(focus)</code>
     </div>
   </div>
