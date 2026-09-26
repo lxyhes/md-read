@@ -5,6 +5,7 @@ export type AppIconName =
   | 'logo'
   | 'home'
   | 'library'
+  | 'folder'
   | 'clipboard'
   | 'history'
   | 'star'
@@ -28,12 +29,15 @@ export type AppIconName =
   | 'expand'
   | 'more'
   | 'download'
+  | 'upload'
   | 'copy'
   | 'edit'
   | 'check'
   | 'chevron-up'
   | 'chevron-down'
   | 'chevron-right'
+  | 'arrow-up'
+  | 'arrow-down'
   | 'code'
   | 'table'
   | 'image'
@@ -43,7 +47,7 @@ export type AppIconName =
 
 withDefaults(defineProps<{ name: AppIconName; size?: number; strokeWidth?: number }>(), {
   size: 16,
-  strokeWidth: 1.8,
+  strokeWidth: 1.75,
 })
 </script>
 
@@ -51,7 +55,8 @@ withDefaults(defineProps<{ name: AppIconName; size?: number; strokeWidth?: numbe
   <img v-if="name === 'logo'" class="app-icon app-icon-logo" :src="logoAsset" :width="size" :height="size" alt="" aria-hidden="true" />
   <svg
     v-else
-    class="app-icon"
+    class="app-icon app-icon-vector"
+    :data-icon="name"
     :width="size"
     :height="size"
     viewBox="0 0 24 24"
@@ -62,14 +67,19 @@ withDefaults(defineProps<{ name: AppIconName; size?: number; strokeWidth?: numbe
     stroke-linejoin="round"
     aria-hidden="true"
     focusable="false"
+    vector-effect="non-scaling-stroke"
   >
     <template v-if="name === 'home'">
       <path d="m3.5 10.7 8.5-7 8.5 7" />
       <path d="M5.5 9.8v9.7h13V9.8M9.5 19.5v-5h5v5" />
     </template>
     <template v-else-if="name === 'library'">
-      <rect x="4" y="4" width="16" height="16" rx="2" />
-      <path d="M8 8h8M8 12h8M8 16h5" />
+      <path d="M4.5 5.5A1.5 1.5 0 0 1 6 4h12a1.5 1.5 0 0 1 1.5 1.5v13A1.5 1.5 0 0 1 18 20H6a1.5 1.5 0 0 1-1.5-1.5v-13Z" />
+      <path d="M8 4v16M11.5 8H16M11.5 12H16M11.5 16H14" />
+    </template>
+    <template v-else-if="name === 'folder'">
+      <path d="M3.5 6.5A1.5 1.5 0 0 1 5 5h5l2 2h7a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5v-11Z" />
+      <path d="M3.5 10h17" />
     </template>
     <template v-else-if="name === 'clipboard'">
       <rect x="5" y="4.5" width="14" height="17" rx="2" />
@@ -159,6 +169,9 @@ withDefaults(defineProps<{ name: AppIconName; size?: number; strokeWidth?: numbe
     <template v-else-if="name === 'download'">
       <path d="M12 3v11M8 10l4 4 4-4M5 19h14" />
     </template>
+    <template v-else-if="name === 'upload'">
+      <path d="M12 15V4M8 8l4-4 4 4M5 19h14" />
+    </template>
     <template v-else-if="name === 'copy'">
       <rect x="8" y="8" width="11" height="12" rx="1.5" />
       <path d="M6 16H5a1.5 1.5 0 0 1-1.5-1.5v-9A1.5 1.5 0 0 1 5 4h8.5A1.5 1.5 0 0 1 15 5.5V7" />
@@ -178,6 +191,12 @@ withDefaults(defineProps<{ name: AppIconName; size?: number; strokeWidth?: numbe
     </template>
     <template v-else-if="name === 'chevron-right'">
       <path d="m9 6 6 6-6 6" />
+    </template>
+    <template v-else-if="name === 'arrow-up'">
+      <path d="M12 19V5M7 10l5-5 5 5" />
+    </template>
+    <template v-else-if="name === 'arrow-down'">
+      <path d="M12 5v14M7 14l5 5 5-5" />
     </template>
     <template v-else-if="name === 'code'">
       <path d="m9 7-5 5 5 5M15 7l5 5-5 5" />

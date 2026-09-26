@@ -23,6 +23,7 @@ withDefaults(defineProps<{
     type="button"
     :title="label"
     :aria-label="label"
+    :aria-pressed="active ? true : undefined"
     :disabled="disabled"
   >
     <AppIcon :name="icon" :size="size === 'sm' ? 14 : 16" />

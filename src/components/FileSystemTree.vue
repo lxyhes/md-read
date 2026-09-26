@@ -87,7 +87,7 @@ watch(() => props.node.expanded, revealSelectedRow)
       @keydown="onKeydown"
     >
       <span class="filesystem-tree-chevron"><AppIcon v-if="node.isDirectory" :name="node.expanded ? 'chevron-down' : 'chevron-right'" :size="11" /><i v-else /></span>
-      <AppIcon :name="node.isDirectory ? 'library' : 'file'" :size="13" />
+      <AppIcon :name="node.isDirectory ? 'folder' : 'file'" :size="13" />
       <span class="filesystem-tree-name">{{ node.name }}</span>
       <span v-if="node.loading" class="filesystem-tree-loading">读取中</span>
     </button>

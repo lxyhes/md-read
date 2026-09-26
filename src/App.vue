@@ -2757,7 +2757,7 @@ async function requestFullscreen() {
 
       <section v-if="view === 'library'" class="page library-page">
         <div class="library-hero reveal-1"><div><p class="section-kicker">LOCAL READING STUDIO</p><h1>给一个想法<br /><em>足够的时间。</em></h1><p class="hero-copy">墨阅把 Markdown 变成一个可以停留的空间。<br />离线、安静、属于你的阅读节奏。</p></div><div class="hero-orbit"><span class="orbit-core">读</span><span class="orbit-label label-one">Region Focus</span><span class="orbit-label label-two">Theme Package</span><span class="orbit-label label-three">Offline First</span></div></div>
-        <div class="page-toolbar reveal-2"><div class="library-toolbar-heading"><div><span class="section-kicker">YOUR SHELF</span><h2>最近阅读 <span>{{ filteredLibraryDocuments.length }}<i v-if="librarySearchQuery.trim()"> / {{ store.documents.length }}</i></span></h2></div><div class="library-search"><AppIcon name="search" :size="14" /><input v-model="librarySearchQuery" type="search" placeholder="搜索已打开的 Markdown…" aria-label="按名称搜索已打开的 Markdown" /><button v-if="librarySearchQuery" type="button" aria-label="清空搜索" @click="librarySearchQuery = ''"><AppIcon name="close" :size="12" /></button></div></div><div class="toolbar-actions"><button class="ghost-button" type="button" :disabled="busyAction !== null" @click="() => pasteFromClipboard()"><AppIcon name="copy" :size="14" />{{ busyAction === 'paste' ? '格式化中…' : '粘贴并格式化' }}</button><button class="ghost-button" type="button" :disabled="busyAction !== null" @click="() => pasteImageFromClipboard()"><AppIcon name="image" :size="14" />{{ busyAction === 'paste-image' ? '读取中…' : '粘贴图片' }}</button><button class="ghost-button" type="button" :disabled="busyAction !== null" @click="() => pasteFromClipboard(true)"><AppIcon name="download" :size="14" />{{ busyAction === 'paste-save' ? '保存中…' : '粘贴并保存' }}</button><button class="ghost-button" type="button" :disabled="busyAction !== null" @click="openFolder"><AppIcon name="library" :size="14" />{{ busyAction === 'folder' ? '扫描中…' : '打开文件夹' }}</button><button class="primary-button" type="button" :disabled="busyAction !== null" @click="openFile"><AppIcon name="plus" :size="14" />{{ busyAction === 'file' ? '打开中…' : '导入 Markdown' }}</button></div></div>
+        <div class="page-toolbar reveal-2"><div class="library-toolbar-heading"><div><span class="section-kicker">YOUR SHELF</span><h2>最近阅读 <span>{{ filteredLibraryDocuments.length }}<i v-if="librarySearchQuery.trim()"> / {{ store.documents.length }}</i></span></h2></div><div class="library-search"><AppIcon name="search" :size="14" /><input v-model="librarySearchQuery" type="search" placeholder="搜索已打开的 Markdown…" aria-label="按名称搜索已打开的 Markdown" /><button v-if="librarySearchQuery" type="button" aria-label="清空搜索" @click="librarySearchQuery = ''"><AppIcon name="close" :size="12" /></button></div></div><div class="toolbar-actions"><button class="ghost-button" type="button" :disabled="busyAction !== null" @click="() => pasteFromClipboard()"><AppIcon name="copy" :size="14" />{{ busyAction === 'paste' ? '格式化中…' : '粘贴并格式化' }}</button><button class="ghost-button" type="button" :disabled="busyAction !== null" @click="() => pasteImageFromClipboard()"><AppIcon name="image" :size="14" />{{ busyAction === 'paste-image' ? '读取中…' : '粘贴图片' }}</button><button class="ghost-button" type="button" :disabled="busyAction !== null" @click="() => pasteFromClipboard(true)"><AppIcon name="download" :size="14" />{{ busyAction === 'paste-save' ? '保存中…' : '粘贴并保存' }}</button><button class="ghost-button" type="button" :disabled="busyAction !== null" @click="openFolder"><AppIcon name="folder" :size="14" />{{ busyAction === 'folder' ? '扫描中…' : '打开文件夹' }}</button><button class="primary-button" type="button" :disabled="busyAction !== null" @click="openFile"><AppIcon name="plus" :size="14" />{{ busyAction === 'file' ? '打开中…' : '导入 Markdown' }}</button></div></div>
         <div class="document-grid reveal-3">
           <div v-if="librarySearchQuery.trim() && !filteredLibraryDocuments.length" class="library-empty"><AppIcon name="search" :size="20" /><strong>没有找到匹配的文档</strong><span>试试搜索其他 Markdown 名称</span></div>
           <button v-for="document in filteredLibraryDocuments" :key="document.id" class="document-card" type="button" @click="chooseDocument(document.id)"><div class="card-topline"><span class="file-badge">MD</span><span>{{ document.id === store.documents[0]?.id ? '刚刚' : '本地文档' }}</span></div><h3>{{ document.title }}</h3><p>{{ document.regions.length }} 个阅读区域 · {{ document.estimatedReadMinutes }} 分钟</p><div class="card-footer"><span>{{ document.path }}</span><span class="arrow"><AppIcon name="external" :size="14" /></span></div></button>
@@ -2817,7 +2817,7 @@ async function requestFullscreen() {
             </template>
             <div class="file-context-divider" />
             <button type="button" role="menuitem" :disabled="!canCreateInContext(fileContextMenu.file)" :title="canCreateInContext(fileContextMenu.file) ? undefined : '请在桌面端的真实文件夹中使用'" @click="createFileContextFile"><AppIcon name="plus" :size="13" />新建文件</button>
-            <button type="button" role="menuitem" :disabled="!canCreateInContext(fileContextMenu.file)" :title="canCreateInContext(fileContextMenu.file) ? undefined : '请在桌面端的真实文件夹中使用'" @click="createFileContextFolder"><AppIcon name="library" :size="13" />新建文件夹</button>
+            <button type="button" role="menuitem" :disabled="!canCreateInContext(fileContextMenu.file)" :title="canCreateInContext(fileContextMenu.file) ? undefined : '请在桌面端的真实文件夹中使用'" @click="createFileContextFolder"><AppIcon name="folder" :size="13" />新建文件夹</button>
             <button v-if="isMarkdownEntry(fileContextMenu.file)" type="button" role="menuitem" @click="searchFileContextEntry"><AppIcon name="search" :size="13" />搜索</button>
             <div class="file-context-divider" />
             <button type="button" role="menuitem" @click="showDocumentList"><AppIcon name="file" :size="13" />文档列表</button>
@@ -2825,7 +2825,7 @@ async function requestFullscreen() {
             <div class="file-context-divider" />
             <button v-if="canManageMarkdownEntry(fileContextMenu.file)" type="button" role="menuitem" @click="renameFileContextEntry"><AppIcon name="edit" :size="13" />重命名</button>
             <button v-if="canManageMarkdownEntry(fileContextMenu.file)" type="button" role="menuitem" @click="duplicateFileContextEntry"><AppIcon name="copy" :size="13" />创建副本</button>
-            <button v-if="isTauriRuntime() && hasRealFilesystemPath(fileContextMenu.file.path)" type="button" role="menuitem" @click="openFileContextDirectory"><AppIcon name="library" :size="13" />{{ fileContextMenu.file.isDirectory ? '打开文件夹' : '打开所在目录' }}</button>
+            <button v-if="isTauriRuntime() && hasRealFilesystemPath(fileContextMenu.file.path)" type="button" role="menuitem" @click="openFileContextDirectory"><AppIcon name="folder" :size="13" />{{ fileContextMenu.file.isDirectory ? '打开文件夹' : '打开所在目录' }}</button>
             <button type="button" role="menuitem" @click="copyFileContextValue('name')"><AppIcon name="copy" :size="13" />复制名称</button>
             <button type="button" role="menuitem" @click="copyFileContextValue('file')"><AppIcon name="copy" :size="13" />复制路径</button>
             <button type="button" role="menuitem" :disabled="!hasRealFilesystemPath(contextDirectoryPath(fileContextMenu.file))" title="只对真实系统目录提供目录路径" @click="copyFileContextValue('directory')"><AppIcon name="copy" :size="13" />复制目录路径</button>
@@ -2863,7 +2863,7 @@ async function requestFullscreen() {
               <button class="text-button" type="button" @click="toggleCleanMode">收起</button>
             </div>
             <div v-if="leftPanelTab === 'files'" class="file-browser-panel">
-              <div class="file-location" :title="fileBrowserMode === 'tree' ? filesystemTree?.path : currentDirectory"><AppIcon name="library" :size="13" /><span>{{ fileBrowserMode === 'tree' ? filesystemTreeScope === 'system' ? '文档树' : '工作区文档树' : currentDirectoryLabel }}</span><small>{{ fileBrowserMode === 'tree' ? filesystemTreeScope === 'system' ? '当前目录' : '已授权文件' : '所在目录' }}</small><button v-if="fileBrowserMode === 'tree'" type="button" class="file-tree-back" aria-label="返回当前目录文件列表" @click="showDocumentList">返回</button></div>
+              <div class="file-location" :title="fileBrowserMode === 'tree' ? filesystemTree?.path : currentDirectory"><AppIcon :name="fileBrowserMode === 'tree' ? 'library' : 'folder'" :size="13" /><span>{{ fileBrowserMode === 'tree' ? filesystemTreeScope === 'system' ? '文档树' : '工作区文档树' : currentDirectoryLabel }}</span><small>{{ fileBrowserMode === 'tree' ? filesystemTreeScope === 'system' ? '当前目录' : '已授权文件' : '所在目录' }}</small><button v-if="fileBrowserMode === 'tree'" type="button" class="file-tree-back" aria-label="返回当前目录文件列表" @click="showDocumentList">返回</button></div>
               <div class="file-filter-toolbar" aria-label="文件侧栏筛选">
                 <select v-model="sidebarFilter" aria-label="文件筛选方式"><option value="markdown">Markdown 文件</option><option value="hidden">包含隐藏文件</option><option value="all">全部文件</option><option value="glob">自定义 glob</option></select>
                 <input v-if="sidebarFilter === 'glob'" v-model="sidebarGlob" aria-label="自定义 glob" placeholder="例如 *.md" />
@@ -2886,7 +2886,7 @@ async function requestFullscreen() {
               </div>
             </div>
             <div v-else class="outline-view">
-              <label class="outline-search"><AppIcon name="search" :size="13" /><input v-model="outlineQuery" type="search" placeholder="筛选章节…" aria-label="筛选章节" /><button v-if="outlineQuery" type="button" aria-label="清除章节筛选" @click="outlineQuery = ''">×</button></label>
+              <label class="outline-search"><AppIcon name="search" :size="13" /><input v-model="outlineQuery" type="search" placeholder="筛选章节…" aria-label="筛选章节" /><button v-if="outlineQuery" type="button" aria-label="清除章节筛选" @click="outlineQuery = ''"><AppIcon name="close" :size="11" /></button></label>
               <div v-if="store.currentDocument?.headings.length" class="outline-actions" aria-label="大纲展开控制">
                 <div class="outline-action-group">
                   <button type="button" title="展开全部章节" @click="setOutlineExpansion(true)"><AppIcon name="chevron-down" :size="11" />全部展开</button>
@@ -2956,8 +2956,8 @@ async function requestFullscreen() {
                     <button class="editor-tool-button" type="button" title="分隔线" @click="insertEditorDivider">分隔线</button>
                   </div>
                   <div class="editor-toolbar-group" aria-label="段落移动">
-                    <button class="editor-tool-button icon-only" type="button" title="上移当前行（Alt+↑）" @click="moveEditorLine(-1)">↑</button>
-                    <button class="editor-tool-button icon-only" type="button" title="下移当前行（Alt+↓）" @click="moveEditorLine(1)">↓</button>
+                    <button class="editor-tool-button icon-only" type="button" title="上移当前行（Alt+↑）" aria-label="上移当前行" @click="moveEditorLine(-1)"><AppIcon name="arrow-up" :size="14" /></button>
+                    <button class="editor-tool-button icon-only" type="button" title="下移当前行（Alt+↓）" aria-label="下移当前行" @click="moveEditorLine(1)"><AppIcon name="arrow-down" :size="14" /></button>
                   </div>
                   <span class="editor-toolbar-spacer" />
                   <div class="editor-toolbar-actions">
@@ -3022,8 +3022,8 @@ async function requestFullscreen() {
                 <div v-if="virtualRange.after" class="virtual-spacer" :style="{ height: `${virtualRange.after}px` }" aria-hidden="true" />
                 </div></div>
                 <div v-if="readerDisplayMode !== 'markdown'" class="reader-mindmap">
-                  <div class="reader-mindmap-heading"><span class="section-kicker">STRUCTURE MAP</span><strong>文章结构</strong><small>{{ currentMindmap ? '章节卡片默认展开，深层分支默认收起；点击 − / + 查看下一层' : '这篇文档还没有可识别的标题' }}</small></div>
-                  <TreeDiagram v-if="currentMindmap" :node="currentMindmap" root />
+                  <div class="reader-mindmap-heading"><span class="section-kicker">STRUCTURE MAP</span><strong>文章结构</strong><small>{{ currentMindmap ? (readerDisplayMode === 'split' ? '章节默认收起；点击 + 查看摘要，点击时间跳转视频' : '章节卡片默认展开，深层分支默认收起；点击 − / + 查看下一层') : '这篇文档还没有可识别的标题' }}</small></div>
+                  <TreeDiagram v-if="currentMindmap" :node="currentMindmap" root :compact="readerDisplayMode === 'split'" @open-link="openExternalLink" />
                   <p v-else class="reader-mindmap-empty">请使用 Markdown 标题或独立加粗小标题来生成思维导图。</p>
                 </div>
                 <footer v-if="readerDisplayMode !== 'mindmap'" class="reader-footer"><span>墨阅 · Moyue Reader</span><span>Read → Focus → Understand</span></footer>
@@ -3109,7 +3109,7 @@ async function requestFullscreen() {
           <button type="button" :class="{ active: viewerTab === 'data' }" @click="viewerTab = 'data'">结构</button>
         </nav>
         <div ref="viewerStage" class="viewer-stage" :class="{ 'is-pan-enabled': viewerCanPan, 'is-dragging': viewerDragging }" :style="viewerStageStyle" @wheel="onViewerWheel" @pointerdown="onViewerPointerDown" @pointermove="onViewerPointerMove" @pointerup="onViewerPointerUp" @pointercancel="onViewerPointerUp" @dblclick="onViewerDoubleClick">
-          <TreeDiagram v-if="viewer.type === 'tree' && activeViewerTree" :node="activeViewerTree" root />
+          <TreeDiagram v-if="viewer.type === 'tree' && activeViewerTree" :node="activeViewerTree" root @open-link="openExternalLink" />
           <MermaidBlock v-else-if="viewer.type === 'mermaid' && viewerTab === 'preview'" :code="String(viewer.region.metadata?.code ?? viewer.region.textContent)" :native-labels="Boolean(viewer.region.metadata?.autoDiagram)" large @rendered="fitViewer" />
           <div v-else-if="viewer.type === 'mermaid' && viewerTab === 'source'" class="viewer-source-panel">
             <div class="viewer-source-toolbar"><span>Mermaid 源码</span><button type="button" @click="copyViewerSource"><AppIcon name="copy" :size="13" />复制源码</button></div>

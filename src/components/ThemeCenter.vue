@@ -20,7 +20,7 @@ const emit = defineEmits<{
 const themeTab = ref<'official' | 'mine'>('official')
 const themeSearch = ref('')
 const themeModeFilter = ref<'all' | 'dark' | 'light'>('all')
-const themeDraft = ref<MoyueTheme | null>(null)
+const themeDraft = ref<MoyueTheme | null>(JSON.parse(JSON.stringify(props.activeTheme)) as MoyueTheme)
 const themeInput = ref<HTMLInputElement | null>(null)
 
 const filteredThemes = computed(() => {
@@ -75,7 +75,7 @@ async function onThemeFile(event: Event) {
       <div><p class="section-kicker">阅读设置</p><h1>主题中心</h1><p class="theme-page-lede">管理阅读界面的颜色和排版。</p></div>
       <div class="toolbar-actions">
         <input ref="themeInput" type="file" accept=".moyue-theme,.zip" hidden @change="onThemeFile" />
-        <button class="ghost-button" type="button" @click="themeInput?.click()"><AppIcon name="download" :size="14" />导入主题包</button>
+        <button class="ghost-button" type="button" @click="themeInput?.click()"><AppIcon name="upload" :size="14" />导入主题包</button>
         <button class="primary-button" type="button" :disabled="!themeDraft" @click="downloadTheme"><AppIcon name="download" :size="14" />导出当前主题</button>
       </div>
     </div>
