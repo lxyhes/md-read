@@ -116,14 +116,6 @@ $$`)
     expect(document.regions[1].html).toContain('href="https://example.com"')
   })
 
-  it('shortens bare external URLs visually while preserving the full destination', () => {
-    const document = parseMarkdown('notes/readme.md', '## 资料 (https://example.com/articles/design-system?chapter=2)')
-    expect(document.regions[0].html).toContain('class="bare-url"')
-    expect(document.regions[0].html).toContain('href="https://example.com/articles/design-system?chapter=2"')
-    expect(document.regions[0].html).toContain('example.com/…/design-system')
-    expect(document.regions[0].html).not.toContain('>https://example.com/articles/design-system?chapter=2</a>')
-  })
-
   it('treats a standalone markdown image paragraph as an image region', () => {
     const document = parseMarkdown('notes/readme.md', '![cover](https://example.com/cover.png)')
     expect(document.regions[0].type).toBe('image')

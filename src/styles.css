@@ -7202,21 +7202,6 @@ body.is-resizing-outline * {
     linear-gradient(90deg, rgba(41, 43, 40, .76), rgba(83, 102, 91, .3) 56%, transparent 92%);
   clip-path: polygon(0 39%, 8% 31%, 18% 43%, 31% 34%, 47% 44%, 64% 38%, 82% 47%, 100% 51%, 82% 60%, 63% 53%, 43% 62%, 21% 54%, 0 65%);
 }
-.app-shell.theme-xuan-paper:not(.is-focus) .reader-rule::after {
-  position: absolute;
-  right: 4px;
-  top: -13px;
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border: 1px solid rgba(151, 53, 43, .66);
-  color: rgba(151, 53, 43, .82);
-  content: "墨阅";
-  font: 9px/1 var(--ink-serif);
-  letter-spacing: -.08em;
-  transform: rotate(-4deg);
-}
 .app-shell.theme-xuan-paper:not(.is-focus) .reader-content .region-content h2::before,
 .app-shell.theme-xuan-paper:not(.is-focus) .reader-content .region-content h3::before {
   background: #53665b;
@@ -7335,16 +7320,6 @@ body.is-resizing-outline * {
 }
 .theme-card.theme-card-inkstone .theme-swatch::before {
   background: radial-gradient(circle at 72% 25%, rgba(183, 173, 145, .16), transparent 27%), linear-gradient(145deg, #0d0f0d, #252822);
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone):not(.is-focus) .reader-title {
-    animation: ink-title-arrive .62s cubic-bezier(.22, .8, .22, 1) both;
-  }
-  @keyframes ink-title-arrive {
-    from { opacity: 0; filter: blur(3px); transform: translateY(7px); }
-    to { opacity: 1; filter: blur(0); transform: translateY(0); }
-  }
 }
 
 /* Icon system v2 — one optical grid, quiet ink-seal states, no font glyph fallbacks. */
@@ -7504,11 +7479,23 @@ a:active > .app-icon-vector { transform: scale(.92); }
   text-decoration-color: currentColor;
 }
 .app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .region-content :is(h2, h3) a[href^="http"] {
+  display: inline-block;
+  max-width: min(32ch, 82%);
+  padding: .08em .42em .12em;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  color: color-mix(in srgb, var(--accent) 82%, var(--ink));
   font-family: var(--ink-ui);
-  font-size: .58em;
+  font-size: .5em;
   font-weight: 500;
-  letter-spacing: -.015em;
-  overflow-wrap: anywhere;
+  letter-spacing: 0;
+  line-height: 1.4;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: .16em;
 }
 .app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .region-content p {
   letter-spacing: .012em;
@@ -7526,10 +7513,6 @@ a:active > .app-icon-vector { transform: scale(.92); }
 }
 
 /* Fix the seal: it belongs to the title, outside the clipped dry-brush rule. */
-.app-shell.theme-xuan-paper:not(.is-focus) .reader-rule::after,
-.app-shell.theme-xuan-paper.is-focus .reader-rule::after {
-  display: none;
-}
 .app-shell.theme-xuan-paper .reader-title::after {
   position: absolute;
   right: -45px;
@@ -7550,10 +7533,6 @@ a:active > .app-icon-vector { transform: scale(.92); }
 .app-shell.theme-xuan-paper .reader-content .region-content blockquote {
   color: #43534a;
 }
-.app-shell.theme-xuan-paper .reader-content .region-content > p:first-child::first-letter {
-  color: #3f5148;
-}
-
 /* Tables and code should feel placed on the paper, not pasted on top of it. */
 .app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .reader-content .code-frame,
 .app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .reader-content .table-scroll {
@@ -7574,6 +7553,26 @@ a:active > .app-icon-vector { transform: scale(.92); }
   border-color: rgba(232, 228, 216, .11);
   background: #0d0f0d;
   box-shadow: 0 16px 36px rgba(0, 0, 0, .25);
+}
+
+/* Keep the reader controls closer to a quiet desk rail than a button wall. */
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone):not(.is-focus) :is(.reader-display-switch, .reader-navigation) {
+  border-color: color-mix(in srgb, var(--border) 58%, transparent);
+  border-radius: 5px;
+  background: transparent;
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone):not(.is-focus) .reader-edit-actions button {
+  border-color: transparent;
+  background: transparent;
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone):not(.is-focus) .reader-edit-actions button:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--ink);
+}
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone):not(.is-focus) .reader-display-switch button.active {
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+  box-shadow: inset 0 -2px 0 var(--accent);
+  color: var(--ink);
 }
 .app-shell.theme-inkstone:not(.is-focus) .reader-content .code-toolbar,
 .app-shell.theme-inkstone:not(.is-focus) .reader-content .table-region-toolbar {
@@ -7633,83 +7632,6 @@ a:active > .app-icon-vector { transform: scale(.92); }
 
 @media (max-width: 1260px) {
   .app-shell.theme-xuan-paper .reader-title::after { display: none; }
-}
-
-/* Bare URLs read as marginalia: destination stays intact, visual noise does not. */
-.reader-content .region-content .bare-url {
-  display: inline-flex;
-  align-items: center;
-  max-width: min(34ch, 100%);
-  padding: .12em .48em .16em;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 5%, transparent);
-  color: color-mix(in srgb, var(--accent) 82%, var(--ink));
-  font-family: var(--ink-ui, var(--ui-font));
-  font-size: .78em;
-  font-weight: 500;
-  letter-spacing: 0;
-  line-height: 1.35;
-  text-decoration: none;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  vertical-align: .08em;
-  transition: border-color .18s ease, background-color .18s ease, color .18s ease;
-}
-.reader-content .region-content .bare-url::after {
-  margin-left: .34em;
-  content: "↗";
-  font-size: .86em;
-  opacity: .72;
-}
-.reader-content .region-content .bare-url:hover {
-  border-color: color-mix(in srgb, var(--accent) 58%, var(--border));
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-  color: var(--accent);
-}
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .region-content :is(h2, h3) .bare-url {
-  font-size: .5em;
-  vertical-align: .18em;
-}
-
-/* Theme center opens as a working surface, with the current paper already selected. */
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone):not(.is-focus) .theme-editor {
-  position: relative;
-  overflow: hidden;
-  box-shadow: 0 18px 46px rgba(50, 45, 36, .07);
-}
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .theme-editor::before {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  opacity: .42;
-  background: repeating-linear-gradient(88deg, transparent 0 13px, rgba(58, 52, 42, .018) 14px, transparent 15px 25px);
-  content: "";
-}
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .theme-editor > * {
-  position: relative;
-  z-index: 1;
-}
-.app-shell.theme-inkstone:not(.is-focus) .theme-editor {
-  box-shadow: 0 18px 48px rgba(0, 0, 0, .22);
-}
-.theme-card:is(.theme-card-xuan-paper, .theme-card-inkstone, .theme-card-bamboo-shadow, .theme-card-cinnabar-scroll).selected::after {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border: 1px solid color-mix(in srgb, var(--theme-accent) 64%, transparent);
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--theme-surface-raised) 88%, transparent);
-  color: var(--theme-accent);
-  content: "✓";
-  font: 700 11px var(--ui-font);
-  box-shadow: 0 5px 14px color-mix(in srgb, var(--theme-bg) 24%, transparent);
 }
 
 /* Keep region actions quiet until the reader is interacting with a region. */
@@ -7815,5 +7737,160 @@ a:active > .app-icon-vector { transform: scale(.92); }
   .focus-hud > span,
   .focus-hud > button {
     padding-inline: 7px;
+  }
+}
+
+/* Library landing: one clear reading gesture, then a calm shelf. */
+.app-shell:not(.is-focus) .library-page {
+  padding-top: clamp(44px, 6vh, 64px);
+  padding-bottom: 56px;
+}
+.app-shell:not(.is-focus) .library-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 270px);
+  gap: clamp(32px, 7vw, 112px);
+  align-items: center;
+  width: min(1160px, 100%);
+  min-height: clamp(250px, 31vh, 300px);
+  margin-inline: auto;
+}
+.app-shell:not(.is-focus) .library-hero .section-kicker {
+  margin: 0;
+}
+.app-shell:not(.is-focus) .library-hero h1 {
+  max-width: 10.5ch;
+  margin: 16px 0 18px;
+  font-family: var(--ink-serif, inherit);
+  font-size: clamp(52px, 5.1vw, 72px);
+  line-height: .96;
+  letter-spacing: -.06em;
+  text-wrap: balance;
+}
+.app-shell:not(.is-focus) .hero-copy {
+  max-width: 32em;
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.75;
+}
+.app-shell:not(.is-focus) .hero-orbit {
+  width: min(250px, 100%);
+  height: min(250px, 100%);
+  margin: 0 auto;
+  border-color: color-mix(in srgb, var(--accent) 34%, transparent);
+  transform: rotate(-8deg);
+}
+.app-shell:not(.is-focus) .hero-orbit::before {
+  inset: 18px;
+  border-color: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.app-shell:not(.is-focus) .hero-orbit::after {
+  inset: 64px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.app-shell:not(.is-focus) .orbit-core {
+  inset: 96px;
+  font-size: 25px;
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.app-shell:not(.is-focus) .orbit-label {
+  padding: 6px 9px;
+  font-size: 9px;
+  letter-spacing: .01em;
+}
+.app-shell:not(.is-focus) .page-toolbar {
+  width: min(1160px, 100%);
+  margin-top: 24px;
+  margin-bottom: 18px;
+  column-gap: 12px;
+  align-items: center;
+}
+.app-shell:not(.is-focus) .library-toolbar-heading {
+  gap: 28px;
+  flex: 1 1 auto;
+}
+.app-shell:not(.is-focus) .library-toolbar-heading > div:first-child {
+  flex: 0 0 auto;
+}
+.app-shell:not(.is-focus) .page-toolbar h2 {
+  margin: 7px 0 0;
+  font-size: 24px;
+  letter-spacing: -.025em;
+  white-space: nowrap;
+}
+.app-shell:not(.is-focus) .library-search {
+  width: min(270px, 28vw);
+  min-width: 220px;
+}
+.app-shell:not(.is-focus) .toolbar-actions {
+  flex: 0 0 auto;
+  gap: 7px;
+}
+.app-shell:not(.is-focus) .ghost-button,
+.app-shell:not(.is-focus) .primary-button {
+  min-height: 38px;
+  padding: 9px 13px;
+}
+.app-shell:not(.is-focus) .document-grid {
+  width: min(1160px, 100%);
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+}
+.app-shell:not(.is-focus) .document-card,
+.app-shell:not(.is-focus) .import-card {
+  min-height: 184px;
+  padding: 18px;
+  border-radius: 12px;
+  box-shadow: none;
+}
+.app-shell:not(.is-focus) .document-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 26px color-mix(in srgb, var(--app-bg) 18%, transparent);
+}
+.app-shell:not(.is-focus) .library-note {
+  margin-top: 30px;
+}
+
+@media (max-width: 1320px) {
+  .app-shell:not(.is-focus) .library-hero {
+    grid-template-columns: minmax(0, 1fr) 230px;
+    gap: 34px;
+  }
+  .app-shell:not(.is-focus) .hero-orbit {
+    width: 220px;
+    height: 220px;
+  }
+  .app-shell:not(.is-focus) .orbit-core {
+    inset: 84px;
+  }
+  .app-shell:not(.is-focus) .library-toolbar-heading {
+    gap: 14px;
+  }
+  .app-shell:not(.is-focus) .library-search {
+    min-width: 190px;
+  }
+}
+
+@media (max-width: 980px) {
+  .app-shell:not(.is-focus) .library-hero {
+    grid-template-columns: minmax(0, 1fr) 190px;
+    gap: 24px;
+  }
+  .app-shell:not(.is-focus) .hero-orbit {
+    width: 190px;
+    height: 190px;
+  }
+  .app-shell:not(.is-focus) .hero-orbit::before { inset: 14px; }
+  .app-shell:not(.is-focus) .hero-orbit::after { inset: 50px; }
+  .app-shell:not(.is-focus) .orbit-core { inset: 73px; }
+  .app-shell:not(.is-focus) .orbit-label { padding: 5px 7px; font-size: 8px; }
+  .app-shell:not(.is-focus) .label-one { top: 2px; right: 4px; }
+  .app-shell:not(.is-focus) .label-two { bottom: 14px; left: -20px; }
+  .app-shell:not(.is-focus) .label-three { right: -14px; bottom: 58px; }
+  .app-shell:not(.is-focus) .page-toolbar {
+    align-items: flex-end;
+  }
+  .app-shell:not(.is-focus) .toolbar-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 }
