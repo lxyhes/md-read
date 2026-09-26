@@ -135,8 +135,6 @@ const virtualViewportHeight = ref(0)
 const virtualRegionThreshold = 240
 const virtualGap = 8
 let focusScrollTargetId: string | null = null
-let focusWheelLocked = false
-let focusWheelReleaseTimer: number | null = null
 let stopNativeFileDrop: (() => void) | null = null
 const documentWatchers = new Map<string, () => void>()
 const documentReloadTimers = new Map<string, number>()
@@ -1787,7 +1785,6 @@ onUnmounted(() => {
   if (searchTimer !== null) window.clearTimeout(searchTimer)
   if (scrollFrame !== null) window.cancelAnimationFrame(scrollFrame)
   if (progressTimer !== null) window.clearTimeout(progressTimer)
-  if (focusWheelReleaseTimer !== null) window.clearTimeout(focusWheelReleaseTimer)
   regionLayoutObserver?.disconnect()
   regionMeasurementObserver?.disconnect()
   viewportResizeObserver?.disconnect()
@@ -2314,21 +2311,6 @@ function restoreViewportPercent(percent: number) {
       virtualViewportHeight.value = viewport.clientHeight
     }
   })
-}
-function onReaderWheel(event: WheelEvent) {
-  focusScrollTargetId = null
-  const viewport = readerViewport.value
-  const isFocusMode = store.mode === 'region-focus' || store.mode === 'focus'
-  if (!viewport || !isFocusMode || event.ctrlKey || event.deltaY === 0) return
-  event.preventDefault()
-  if (focusWheelReleaseTimer !== null) window.clearTimeout(focusWheelReleaseTimer)
-  focusWheelReleaseTimer = window.setTimeout(() => {
-    focusWheelLocked = false
-    focusWheelReleaseTimer = null
-  }, 260)
-  if (focusWheelLocked) return
-  focusWheelLocked = true
-  moveFocus(event.deltaY > 0 ? 1 : -1)
 }
 function onReaderPointerDown() { focusScrollTargetId = null }
 function onReaderScroll() {
@@ -2936,7 +2918,7 @@ async function requestFullscreen() {
                 <button type="button" @click="closeEditor">退出编辑</button>
               </div>
             </div>
-            <div ref="readerViewport" class="reader-viewport" @scroll="onReaderScroll" @wheel="onReaderWheel" @pointerdown="onReaderPointerDown" @mouseup="captureSelection">
+            <div ref="readerViewport" class="reader-viewport" @scroll="onReaderScroll" @pointerdown="onReaderPointerDown" @mouseup="captureSelection">
               <div v-if="editorOpen" class="editor-surface" :class="{ 'editor-calm-mode': editorCalmMode }" @contextmenu="openEditorContextMenu">
                 <div v-if="!editorCalmMode" class="editor-toolbar" aria-label="Markdown 编辑工具栏">
                   <div class="editor-toolbar-group" aria-label="文字格式">
@@ -3060,7 +3042,7 @@ async function requestFullscreen() {
             <button class="primary-button" type="button" @click="resumeReading">继续阅读</button>
           </div>
         </div>
-        <div v-if="store.mode === 'region-focus'" class="focus-hud"><span v-if="focusPosition" class="focus-hud-position">{{ focusPosition }}</span><span>↑ ↓ 切换区域</span><span>Enter 聚焦</span><button type="button" @click="clearRegionFocus">ESC 退出</button></div>
+        <div v-if="store.mode === 'region-focus'" class="focus-hud" role="status"><span v-if="focusPosition" class="focus-hud-position">{{ focusPosition }}</span><span class="focus-hud-shortcut"><kbd>↑</kbd><kbd>↓</kbd>切换</span><button type="button" @click="clearRegionFocus"><kbd>Esc</kbd>退出聚焦</button></div>
         <div v-if="store.mode === 'clean'" class="clean-mode-hud"><span><AppIcon name="eye" :size="13" />纯净阅读</span><button type="button" @click="toggleCleanMode">退出 <kbd>Esc</kbd></button></div>
         <div v-if="selectionToolbar" class="selection-toolbar"><span class="selection-label">{{ selectionToolbar.text.slice(0, 28) }}{{ selectionToolbar.text.length > 28 ? '…' : '' }}</span><button type="button" @click="highlightSelection">{{ selectionIsHighlighted() ? '取消高亮' : '高亮' }}</button><button type="button" @click="beginAnnotation">批注</button><button type="button" @click="searchSelection">搜索</button><button type="button" @click="assist('translate')">翻译</button><button type="button" @click="copySelectionMarkdown">复制 Markdown</button><button type="button" @click="copySelection">复制</button></div>
       </section>
