@@ -1738,10 +1738,6 @@ html, body, #app { background: var(--app-bg, #070d22); }
   font-size: 11px;
   line-height: 1.65;
 }
-.reader-footer {
-  margin-top: 42px;
-}
-
 .app-shell.is-region-focus .region-block:not(.focused) {
   opacity: .10;
   filter: blur(1.6px);
@@ -7388,6 +7384,9 @@ body.is-resizing-outline * {
   background: transparent;
   box-shadow: none;
 }
+.app-shell.theme-inkstone .reader-content .region-content blockquote::before {
+  content: none;
+}
 .app-shell.theme-inkstone .reader-content .code-frame {
   border-left: 2px solid #b7ad91;
   border-radius: 0 8px 8px 0;
@@ -7396,7 +7395,7 @@ body.is-resizing-outline * {
   letter-spacing: .025em;
 }
 .app-shell.theme-bamboo-shadow .reader-content .region-content blockquote {
-  margin-left: clamp(18px, 4vw, 48px);
+  margin-left: 0;
   padding: 14px 20px;
   border: 0;
   border-right: 1px solid color-mix(in srgb, var(--accent) 42%, transparent);
@@ -7405,6 +7404,9 @@ body.is-resizing-outline * {
   background: transparent;
   box-shadow: none;
   font-family: FangSong, STFangsong, var(--ink-serif);
+}
+.app-shell.theme-bamboo-shadow .reader-content .region-content blockquote::before {
+  content: none;
 }
 .app-shell.theme-bamboo-shadow .reader-content .region-content :is(h2, h3)::before {
   width: 2px;

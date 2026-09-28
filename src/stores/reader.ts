@@ -2,10 +2,11 @@ import { computed, ref, shallowRef } from 'vue'
 import { defineStore } from 'pinia'
 import { deleteAnnotation, deleteDocument, getLocalProgress, getProgress, loadAnnotations, loadDocumentSnapshots, saveAnnotation, saveDocument, saveDocumentSnapshot, saveProgress } from '../persistence'
 import { authorizeMarkdownAssets, createRemoteAssetMap, createTauriAssetMap, openMarkdownFile, openMarkdownFolder, resolveMarkdownAssetUrl, type OpenedFile } from '../fileService'
-import { builtInThemes, cssVariables, defaultTokens } from '../themes'
+import { builtInThemes, cssVariables, defaultTokens, themeCss } from '../themes'
 import { interfaceFont } from '../fonts'
 const SESSION_KEY = 'moyue:reader-session'
 const THEME_KEY = 'moyue:theme'
+const THEME_STYLE_ID = 'moyue-active-theme'
 const DEFAULT_THEME_ID = 'paper-white'
 
 function readSession() {
@@ -46,13 +47,18 @@ export const useReaderStore = defineStore('reader', () => {
     localStorage.setItem(SESSION_KEY, JSON.stringify({ openDocumentIds: openDocumentIds.value, currentDocumentId: currentDocumentId.value }))
   }
 
-  function applyTheme(theme: MoyueTheme) {
+  function applyTheme(theme: MoyueTheme, adoptReaderSettings = false) {
     const existing = themes.value.some((item) => item.manifest.id === theme.manifest.id)
     themes.value = existing
       ? themes.value.map((item) => item.manifest.id === theme.manifest.id ? theme : item)
       : [...themes.value, theme]
     activeThemeId.value = theme.manifest.id
     localStorage.setItem(THEME_KEY, theme.manifest.id)
+    if (adoptReaderSettings) {
+      const { width, fontSize, lineHeight } = theme.tokens.reader
+      readerSettings.value = { ...readerSettings.value, width, fontSize, lineHeight, fontFamily: '' }
+      localStorage.setItem('moyue:reader-settings', JSON.stringify(readerSettings.value))
+    }
     const variables = cssVariables(theme)
     variables['--reader-width'] = `${readerSettings.value.width}px`
     variables['--reader-size'] = `${readerSettings.value.fontSize}px`
@@ -61,6 +67,13 @@ export const useReaderStore = defineStore('reader', () => {
     variables['--ui-font'] = readerSettings.value.interfaceFontFamily || interfaceFont
     variables['--shell-font'] = readerSettings.value.interfaceFontFamily || interfaceFont
     for (const [name, value] of Object.entries(variables)) document.documentElement.style.setProperty(name, value)
+    let style = document.getElementById(THEME_STYLE_ID) as HTMLStyleElement | null
+    if (!style) {
+      style = document.createElement('style')
+      style.id = THEME_STYLE_ID
+      document.head.append(style)
+    }
+    style.textContent = themeCss(theme)
   }
 
   async function parseOpenedFile(file: OpenedFile) {

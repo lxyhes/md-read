@@ -2182,7 +2182,11 @@ watch(() => store.currentDocumentId, () => {
   collapsedOutlineHeadingIds.value = new Set()
   outlineExpansionOverride.value = null
   virtualMeasuredHeights.value = new Map()
-  nextTick(() => { syncVirtualViewport(); observeReaderLayout() })
+  nextTick(() => {
+    document.querySelector<HTMLElement>('.reader-tab[aria-selected="true"]')?.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'nearest' })
+    syncVirtualViewport()
+    observeReaderLayout()
+  })
 })
 watch(() => [store.mode, store.activeThemeId, store.readerSettings.fontSize, store.readerSettings.lineHeight, store.readerSettings.width], () => {
   virtualMeasuredHeights.value = new Map()
@@ -3123,7 +3127,7 @@ async function saveCurrentAnnotation() {
   annotationEditor.value = null
   notify('批注已保存')
 }
-function applyReaderTheme(theme: Parameters<typeof store.applyTheme>[0]) { store.applyTheme(theme); notify(`已切换到「${theme.manifest.name}」`) }
+function applyReaderTheme(theme: Parameters<typeof store.applyTheme>[0]) { store.applyTheme(theme, true); notify(`已切换到「${theme.manifest.name}」`) }
 
 function changeSetting(key: 'fontSize' | 'lineHeight' | 'width', value: number) { store.updateSettings({ [key]: value }) }
 function changeReaderZoom(delta: number) {
@@ -3479,7 +3483,6 @@ async function requestFullscreen() {
                   <TreeDiagram v-if="currentMindmap" :node="currentMindmap" root :compact="readerDisplayMode === 'split'" @open-link="openExternalLink" />
                   <p v-else class="reader-mindmap-empty">请使用 Markdown 标题或独立加粗小标题来生成思维导图。</p>
                 </div>
-                <footer v-if="readerDisplayMode !== 'mindmap'" class="reader-footer"><span>墨阅</span><span>慢读，专注，理解</span></footer>
               </div>
             </div>
           </div>
