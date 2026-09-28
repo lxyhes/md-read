@@ -317,6 +317,42 @@ html, body, #app { background: var(--app-bg, #070d22); }
   .app-shell.is-focus .reader-content { width: min(820px, calc(100% - 72px)); }
 }
 
+/* Writing tools stay compact and paper-like inside the existing desk. */
+.math-block mjx-container { display: block; max-width: 100%; overflow-x: auto; text-align: center; }
+.math-block mjx-container > svg { max-width: 100%; height: auto; }
+.editor-language-input { width: 76px; height: 28px; padding: 0 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--ink); font: 12px var(--ui-font); }
+.editor-source-pane { position: relative; }
+.editor-emoji-menu { position: absolute; z-index: 7; right: 16px; bottom: 16px; display: grid; min-width: 170px; padding: 6px; border: 1px solid var(--border); border-radius: 10px; background: color-mix(in srgb, var(--surface-raised) 96%, transparent); box-shadow: 0 14px 36px rgba(16, 28, 25, .16); backdrop-filter: blur(14px); }
+.editor-emoji-menu button { display: flex; gap: 8px; align-items: center; padding: 7px 9px; border: 0; border-radius: 7px; background: transparent; color: var(--ink); text-align: left; }
+.editor-emoji-menu button:hover, .editor-emoji-menu button:focus-visible { background: var(--accent-soft); }
+.editor-emoji-menu span { width: 24px; font-size: 18px; }
+.editor-dialog-overlay { z-index: 80; }
+.editor-dialog { width: min(620px, calc(100vw - 32px)); max-height: min(760px, calc(100vh - 48px)); overflow: auto; padding: 24px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-raised); color: var(--ink); box-shadow: 0 28px 80px rgba(15, 28, 25, .24); }
+.editor-dialog h2 { margin: 5px 0 20px; font: 600 23px/1.2 var(--ui-font); }
+.setting-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.setting-input select { width: 100%; min-height: 38px; margin-top: 7px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--ink); }
+.setting-check { display: flex; gap: 9px; align-items: center; margin-top: 13px; color: var(--ink); font-size: 13px; }
+.settings-card-wide { grid-column: 1 / -1; }
+.image-manager-dialog { width: min(760px, calc(100vw - 32px)); }
+.image-manager-list { display: grid; gap: 8px; margin: 18px 0; }
+.image-manager-row { display: grid; grid-template-columns: 62px minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 9px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.image-manager-row img { width: 62px; height: 46px; border-radius: 6px; object-fit: cover; background: var(--app-bg); }
+.image-manager-row span { min-width: 0; display: grid; gap: 3px; }
+.image-manager-row small { overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
+.image-manager-row button, .danger-button { min-height: 30px; padding: 0 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-raised); color: var(--ink); }
+.image-manager-row .danger-button, .danger-button { color: #b54b4b; }
+.table-editor-dialog { width: min(920px, calc(100vw - 32px)); }
+.table-editor-grid { display: grid; gap: 5px; margin: 18px 0; overflow: auto; }
+.table-editor-grid input, .table-editor-grid select { min-width: 0; height: 36px; padding: 0 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--ink); }
+.table-editor-grid .table-header-input { border-color: color-mix(in srgb, var(--accent) 48%, var(--border)); font-weight: 650; }
+.region-copy-image { position: absolute; right: 10px; bottom: 10px; opacity: 0; transition: opacity .15s ease; }
+.region-block:hover .region-copy-image, .region-block:focus-within .region-copy-image { opacity: 1; }
+
+@media (max-width: 720px) {
+  .setting-form-grid { grid-template-columns: 1fr; }
+  .image-manager-row { grid-template-columns: 52px minmax(0, 1fr); }
+}
+
 /* Quiet Moss: keep the light reader paper-like and remove the inherited violet veil. */
 .app-shell.theme-quiet-moss:not(.is-focus) .reader-page {
   background: linear-gradient(180deg, #f5f3ec 0%, #eeece4 100%);
@@ -7054,6 +7090,32 @@ body.is-resizing-outline * {
   .editor-split-divider {
     display: none;
   }
+}
+
+.editor-workspace.editor-mode-rich { grid-template-columns: minmax(0, 1fr); }
+.editor-rich-pane { display: flex; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-top: 2px solid var(--editor-accent); border-radius: 12px; background: color-mix(in srgb, var(--surface-raised) 96%, transparent); }
+.editor-rich-content { flex: 1; width: min(860px, 100%); min-height: 520px; margin: 0 auto; padding: 38px clamp(24px, 6vw, 76px) 80px; overflow: auto; outline: none; color: var(--ink); caret-color: var(--editor-accent); font: 15px/1.85 var(--reader-font); }
+.editor-rich-content:focus { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--editor-accent) 28%, transparent); }
+.editor-rich-content:empty::before { content: '开始写作…'; color: var(--muted); pointer-events: none; }
+.editor-rich-content h1, .editor-rich-content h2, .editor-rich-content h3, .editor-rich-content h4, .editor-rich-content h5, .editor-rich-content h6 { color: var(--ink); font-family: var(--ui-font); line-height: 1.28; }
+.editor-rich-content h1 { margin: 0 0 24px; font-size: clamp(27px, 3vw, 38px); }
+.editor-rich-content h2 { margin: 30px 0 12px; font-size: 23px; }
+.editor-rich-content h3 { margin: 24px 0 9px; font-size: 18px; }
+.editor-rich-content p { margin: 0 0 16px; }
+.editor-rich-content blockquote { margin: 18px 0; padding: 6px 18px; border-left: 3px solid var(--editor-accent); background: color-mix(in srgb, var(--editor-accent) 7%, transparent); color: var(--editor-ink-soft); }
+.editor-rich-content code { padding: 2px 5px; border-radius: 4px; background: color-mix(in srgb, var(--editor-accent) 9%, var(--surface)); color: var(--editor-accent); font-family: var(--mono); }
+.editor-rich-content pre { padding: 16px 18px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--code-bg); }
+.editor-rich-content pre code { padding: 0; background: transparent; color: var(--ink); }
+.editor-rich-content img, .editor-rich-content video { display: block; max-width: 100%; max-height: 460px; margin: 18px auto; border-radius: 8px; object-fit: contain; }
+.editor-rich-content table { width: 100%; margin: 18px 0; border-collapse: collapse; }
+.editor-rich-content th, .editor-rich-content td { min-width: 80px; padding: 8px 10px; border: 1px solid var(--border); text-align: left; }
+.editor-rich-content a { color: var(--editor-accent); }
+.editor-tool-button:disabled { opacity: .35; transform: none; cursor: not-allowed; }
+.markdown-video { margin: 20px 0; }
+.markdown-video video, .video-region video, .editor-preview video { display: block; width: min(100%, 900px); max-height: 70vh; margin: 0 auto; border-radius: 10px; background: #000; }
+.markdown-video figcaption { margin-top: 8px; color: var(--muted); text-align: center; font: 10px var(--ui-font); }
+@media (max-width: 620px) {
+  .editor-rich-content { min-height: 430px; padding: 28px 20px 60px; }
 }
 
 /* Settings read like a paper index: one active section, separated by rules. */

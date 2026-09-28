@@ -8,7 +8,7 @@ import IconButton from './IconButton.vue'
 import { asciiDiagramToMermaid, asciiTreeToTree } from '../asciiDiagram'
 
 const props = defineProps<{ region: ReaderRegion; annotations?: Annotation[]; focused: boolean; active: boolean; focusDistance?: number; themeMode?: ThemeManifest['mode']; themeKey?: string }>()
-const emit = defineEmits<{ focus: []; openViewer: []; 'open-link': [url: string]; 'code-copied': []; 'toggle-task': [] }>()
+const emit = defineEmits<{ focus: []; openViewer: []; 'open-link': [url: string]; 'code-copied': []; 'toggle-task': []; 'copy-image': [] }>()
 const codeLanguage = computed(() => String(props.region.metadata?.language ?? 'text'))
 const proseCodeLanguage = computed(() => /^(?:text|plaintext|markdown|md)$/i.test(codeLanguage.value))
 const asciiDiagramCandidate = computed(() => props.region.type === 'code' && proseCodeLanguage.value)
@@ -156,11 +156,13 @@ function handleContentClick(event: MouseEvent) {
   <article ref="regionRoot" :data-region-id="region.id" class="region-block" :class="[`region-${region.type}`, focusDistanceClass, { focused, active }]" tabindex="0" @click="emit('focus')" @keydown.enter.self.prevent="emit('focus')" @keydown.space.self.prevent="emit('focus')">
       <div v-if="region.type === 'mermaid'" class="region-content" @click.stop="emit('openViewer')">
       <MermaidBlock :code="String(region.metadata?.code ?? region.textContent)" :theme-key="themeKey" />
+      <button class="inline-view-action region-copy-image" type="button" @click.stop="emit('copy-image')">复制为图片</button>
     </div>
     <div v-else-if="region.type === 'image'" class="region-content image-region" @click.stop="emit('openViewer')">
       <div v-html="highlighted" />
       <button class="inline-view-action image-zoom-action" type="button" aria-label="放大查看原图" @click.stop="emit('openViewer')">放大查看 <AppIcon name="expand" :size="12" /></button>
     </div>
+    <div v-else-if="region.type === 'video'" class="region-content video-region" @click.stop v-html="renderedHtml" />
       <div v-else-if="region.type === 'code' && asciiTree" class="region-content auto-tree-region" @click.stop>
       <TreeDiagram :node="asciiTree" root @open-link="emit('open-link', $event)" />
     </div>
@@ -189,6 +191,7 @@ function handleContentClick(event: MouseEvent) {
         <div v-html="renderedHtml" />
       </div>
       <div v-else v-html="renderedHtml" />
+      <button v-if="region.type === 'math'" class="inline-view-action region-copy-image" type="button" @click.stop="emit('copy-image')">复制为图片</button>
     </div>
     <IconButton v-if="region.type === 'image'" class="region-more image-region-more" icon="expand" size="sm" label="放大查看原图" @click.stop="emit('openViewer')" />
     <IconButton v-else-if="!focused" class="region-more" icon="focus" size="sm" label="聚焦此区域" @click.stop="emit('focus')" />

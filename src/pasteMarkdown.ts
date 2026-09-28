@@ -28,7 +28,7 @@ function attributeUrl(element: HTMLElement | null, names: string[]) {
 }
 
 function imageUrl(element: HTMLElement | null) {
-  return attributeUrl(element, ['data-src', 'data-original', 'data-original-src', 'data-image-src', 'data-lazy-src', 'data-url', 'src'])
+  return attributeUrl(element, ['data-markdown-src', 'data-src', 'data-original', 'data-original-src', 'data-image-src', 'data-lazy-src', 'data-url', 'src'])
 }
 
 function imageAlt(element: HTMLElement | null) {
@@ -50,7 +50,7 @@ function imageMarkdown(element: HTMLElement | null) {
 }
 
 function mediaMarkdown(element: HTMLElement) {
-  const src = attributeUrl(element, ['src', 'data-src', 'data-url', 'href']) || attributeUrl(element.querySelector('source') as HTMLElement | null, ['src', 'data-src'])
+  const src = attributeUrl(element, ['data-markdown-src', 'src', 'data-src', 'data-url', 'href']) || attributeUrl(element.querySelector('source') as HTMLElement | null, ['data-markdown-src', 'src', 'data-src'])
   if (!src) return ''
   const label = element.tagName.toLowerCase() === 'audio' ? '音频' : '视频'
   return `[${label}](${src})`
@@ -167,7 +167,7 @@ function inline(node: Node): string {
     case 'iframe':
     case 'mpvoice':
     case 'mpvideosnap': return mediaMarkdown(element)
-    case 'input': return element.getAttribute('type')?.toLowerCase() === 'checkbox' ? `[${element.hasAttribute('checked') ? 'x' : ' '}]` : ''
+    case 'input': return element.getAttribute('type')?.toLowerCase() === 'checkbox' ? `[${element.hasAttribute('checked') ? 'x' : ' '}] ` : ''
     case 'svg':
     case 'canvas': return ''
     case 'script':
@@ -239,6 +239,8 @@ function removeClipboardNoise(document: ClipboardDocument) {
 }
 
 function renderFigure(figure: HTMLElement) {
+  const media = figure.querySelector('video, audio') as HTMLElement | null
+  if (media) return `${mediaMarkdown(media)}\n\n`
   const image = figure.querySelector('img') as HTMLElement | null
   const imageSource = imageMarkdown(image)
   const caption = figure.querySelector('figcaption, .img-caption, .img_desc, [class*="caption"]') as HTMLElement | null
@@ -466,14 +468,17 @@ export function formatClipboardImage(dataUrl: string, alt = '剪贴板图片') {
   return value ? `![${alt}](${value})` : ''
 }
 
+export function htmlToMarkdown(html: string) {
+  if (!html.trim() || typeof DOMParser === 'undefined') return ''
+  const document = new DOMParser().parseFromString(html, 'text/html') as ClipboardDocument
+  const body = removeClipboardNoise(document)
+  const source = Array.from(body.childNodes).filter((node) => node.nodeType !== Node.TEXT_NODE || Boolean(node.textContent?.trim())).map((node) => node.nodeType === Node.ELEMENT_NODE ? render(node as HTMLElement) : inline(node)).join('')
+  return normalizeArticleSections(stripDecorativeHeadingStars(normalizeMarkdown(stripAccidentalClipboardIndent(source))))
+}
+
 export function formatClipboardToMarkdown(html: string, text: string) {
   if (text.trim() && hasMarkdownSyntax(text)) return formatPastedText(text)
-  if (html.trim() && typeof DOMParser !== 'undefined') {
-    const document = new DOMParser().parseFromString(html, 'text/html') as ClipboardDocument
-    const body = removeClipboardNoise(document)
-    const source = Array.from(body.childNodes).filter((node) => node.nodeType !== Node.TEXT_NODE || Boolean(node.textContent?.trim())).map((node) => node.nodeType === Node.ELEMENT_NODE ? render(node as HTMLElement) : inline(node)).join('')
-    const markdown = normalizeArticleSections(stripDecorativeHeadingStars(normalizeMarkdown(stripAccidentalClipboardIndent(source))))
-    if (markdown) return markdown
-  }
+  const markdown = htmlToMarkdown(html)
+  if (markdown) return markdown
   return formatPastedText(text)
 }

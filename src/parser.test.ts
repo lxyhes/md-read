@@ -38,7 +38,7 @@ describe('Moyue markdown region parser', () => {
 $$
 \frac{a}{b}
 $$`)
-    expect(document.regions[0].html).toContain('katex')
+    expect(document.regions[0].html).toContain('MathJax')
     expect(document.regions[1].type).toBe('math')
     expect(document.regions[1].html).toContain('frac')
   })
@@ -49,7 +49,7 @@ $$`)
 \[
 \frac{a}{b}
 \]`)
-    expect(document.regions[0].html).toContain('katex')
+    expect(document.regions[0].html).toContain('MathJax')
     expect(document.regions[1].type).toBe('math')
     expect(document.regions[1].html).toContain('frac')
   })
@@ -121,6 +121,14 @@ $$`)
     expect(document.regions[0].type).toBe('image')
     expect(document.regions[0].metadata?.url).toBe('https://example.com/cover.png')
     expect(document.regions[0].html).toContain('loading="eager"')
+  })
+
+  it('renders a standalone video link as a playable video block', () => {
+    const document = parseMarkdown('notes/readme.md', '[视频](assets/demo.mp4)', (url) => `asset://${url}`)
+    expect(document.regions[0].type).toBe('video')
+    expect(document.regions[0].metadata?.url).toBe('asset://assets/demo.mp4')
+    expect(document.regions[0].html).toContain('<video')
+    expect(document.regions[0].html).toContain('controls')
   })
 
   it('resolves browser assets relative to the Markdown file', () => {

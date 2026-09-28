@@ -39,6 +39,10 @@ export const useReaderStore = defineStore('reader', () => {
   const activeTheme = computed(() => themes.value.find((theme) => theme.manifest.id === activeThemeId.value) ?? themes.value[0])
 
   function persistSession() {
+    try {
+      const settings = JSON.parse(localStorage.getItem('moyue:advanced-settings') ?? '{}') as { rememberRecent?: boolean }
+      if (settings.rememberRecent === false) { localStorage.removeItem(SESSION_KEY); return }
+    } catch { /* keep the default session behavior */ }
     localStorage.setItem(SESSION_KEY, JSON.stringify({ openDocumentIds: openDocumentIds.value, currentDocumentId: currentDocumentId.value }))
   }
 

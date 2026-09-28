@@ -1,6 +1,6 @@
 import { convertFileSrc, invoke, isTauri as tauriIsTauri } from '@tauri-apps/api/core'
 import { open, save } from '@tauri-apps/plugin-dialog'
-import { copyFile, mkdir, readDir, readTextFile, rename, watch, writeFile, writeTextFile } from '@tauri-apps/plugin-fs'
+import { copyFile, mkdir, readDir, readFile, readTextFile, remove, rename, watch, writeFile, writeTextFile } from '@tauri-apps/plugin-fs'
 
 const isTauri = () => tauriIsTauri()
 
@@ -8,6 +8,7 @@ export type BrowserAssetMap = Readonly<Record<string, string>>
 export interface OpenedFile { path: string; source: string; assets?: BrowserAssetMap }
 export interface WorkspaceFile { path: string; name: string }
 export interface FileSystemEntry { path: string; name: string; isDirectory: boolean }
+export interface MarkdownExportAsset { url: string; name: string; mime: string; bytes: Uint8Array }
 
 export async function watchMarkdownPath(path: string, onChange: () => void): Promise<(() => void) | null> {
   if (!isTauri()) return null
@@ -248,6 +249,180 @@ export async function saveExportFile(source: string, defaultName: string, extens
   const path = selected.toLowerCase().endsWith(`.${extension.toLowerCase()}`) ? selected : `${selected}.${extension}`
   await writeTextFile(path, source)
   return path
+}
+
+export async function saveBinaryExportFile(bytes: Uint8Array, defaultName: string, extension: string, filterName: string, mime: string): Promise<string | null> {
+  if (!isTauri()) {
+    const blob = new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], { type: mime })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `${defaultName}.${extension}`
+    anchor.click()
+    URL.revokeObjectURL(url)
+    return anchor.download
+  }
+  const selected = await save({ defaultPath: `${defaultName}.${extension}`, filters: [{ name: filterName, extensions: [extension] }] })
+  if (!selected) return null
+  const path = selected.toLowerCase().endsWith(`.${extension.toLowerCase()}`) ? selected : `${selected}.${extension}`
+  await writeFile(path, bytes)
+  return path
+}
+
+export async function importMarkdownAsset(markdownPath: string, kind: 'image' | 'video'): Promise<string | null> {
+  if (!isTauri()) throw new Error('媒体导入需要桌面端，浏览器预览可继续使用网络地址')
+  const filters = kind === 'image'
+    ? [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'bmp', 'svg'] }]
+    : [{ name: '视频', extensions: ['mp4', 'webm', 'mov', 'm4v', 'ogv', 'ogg'] }]
+  const selected = await open({ multiple: false, filters })
+  if (!selected || Array.isArray(selected)) return null
+  return importMarkdownAssetFromPath(markdownPath, kind, selected)
+}
+
+export async function importMarkdownAssetFromPath(markdownPath: string, kind: 'image' | 'video', selected: string): Promise<string> {
+  if (!isTauri()) throw new Error('媒体导入需要桌面端')
+  const directory = dirnameOf(markdownPath)
+  if (!directory) throw new Error('请先将 Markdown 保存到本地，再导入媒体')
+  const assetDirectory = `${directory}/.moyue-assets`
+  await mkdir(assetDirectory, { recursive: true })
+  const originalName = selected.replace(/\\/g, '/').split('/').pop() || `${kind}-${Date.now()}`
+  const dot = originalName.lastIndexOf('.')
+  const stem = (dot > 0 ? originalName.slice(0, dot) : originalName).replace(/[^\w\u3400-\u9fff-]+/g, '-').replace(/^-+|-+$/g, '') || kind
+  const extension = dot > 0 ? originalName.slice(dot + 1).toLowerCase() : kind === 'image' ? 'png' : 'mp4'
+  const fileName = `${stem}-${Date.now().toString(36)}.${extension}`
+  await copyFile(selected, `${assetDirectory}/${fileName}`)
+  await authorizeMarkdownAssets(markdownPath)
+  return `.moyue-assets/${fileName}`
+}
+
+export async function uploadMarkdownImage(endpoint: string, key = ''): Promise<string | null> {
+  if (!isTauri()) throw new Error('PicList 上传需要桌面端')
+  const selected = await open({ multiple: false, filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'bmp', 'svg'] }] })
+  if (!selected || Array.isArray(selected)) return null
+  return invoke<string>('upload_piclist_image', { path: selected, endpoint, key: key || null })
+}
+
+function imageExtension(url: string, mime: string) {
+  const fromUrl = url.match(/\.([a-z0-9]{2,5})(?:[?#]|$)/i)?.[1]?.toLowerCase()
+  if (fromUrl && /^(?:avif|bmp|gif|jpe?g|png|svg|webp)$/.test(fromUrl)) return fromUrl === 'jpeg' ? 'jpg' : fromUrl
+  return ({ 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp', 'image/svg+xml': 'svg', 'image/avif': 'avif', 'image/bmp': 'bmp' } as Record<string, string>)[mime] ?? 'jpg'
+}
+
+export async function downloadMarkdownImages(markdownPath: string, source: string): Promise<{ source: string; count: number }> {
+  if (!isTauri()) throw new Error('下载远程图片需要桌面端')
+  const directory = dirnameOf(markdownPath)
+  if (!directory) throw new Error('请先将 Markdown 保存到本地')
+  const pattern = /(!\[[^\]\n]*\]\()(<https?:\/\/[^>\n]+>|https?:\/\/[^)\s\n]+)(\))/gi
+  const urls = [...new Set([...source.matchAll(pattern)].map((match) => match[2].replace(/^<|>$/g, '')))]
+  if (!urls.length) return { source, count: 0 }
+  const assetDirectory = `${directory}/.moyue-assets`
+  await mkdir(assetDirectory, { recursive: true })
+  const replacements = new Map<string, string>()
+  for (const [index, url] of urls.entries()) {
+    try {
+      const image = await invoke<{ bytes: number[]; mime: string }>('download_remote_image', { url })
+      const extension = imageExtension(url, image.mime)
+      const name = `download-${Date.now().toString(36)}-${index + 1}.${extension}`
+      await writeFile(`${assetDirectory}/${name}`, Uint8Array.from(image.bytes))
+      replacements.set(url, `.moyue-assets/${name}`)
+    } catch {
+      // One unreachable image should not block the rest of the document.
+    }
+  }
+  if (!replacements.size) throw new Error('远程图片下载失败，请检查图片地址或网络')
+  await authorizeMarkdownAssets(markdownPath)
+  return {
+    source: source.replace(pattern, (match, before: string, wrapped: string, after: string) => {
+      const value = wrapped.replace(/^<|>$/g, '')
+      return `${before}${replacements.get(value) ?? wrapped}${after}`
+    }),
+    count: replacements.size,
+  }
+}
+
+function managedAssetPath(markdownPath: string, markdownUrl: string) {
+  const directory = dirnameOf(markdownPath)
+  const localPath = localAssetPath(decodeUrlPath(markdownUrl.match(/^([^?#]*)/)?.[1] ?? markdownUrl))
+  if (!directory || !localPath) throw new Error('只能管理本地图片')
+  const absolute = resolveLocalAssetPath(markdownPath, localPath)
+  const assetDirectory = `${assetKey(directory)}/.moyue-assets/`
+  if (!assetKey(absolute).startsWith(assetDirectory)) throw new Error('只能重命名或删除 .moyue-assets 中的图片')
+  return absolute
+}
+
+export async function renameMarkdownAsset(markdownPath: string, markdownUrl: string, nextName: string): Promise<string> {
+  if (!isTauri()) throw new Error('图片重命名需要桌面端')
+  const sourcePath = managedAssetPath(markdownPath, markdownUrl)
+  const safeName = nextName.trim().replace(/[\\/:*?"<>|]/g, '-')
+  if (!safeName || !/\.(?:avif|bmp|gif|jpe?g|png|svg|webp)$/i.test(safeName)) throw new Error('请输入带图片扩展名的有效文件名')
+  const targetPath = `${sourcePath.slice(0, sourcePath.lastIndexOf('/') + 1)}${safeName}`
+  await rename(sourcePath, targetPath)
+  return `.moyue-assets/${safeName}`
+}
+
+export async function removeMarkdownAsset(markdownPath: string, markdownUrl: string): Promise<void> {
+  if (!isTauri()) throw new Error('图片删除需要桌面端')
+  await remove(managedAssetPath(markdownPath, markdownUrl))
+}
+
+export async function organizeMarkdownAssets(markdownPath: string, source: string): Promise<{ source: string; count: number }> {
+  if (!isTauri()) throw new Error('媒体整理需要桌面端')
+  const directory = dirnameOf(markdownPath)
+  if (!directory) throw new Error('请先将 Markdown 保存到本地，再整理媒体')
+  const pattern = /(!\[[^\]\n]*\]\(|\[(?:视频|video)\]\()(<[^>\n]+>|[^)\n]+)(\))/gi
+  const urls = [...source.matchAll(pattern)].map((match) => match[2].trim()).filter(Boolean)
+  const replacements = new Map<string, string>()
+  const assetDirectory = `${directory}/.moyue-assets`
+  let count = 0
+  for (const original of new Set(urls)) {
+    const value = original.startsWith('<') && original.endsWith('>') ? original.slice(1, -1) : original
+    const pathPart = value.match(/^([^?#]*)(.*)$/)
+    const localPath = localAssetPath(decodeUrlPath(pathPart?.[1] ?? value))
+    if (!localPath || !/\.(?:avif|bmp|gif|jpe?g|png|svg|webp|mp4|webm|mov|m4v|ogv|ogg)$/i.test(localPath)) continue
+    const absolutePath = resolveLocalAssetPath(markdownPath, localPath)
+    if (assetKey(absolutePath).startsWith(`${assetKey(assetDirectory)}/`)) continue
+    if (!count) await mkdir(assetDirectory, { recursive: true })
+    const originalName = absolutePath.split('/').pop() || `media-${count + 1}`
+    const dot = originalName.lastIndexOf('.')
+    const stem = (dot > 0 ? originalName.slice(0, dot) : originalName).replace(/[^\w\u3400-\u9fff-]+/g, '-').replace(/^-+|-+$/g, '') || 'media'
+    const extension = dot > 0 ? originalName.slice(dot + 1).toLowerCase() : 'bin'
+    const fileName = `${stem}-${Date.now().toString(36)}-${count + 1}.${extension}`
+    const targetPath = `${assetDirectory}/${fileName}`
+    const insideDocumentDirectory = assetKey(absolutePath).startsWith(`${assetKey(directory)}/`)
+    if (insideDocumentDirectory) {
+      try { await rename(absolutePath, targetPath) } catch { await copyFile(absolutePath, targetPath) }
+    } else {
+      await copyFile(absolutePath, targetPath)
+    }
+    replacements.set(original, `.moyue-assets/${fileName}${pathPart?.[2] ?? ''}`)
+    count += 1
+  }
+  if (!count) return { source, count: 0 }
+  await authorizeMarkdownAssets(markdownPath)
+  return { source: source.replace(pattern, (match, before: string, url: string, after: string) => `${before}${replacements.get(url.trim()) ?? url}${after}`), count }
+}
+
+export async function readMarkdownExportAssets(markdownPath: string, source: string): Promise<MarkdownExportAsset[]> {
+  if (!isTauri()) return []
+  const pattern = /(?:!\[[^\]\n]*\]|\[(?:视频|video)\])\((<[^>\n]+>|[^)\n]+)\)/gi
+  const result: MarkdownExportAsset[] = []
+  for (const [index, original] of [...new Set([...source.matchAll(pattern)].map((match) => match[1].trim()))].entries()) {
+    const value = original.startsWith('<') && original.endsWith('>') ? original.slice(1, -1) : original
+    const rawPath = value.match(/^([^?#]*)/)?.[1] ?? value
+    const localPath = localAssetPath(decodeUrlPath(rawPath))
+    if (!localPath || !/\.(?:avif|bmp|gif|jpe?g|png|svg|webp|mp4|webm|ogv|ogg)$/i.test(localPath)) continue
+    const absolutePath = resolveLocalAssetPath(markdownPath, localPath)
+    try {
+      const extension = absolutePath.split('.').pop()?.toLowerCase() || 'bin'
+      const base = absolutePath.split('/').pop()?.replace(/[^\w\u3400-\u9fff.-]+/g, '-') || `asset-${index + 1}.${extension}`
+      const name = `${index + 1}-${base}`
+      const mime = extension === 'svg' ? 'image/svg+xml' : extension === 'jpg' || extension === 'jpeg' ? 'image/jpeg' : extension === 'mp4' || extension === 'm4v' ? 'video/mp4' : extension === 'webm' ? 'video/webm' : extension === 'ogv' || extension === 'ogg' ? 'video/ogg' : `image/${extension}`
+      result.push({ url: value, name, mime, bytes: await readFile(absolutePath) })
+    } catch {
+      // Missing media does not block the document export.
+    }
+  }
+  return result
 }
 
 export async function createMarkdownDirectory(path: string): Promise<void> {

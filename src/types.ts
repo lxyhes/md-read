@@ -6,6 +6,7 @@ export type ReaderRegionType =
   | 'code'
   | 'mermaid'
   | 'image'
+  | 'video'
   | 'table'
   | 'math'
   | 'footnotes'

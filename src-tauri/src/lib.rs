@@ -5,6 +5,7 @@ use serde::Serialize;
 use std::borrow::Cow;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+use std::net::IpAddr;
 use std::path::Path;
 use std::process::Command;
 use tauri::Manager;
@@ -208,6 +209,91 @@ struct RemoteImage {
     mime: String,
 }
 
+fn is_safe_remote_image_url(url: &reqwest::Url) -> bool {
+    if !matches!(url.scheme(), "http" | "https") {
+        return false;
+    }
+    let Some(host) = url.host_str() else { return false };
+    if host.eq_ignore_ascii_case("localhost") || host.ends_with(".local") {
+        return false;
+    }
+    match host.parse::<IpAddr>() {
+        Ok(IpAddr::V4(ip)) => !(ip.is_private() || ip.is_loopback() || ip.is_link_local() || ip.is_unspecified()),
+        Ok(IpAddr::V6(ip)) => !(ip.is_loopback() || ip.is_unspecified() || ip.is_unique_local()),
+        Err(_) => true,
+    }
+}
+
+#[tauri::command]
+async fn download_remote_image(url: String) -> Result<RemoteImage, String> {
+    let parsed = reqwest::Url::parse(url.trim()).map_err(|error| format!("图片地址无效：{error}"))?;
+    if !is_safe_remote_image_url(&parsed) {
+        return Err("只允许下载公开 HTTP 或 HTTPS 图片".into());
+    }
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            if is_safe_remote_image_url(attempt.url()) { attempt.follow() } else { attempt.stop() }
+        }))
+        .timeout(std::time::Duration::from_secs(20))
+        .user_agent("Mozilla/5.0 MoyueReader/0.1")
+        .build()
+        .map_err(|error| format!("创建图片请求失败：{error}"))?;
+    let response = client.get(parsed).send().await.map_err(|error| format!("下载图片失败：{error}"))?;
+    if !response.status().is_success() {
+        return Err(format!("图片服务器返回 {}", response.status()));
+    }
+    if response.content_length().unwrap_or(0) > 20 * 1024 * 1024 {
+        return Err("图片超过 20 MB，已跳过下载".into());
+    }
+    let mime = response.headers().get(reqwest::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok()).and_then(|value| value.split(';').next())
+        .unwrap_or("image/jpeg").to_string();
+    if !mime.starts_with("image/") {
+        return Err("远程地址没有返回图片".into());
+    }
+    let bytes = response.bytes().await.map_err(|error| format!("读取图片失败：{error}"))?;
+    if bytes.len() > 20 * 1024 * 1024 {
+        return Err("图片超过 20 MB，已跳过下载".into());
+    }
+    Ok(RemoteImage { bytes: bytes.to_vec(), mime })
+}
+
+#[tauri::command]
+async fn upload_piclist_image(path: String, endpoint: String, key: Option<String>) -> Result<String, String> {
+    let image = Path::new(&path);
+    if !image.is_file() || !is_image(image) {
+        return Err("请选择受支持的图片文件".into());
+    }
+    let mut url = reqwest::Url::parse(endpoint.trim()).map_err(|error| format!("PicList 地址无效：{error}"))?;
+    let host = url.host_str().unwrap_or_default();
+    if !matches!(url.scheme(), "http" | "https") || !matches!(host, "127.0.0.1" | "localhost" | "::1") {
+        return Err("PicList 服务地址必须指向本机".into());
+    }
+    if let Some(value) = key.filter(|value| !value.trim().is_empty()) {
+        url.query_pairs_mut().append_pair("key", value.trim());
+    }
+    let bytes = std::fs::read(image).map_err(|error| format!("读取图片失败：{error}"))?;
+    if bytes.len() > 20 * 1024 * 1024 {
+        return Err("图片超过 20 MB，已取消上传".into());
+    }
+    let filename = image.file_name().and_then(|value| value.to_str()).unwrap_or("image.png");
+    let boundary = format!("moyue-{}", clipboard_signature(&(filename, bytes.len())));
+    let mut body = format!("--{boundary}\r\nContent-Disposition: form-data; name=\"image\"; filename=\"{filename}\"\r\nContent-Type: application/octet-stream\r\n\r\n").into_bytes();
+    body.extend_from_slice(&bytes);
+    body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+    let response = reqwest::Client::builder().timeout(std::time::Duration::from_secs(60)).build()
+        .map_err(|error| format!("创建 PicList 请求失败：{error}"))?
+        .post(url).header(reqwest::header::CONTENT_TYPE, format!("multipart/form-data; boundary={boundary}"))
+        .body(body).send().await.map_err(|error| format!("连接 PicList 失败：{error}"))?;
+    if !response.status().is_success() {
+        return Err(format!("PicList 返回 {}", response.status()));
+    }
+    let response_text = response.text().await.map_err(|error| format!("读取 PicList 响应失败：{error}"))?;
+    let payload: serde_json::Value = serde_json::from_str(&response_text).map_err(|error| format!("PicList 响应无效：{error}"))?;
+    payload.get("result").and_then(|value| value.as_array()).and_then(|items| items.first()).and_then(|value| value.as_str())
+        .map(str::to_string).ok_or_else(|| payload.get("message").and_then(|value| value.as_str()).unwrap_or("PicList 没有返回图片地址").to_string())
+}
+
 fn remote_image_referer(url: &reqwest::Url) -> Option<&'static str> {
     let host = url.host_str()?.to_ascii_lowercase();
     if host == "mmbiz.qpic.cn" {
@@ -319,14 +405,14 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
-        .invoke_handler(tauri::generate_handler![allow_asset_directory, read_local_image, read_clipboard_image, read_clipboard_snapshot, read_clipboard_signature, write_clipboard_snapshot, read_remote_image, open_directory, open_external_url])
+        .invoke_handler(tauri::generate_handler![allow_asset_directory, read_local_image, read_clipboard_image, read_clipboard_snapshot, read_clipboard_signature, write_clipboard_snapshot, read_remote_image, download_remote_image, upload_piclist_image, open_directory, open_external_url])
         .run(tauri::generate_context!())
         .expect("error while running Moyue application");
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{is_allowed_external_url, is_image, remote_image_referer};
+    use super::{is_allowed_external_url, is_image, is_safe_remote_image_url, remote_image_referer};
     use std::path::Path;
 
     #[test]
@@ -348,5 +434,12 @@ mod tests {
         assert_eq!(remote_image_referer(&reqwest::Url::parse("https://mmbiz.qpic.cn/a.png").unwrap()), Some("https://mp.weixin.qq.com/"));
         assert_eq!(remote_image_referer(&reqwest::Url::parse("https://sns-img-qc.xhscdn.com/a.png").unwrap()), Some("https://www.xiaohongshu.com/"));
         assert_eq!(remote_image_referer(&reqwest::Url::parse("https://example.com/a.png").unwrap()), None);
+    }
+
+    #[test]
+    fn remote_image_download_rejects_local_networks() {
+        assert!(is_safe_remote_image_url(&reqwest::Url::parse("https://example.com/a.png").unwrap()));
+        assert!(!is_safe_remote_image_url(&reqwest::Url::parse("http://127.0.0.1/a.png").unwrap()));
+        assert!(!is_safe_remote_image_url(&reqwest::Url::parse("http://192.168.1.2/a.png").unwrap()));
     }
 }
