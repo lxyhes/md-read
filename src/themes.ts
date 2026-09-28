@@ -71,7 +71,7 @@ export async function importTheme(file: File): Promise<MoyueTheme> {
 }
 
 export function exportTheme(theme: MoyueTheme): Blob {
-  validateTheme(theme.manifest, { tokens: JSON.stringify(theme.tokens), reader: theme.readerCss ?? '', markdown: theme.markdownCss ?? '', components: theme.componentsCss ?? '' })
+  validateTheme(theme.manifest, { tokens: JSON.stringify(theme.tokens), reader: theme.readerCss ?? '', markdown: theme.markdownCss ?? '', components: theme.componentsCss ?? '', code: theme.codeCss ?? '', mermaid: theme.mermaidCss ?? '' })
   const files: Record<string, Uint8Array> = {
     'manifest.json': strToU8(JSON.stringify(theme.manifest, null, 2)),
     'tokens.json': strToU8(JSON.stringify(theme.tokens, null, 2)),
@@ -79,7 +79,13 @@ export function exportTheme(theme: MoyueTheme): Blob {
     [theme.manifest.entry.markdown]: strToU8(theme.markdownCss ?? ''),
     [theme.manifest.entry.components]: strToU8(theme.componentsCss ?? '')
   }
+  if (theme.manifest.entry.code) files[theme.manifest.entry.code] = strToU8(theme.codeCss ?? '')
+  if (theme.manifest.entry.mermaid) files[theme.manifest.entry.mermaid] = strToU8(theme.mermaidCss ?? '')
   return new Blob([zipSync(files) as unknown as BlobPart], { type: 'application/zip' })
+}
+
+export function themeCss(theme: MoyueTheme): string {
+  return [theme.readerCss, theme.markdownCss, theme.componentsCss, theme.codeCss, theme.mermaidCss].filter(Boolean).join('\n')
 }
 
 export function cssVariables(theme: MoyueTheme): Record<string, string> {
