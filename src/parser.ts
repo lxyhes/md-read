@@ -1,6 +1,6 @@
 import type { HeadingItem, ReaderDocument, ReaderRegion, ReaderRegionType } from './types'
 import { blockHtmlWithSourceIndent, renderFootnotes } from './markdown/render'
-import { createRenderContext, nodeText, type MarkdownUrlResolver, type MdastNode } from './markdown/shared'
+import { createRenderContext, escapeHtml, nodeText, safeUrl, type MarkdownUrlResolver, type MdastNode } from './markdown/shared'
 import { formatPastedText, isLikelyProseBlock, normalizeMixedOrderedListSource } from './pasteMarkdown'
 import { isTimestampedParagraph, markdownProcessor as processor, normalizeArticleStrong, normalizeLatexDelimiters, normalizeMixedOrderedLists, promoteTimestampedParagraphs, removeEmptyListItems } from './markdown/fragment'
 
@@ -36,8 +36,17 @@ function imageNode(node: MdastNode): MdastNode | null {
   return null
 }
 
+function videoNode(node: MdastNode): MdastNode | null {
+  if (node.type !== 'paragraph' || node.children?.length !== 1) return null
+  const link = node.children[0]
+  if (link?.type !== 'link') return null
+  const label = nodeText(link).trim().toLowerCase()
+  return label === '视频' || label === 'video' || /\.(?:mp4|webm|mov|m4v|ogv|ogg)(?:[?#].*)?$/i.test(link.url ?? '') ? link : null
+}
+
 function regionType(node: MdastNode): ReaderRegionType {
   if (mermaidCode(node) !== null) return 'mermaid'
+  if (videoNode(node)) return 'video'
   if (imageNode(node)) return 'image'
   if (node.type === 'table') return 'table'
   if (node.type === 'math') return 'math'
@@ -144,9 +153,13 @@ export function parseMarkdown(path: string, source: string, resolveUrl: Markdown
     if (node.lang) metadata.language = node.lang
     if (type === 'mermaid') metadata.code = diagramCode ?? ''
     if (type === 'image') metadata.url = resolveUrl(imageNode(node)?.url ?? '')
+    if (type === 'video') metadata.url = resolveUrl(videoNode(node)?.url ?? '')
+    const html = type === 'video'
+      ? `<figure class="markdown-video"><video src="${safeUrl(String(metadata.url ?? ''))}" controls preload="metadata"></video><figcaption>${escapeHtml(videoNode(node)?.title || textContent || '视频')}</figcaption></figure>`
+      : blockHtmlWithSourceIndent(node, normalizedSource, resolveUrl, context)
     const region: ReaderRegion = {
       id, documentId, type, index: regions.length, textContent, sourceStart: start, sourceEnd: end,
-      html: blockHtmlWithSourceIndent(node, normalizedSource, resolveUrl, context), metadata
+      html, metadata
     }
     regions.push(region)
     const boldSection = standaloneStrongText(node)

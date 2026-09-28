@@ -11,12 +11,13 @@ import FontPicker from './components/FontPicker.vue'
 import { interfaceFont } from './fonts'
 import FileSystemTree, { type FileSystemTreeNode } from './components/FileSystemTree.vue'
 import ClipboardManager from './components/ClipboardManager.vue'
-import { copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, listDirectoryFiles, listFileSystemEntries, openFileSystemDirectory, openMarkdownDirectory, openMarkdownFile, readMarkdownPath, renameMarkdownPath, resolveMarkdownAssetUrl, saveClipboardImage, saveExportFile, saveMarkdownFile, watchMarkdownPath, writeMarkdownFile, type WorkspaceFile } from './fileService'
+import { copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, downloadMarkdownImages, importMarkdownAsset, importMarkdownAssetFromPath, listDirectoryFiles, listFileSystemEntries, openFileSystemDirectory, openMarkdownDirectory, openMarkdownFile, organizeMarkdownAssets, readMarkdownExportAssets, readMarkdownPath, removeMarkdownAsset, renameMarkdownAsset, renameMarkdownPath, resolveMarkdownAssetUrl, saveBinaryExportFile, saveClipboardImage, saveExportFile, saveMarkdownFile, uploadMarkdownImage, watchMarkdownPath, writeMarkdownFile, type WorkspaceFile } from './fileService'
 import type { Annotation, ReaderDocument, ReaderRegion, ViewerType } from './types'
 import { escapeHtml } from './markdown/shared'
 import { makeImplicitMarkdownHeadingsExplicit, parseMarkdown, renderMarkdownFragment } from './parser'
 import { asciiDiagramToMermaid, asciiTreeToTree, markdownToTree } from './asciiDiagram'
-import { formatClipboardImage, formatClipboardToMarkdown, normalizeMixedOrderedListSource, suggestPastedMarkdownName } from './pasteMarkdown'
+import { formatClipboardImage, formatClipboardToMarkdown, htmlToMarkdown, normalizeMixedOrderedListSource, suggestPastedMarkdownName } from './pasteMarkdown'
+import { createDocx, createEpub, createLatex } from './exportService'
 import logoAsset from './assets/moyue-logo-256.png'
 
 const FocusAmbiencePicker = defineAsyncComponent(() => import('./components/FocusAmbiencePicker.vue'))
@@ -54,6 +55,29 @@ const saveFailed = ref(false)
 const fileSyncState = ref<FileSyncState>('idle')
 const fullscreenActive = ref(typeof document !== 'undefined' && Boolean(document.fullscreenElement))
 const settingsTab = ref('reading')
+type AdvancedSettings = {
+  defaultExtension: 'md' | 'markdown'
+  defaultCodeLanguage: string
+  rememberCodeLanguage: boolean
+  emojiAutocomplete: boolean
+  autoLink: boolean
+  rememberRecent: boolean
+  dropBehavior: 'open' | 'insert'
+  picListEndpoint: string
+  picListKey: string
+  epubChapterDepth: number
+  printPageSize: 'A4' | 'Letter'
+  printMargin: number
+  printHeader: string
+  printFooter: string
+  printBackground: boolean
+}
+const advancedDefaults: AdvancedSettings = { defaultExtension: 'md', defaultCodeLanguage: 'text', rememberCodeLanguage: true, emojiAutocomplete: true, autoLink: true, rememberRecent: true, dropBehavior: 'insert', picListEndpoint: 'http://127.0.0.1:36677/upload', picListKey: '', epubChapterDepth: 3, printPageSize: 'A4', printMargin: 18, printHeader: '', printFooter: '', printBackground: true }
+function readAdvancedSettings(): AdvancedSettings {
+  try { return { ...advancedDefaults, ...JSON.parse(localStorage.getItem('moyue:advanced-settings') ?? '{}') } }
+  catch { return { ...advancedDefaults } }
+}
+const advancedSettings = ref(readAdvancedSettings())
 const viewer = ref<{ type: ViewerType; region: ReaderRegion } | null>(null)
 const viewerTab = ref<'preview' | 'source' | 'data'>('preview')
 const viewerFullscreen = ref(false)
@@ -91,10 +115,18 @@ const fileProperties = ref<FileTreeEntry | null>(null)
 const editorOpen = ref(false)
 const editorSource = ref('')
 const editorTextarea = ref<HTMLTextAreaElement | null>(null)
+const editorRich = ref<HTMLElement | null>(null)
+const editorRichBaseSource = ref('')
 const editorPreview = ref<HTMLElement | null>(null)
-const editorMode = ref<'write' | 'split' | 'preview'>('split')
+const editorMode = ref<'write' | 'split' | 'rich' | 'preview'>('split')
 const editorCalmMode = ref(false)
 const editorContextMenu = ref<{ x: number; y: number } | null>(null)
+const imageManagerOpen = ref(false)
+const tableBuilderOpen = ref(false)
+const tableBuilder = ref({ rows: 3, columns: 3, alignment: 'left' as 'left' | 'center' | 'right' })
+const tableEditor = ref<{ region: ReaderRegion; rows: string[][]; alignments: Array<'left' | 'center' | 'right'> } | null>(null)
+const editorCodeLanguage = ref(advancedSettings.value.defaultCodeLanguage)
+const lastMediaAction = ref<{ source: string; path: string | null } | null>(null)
 const editorOriginalSource = ref('')
 const editorSaving = ref(false)
 const editorCursor = ref({ line: 1, column: 1 })
@@ -112,6 +144,14 @@ const editorSourceStats = computed(() => {
     characters: source.replace(/\s/g, '').length,
     lines: source ? source.split(/\r?\n/).length : 1,
   }
+})
+const editorImages = computed(() => [...editorSource.value.matchAll(/!\[([^\]\n]*)\]\((<[^>\n]+>|[^)\n]+)\)/g)].map((match, index) => ({ index, alt: match[1] || `图片 ${index + 1}`, url: match[2].replace(/^<|>$/g, ''), remote: /^https?:\/\//i.test(match[2].replace(/^<|>$/g, '')) })))
+const emojiChoices = [{ code: 'smile', value: '😊' }, { code: 'joy', value: '😂' }, { code: 'heart', value: '❤️' }, { code: 'thumbsup', value: '👍' }, { code: 'warning', value: '⚠️' }, { code: 'check', value: '✅' }, { code: 'bulb', value: '💡' }, { code: 'rocket', value: '🚀' }]
+const editorEmojiSuggestions = computed(() => {
+  if (!advancedSettings.value.emojiAutocomplete || editorMode.value === 'rich') return []
+  const position = editorTextarea.value?.selectionStart ?? 0
+  const query = editorSource.value.slice(0, position).match(/:([a-z0-9_+-]{0,16})$/i)?.[1]?.toLowerCase()
+  return query === undefined ? [] : emojiChoices.filter((item) => item.code.includes(query)).slice(0, 5)
 })
 const editorMarkdownNormalization = computed(() => makeImplicitMarkdownHeadingsExplicit(editorSource.value))
 const exportOpen = ref(false)
@@ -492,17 +532,94 @@ async function openEditor() {
 }
 
 function closeEditor() {
+  if (editorMode.value === 'rich') syncRichEditorSource()
   if (editorDirty.value && !window.confirm('还有未保存的编辑内容，确定要退出吗？')) return
   editorOpen.value = false
   editorContextMenu.value = null
   clearEditorInlineAssets()
 }
 
-function setEditorMode(mode: 'write' | 'split' | 'preview') {
+function richEditorHtml() {
+  const path = store.currentDocument?.path ?? ''
+  const parsed = parseMarkdown(path || '编辑.md', editorSource.value)
+  if (!parsed.regions.length) return '<section class="editor-rich-block" data-source-start="0" data-source-end="0"><p><br></p></section>'
+  return parsed.regions.map((region) => {
+    const blockSource = editorSource.value.slice(region.sourceStart, region.sourceEnd)
+    const root = document.createElement('div')
+    root.innerHTML = region.html
+    const imageUrls = [...blockSource.matchAll(/!\[[^\]]*\]\((<[^>]+>|[^)\n]+)\)/g)].map((match) => match[1].replace(/^<|>$/g, ''))
+    const videoUrls = [...blockSource.matchAll(/\[(?:视频|video)\]\((<[^>]+>|[^)\n]+)\)/gi)].map((match) => match[1].replace(/^<|>$/g, ''))
+    root.querySelectorAll<HTMLImageElement>('img[src]').forEach((media, index) => {
+      const markdownSource = imageUrls[index] ?? media.getAttribute('src') ?? ''
+      media.dataset.markdownSrc = markdownSource
+      media.src = resolveMarkdownAssetUrl(path, markdownSource, editorInlineAssets.value)
+    })
+    root.querySelectorAll<HTMLVideoElement>('video[src]').forEach((media, index) => {
+      const markdownSource = videoUrls[index] ?? media.getAttribute('src') ?? ''
+      media.dataset.markdownSrc = markdownSource
+      media.src = resolveMarkdownAssetUrl(path, markdownSource, editorInlineAssets.value)
+    })
+    return `<section class="editor-rich-block" data-source-start="${region.sourceStart}" data-source-end="${region.sourceEnd}">${root.innerHTML}</section>`
+  }).join('')
+}
+
+function mountRichEditor() {
+  if (!editorRich.value) return
+  editorRichBaseSource.value = editorSource.value
+  editorRich.value.innerHTML = richEditorHtml()
+  editorRich.value.focus()
+}
+
+function syncRichEditorSource() {
+  if (!editorRich.value) return
+  const changes = [...editorRich.value.querySelectorAll<HTMLElement>('.editor-rich-block[data-rich-dirty="true"]')].map((block) => ({
+    start: Number(block.dataset.sourceStart),
+    end: Number(block.dataset.sourceEnd),
+    markdown: htmlToMarkdown(block.innerHTML),
+  })).filter((change) => Number.isFinite(change.start) && Number.isFinite(change.end)).sort((left, right) => right.start - left.start)
+  if (!changes.length) return
+  let source = editorRichBaseSource.value
+  for (const change of changes) source = `${source.slice(0, change.start)}${change.markdown}${source.slice(change.end)}`
+  editorSource.value = source
+}
+
+function markRichSelectionDirty() {
+  const anchor = window.getSelection()?.anchorNode
+  const element = anchor instanceof Element ? anchor : anchor?.parentElement
+  element?.closest<HTMLElement>('.editor-rich-block')?.setAttribute('data-rich-dirty', 'true')
+}
+
+function onRichEditorInput() {
+  markRichSelectionDirty()
+  syncRichEditorSource()
+}
+
+function runRichCommand(command: string, value?: string) {
+  editorRich.value?.focus()
+  document.execCommand(command, false, value)
+  markRichSelectionDirty()
+  syncRichEditorSource()
+}
+
+function insertRichHtml(html: string) {
+  runRichCommand('insertHTML', html)
+}
+
+function onRichEditorPaste(event: ClipboardEvent) {
+  event.preventDefault()
+  const html = event.clipboardData?.getData('text/html') ?? ''
+  const text = event.clipboardData?.getData('text/plain') ?? ''
+  const markdown = formatClipboardToMarkdown(html, text)
+  insertRichHtml(renderMarkdownFragment(markdown))
+}
+
+function setEditorMode(mode: 'write' | 'split' | 'rich' | 'preview') {
+  if (editorMode.value === 'rich' && mode !== 'rich') syncRichEditorSource()
   if (mode !== 'split') stopEditorSplitResize()
   editorMode.value = mode
   void nextTick(() => {
-    if (mode !== 'preview') editorTextarea.value?.focus()
+    if (mode === 'rich') mountRichEditor()
+    else if (mode !== 'preview') editorTextarea.value?.focus()
   })
 }
 
@@ -547,7 +664,7 @@ function startEditorSplitResize(event: PointerEvent) {
 
 function toggleEditorCalmMode() {
   editorCalmMode.value = !editorCalmMode.value
-  void nextTick(() => editorTextarea.value?.focus())
+  void nextTick(() => editorMode.value === 'rich' ? editorRich.value?.focus() : editorTextarea.value?.focus())
 }
 
 function openEditorPreviewImage(event: MouseEvent) {
@@ -574,6 +691,7 @@ async function saveEditor() {
   if (!document || !editorOpen.value || editorSaving.value) return
   editorSaving.value = true
   try {
+    if (editorMode.value === 'rich') syncRichEditorSource()
     const sourceToSave = editorSourceForSave.value
     if (isRealDocumentPath(document.path)) await writeMarkdownFile(document.path, sourceToSave)
     await store.replaceDocumentSource(document.id, sourceToSave)
@@ -800,6 +918,15 @@ async function onEditorPaste(event: ClipboardEvent) {
 }
 
 function wrapEditorSelection(before: string, after: string, placeholder: string) {
+  if (editorMode.value === 'rich') {
+    if (before === '**') runRichCommand('bold')
+    else if (before === '*') runRichCommand('italic')
+    else {
+      const selected = window.getSelection()?.toString() || placeholder
+      insertRichHtml(before.startsWith('```') ? `<pre><code>${escapeHtml(selected)}</code></pre>` : `<code>${escapeHtml(selected)}</code>`)
+    }
+    return
+  }
   updateEditor((value, start, end) => {
     const selected = value.slice(start, end) || placeholder
     const next = `${value.slice(0, start)}${before}${selected}${after}${value.slice(end)}`
@@ -808,6 +935,12 @@ function wrapEditorSelection(before: string, after: string, placeholder: string)
 }
 
 function insertEditorLink() {
+  if (editorMode.value === 'rich') {
+    const selected = window.getSelection()?.toString() || '链接文字'
+    const url = window.prompt('链接地址', 'https://')?.trim()
+    if (url) insertRichHtml(`<a href="${escapeHtml(url)}">${escapeHtml(selected)}</a>`)
+    return
+  }
   updateEditor((value, start, end) => {
     const selected = value.slice(start, end) || '链接文字'
     const next = `${value.slice(0, start)}[${selected}](https://)${value.slice(end)}`
@@ -816,24 +949,232 @@ function insertEditorLink() {
   })
 }
 
+function insertEditorMedia(kind: 'image' | 'video', markdownUrl: string) {
+  if (editorMode.value === 'rich') {
+    const resolved = resolveMarkdownAssetUrl(store.currentDocument?.path ?? '', markdownUrl, editorInlineAssets.value)
+    insertRichHtml(kind === 'image'
+      ? `<img src="${escapeHtml(resolved)}" data-markdown-src="${escapeHtml(markdownUrl)}" alt="图片" />`
+      : `<figure><video src="${escapeHtml(resolved)}" data-markdown-src="${escapeHtml(markdownUrl)}" controls></video><figcaption>视频</figcaption></figure>`)
+    return
+  }
+  const markup = kind === 'image' ? `![图片](${markdownUrl})` : `[视频](${markdownUrl})`
+  updateEditor((value, start, end) => ({ value: `${value.slice(0, start)}${markup}${value.slice(end)}`, start: start + markup.length, end: start + markup.length }))
+}
+
+async function importEditorMedia(kind: 'image' | 'video') {
+  const document = store.currentDocument
+  if (!document) return
+  if (!isRealDocumentPath(document.path)) {
+    const fallback = kind === 'image' ? '图片地址' : '视频地址'
+    insertEditorMedia(kind, fallback)
+    notify('浏览器预览已插入地址占位符；桌面端可直接导入文件')
+    return
+  }
+  busyAction.value = 'file'
+  try {
+    const url = await importMarkdownAsset(document.path, kind)
+    if (!url) return
+    lastMediaAction.value = { source: editorSource.value, path: url }
+    insertEditorMedia(kind, url)
+    notify(kind === 'image' ? '图片已导入并插入' : '视频已导入并插入')
+  } catch (error) {
+    notify(error instanceof Error ? error.message : '媒体导入失败')
+  } finally {
+    busyAction.value = null
+  }
+}
+
 function insertEditorImage() {
-  updateEditor((value, start, end) => {
-    const selected = value.slice(start, end) || '图片描述'
-    const next = `${value.slice(0, start)}![${selected}](图片地址)${value.slice(end)}`
-    const urlStart = start + selected.length + 4
-    return { value: next, start: urlStart, end: urlStart + 4 }
-  })
+  void importEditorMedia('image')
+}
+
+function insertEditorVideo() {
+  void importEditorMedia('video')
+}
+
+async function uploadEditorImage() {
+  busyAction.value = 'file'
+  try {
+    const url = await uploadMarkdownImage(advancedSettings.value.picListEndpoint, advancedSettings.value.picListKey)
+    if (!url) return
+    lastMediaAction.value = { source: editorSource.value, path: null }
+    insertEditorMedia('image', url)
+    notify('图片已通过 PicList 上传并插入')
+  } catch (error) {
+    notify(error instanceof Error ? error.message : 'PicList 上传失败')
+  } finally { busyAction.value = null }
+}
+
+async function downloadAllEditorImages() {
+  const document = store.currentDocument
+  if (!document || !isRealDocumentPath(document.path)) { notify('请先在桌面端保存 Markdown'); return }
+  if (editorMode.value === 'rich') syncRichEditorSource()
+  busyAction.value = 'file'
+  try {
+    const previous = editorSource.value
+    const result = await downloadMarkdownImages(document.path, previous)
+    if (!result.count) { notify('没有需要下载的远程图片'); return }
+    lastMediaAction.value = { source: previous, path: null }
+    editorSource.value = result.source
+    if (editorMode.value === 'rich') void nextTick(mountRichEditor)
+    notify(`已下载 ${result.count} 张图片到 .moyue-assets`)
+  } catch (error) {
+    notify(error instanceof Error ? error.message : '下载图片失败')
+  } finally { busyAction.value = null }
+}
+
+async function undoLastMediaAction() {
+  const action = lastMediaAction.value
+  const document = store.currentDocument
+  if (!action || !document) return
+  try {
+    if (action.path) await removeMarkdownAsset(document.path, action.path)
+    editorSource.value = action.source
+    lastMediaAction.value = null
+    if (editorMode.value === 'rich') void nextTick(mountRichEditor)
+    notify('已撤销上一次图片操作')
+  } catch (error) { notify(error instanceof Error ? error.message : '撤销图片操作失败') }
+}
+
+async function renameEditorImage(url: string) {
+  const document = store.currentDocument
+  if (!document) return
+  const currentName = url.split('/').pop() ?? 'image.png'
+  const nextName = window.prompt('图片新文件名', currentName)?.trim()
+  if (!nextName) return
+  try {
+    const nextUrl = await renameMarkdownAsset(document.path, url, nextName)
+    editorSource.value = editorSource.value.split(url).join(nextUrl)
+    notify(`图片已重命名为 ${nextName}`)
+  } catch (error) { notify(error instanceof Error ? error.message : '图片重命名失败') }
+}
+
+async function deleteEditorImage(url: string) {
+  const document = store.currentDocument
+  if (!document || !window.confirm('删除图片文件并移除文档中的引用？')) return
+  try {
+    await removeMarkdownAsset(document.path, url)
+    editorSource.value = editorSource.value.replace(new RegExp(`!\\[[^\\]\\n]*\\]\\(${escapeRegExp(url)}\\)\\s*`, 'g'), '')
+    notify('图片文件和引用已删除')
+  } catch (error) { notify(error instanceof Error ? error.message : '图片删除失败') }
+}
+
+async function organizeEditorMedia() {
+  const document = store.currentDocument
+  if (!document || !isRealDocumentPath(document.path)) {
+    notify('请先在桌面端保存 Markdown，再整理媒体')
+    return
+  }
+  if (editorMode.value === 'rich') syncRichEditorSource()
+  busyAction.value = 'file'
+  try {
+    const result = await organizeMarkdownAssets(document.path, editorSource.value)
+    if (!result.count) {
+      notify('没有需要移动的本地图片或视频')
+      return
+    }
+    editorSource.value = result.source
+    if (editorMode.value === 'rich') void nextTick(mountRichEditor)
+    notify(`已整理 ${result.count} 个媒体文件，请保存文档`)
+  } catch (error) {
+    notify(error instanceof Error ? error.message : '媒体整理失败')
+  } finally {
+    busyAction.value = null
+  }
 }
 
 function insertEditorTable() {
-  updateEditor((value, start, end) => {
-    const table = '| 项目 | 内容 |\n| --- | --- |\n| 示例 | 填写内容 |'
-    const next = `${value.slice(0, start)}${table}${value.slice(end)}`
-    return { value: next, start: start + table.length, end: start + table.length }
-  })
+  tableBuilderOpen.value = true
+}
+
+function confirmInsertEditorTable() {
+  const rows = Math.min(20, Math.max(2, tableBuilder.value.rows))
+  const columns = Math.min(12, Math.max(1, tableBuilder.value.columns))
+  const marker = tableBuilder.value.alignment === 'center' ? ':---:' : tableBuilder.value.alignment === 'right' ? '---:' : ':---'
+  const header = `| ${Array.from({ length: columns }, (_, index) => `列 ${index + 1}`).join(' | ')} |`
+  const divider = `| ${Array.from({ length: columns }, () => marker).join(' | ')} |`
+  const body = Array.from({ length: rows - 1 }, () => `| ${Array.from({ length: columns }, () => ' ').join(' | ')} |`).join('\n')
+  const table = `${header}\n${divider}\n${body}`
+  if (editorMode.value === 'rich') {
+    insertRichHtml(`${renderMarkdownFragment(table)}<p><br></p>`)
+  } else {
+    updateEditor((value, start, end) => ({ value: `${value.slice(0, start)}${table}${value.slice(end)}`, start: start + table.length, end: start + table.length }))
+  }
+  tableBuilderOpen.value = false
+}
+
+function markdownTableCells(line: string) {
+  return line.trim().replace(/^\||\|$/g, '').split('|').map((cell) => cell.trim().replace(/\\\|/g, '|'))
+}
+
+function openTableEditor(region: ReaderRegion) {
+  const source = store.currentDocument?.source.slice(region.sourceStart, region.sourceEnd) ?? ''
+  const lines = source.split(/\r?\n/).filter((line) => line.includes('|'))
+  if (lines.length < 2) { notify('当前表格无法进入可视化编辑'); return }
+  const markers = markdownTableCells(lines[1])
+  tableEditor.value = {
+    region,
+    rows: [markdownTableCells(lines[0]), ...lines.slice(2).map(markdownTableCells)],
+    alignments: markers.map((marker) => marker.startsWith(':') && marker.endsWith(':') ? 'center' : marker.endsWith(':') ? 'right' : 'left'),
+  }
+}
+
+function addTableEditorRow() {
+  if (!tableEditor.value) return
+  tableEditor.value.rows.push(Array.from({ length: tableEditor.value.alignments.length }, () => ''))
+}
+
+function addTableEditorColumn() {
+  if (!tableEditor.value || tableEditor.value.alignments.length >= 12) return
+  tableEditor.value.alignments.push('left')
+  for (const row of tableEditor.value.rows) row.push('')
+}
+
+async function saveTableEditor() {
+  const editor = tableEditor.value
+  const document = store.currentDocument
+  if (!editor || !document) return
+  const escapeCell = (value: string) => value.replace(/\|/g, '\\|').replace(/\r?\n/g, '<br>')
+  const row = (cells: string[]) => `| ${editor.alignments.map((_, index) => escapeCell(cells[index] ?? '')).join(' | ')} |`
+  const markers = `| ${editor.alignments.map((alignment) => alignment === 'center' ? ':---:' : alignment === 'right' ? '---:' : ':---').join(' | ')} |`
+  const source = [row(editor.rows[0] ?? []), markers, ...editor.rows.slice(1).map(row)].join('\n')
+  const nextSource = `${document.source.slice(0, editor.region.sourceStart)}${source}${document.source.slice(editor.region.sourceEnd)}`
+  try {
+    if (isRealDocumentPath(document.path)) await writeMarkdownFile(document.path, nextSource)
+    await store.replaceDocumentSource(document.id, nextSource)
+    tableEditor.value = null
+    closeViewer()
+    notify('表格已更新')
+  } catch (error) { notify(error instanceof Error ? error.message : '保存表格失败') }
+}
+
+function insertEditorAlert(kind = 'NOTE') {
+  const source = `> [!${kind}]\n> 在这里填写内容`
+  if (editorMode.value === 'rich') insertRichHtml(renderMarkdownFragment(source))
+  else updateEditor((value, start, end) => ({ value: `${value.slice(0, start)}${source}${value.slice(end)}`, start: start + source.length, end: start + source.length }))
+}
+
+function insertEditorCodeBlock() {
+  const language = editorCodeLanguage.value.trim() || advancedSettings.value.defaultCodeLanguage || 'text'
+  if (advancedSettings.value.rememberCodeLanguage) advancedSettings.value.defaultCodeLanguage = language
+  wrapEditorSelection(`\`\`\`${language}\n`, '\n```', '代码')
+}
+
+function insertEditorEmoji(value: string) {
+  const element = editorTextarea.value
+  if (!element) return
+  const position = element.selectionStart
+  const before = editorSource.value.slice(0, position)
+  const start = before.search(/:[a-z0-9_+-]{0,16}$/i)
+  if (start < 0) return
+  applyEditorChange(`${editorSource.value.slice(0, start)}${value}${editorSource.value.slice(position)}`, start + value.length)
 }
 
 function insertEditorDivider() {
+  if (editorMode.value === 'rich') {
+    runRichCommand('insertHorizontalRule')
+    return
+  }
   updateEditor((value, start, end) => {
     const divider = '---'
     const next = `${value.slice(0, start)}${divider}${value.slice(end)}`
@@ -842,6 +1183,13 @@ function insertEditorDivider() {
 }
 
 function prefixEditorLines(prefix: string) {
+  if (editorMode.value === 'rich') {
+    if (prefix === '# ') runRichCommand('formatBlock', 'h1')
+    else if (prefix === '> ') runRichCommand('formatBlock', 'blockquote')
+    else if (prefix === '- ') runRichCommand('insertUnorderedList')
+    else if (prefix === '- [ ] ') insertRichHtml('<ul><li><input type="checkbox" />任务</li></ul>')
+    return
+  }
   updateEditor((value, start, end) => {
     const lineStart = value.lastIndexOf('\n', Math.max(0, start - 1)) + 1
     const lineEnd = value.indexOf('\n', end)
@@ -858,6 +1206,7 @@ function prefixEditorLines(prefix: string) {
 }
 
 function moveEditorLine(delta: number) {
+  if (editorMode.value === 'rich') return
   updateEditor((value, start, end) => {
     const lines = value.split('\n')
     const lineIndex = value.slice(0, start).split('\n').length - 1
@@ -882,17 +1231,41 @@ function exportHtmlSource(document: ReaderDocument) {
   return `<!doctype html>\n<html lang="zh-CN"><head><meta charset="utf-8"><title>${escapeHtml(document.title)}</title><style>body{max-width:860px;margin:48px auto;padding:0 24px;color:#263238;font:16px/1.8 system-ui,sans-serif}img{max-width:100%}pre{padding:16px;overflow:auto;background:#f4f6f8;border-radius:8px}blockquote{border-left:4px solid #6b63d9;padding-left:16px;color:#58616b}table{border-collapse:collapse}td,th{border:1px solid #ccd3d9;padding:6px 10px}</style></head><body><h1>${escapeHtml(document.title)}</h1>${body}</body></html>`
 }
 
-async function exportDocument(format: 'markdown' | 'html') {
+async function exportDocument(format: 'markdown' | 'html' | 'docx' | 'epub' | 'latex') {
   const document = store.currentDocument
   if (!document) return
-  const extension = format === 'html' ? 'html' : 'md'
-  const source = format === 'html' ? exportHtmlSource(document) : document.source
-  const path = await saveExportFile(source, document.title || '文档', extension, format === 'html' ? 'HTML' : 'Markdown')
-  if (path) notify(`已导出：${path}`)
+  try {
+    let path: string | null = null
+    if (format === 'docx') {
+      const assets = await readMarkdownExportAssets(document.path, document.source)
+      path = await saveBinaryExportFile(createDocx(document.title, document.source, assets), document.title || '文档', 'docx', 'Word 文档', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+    } else if (format === 'epub') {
+      const assets = await readMarkdownExportAssets(document.path, document.source)
+      path = await saveBinaryExportFile(createEpub(document.title, document.source, assets, { chapterDepth: advancedSettings.value.epubChapterDepth }), document.title || '文档', 'epub', 'EPUB 电子书', 'application/epub+zip')
+    }
+    else {
+      const extension = format === 'html' ? 'html' : format === 'latex' ? 'tex' : 'md'
+      const source = format === 'html' ? exportHtmlSource(document) : format === 'latex' ? createLatex(document.title, document.source) : document.source
+      path = await saveExportFile(source, document.title || '文档', extension, format === 'html' ? 'HTML' : format === 'latex' ? 'LaTeX' : 'Markdown')
+    }
+    if (path) notify(`已导出：${path}`)
+  } catch (error) {
+    notify(error instanceof Error ? error.message : '导出失败')
+  }
 }
 
 function printDocument() {
   if (!store.currentDocument) return
+  const settings = advancedSettings.value
+  let style = document.querySelector<HTMLStyleElement>('#moyue-print-settings')
+  if (!style) {
+    style = document.createElement('style')
+    style.id = 'moyue-print-settings'
+    document.head.append(style)
+  }
+  style.textContent = `@page{size:${settings.printPageSize};margin:${settings.printMargin}mm}@media print{body{print-color-adjust:${settings.printBackground ? 'exact' : 'economy'};-webkit-print-color-adjust:${settings.printBackground ? 'exact' : 'economy'}}body::before{content:attr(data-print-header);position:fixed;top:-${Math.max(8, settings.printMargin - 5)}mm;left:0;right:0;text-align:center;font-size:9pt;color:#667}body::after{content:attr(data-print-footer);position:fixed;bottom:-${Math.max(8, settings.printMargin - 5)}mm;left:0;right:0;text-align:center;font-size:9pt;color:#667}}`
+  document.body.dataset.printHeader = settings.printHeader
+  document.body.dataset.printFooter = settings.printFooter
   window.print()
 }
 
@@ -1231,7 +1604,7 @@ function validEntryName(value: string) {
 
 function markdownName(value: string) {
   const name = value.trim()
-  return /\.(md|markdown)$/i.test(name) ? name : `${name}.md`
+  return /\.(md|markdown)$/i.test(name) ? name : `${name}.${advancedSettings.value.defaultExtension}`
 }
 
 function hasCurrentFile(path: string) {
@@ -1795,6 +2168,10 @@ watch(query, () => {
   if (searchTimer !== null) window.clearTimeout(searchTimer)
   searchTimer = window.setTimeout(() => { searchNeedle.value = query.value.trim(); searchTimer = null }, 90)
 })
+watch(advancedSettings, (settings) => {
+  localStorage.setItem('moyue:advanced-settings', JSON.stringify(settings))
+  if (!settings.rememberRecent) localStorage.removeItem('moyue:reader-session')
+}, { deep: true })
 watch(() => store.mode, (mode) => { if (mode !== 'focus') stopFocusTimer() })
 watch(() => store.currentDocument?.path, (path) => { fileSyncState.value = 'idle'; focusScrollTargetId = null; outlineQuery.value = ''; selectedFilePaths.value = []; invalidateRegionLayout(); void refreshFileTree(); if (path) void syncFilesystemTreeTarget(path) }, { immediate: true })
 watch(currentDirectoryFiles, (files) => {
@@ -1981,6 +2358,21 @@ function onDragLeave(event: DragEvent) {
   if (!next || !current.contains(next)) draggingFiles.value = false
 }
 async function importNativeDroppedPaths(paths: string[]) {
+  const document = store.currentDocument
+  const mediaPaths = paths.filter((path) => /\.(?:avif|bmp|gif|jpe?g|png|svg|webp|mp4|webm|mov|m4v|ogv|ogg)$/i.test(path))
+  if (editorOpen.value && advancedSettings.value.dropBehavior === 'insert' && document && isRealDocumentPath(document.path) && mediaPaths.length) {
+    busyAction.value = 'drop'
+    try {
+      for (const path of mediaPaths) {
+        const kind = /\.(?:mp4|webm|mov|m4v|ogv|ogg)$/i.test(path) ? 'video' : 'image'
+        const url = await importMarkdownAssetFromPath(document.path, kind, path)
+        insertEditorMedia(kind, url)
+      }
+      notify(`已插入 ${mediaPaths.length} 个媒体文件`)
+    } catch (error) { notify(error instanceof Error ? error.message : '插入拖放媒体失败') }
+    finally { busyAction.value = null }
+    return
+  }
   const markdownPaths = paths.filter((path) => /\.(md|markdown)$/i.test(path))
   if (!markdownPaths.length) { notify('请拖入 .md 或 .markdown 文件'); return }
   if (busyAction.value) return
@@ -2540,6 +2932,54 @@ function exportViewer(format: 'svg' | 'png' = 'svg') {
   downloadBlob(new Blob([source], { type: extension === 'svg' ? 'image/svg+xml' : 'text/plain' }), `moyue-${viewer.value.region.type}.${extension}`)
   notify('内容已导出')
 }
+
+async function copyRegionAsImage(region: ReaderRegion) {
+  const root = document.querySelector<HTMLElement>(`[data-region-id="${region.id}"]`)
+  const target = root?.querySelector<HTMLElement>('svg, .math-block')
+  if (!target) { notify('当前内容还没有可复制的图像'); return }
+  const bounds = target.getBoundingClientRect()
+  const width = Math.max(1, Math.ceil(bounds.width))
+  const height = Math.max(1, Math.ceil(bounds.height))
+  const markup = target instanceof SVGElement
+    ? target.outerHTML.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"')
+    : `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml" style="box-sizing:border-box;width:100%;height:100%;padding:12px;background:white;color:#17211f;font-size:18px">${target.innerHTML}</div></foreignObject></svg>`
+  const url = URL.createObjectURL(new Blob([markup], { type: 'image/svg+xml;charset=utf-8' }))
+  const image = new Image()
+  image.onload = () => {
+    const canvas = document.createElement('canvas')
+    canvas.width = width * 2
+    canvas.height = height * 2
+    const context = canvas.getContext('2d')
+    if (!context) { URL.revokeObjectURL(url); notify('复制图片失败'); return }
+    context.scale(2, 2)
+    context.fillStyle = '#fff'
+    context.fillRect(0, 0, width, height)
+    context.drawImage(image, 0, 0, width, height)
+    canvas.toBlob(async (blob) => {
+      URL.revokeObjectURL(url)
+      if (!blob) { notify('复制图片失败'); return }
+      try {
+        await invoke('write_clipboard_snapshot', { kind: 'image', text: null, bytes: [...new Uint8Array(await blob.arrayBuffer())] })
+        notify('已复制为图片')
+      } catch { notify('复制图片失败，请检查剪贴板权限') }
+    }, 'image/png')
+  }
+  image.onerror = () => { URL.revokeObjectURL(url); notify('复制图片失败') }
+  image.src = url
+}
+
+async function deleteViewerDiagram() {
+  const document = store.currentDocument
+  const region = viewer.value?.region
+  if (!document || !region || viewer.value?.type !== 'mermaid' || !window.confirm('从文档中删除这张 Mermaid 图表？')) return
+  const nextSource = `${document.source.slice(0, region.sourceStart)}${document.source.slice(region.sourceEnd)}`.replace(/\n{3,}/g, '\n\n')
+  try {
+    if (isRealDocumentPath(document.path)) await writeMarkdownFile(document.path, nextSource)
+    await store.replaceDocumentSource(document.id, nextSource)
+    closeViewer()
+    notify('图表已删除')
+  } catch (error) { notify(error instanceof Error ? error.message : '删除图表失败') }
+}
 function scrollToHeading(regionId: string) {
   syncActiveHeading(regionId, true)
   const readerDocument = store.currentDocument
@@ -2909,6 +3349,9 @@ async function requestFullscreen() {
                       <button type="button" :class="{ active: contextPanelOpen }" @click="contextPanelOpen = !contextPanelOpen">{{ contextPanelOpen ? '收起阅读信息' : '查看阅读信息' }}</button>
                       <button type="button" @click="exportDocument('markdown')">导出 Markdown</button>
                       <button type="button" @click="exportDocument('html')">导出 HTML</button>
+                      <button type="button" @click="exportDocument('docx')">导出 DOCX</button>
+                      <button type="button" @click="exportDocument('epub')">导出 EPUB</button>
+                      <button type="button" @click="exportDocument('latex')">导出 LaTeX</button>
                       <button type="button" @click="printDocument">打印 / PDF</button>
                     </div>
                   </details>
@@ -2946,20 +3389,29 @@ async function requestFullscreen() {
                     <button class="editor-tool-button" type="button" title="引用" @click="prefixEditorLines('> ')">引用</button>
                     <button class="editor-tool-button" type="button" title="无序列表" @click="prefixEditorLines('- ')">列表</button>
                     <button class="editor-tool-button" type="button" title="任务列表" @click="prefixEditorLines('- [ ] ')">任务</button>
-                    <button class="editor-tool-button" type="button" title="代码块" @click="wrapEditorSelection('```\n', '\n```', '代码')">代码</button>
+                    <input v-model="editorCodeLanguage" class="editor-language-input" list="editor-code-languages" aria-label="代码语言" placeholder="语言" />
+                    <datalist id="editor-code-languages"><option v-for="language in ['text', 'typescript', 'javascript', 'python', 'rust', 'go', 'java', 'sql', 'bash', 'json', 'yaml', 'mermaid']" :key="language" :value="language" /></datalist>
+                    <button class="editor-tool-button" type="button" title="插入带语言的代码块" @click="insertEditorCodeBlock">代码</button>
+                    <button class="editor-tool-button" type="button" title="GitHub Alert" @click="insertEditorAlert('NOTE')">警告框</button>
                     <button class="editor-tool-button" type="button" title="表格" @click="insertEditorTable">表格</button>
                     <button class="editor-tool-button" type="button" title="图片" @click="insertEditorImage">图片</button>
+                    <button class="editor-tool-button" type="button" title="通过 PicList 上传图片" @click="uploadEditorImage">上传</button>
+                    <button class="editor-tool-button" type="button" title="导入视频" @click="insertEditorVideo">视频</button>
+                    <button class="editor-tool-button" type="button" title="移动本地图片和视频到 .moyue-assets" @click="organizeEditorMedia">整理媒体</button>
+                    <button class="editor-tool-button" type="button" title="图片管理" @click="imageManagerOpen = true">图片管理</button>
+                    <button v-if="lastMediaAction" class="editor-tool-button" type="button" title="撤销上一次图片操作" @click="undoLastMediaAction">撤销图片</button>
                     <button class="editor-tool-button" type="button" title="分隔线" @click="insertEditorDivider">分隔线</button>
                   </div>
                   <div class="editor-toolbar-group" aria-label="段落移动">
-                    <button class="editor-tool-button icon-only" type="button" title="上移当前行（Alt+↑）" aria-label="上移当前行" @click="moveEditorLine(-1)"><AppIcon name="arrow-up" :size="14" /></button>
-                    <button class="editor-tool-button icon-only" type="button" title="下移当前行（Alt+↓）" aria-label="下移当前行" @click="moveEditorLine(1)"><AppIcon name="arrow-down" :size="14" /></button>
+                    <button class="editor-tool-button icon-only" type="button" title="上移当前行（Alt+↑）" aria-label="上移当前行" :disabled="editorMode === 'rich'" @click="moveEditorLine(-1)"><AppIcon name="arrow-up" :size="14" /></button>
+                    <button class="editor-tool-button icon-only" type="button" title="下移当前行（Alt+↓）" aria-label="下移当前行" :disabled="editorMode === 'rich'" @click="moveEditorLine(1)"><AppIcon name="arrow-down" :size="14" /></button>
                   </div>
                   <span class="editor-toolbar-spacer" />
                   <div class="editor-toolbar-actions">
                     <div class="editor-mode-switch" role="tablist" aria-label="编辑模式">
                       <button type="button" role="tab" :aria-selected="editorMode === 'write'" :class="{ active: editorMode === 'write' }" @click="setEditorMode('write')">写作</button>
                       <button type="button" role="tab" :aria-selected="editorMode === 'split'" :class="{ active: editorMode === 'split' }" @click="setEditorMode('split')">并排</button>
+                      <button type="button" role="tab" :aria-selected="editorMode === 'rich'" :class="{ active: editorMode === 'rich' }" @click="setEditorMode('rich')">富文本</button>
                       <button type="button" role="tab" :aria-selected="editorMode === 'preview'" :class="{ active: editorMode === 'preview' }" @click="setEditorMode('preview')">预览</button>
                     </div>
                     <button class="editor-calm-toggle" type="button" :class="{ active: editorCalmMode }" :aria-pressed="editorCalmMode" @click="toggleEditorCalmMode">静写</button>
@@ -2969,7 +3421,7 @@ async function requestFullscreen() {
                 </div>
                 <button v-if="editorCalmMode" class="editor-calm-exit" type="button" @click="toggleEditorCalmMode">退出静写 · 显示工具栏</button>
                 <div class="editor-workspace" :class="[`editor-mode-${editorMode}`, { 'is-resizing-split': editorSplitResizing }]" :style="editorMode === 'split' ? { '--editor-split-ratio': `${editorSplitRatio}%` } : undefined">
-                  <section v-if="editorMode !== 'preview'" class="editor-source-pane" aria-label="Markdown 源码">
+                  <section v-if="editorMode === 'write' || editorMode === 'split'" class="editor-source-pane" aria-label="Markdown 源码">
                     <div class="editor-pane-heading">
                       <span class="editor-pane-title"><i class="editor-pane-dot editor-pane-dot-source" />Markdown 源码</span>
                       <span class="editor-pane-heading-actions">
@@ -2979,9 +3431,14 @@ async function requestFullscreen() {
                       </span>
                     </div>
                     <textarea ref="editorTextarea" v-model="editorSource" class="editor-textarea" spellcheck="false" aria-label="Markdown 源码编辑器" @focus="normalizeEditorLists" @paste="onEditorPaste" @keydown="onEditorKeydown" @input="updateEditorCursor" @keyup="updateEditorCursor" @click="updateEditorCursor" @select="updateEditorCursor" />
+                    <div v-if="editorEmojiSuggestions.length" class="editor-emoji-menu" role="listbox" aria-label="Emoji 建议"><button v-for="emoji in editorEmojiSuggestions" :key="emoji.code" type="button" @click="insertEditorEmoji(emoji.value)"><span>{{ emoji.value }}</span>:{{ emoji.code }}:</button></div>
                   </section>
                   <div v-if="editorMode === 'split'" class="editor-split-divider" role="separator" tabindex="0" aria-orientation="vertical" :aria-valuemin="36" :aria-valuemax="70" :aria-valuenow="Math.round(editorSplitRatio)" aria-label="调整源码与预览宽度" title="拖动调整源码与预览宽度，左右方向键微调" @pointerdown="startEditorSplitResize" @keydown="onEditorSplitResizeKeydown"><span /></div>
-                  <section v-if="editorMode !== 'write'" class="editor-preview-pane" aria-label="实时阅读预览">
+                  <section v-if="editorMode === 'rich'" class="editor-rich-pane" aria-label="富文本编辑器">
+                    <div class="editor-pane-heading"><span class="editor-pane-title"><i class="editor-pane-dot" />富文本</span><small>直接编辑阅读版式，保存时仍是 Markdown</small></div>
+                    <article ref="editorRich" class="editor-rich-content" contenteditable="true" spellcheck="true" aria-label="Markdown 富文本编辑器" @input="onRichEditorInput" @paste="onRichEditorPaste" />
+                  </section>
+                  <section v-if="editorMode === 'split' || editorMode === 'preview'" class="editor-preview-pane" aria-label="实时阅读预览">
                     <div class="editor-pane-heading">
                       <span class="editor-pane-title"><i class="editor-pane-dot editor-pane-dot-preview" />阅读预览</span>
                       <span class="editor-pane-heading-actions">
@@ -2999,7 +3456,7 @@ async function requestFullscreen() {
                   </section>
                 </div>
                 <div class="editor-statusbar">
-                  <span>{{ editorMode === 'write' ? '源码写作' : editorMode === 'preview' ? '阅读预览' : '边写边读' }}</span>
+                  <span>{{ editorMode === 'write' ? '源码写作' : editorMode === 'rich' ? '行内富文本' : editorMode === 'preview' ? '阅读预览' : '边写边读' }}</span>
                   <span :class="{ 'editor-dirty': editorDirty }">{{ editorDirty ? '未保存更改' : '已保存' }}</span>
                   <span>Ln {{ editorCursor.line }}, Col {{ editorCursor.column }}</span>
                   <span class="editor-status-spacer" />
@@ -3013,7 +3470,7 @@ async function requestFullscreen() {
                 <div class="regions-stack" :class="{ virtualized: virtualizedReader }">
                 <div v-if="virtualRange.before" class="virtual-spacer" :style="{ height: `${virtualRange.before}px` }" aria-hidden="true" />
                 <div class="virtual-regions">
-                  <RegionBlock v-for="region in virtualRange.regions" v-memo="[region.id, store.currentDocument?.sourceHash, store.activeRegionId === region.id, store.focusedRegionId === region.id, focusDistanceByRegion.get(region.id), store.mode, store.activeThemeId, currentAnnotationsByRegion.get(region.id)]" :key="region.id" :region="region" :annotations="currentAnnotationsByRegion.get(region.id)" :focused="store.focusedRegionId === region.id" :active="store.activeRegionId === region.id" :focus-distance="focusDistanceByRegion.get(region.id)" :theme-mode="store.activeTheme?.manifest.mode" :theme-key="`${store.mode}-${store.activeThemeId}`" @focus="focusRegion(region)" @open-viewer="openViewer(region)" @open-link="openExternalLink" @code-copied="notify('代码已复制')" @toggle-task="toggleTask(region)" />
+                  <RegionBlock v-for="region in virtualRange.regions" v-memo="[region.id, store.currentDocument?.sourceHash, store.activeRegionId === region.id, store.focusedRegionId === region.id, focusDistanceByRegion.get(region.id), store.mode, store.activeThemeId, currentAnnotationsByRegion.get(region.id)]" :key="region.id" :region="region" :annotations="currentAnnotationsByRegion.get(region.id)" :focused="store.focusedRegionId === region.id" :active="store.activeRegionId === region.id" :focus-distance="focusDistanceByRegion.get(region.id)" :theme-mode="store.activeTheme?.manifest.mode" :theme-key="`${store.mode}-${store.activeThemeId}`" @focus="focusRegion(region)" @open-viewer="openViewer(region)" @open-link="openExternalLink" @code-copied="notify('代码已复制')" @copy-image="copyRegionAsImage(region)" @toggle-task="toggleTask(region)" />
                 </div>
                 <div v-if="virtualRange.after" class="virtual-spacer" :style="{ height: `${virtualRange.after}px` }" aria-hidden="true" />
                 </div></div>
@@ -3063,7 +3520,7 @@ async function requestFullscreen() {
 
       <ThemeCenter v-else-if="view === 'themes'" :themes="store.themes" :active-theme-id="store.activeThemeId" :active-theme="store.activeTheme" @apply="applyReaderTheme" @install="store.installTheme" @notify="notify" />
 
-        <section v-else-if="view === 'settings'" class="page settings-page"><div class="page-heading"><div><p class="section-kicker">偏好设置</p><h1>把阅读，调成<br /><em>自己的样子。</em></h1></div><button class="ghost-button" type="button" @click="notify('设置已保存在本地')"><AppIcon name="check" :size="14" />保存设置</button></div><div class="settings-tabs"><button :class="{ active: settingsTab === 'reading' }" type="button" @click="settingsTab = 'reading'">阅读偏好</button><button :class="{ active: settingsTab === 'shortcuts' }" type="button" @click="settingsTab = 'shortcuts'">快捷键</button><button :class="{ active: settingsTab === 'extensions' }" type="button" @click="settingsTab = 'extensions'">插件扩展</button><button type="button" @click="notify('文件关联设置将在桌面端接入')">文件关联</button><button type="button" @click="notify('同步与备份暂不启用')">同步与备份</button></div><div class="settings-grid">
+        <section v-else-if="view === 'settings'" class="page settings-page"><div class="page-heading"><div><p class="section-kicker">偏好设置</p><h1>把阅读，调成<br /><em>自己的样子。</em></h1></div><button class="ghost-button" type="button" @click="notify('设置已保存在本地')"><AppIcon name="check" :size="14" />保存设置</button></div><div class="settings-tabs"><button :class="{ active: settingsTab === 'reading' }" type="button" @click="settingsTab = 'reading'">阅读偏好</button><button :class="{ active: settingsTab === 'editing' }" type="button" @click="settingsTab = 'editing'">编辑与导出</button><button :class="{ active: settingsTab === 'shortcuts' }" type="button" @click="settingsTab = 'shortcuts'">快捷键</button><button :class="{ active: settingsTab === 'extensions' }" type="button" @click="settingsTab = 'extensions'">插件扩展</button><button type="button" @click="notify('文件关联设置将在桌面端接入')">文件关联</button><button type="button" @click="notify('同步与备份暂不启用')">同步与备份</button></div><div class="settings-grid">
         <div v-show="settingsTab === 'reading'" class="settings-card font-settings-card">
           <div class="font-settings-heading"><div><span class="section-kicker">阅读偏好</span><h2>字体与排版</h2></div><span>自动保存</span></div>
           <FontPicker label="正文字体" :model-value="store.readerSettings.fontFamily" :fallback-family="store.activeTheme.tokens.reader.fontFamily" @update:model-value="store.updateSettings({ fontFamily: $event })" />
@@ -3072,13 +3529,20 @@ async function requestFullscreen() {
             <p>用于菜单、侧栏与按钮。正文单独设置，代码保持等宽。</p>
           </div>
         </div>
+        <div v-show="settingsTab === 'editing'" class="settings-card settings-card-wide"><span class="section-kicker">写作</span><h2>编辑器行为</h2><div class="setting-form-grid"><label class="setting-input">默认扩展名<select v-model="advancedSettings.defaultExtension"><option value="md">.md</option><option value="markdown">.markdown</option></select></label><label class="setting-input">默认代码语言<input v-model="advancedSettings.defaultCodeLanguage" list="editor-code-languages" /></label><label class="setting-input">文件拖放<select v-model="advancedSettings.dropBehavior"><option value="insert">编辑时插入媒体</option><option value="open">只打开 Markdown</option></select></label></div><label class="setting-check"><input v-model="advancedSettings.rememberCodeLanguage" type="checkbox" />记住上次代码语言</label><label class="setting-check"><input v-model="advancedSettings.emojiAutocomplete" type="checkbox" />输入 : 时显示 Emoji 建议</label><label class="setting-check"><input v-model="advancedSettings.rememberRecent" type="checkbox" />保存最近打开的文档</label></div>
+        <div v-show="settingsTab === 'editing'" class="settings-card"><span class="section-kicker">输入辅助</span><h2>链接识别</h2><label class="setting-check"><input v-model="advancedSettings.autoLink" type="checkbox" />自动把裸网址渲染为链接</label><p class="muted-copy">关闭后，仍保留明确写出的 Markdown 链接。</p></div>
+        <div v-show="settingsTab === 'editing'" class="settings-card"><span class="section-kicker">图片上传</span><h2>PicList</h2><label class="setting-input">服务地址<input v-model="advancedSettings.picListEndpoint" placeholder="http://127.0.0.1:36677/upload" /></label><label class="setting-input">接口密钥<input v-model="advancedSettings.picListKey" type="password" placeholder="可选" /></label><p class="muted-copy">仅连接本机 PicList 服务；图片不会经过墨阅服务器。</p></div>
+        <div v-show="settingsTab === 'editing'" class="settings-card"><span class="section-kicker">导出</span><h2>电子书与打印</h2><label class="setting-row"><span>EPUB 目录层级 <b>H{{ advancedSettings.epubChapterDepth }}</b></span><input v-model.number="advancedSettings.epubChapterDepth" type="range" min="1" max="6" /></label><div class="setting-form-grid"><label class="setting-input">纸张<select v-model="advancedSettings.printPageSize"><option value="A4">A4</option><option value="Letter">Letter</option></select></label><label class="setting-input">页边距（mm）<input v-model.number="advancedSettings.printMargin" type="number" min="8" max="40" /></label><label class="setting-input">页眉<input v-model="advancedSettings.printHeader" /></label><label class="setting-input">页脚<input v-model="advancedSettings.printFooter" /></label></div><label class="setting-check"><input v-model="advancedSettings.printBackground" type="checkbox" />打印主题背景</label></div>
         <div v-show="settingsTab === 'reading'" class="settings-card"><span class="section-kicker">阅读</span><h2>阅读偏好</h2><label class="setting-row"><span>正文宽度 <b>{{ store.readerSettings.width }}px</b></span><input :value="store.readerSettings.width" type="range" min="620" max="980" step="10" @input="changeSetting('width', Number(($event.target as HTMLInputElement).value))" /></label><label class="setting-row"><span>字号 <b>{{ store.readerSettings.fontSize }}px</b></span><input :value="store.readerSettings.fontSize" type="range" min="15" max="24" step="1" @input="changeSetting('fontSize', Number(($event.target as HTMLInputElement).value))" /></label><label class="setting-row"><span>行距 <b>{{ store.readerSettings.lineHeight }}</b></span><input :value="store.readerSettings.lineHeight" type="range" min="1.4" max="2.2" step=".05" @input="changeSetting('lineHeight', Number(($event.target as HTMLInputElement).value))" /></label><div class="setting-toggle-row"><span>显示阅读进度</span><i class="toggle-on" /></div><div class="setting-toggle-row"><span>启用专注模式</span><i class="toggle-on" /></div></div><div v-show="settingsTab === 'reading'" class="settings-card"><span class="section-kicker">辅助功能</span><h2>翻译与解释</h2><p class="muted-copy">使用适配器连接你自己的翻译或解释服务；配置后可从划词工具栏调用。</p><label class="setting-input">服务标识<input v-model="customProvider" placeholder="例如：local-llm / my-translator" /></label><button class="primary-button" type="button" @click="notify(customProvider ? '适配器标识已保存' : '保持未配置状态')"><AppIcon name="check" :size="14" />保存配置</button></div><div v-show="settingsTab === 'shortcuts'" class="settings-card shortcuts-card"><span class="section-kicker">快捷操作</span><h2>快捷键</h2><div class="shortcut-row"><span>全局搜索</span><kbd>Ctrl / Cmd + K</kbd></div><div class="shortcut-row"><span>当前文档搜索</span><kbd>Ctrl / Cmd + F</kbd></div><div class="shortcut-row"><span>阅读缩放</span><kbd>Ctrl / Cmd + + / -</kbd></div><div class="shortcut-row"><span>专注模式</span><kbd>F</kbd></div><div class="shortcut-row"><span>退出聚焦</span><kbd>Esc</kbd></div><div class="shortcut-row"><span>切换区域</span><kbd>↑ ↓</kbd></div></div><div v-show="settingsTab === 'extensions'" class="settings-card extensions-card"><div class="extensions-head"><div><span class="section-kicker">插件中心</span><h2>插件扩展</h2></div><button class="ghost-button" type="button" @click="notify('插件运行时将在后续版本启用')"><AppIcon name="plugin" :size="14" />打开插件目录</button></div><div class="extension-filter"><AppIcon name="search" :size="14" /><span>按需扩展阅读能力</span></div><div class="extension-list"><div class="extension-item"><span class="extension-icon purple"><AppIcon name="sparkle" :size="17" /></span><span><b>AI 阅读助手</b><small>总结、解释与问答适配器</small></span><button type="button" @click="notify('请先在翻译与解释中配置服务')">配置</button></div><div class="extension-item"><span class="extension-icon green"><AppIcon name="download" :size="17" /></span><span><b>导出增强</b><small>为阅读内容准备更多导出格式</small></span><button type="button" @click="notify('导出增强将在下一阶段接入')">安装</button></div><div class="extension-item"><span class="extension-icon pink"><AppIcon name="components" :size="17" /></span><span><b>思维导图</b><small>把长文转换为结构化视图</small></span><button type="button" @click="notify('插件运行时暂未启用')">安装</button></div></div></div></div></section>
       <ClipboardManager v-show="view === 'clipboard'" @notify="notify" />
     </main>
 
     <div v-if="searchOpen" class="overlay search-overlay" @click.self="searchOpen = false"><div class="search-dialog"><div class="search-input-row"><AppIcon name="search" :size="17" /><input v-model="query" autofocus :placeholder="searchScope === 'current' ? '搜索当前文档…' : '搜索文档、标题、内容…'" aria-label="搜索内容" @keydown.esc="searchOpen = false" /><kbd>ESC</kbd></div><div class="search-scope-row"><div class="search-scope-tabs" role="tablist" aria-label="搜索范围"><button type="button" :class="{ active: searchScope === 'all' }" @click="searchScope = 'all'">全部文档</button><button type="button" :class="{ active: searchScope === 'current' }" :disabled="!store.currentDocument" @click="searchScope = 'current'">当前文档</button><button type="button" :class="{ active: replaceOpen }" @click="replaceOpen = !replaceOpen">查找替换</button></div><span>{{ searchResults.reduce((total, result) => total + result.matchCount, 0) }} 个匹配</span><small>Ctrl/Cmd + F 搜当前文档</small></div><div v-if="replaceOpen" class="replace-row"><input v-model="replaceValue" placeholder="替换为…" aria-label="替换内容" /><label><input v-model="searchRegex" type="checkbox" /> 正则</label><button type="button" :disabled="!searchPattern || searchPatternError" @click="replaceSearchMatches">全部替换</button></div><p v-if="searchPatternError" class="search-error">正则表达式无效</p><div v-if="searchResults.length" class="search-results"><button v-for="(result, index) in searchResults" :key="`${result.document.id}-${result.region.id}`" type="button" :class="{ selected: searchIndex === index }" @click="chooseSearchResult(result.document.id, result.region.id)"><span class="result-kind">{{ result.region.type }}</span><span><b>{{ displayTitle(result.document.title) }}</b><small>{{ result.region.textContent.slice(0, 100) }} · {{ result.matchCount }} 处匹配</small></span><AppIcon name="external" :size="14" /></button></div><div v-else class="empty-search">{{ query ? '没有找到相关内容' : searchScope === 'current' ? '输入关键词，搜索当前文档' : '输入关键词，搜索你的阅读空间' }}</div></div></div>
 
-<div v-if="viewer" class="overlay viewer-overlay" :class="{ 'is-viewer-fullscreen': viewerFullscreen }" @click.self="closeViewer">
+    <div v-if="tableBuilderOpen" class="overlay editor-dialog-overlay" @click.self="tableBuilderOpen = false"><div class="editor-dialog" role="dialog" aria-modal="true" aria-label="插入表格"><span class="section-kicker">表格工具</span><h2>插入可编辑表格</h2><div class="setting-form-grid"><label class="setting-input">行数<input v-model.number="tableBuilder.rows" type="number" min="2" max="20" /></label><label class="setting-input">列数<input v-model.number="tableBuilder.columns" type="number" min="1" max="12" /></label><label class="setting-input">对齐<select v-model="tableBuilder.alignment"><option value="left">左对齐</option><option value="center">居中</option><option value="right">右对齐</option></select></label></div><div class="note-actions"><button class="ghost-button" type="button" @click="tableBuilderOpen = false">取消</button><button class="primary-button" type="button" @click="confirmInsertEditorTable">插入表格</button></div></div></div>
+    <div v-if="tableEditor" class="overlay editor-dialog-overlay" @click.self="tableEditor = null"><div class="editor-dialog table-editor-dialog" role="dialog" aria-modal="true" aria-label="编辑表格"><div class="extensions-head"><div><span class="section-kicker">表格工具</span><h2>可视化编辑</h2></div><div><button class="ghost-button" type="button" @click="addTableEditorRow">增加行</button><button class="ghost-button" type="button" @click="addTableEditorColumn">增加列</button></div></div><div class="table-editor-grid" :style="{ gridTemplateColumns: `repeat(${tableEditor.alignments.length}, minmax(120px, 1fr))` }"><template v-for="(alignment, column) in tableEditor.alignments" :key="`alignment-${column}`"><select v-model="tableEditor.alignments[column]" :aria-label="`第 ${column + 1} 列对齐方式`"><option value="left">左对齐</option><option value="center">居中</option><option value="right">右对齐</option></select></template><template v-for="(row, rowIndex) in tableEditor.rows" :key="`row-${rowIndex}`"><input v-for="(_, column) in tableEditor.alignments" :key="`${rowIndex}-${column}`" v-model="row[column]" :class="{ 'table-header-input': rowIndex === 0 }" :aria-label="`第 ${rowIndex + 1} 行第 ${column + 1} 列`" /></template></div><div class="note-actions"><button class="ghost-button" type="button" @click="tableEditor = null">取消</button><button class="primary-button" type="button" @click="saveTableEditor">保存表格</button></div></div></div>
+    <div v-if="imageManagerOpen" class="overlay editor-dialog-overlay" @click.self="imageManagerOpen = false"><div class="editor-dialog image-manager-dialog" role="dialog" aria-modal="true" aria-label="图片管理"><div class="extensions-head"><div><span class="section-kicker">文档资源</span><h2>图片管理</h2></div><button class="ghost-button" type="button" @click="downloadAllEditorImages">下载全部远程图片</button></div><div v-if="editorImages.length" class="image-manager-list"><div v-for="image in editorImages" :key="`${image.index}-${image.url}`" class="image-manager-row"><img :src="resolveMarkdownAssetUrl(store.currentDocument?.path ?? '', image.url, editorInlineAssets)" :alt="image.alt" /><span><b>{{ image.alt }}</b><small>{{ image.url }}</small></span><button v-if="!image.remote" type="button" @click="renameEditorImage(image.url)">重命名</button><button v-if="!image.remote" class="danger-button" type="button" @click="deleteEditorImage(image.url)">删除</button></div></div><p v-else class="empty-search">当前文档没有图片。</p><div class="note-actions"><button class="ghost-button" type="button" @click="imageManagerOpen = false">完成</button></div></div></div>
+    <div v-if="viewer" class="overlay viewer-overlay" :class="{ 'is-viewer-fullscreen': viewerFullscreen }" @click.self="closeViewer">
       <div class="viewer-shell" role="dialog" aria-modal="true" :aria-label="`${viewerKind(viewer.type)}独立查看`" :class="{ 'is-fullscreen': viewerFullscreen }">
         <header class="viewer-header">
           <div class="viewer-heading">
@@ -3125,7 +3589,10 @@ async function requestFullscreen() {
             <button v-if="viewer.type === 'mermaid'" type="button" @click="copyViewerSource"><AppIcon name="copy" :size="14" />复制源码</button>
             <button v-if="viewer.type === 'mermaid'" type="button" @click="exportViewer('svg')"><AppIcon name="download" :size="14" />导出 SVG</button>
             <button v-if="viewer.type === 'mermaid'" type="button" @click="exportViewer('png')"><AppIcon name="download" :size="14" />导出 PNG</button>
+            <button v-if="viewer.type === 'mermaid'" type="button" @click="copyRegionAsImage(viewer.region)"><AppIcon name="copy" :size="14" />复制为图片</button>
+            <button v-if="viewer.type === 'mermaid'" class="danger-button" type="button" @click="deleteViewerDiagram">删除图表</button>
             <button v-if="viewer.type === 'code' || viewer.type === 'tree' || viewer.type === 'table'" type="button" @click="exportViewer()"><AppIcon name="download" :size="14" />导出文本</button>
+            <button v-if="viewer.type === 'table'" type="button" @click="openTableEditor(viewer.region)">编辑表格</button>
           </div>
         </footer>
       </div>

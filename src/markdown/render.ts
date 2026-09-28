@@ -10,6 +10,12 @@ import {
   type RenderContext,
 } from './shared'
 
+function autoLinkEnabled() {
+  if (typeof localStorage === 'undefined') return true
+  try { return JSON.parse(localStorage.getItem('moyue:advanced-settings') ?? '{}').autoLink !== false }
+  catch { return true }
+}
+
 function inlineHtml(node: MdastNode, preserveSoftBreaks = false, resolveUrl: MarkdownUrlResolver = (url) => url, context = createRenderContext()): string {
   const children = () => (node.children ?? []).map((child) => inlineHtml(child, preserveSoftBreaks, resolveUrl, context)).join('')
   switch (node.type) {
@@ -18,7 +24,7 @@ function inlineHtml(node: MdastNode, preserveSoftBreaks = false, resolveUrl: Mar
     case 'strong': return `<strong>${children()}</strong>`
     case 'delete': return `<del>${children()}</del>`
     case 'inlineCode': return `<code>${escapeHtml(node.value ?? '')}</code>`
-    case 'link': return `<a href="${safeUrl(resolveUrl(node.url ?? ''))}" target="_blank" rel="noreferrer">${children()}</a>`
+    case 'link': return !autoLinkEnabled() && nodeText(node) === node.url ? escapeHtml(nodeText(node)) : `<a href="${safeUrl(resolveUrl(node.url ?? ''))}" target="_blank" rel="noreferrer">${children()}</a>`
     case 'image': return `<img src="${safeImageUrl(resolveUrl(node.url ?? ''))}" alt="${escapeHtml(node.title ?? nodeText(node))}" loading="lazy" decoding="async" referrerpolicy="no-referrer" />`
     case 'break': return '<br />'
     case 'inlineMath': return renderMath(node.value ?? '', false)
@@ -85,6 +91,14 @@ function standaloneImageNode(node: MdastNode): MdastNode | null {
   return null
 }
 
+function standaloneVideoNode(node: MdastNode): MdastNode | null {
+  if (node.type !== 'paragraph' || node.children?.length !== 1) return null
+  const link = node.children[0]
+  if (link?.type !== 'link') return null
+  const label = nodeText(link).trim().toLowerCase()
+  return label === '视频' || label === 'video' || /\.(?:mp4|webm|mov|m4v|ogv|ogg)(?:[?#].*)?$/i.test(link.url ?? '') ? link : null
+}
+
 function blockHtml(node: MdastNode, resolveUrl: MarkdownUrlResolver = (url) => url, context = createRenderContext()): string {
   const children = () => (node.children ?? []).map((child) => blockHtml(child, resolveUrl, context)).join('')
   const inlineChildren = (preserveSoftBreaks = false) => (node.children ?? []).map((child) => inlineHtml(child, preserveSoftBreaks, resolveUrl, context)).join('')
@@ -98,7 +112,10 @@ function blockHtml(node: MdastNode, resolveUrl: MarkdownUrlResolver = (url) => u
     }
     case 'paragraph': {
       const standaloneImage = standaloneImageNode(node)
-      return standaloneImage ? blockHtml(standaloneImage, resolveUrl, context) : `<p>${inlineChildren(true)}</p>`
+      if (standaloneImage) return blockHtml(standaloneImage, resolveUrl, context)
+      const video = standaloneVideoNode(node)
+      if (video) return `<figure class="markdown-video"><video src="${safeUrl(resolveUrl(video.url ?? ''))}" controls preload="metadata"></video><figcaption>${escapeHtml(video.title || nodeText(video) || '视频')}</figcaption></figure>`
+      return `<p>${inlineChildren(true)}</p>`
     }
     case 'blockquote': return calloutHtml(node, resolveUrl, context) ?? `<blockquote>${children()}</blockquote>`
     case 'list': return `<${node.ordered ? 'ol' : 'ul'}>${children()}</${node.ordered ? 'ol' : 'ul'}>`

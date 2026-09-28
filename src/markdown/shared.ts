@@ -1,4 +1,12 @@
-import katex from 'katex'
+import { mathjax } from '@mathjax/src/js/mathjax.js'
+import { liteAdaptor } from '@mathjax/src/js/adaptors/liteAdaptor.js'
+import { RegisterHTMLHandler } from '@mathjax/src/js/handlers/html.js'
+import { TeX } from '@mathjax/src/js/input/tex.js'
+import { SVG } from '@mathjax/src/js/output/svg.js'
+
+const mathAdaptor = liteAdaptor()
+RegisterHTMLHandler(mathAdaptor)
+const mathDocument = mathjax.document('', { InputJax: new TeX(), OutputJax: new SVG({ fontCache: 'local' }) })
 
 export type MdastNode = {
   type: string
@@ -51,7 +59,7 @@ export type MarkdownUrlResolver = (url: string) => string
 
 export function renderMath(value: string, displayMode: boolean): string {
   try {
-    return katex.renderToString(value, { displayMode, throwOnError: false, strict: 'ignore' })
+    return mathAdaptor.outerHTML(mathDocument.convert(value, { display: displayMode }))
   } catch {
     return `<code class="math-error">${escapeHtml(value)}</code>`
   }
