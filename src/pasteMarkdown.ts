@@ -53,7 +53,8 @@ function mediaMarkdown(element: HTMLElement) {
   const src = attributeUrl(element, ['data-markdown-src', 'src', 'data-src', 'data-url', 'href']) || attributeUrl(element.querySelector('source') as HTMLElement | null, ['data-markdown-src', 'src', 'data-src'])
   if (!src) return ''
   const label = element.tagName.toLowerCase() === 'audio' ? '音频' : '视频'
-  return `[${label}](${src})`
+  const title = element.getAttribute('data-markdown-title')?.trim().replace(/["\r\n]/g, '')
+  return `[${label}](${src}${title ? ` "${title}"` : ''})`
 }
 
 function hasStyle(element: HTMLElement, pattern: RegExp) {

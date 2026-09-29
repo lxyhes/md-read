@@ -1,13 +1,13 @@
 import { convertFileSrc, invoke, isTauri as tauriIsTauri } from '@tauri-apps/api/core'
 import { open, save } from '@tauri-apps/plugin-dialog'
-import { copyFile, mkdir, readDir, readFile, readTextFile, remove, rename, watch, writeFile, writeTextFile } from '@tauri-apps/plugin-fs'
+import { copyFile, mkdir, readDir, readFile, readTextFile, remove, rename, stat, watch, writeFile, writeTextFile } from '@tauri-apps/plugin-fs'
 
 const isTauri = () => tauriIsTauri()
 
 export type BrowserAssetMap = Readonly<Record<string, string>>
 export interface OpenedFile { path: string; source: string; assets?: BrowserAssetMap }
-export interface WorkspaceFile { path: string; name: string }
-export interface FileSystemEntry { path: string; name: string; isDirectory: boolean }
+export interface WorkspaceFile { path: string; name: string; size?: number; createdAt?: number; modifiedAt?: number }
+export interface FileSystemEntry { path: string; name: string; isDirectory: boolean; size?: number; createdAt?: number; modifiedAt?: number }
 export interface MarkdownExportAsset { url: string; name: string; mime: string; bytes: Uint8Array }
 export type PandocExportFormat = 'odt' | 'rtf' | 'mediawiki'
 
@@ -130,14 +130,14 @@ export function createBrowserAssetMap(files: File[]): Record<string, string> {
 
 export async function openMarkdownFile(): Promise<OpenedFile[]> {
   if (isTauri()) {
-    const selected = await open({ multiple: true, filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }] })
+    const selected = await open({ multiple: true, filters: [{ name: 'Markdown / Quarto', extensions: ['md', 'markdown', 'qmd'] }] })
     const paths = Array.isArray(selected) ? selected : selected ? [selected] : []
     return Promise.all(paths.map(async (path) => ({ path, source: await readTextFile(path) })))
   }
   return new Promise((resolve) => {
     const input = document.createElement('input')
     input.type = 'file'
-    input.accept = '.md,.markdown,text/markdown,image/*'
+    input.accept = '.md,.markdown,.qmd,text/markdown,text/x-markdown,image/*'
     input.multiple = true
     let settled = false
     const finish = async () => {
@@ -179,10 +179,10 @@ export async function listMarkdownFiles(path: string): Promise<WorkspaceFile[]> 
   const directory = dirnameOf(path)
   if (!directory) return []
   const entries = await readDir(directory)
-  return entries
-    .filter((entry) => !entry.isDirectory && /\.(md|markdown)$/i.test(entry.name))
-    .map((entry) => ({ name: entry.name, path: `${directory}/${entry.name}` }))
-    .sort((left, right) => left.name.localeCompare(right.name, 'zh-CN'))
+  const files = await Promise.all(entries
+    .filter((entry) => !entry.isDirectory && /\.(md|markdown|qmd)$/i.test(entry.name))
+    .map(async (entry) => ({ name: entry.name, path: `${directory}/${entry.name}`, ...(await readFileStats(`${directory}/${entry.name}`)) })))
+  return files.sort((left, right) => left.name.localeCompare(right.name, 'zh-CN'))
 }
 
 export async function listDirectoryFiles(path: string): Promise<WorkspaceFile[]> {
@@ -190,19 +190,22 @@ export async function listDirectoryFiles(path: string): Promise<WorkspaceFile[]>
   const directory = dirnameOf(path)
   if (!directory) return []
   const entries = await readDir(directory)
-  return entries
+  const files = await Promise.all(entries
     .filter((entry) => !entry.isDirectory)
-    .map((entry) => ({ name: entry.name, path: `${directory}/${entry.name}` }))
-    .sort((left, right) => left.name.localeCompare(right.name, 'zh-CN'))
+    .map(async (entry) => ({ name: entry.name, path: `${directory}/${entry.name}`, ...(await readFileStats(`${directory}/${entry.name}`)) })))
+  return files.sort((left, right) => left.name.localeCompare(right.name, 'zh-CN'))
 }
 
 export async function listFileSystemEntries(path: string): Promise<FileSystemEntry[]> {
   if (!isTauri()) throw new Error('浏览器预览无法读取系统文件树，请使用桌面端打开')
   const directory = path.replace(/\\/g, '/').replace(/\/+$/, '') || '/'
   const entries = await readDir(directory)
-  return entries
-    .map((entry) => ({ name: entry.name, path: directory === '/' ? `/${entry.name}` : `${directory}/${entry.name}`, isDirectory: Boolean(entry.isDirectory) }))
-    .sort((left, right) => Number(right.isDirectory) - Number(left.isDirectory) || left.name.localeCompare(right.name, 'zh-CN'))
+  const files = await Promise.all(entries
+    .map(async (entry) => {
+      const entryPath = directory === '/' ? `/${entry.name}` : `${directory}/${entry.name}`
+      return { name: entry.name, path: entryPath, isDirectory: Boolean(entry.isDirectory), ...(await readFileStats(entryPath)) }
+    }))
+  return files.sort((left, right) => Number(right.isDirectory) - Number(left.isDirectory) || left.name.localeCompare(right.name, 'zh-CN'))
 }
 
 export async function readMarkdownPath(path: string): Promise<string> {
@@ -212,7 +215,7 @@ export async function readMarkdownPath(path: string): Promise<string> {
 
 export async function createMarkdownFile(path: string, source = ''): Promise<void> {
   if (!isTauri()) throw new Error('浏览器预览无法新建文件，请使用桌面端打开')
-  if (!/\.(md|markdown)$/i.test(path)) throw new Error('只能创建 Markdown 文件')
+  if (!/\.(md|markdown|qmd)$/i.test(path)) throw new Error('只能创建 Markdown / Quarto 文件')
   await writeTextFile(path, source)
 }
 
@@ -220,17 +223,17 @@ export async function saveMarkdownFile(source: string, defaultName = '剪贴板'
   if (!isTauri()) throw new Error('浏览器预览无法保存文件，请使用桌面端打开')
   const selected = await save({
     defaultPath: `${defaultName}.md`,
-    filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }],
+    filters: [{ name: 'Markdown / Quarto', extensions: ['md', 'markdown', 'qmd'] }],
   })
   if (!selected) return null
-  const path = /\.(md|markdown)$/i.test(selected) ? selected : `${selected}.md`
+  const path = /\.(md|markdown|qmd)$/i.test(selected) ? selected : `${selected}.md`
   await createMarkdownFile(path, source)
   return path
 }
 
 export async function writeMarkdownFile(path: string, source: string): Promise<void> {
   if (!isTauri()) throw new Error('浏览器预览无法写入文件，请使用桌面端打开')
-  if (!/\.(md|markdown)$/i.test(path)) throw new Error('只能写入 Markdown 文件')
+  if (!/\.(md|markdown|qmd)$/i.test(path)) throw new Error('只能写入 Markdown / Quarto 文件')
   await writeTextFile(path, source)
 }
 
@@ -267,6 +270,15 @@ export async function saveBinaryExportFile(bytes: Uint8Array, defaultName: strin
   if (!selected) return null
   const path = selected.toLowerCase().endsWith(`.${extension.toLowerCase()}`) ? selected : `${selected}.${extension}`
   await writeFile(path, bytes)
+  return path
+}
+
+export async function savePdfExportFile(source: string, defaultName: string): Promise<string | null> {
+  if (!isTauri()) return null
+  const selected = await save({ defaultPath: `${defaultName}.pdf`, filters: [{ name: 'PDF', extensions: ['pdf'] }] })
+  if (!selected) return null
+  const path = selected.toLowerCase().endsWith('.pdf') ? selected : `${selected}.pdf`
+  await invoke('export_html_to_pdf', { source, path })
   return path
 }
 
@@ -464,15 +476,23 @@ export async function createMarkdownDirectory(path: string): Promise<void> {
   await mkdir(path)
 }
 
-export async function renameMarkdownPath(path: string, nextPath: string): Promise<void> {
+export async function selectFileSystemDirectory(): Promise<string | null> {
+  if (!isTauri()) throw new Error('浏览器预览无法选择系统目录，请使用桌面端打开')
+  const selected = await open({ directory: true, multiple: false })
+  return typeof selected === 'string' ? selected : null
+}
+
+export async function renameMarkdownPath(path: string, nextPath: string): Promise<string | null> {
   if (!isTauri()) throw new Error('浏览器预览无法重命名文件，请使用桌面端打开')
-  if (!/\.(md|markdown)$/i.test(path) || !/\.(md|markdown)$/i.test(nextPath)) throw new Error('只能重命名 Markdown 文件')
+  if (!/\.(md|markdown|qmd)$/i.test(path) || !/\.(md|markdown|qmd)$/i.test(nextPath)) throw new Error('只能重命名 Markdown / Quarto 文件')
   await rename(path, nextPath)
+  const updatedSource = await moveRenamedMediaDirectory(path, nextPath)
+  return updatedSource
 }
 
 export async function copyMarkdownPath(path: string, nextPath: string): Promise<void> {
   if (!isTauri()) throw new Error('浏览器预览无法创建文件副本，请使用桌面端打开')
-  if (!/\.(md|markdown)$/i.test(path) || !/\.(md|markdown)$/i.test(nextPath)) throw new Error('只能复制 Markdown 文件')
+  if (!/\.(md|markdown|qmd)$/i.test(path) || !/\.(md|markdown|qmd)$/i.test(nextPath)) throw new Error('只能复制 Markdown / Quarto 文件')
   await copyFile(path, nextPath)
 }
 
@@ -494,7 +514,7 @@ async function filesToOpened(files: FileList | null): Promise<OpenedFile[]> {
   if (!files) return []
   const selectedFiles = Array.from(files)
   const assets = createBrowserAssetMap(selectedFiles)
-  return Promise.all(selectedFiles.filter((file) => /\.(md|markdown)$/i.test(file.name)).map(async (file) => ({ path: file.webkitRelativePath || file.name, source: await file.text(), assets })))
+  return Promise.all(selectedFiles.filter((file) => /\.(md|markdown|qmd)$/i.test(file.name)).map(async (file) => ({ path: file.webkitRelativePath || file.name, source: await file.text(), assets })))
 }
 
 function dirnameOf(path: string) {
@@ -582,9 +602,58 @@ async function scanDirectory(path: string): Promise<OpenedFile[]> {
     for (const entry of entries) {
       const child = `${directory}/${entry.name}`
       if (entry.isDirectory && !['.git', 'node_modules', 'dist', 'build', '.idea', '.vscode'].includes(entry.name)) await visit(child)
-      else if (!entry.isDirectory && /\.(md|markdown)$/i.test(entry.name)) result.push({ path: child, source: await readTextFile(child) })
+      else if (!entry.isDirectory && /\.(md|markdown|qmd)$/i.test(entry.name)) result.push({ path: child, source: await readTextFile(child) })
     }
   }
   await visit(path)
   return result
+}
+
+async function readFileStats(path: string): Promise<Pick<WorkspaceFile, 'size' | 'createdAt' | 'modifiedAt'>> {
+  try {
+    const info = await stat(path)
+    return { size: info.size, createdAt: info.birthtime?.getTime() ?? undefined, modifiedAt: info.mtime?.getTime() ?? undefined }
+  } catch {
+    return {}
+  }
+}
+
+async function moveRenamedMediaDirectory(path: string, nextPath: string): Promise<string | null> {
+  const oldDirectory = dirnameOf(path)
+  const nextDirectory = dirnameOf(nextPath)
+  if (!oldDirectory || !nextDirectory) return null
+  const oldStem = baseNameWithoutExtension(path)
+  const nextStem = baseNameWithoutExtension(nextPath)
+  if (!oldStem || !nextStem || (oldStem === nextStem && oldDirectory === nextDirectory)) return null
+  const folders = [
+    { old: `${oldDirectory}/.moyue-assets/${oldStem}-media`, next: `${nextDirectory}/.moyue-assets/${nextStem}-media`, oldReference: `.moyue-assets/${oldStem}-media/`, nextReference: `.moyue-assets/${nextStem}-media/` },
+    { old: `${oldDirectory}/${oldStem}.assets`, next: `${nextDirectory}/${nextStem}.assets`, oldReference: `${oldStem}.assets/`, nextReference: `${nextStem}.assets/` },
+    { old: `${oldDirectory}/${oldStem}_files`, next: `${nextDirectory}/${nextStem}_files`, oldReference: `${oldStem}_files/`, nextReference: `${nextStem}_files/` },
+    { old: `${oldDirectory}/${oldStem}.files`, next: `${nextDirectory}/${nextStem}.files`, oldReference: `${oldStem}.files/`, nextReference: `${nextStem}.files/` },
+  ]
+  const replacements: Array<{ old: string; next: string }> = []
+  for (const folder of folders) {
+    try {
+      if (!(await stat(folder.old)).isDirectory) continue
+      await mkdir(dirnameOf(folder.next), { recursive: true })
+      await rename(folder.old, folder.next)
+      replacements.push({ old: folder.oldReference, next: folder.nextReference })
+    } catch {
+      // A missing or conflicting asset folder should not block file rename.
+    }
+  }
+  if (!replacements.length) return null
+  try {
+    const source = await readTextFile(nextPath)
+    const updatedSource = replacements.reduce((value, replacement) => value.split(replacement.old).join(replacement.next), source)
+    if (updatedSource !== source) await writeTextFile(nextPath, updatedSource)
+    return updatedSource
+  } catch {
+    return null
+  }
+}
+
+function baseNameWithoutExtension(path: string) {
+  const name = path.replace(/\\/g, '/').split('/').pop() ?? ''
+  return name.replace(/\.[^.]+$/, '')
 }

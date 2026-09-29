@@ -11,9 +11,9 @@ import FontPicker from './components/FontPicker.vue'
 import { interfaceFont } from './fonts'
 import FileSystemTree, { type FileSystemTreeNode } from './components/FileSystemTree.vue'
 import ClipboardManager from './components/ClipboardManager.vue'
-import { copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, downloadMarkdownImages, exportDocumentWithPandoc, importDocumentWithPandoc, importMarkdownAsset, importMarkdownAssetFromPath, listDirectoryFiles, listFileSystemEntries, openFileSystemDirectory, openMarkdownDirectory, openMarkdownFile, organizeMarkdownAssets, readMarkdownExportAssets, readMarkdownPath, removeMarkdownAsset, renameMarkdownAsset, renameMarkdownPath, resolveMarkdownAssetUrl, saveBinaryExportFile, saveClipboardImage, saveExportFile, saveMarkdownFile, uploadMarkdownImage, watchMarkdownPath, writeMarkdownFile, type PandocExportFormat, type WorkspaceFile } from './fileService'
+import { copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, downloadMarkdownImages, exportDocumentWithPandoc, importDocumentWithPandoc, importMarkdownAsset, importMarkdownAssetFromPath, listDirectoryFiles, listFileSystemEntries, openFileSystemDirectory, openMarkdownDirectory, openMarkdownFile, organizeMarkdownAssets, readMarkdownExportAssets, readMarkdownPath, removeMarkdownAsset, renameMarkdownAsset, renameMarkdownPath, resolveMarkdownAssetUrl, saveBinaryExportFile, saveClipboardImage, saveExportFile, saveMarkdownFile, savePdfExportFile, selectFileSystemDirectory, uploadMarkdownImage, watchMarkdownPath, writeMarkdownFile, type PandocExportFormat, type WorkspaceFile } from './fileService'
 import type { Annotation, ReaderDocument, ReaderRegion, ViewerType } from './types'
-import { escapeHtml } from './markdown/shared'
+import { escapeHtml, renderMathMl } from './markdown/shared'
 import { makeImplicitMarkdownHeadingsExplicit, parseMarkdown, renderMarkdownFragment } from './parser'
 import { asciiDiagramToMermaid, asciiTreeToTree, markdownToTree } from './asciiDiagram'
 import { formatClipboardImage, formatClipboardToMarkdown, htmlToMarkdown, normalizeMixedOrderedListSource, suggestPastedMarkdownName } from './pasteMarkdown'
@@ -27,7 +27,8 @@ const ViewerCode = defineAsyncComponent(() => import('./components/ViewerCode.vu
 type View = 'library' | 'reader' | 'clipboard' | 'themes' | 'settings'
 type BusyAction = 'file' | 'folder' | 'drop' | 'paste' | 'paste-save' | 'paste-image' | 'pandoc' | 'delete' | null
 type FileSyncState = 'idle' | 'syncing' | 'updated' | 'error'
-type FileTreeEntry = { path: string; name: string; documentId?: string; isDirectory?: boolean }
+type FileSortMode = 'name' | 'natural' | 'created' | 'modified' | 'size'
+type FileTreeEntry = { path: string; name: string; documentId?: string; isDirectory?: boolean; size?: number; createdAt?: number; modifiedAt?: number }
 const store = useReaderStore()
 const view = ref<View>('library')
 const libraryTab = ref<'home' | 'all'>('all')
@@ -103,6 +104,8 @@ const outlineQuery = ref('')
 const fileBrowserMode = ref<'list' | 'tree'>('list')
 const sidebarFilter = ref<'markdown' | 'all' | 'hidden' | 'glob'>('markdown')
 const sidebarGlob = ref('*.md')
+const savedFileSort = localStorage.getItem('moyue:file-sort') as FileSortMode | null
+const fileSort = ref<FileSortMode>(savedFileSort && ['name', 'natural', 'created', 'modified', 'size'].includes(savedFileSort) ? savedFileSort : 'name')
 const filesystemTree = ref<FileSystemTreeNode | null>(null)
 const filesystemTreeTarget = ref('')
 const filesystemTreeScope = ref<'system' | 'workspace'>('workspace')
@@ -126,7 +129,7 @@ const editorContextMenu = ref<{ x: number; y: number } | null>(null)
 const imageManagerOpen = ref(false)
 const tableBuilderOpen = ref(false)
 const tableBuilder = ref({ rows: 3, columns: 3, alignment: 'left' as 'left' | 'center' | 'right' })
-const tableEditor = ref<{ region: ReaderRegion; rows: string[][]; alignments: Array<'left' | 'center' | 'right'> } | null>(null)
+const tableEditor = ref<{ region: ReaderRegion; rows: string[][]; alignments: Array<'left' | 'center' | 'right'>; selectedColumns: number[] } | null>(null)
 const editorCodeLanguage = ref(advancedSettings.value.defaultCodeLanguage)
 const lastMediaAction = ref<{ source: string; path: string | null } | null>(null)
 const editorOriginalSource = ref('')
@@ -379,7 +382,7 @@ function directoryOf(path: string) {
   return separator >= 0 ? normalized.slice(0, separator) || '/' : '当前工作区'
 }
 function fileNameOf(path: string) { return normalizedPath(path).split('/').pop() || path }
-function isMarkdownEntry(file: FileTreeEntry) { return !file.isDirectory && /\.(md|markdown)$/i.test(file.name) }
+function isMarkdownEntry(file: FileTreeEntry) { return !file.isDirectory && /\.(md|markdown|qmd)$/i.test(file.name) }
 function hasRealFilesystemPath(path: string) { return Boolean(filesystemRoot(path)) }
 function isHiddenFile(name: string) { return name.startsWith('.') || name.startsWith('~$') }
 function globRegExp(glob: string) {
@@ -387,7 +390,7 @@ function globRegExp(glob: string) {
   return new RegExp(`^${source || '.*'}$`, 'i')
 }
 function matchesSidebarFilter(name: string) {
-  const markdown = /\.(md|markdown)$/i.test(name)
+  const markdown = /\.(md|markdown|qmd)$/i.test(name)
   const hidden = isHiddenFile(name)
   if (sidebarFilter.value === 'all') return !hidden
   if (sidebarFilter.value === 'hidden') return markdown || hidden
@@ -396,8 +399,18 @@ function matchesSidebarFilter(name: string) {
 }
 const currentDirectory = computed(() => directoryOf(store.currentDocument?.path ?? ''))
 const currentDirectoryLabel = computed(() => currentDirectory.value === '当前工作区' ? currentDirectory.value : currentDirectory.value.split('/').filter(Boolean).pop() || currentDirectory.value)
+function compareWorkspaceFiles(left: FileTreeEntry, right: FileTreeEntry) {
+  if (fileSort.value === 'natural') return left.name.localeCompare(right.name, 'zh-CN', { numeric: true, sensitivity: 'base' })
+  if (fileSort.value === 'created' || fileSort.value === 'modified') {
+    const key = fileSort.value === 'created' ? 'createdAt' : 'modifiedAt'
+    const difference = (right[key] ?? 0) - (left[key] ?? 0)
+    return difference || left.name.localeCompare(right.name, 'zh-CN')
+  }
+  if (fileSort.value === 'size') return (right.size ?? 0) - (left.size ?? 0) || left.name.localeCompare(right.name, 'zh-CN')
+  return left.name.localeCompare(right.name, 'zh-CN')
+}
 const currentDirectoryFiles = computed(() => {
-  const files = new Map<string, { path: string; name: string; documentId?: string }>()
+  const files = new Map<string, FileTreeEntry>()
   for (const document of store.documents) {
     if (directoryOf(document.path) !== currentDirectory.value) continue
     files.set(normalizedPath(document.path), { path: document.path, name: fileNameOf(document.path), documentId: document.id })
@@ -406,7 +419,7 @@ const currentDirectoryFiles = computed(() => {
     const key = normalizedPath(file.path)
     if (!files.has(key)) files.set(key, file)
   }
-  const result = [...files.values()].filter((file) => matchesSidebarFilter(file.name)).sort((left, right) => left.name.localeCompare(right.name, 'zh-CN'))
+  const result = [...files.values()].filter((file) => matchesSidebarFilter(file.name)).sort(compareWorkspaceFiles)
   return result.length || !store.currentDocument ? result : [{ path: store.currentDocument.path, name: fileNameOf(store.currentDocument.path), documentId: store.currentDocument.id }]
 })
 const batchDeletableFiles = computed(() => currentDirectoryFiles.value.filter(isBatchDeletableFile))
@@ -551,15 +564,17 @@ function richEditorHtml() {
     const root = document.createElement('div')
     root.innerHTML = region.html
     const imageUrls = [...blockSource.matchAll(/!\[[^\]]*\]\((<[^>]+>|[^)\n]+)\)/g)].map((match) => match[1].replace(/^<|>$/g, ''))
-    const videoUrls = [...blockSource.matchAll(/\[(?:视频|video)\]\((<[^>]+>|[^)\n]+)\)/gi)].map((match) => match[1].replace(/^<|>$/g, ''))
+    const videoUrls = [...blockSource.matchAll(/\[(?:视频|video)\]\((<[^>]+>|[^)\n]+?)(?:\s+["']([^"']*)["'])?\)/gi)].map((match) => ({ url: match[1].replace(/^<|>$/g, ''), title: match[2] ?? '' }))
     root.querySelectorAll<HTMLImageElement>('img[src]').forEach((media, index) => {
       const markdownSource = imageUrls[index] ?? media.getAttribute('src') ?? ''
       media.dataset.markdownSrc = markdownSource
       media.src = resolveMarkdownAssetUrl(path, markdownSource, editorInlineAssets.value)
     })
     root.querySelectorAll<HTMLVideoElement>('video[src]').forEach((media, index) => {
-      const markdownSource = videoUrls[index] ?? media.getAttribute('src') ?? ''
+      const video = videoUrls[index]
+      const markdownSource = video?.url ?? media.getAttribute('src') ?? ''
       media.dataset.markdownSrc = markdownSource
+      if (video?.title) media.dataset.markdownTitle = video.title
       media.src = resolveMarkdownAssetUrl(path, markdownSource, editorInlineAssets.value)
     })
     return `<section class="editor-rich-block" data-source-start="${region.sourceStart}" data-source-end="${region.sourceEnd}">${root.innerHTML}</section>`
@@ -861,13 +876,75 @@ function continueEditorList() {
   return true
 }
 
+function continueEditorCodeIndent() {
+  const element = editorTextarea.value
+  if (!element || element.selectionStart !== element.selectionEnd) return false
+  const value = editorSource.value
+  const cursor = element.selectionStart
+  const fenceCount = (value.slice(0, cursor).match(/^\s*(```|~~~)/gm) ?? []).length
+  if (fenceCount % 2 === 0) return false
+  const lineStart = value.lastIndexOf('\n', Math.max(0, cursor - 1)) + 1
+  const line = value.slice(lineStart, cursor)
+  const indent = line.match(/^\s*/)?.[0] ?? ''
+  const continuation = /(?:\{|\(|\[|：|:)\s*$/.test(line.trimEnd()) ? '  ' : ''
+  const insertion = `\n${indent}${continuation}`
+  applyEditorChange(`${value.slice(0, cursor)}${insertion}${value.slice(cursor)}`, cursor + insertion.length)
+  return true
+}
+
+function editorLineRange() {
+  const element = editorTextarea.value
+  if (!element) return null
+  const value = editorSource.value
+  const start = value.lastIndexOf('\n', Math.max(0, element.selectionStart - 1)) + 1
+  const end = value.indexOf('\n', element.selectionEnd)
+  return { start, end: end < 0 ? value.length : end }
+}
+
+function selectEditorLine() {
+  const range = editorLineRange()
+  const element = editorTextarea.value
+  if (!range || !element) return
+  element.focus()
+  element.setSelectionRange(range.start, range.end)
+}
+
+function deleteEditorLine() {
+  if (editorMode.value === 'rich') return
+  const range = editorLineRange()
+  if (!range) return
+  updateEditor((value) => {
+    const removeEnd = range.end < value.length ? range.end + 1 : range.start > 0 ? range.start : range.end
+    const removeStart = range.end < value.length ? range.start : range.start > 0 ? range.start - 1 : range.start
+    return { value: `${value.slice(0, removeStart)}${value.slice(removeEnd)}`, start: removeStart, end: removeStart }
+  })
+}
+
+function cutEditorLine() {
+  const range = editorLineRange()
+  if (!range) return
+  const line = editorSource.value.slice(range.start, range.end)
+  void navigator.clipboard?.writeText(line)
+  deleteEditorLine()
+}
+
 function onEditorKeydown(event: KeyboardEvent) {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'x' && editorTextarea.value?.selectionStart === editorTextarea.value?.selectionEnd) {
+    event.preventDefault()
+    cutEditorLine()
+    return
+  }
+  if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'k') {
+    event.preventDefault()
+    deleteEditorLine()
+    return
+  }
   if (event.key === 'Tab') {
     event.preventDefault()
     indentEditorSelection(event.shiftKey)
     return
   }
-  if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey && continueEditorList()) {
+  if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey && (continueEditorCodeIndent() || continueEditorList())) {
     event.preventDefault()
     return
   }
@@ -997,15 +1074,15 @@ function insertEditorLink() {
   })
 }
 
-function insertEditorMedia(kind: 'image' | 'video', markdownUrl: string) {
+function insertEditorMedia(kind: 'image' | 'video', markdownUrl: string, videoTitle = '') {
   if (editorMode.value === 'rich') {
     const resolved = resolveMarkdownAssetUrl(store.currentDocument?.path ?? '', markdownUrl, editorInlineAssets.value)
     insertRichHtml(kind === 'image'
       ? `<img src="${escapeHtml(resolved)}" data-markdown-src="${escapeHtml(markdownUrl)}" alt="图片" />`
-      : `<figure><video src="${escapeHtml(resolved)}" data-markdown-src="${escapeHtml(markdownUrl)}" controls></video><figcaption>视频</figcaption></figure>`)
+      : `<figure><video src="${escapeHtml(resolved)}" data-markdown-src="${escapeHtml(markdownUrl)}" data-markdown-title="${escapeHtml(videoTitle)}" controls></video><figcaption>视频</figcaption></figure>`)
     return
   }
-  const markup = kind === 'image' ? `![图片](${markdownUrl})` : `[视频](${markdownUrl})`
+  const markup = kind === 'image' ? `![图片](${markdownUrl})` : `[视频](${markdownUrl}${videoTitle ? ` "${videoTitle}"` : ''})`
   updateEditor((value, start, end) => ({ value: `${value.slice(0, start)}${markup}${value.slice(end)}`, start: start + markup.length, end: start + markup.length }))
 }
 
@@ -1023,7 +1100,10 @@ async function importEditorMedia(kind: 'image' | 'video') {
     const url = await importMarkdownAsset(document.path, kind)
     if (!url) return
     lastMediaAction.value = { source: editorSource.value, path: url }
-    insertEditorMedia(kind, url)
+    const videoTitle = kind === 'video'
+      ? (window.prompt('视频封面/字幕（可选）', 'poster=封面.jpg;track=字幕.vtt;lang=zh-CN') ?? '').trim().replace(/["\r\n]/g, '')
+      : ''
+    insertEditorMedia(kind, url, videoTitle)
     notify(kind === 'image' ? '图片已导入并插入' : '视频已导入并插入')
   } catch (error) {
     notify(error instanceof Error ? error.message : '媒体导入失败')
@@ -1164,6 +1244,7 @@ function openTableEditor(region: ReaderRegion) {
     region,
     rows: [markdownTableCells(lines[0]), ...lines.slice(2).map(markdownTableCells)],
     alignments: markers.map((marker) => marker.startsWith(':') && marker.endsWith(':') ? 'center' : marker.endsWith(':') ? 'right' : 'left'),
+    selectedColumns: [],
   }
 }
 
@@ -1176,6 +1257,19 @@ function addTableEditorColumn() {
   if (!tableEditor.value || tableEditor.value.alignments.length >= 12) return
   tableEditor.value.alignments.push('left')
   for (const row of tableEditor.value.rows) row.push('')
+}
+
+function setTableEditorAlignment(alignment: 'left' | 'center' | 'right') {
+  if (!tableEditor.value) return
+  const selected = new Set(tableEditor.value.selectedColumns)
+  tableEditor.value.alignments = tableEditor.value.alignments.map((current, column) => !selected.size || selected.has(column) ? alignment : current)
+}
+
+function toggleTableEditorColumn(column: number) {
+  if (!tableEditor.value) return
+  tableEditor.value.selectedColumns = tableEditor.value.selectedColumns.includes(column)
+    ? tableEditor.value.selectedColumns.filter((item) => item !== column)
+    : [...tableEditor.value.selectedColumns, column].sort((left, right) => left - right)
 }
 
 async function saveTableEditor() {
@@ -1351,16 +1445,38 @@ async function exportDocument(format: 'markdown' | 'html' | 'html-clean' | 'docx
 function printDocument() {
   if (!store.currentDocument) return
   const settings = advancedSettings.value
+  const previousTitle = document.title
+  document.title = store.currentDocument.title
   let style = document.querySelector<HTMLStyleElement>('#moyue-print-settings')
   if (!style) {
     style = document.createElement('style')
     style.id = 'moyue-print-settings'
     document.head.append(style)
   }
-  style.textContent = `@page{size:${settings.printPageSize};margin:${settings.printMargin}mm}@media print{body{print-color-adjust:${settings.printBackground ? 'exact' : 'economy'};-webkit-print-color-adjust:${settings.printBackground ? 'exact' : 'economy'}}body::before{content:attr(data-print-header);position:fixed;top:-${Math.max(8, settings.printMargin - 5)}mm;left:0;right:0;text-align:center;font-size:9pt;color:#667}body::after{content:attr(data-print-footer);position:fixed;bottom:-${Math.max(8, settings.printMargin - 5)}mm;left:0;right:0;text-align:center;font-size:9pt;color:#667}}`
+  style.textContent = `@page{size:${settings.printPageSize};margin:${settings.printMargin}mm}@media print{body{print-color-adjust:${settings.printBackground ? 'exact' : 'economy'};-webkit-print-color-adjust:${settings.printBackground ? 'exact' : 'economy'}}body::before{content:attr(data-print-header);position:fixed;top:-${Math.max(8, settings.printMargin - 5)}mm;left:0;right:0;text-align:center;font-size:9pt;color:#667}body::after{content:attr(data-print-footer);position:fixed;bottom:-${Math.max(8, settings.printMargin - 5)}mm;left:0;right:0;text-align:center;font-size:9pt;color:#667}.reader-content h1,.reader-content h2,.reader-content h3{break-after:avoid}.reader-content pre,.reader-content table,.reader-content figure{break-inside:avoid}.reader-content video{max-width:100%;height:auto}}`
   document.body.dataset.printHeader = settings.printHeader
   document.body.dataset.printFooter = settings.printFooter
+  const restore = () => {
+    document.title = previousTitle
+    delete document.body.dataset.printHeader
+    delete document.body.dataset.printFooter
+    window.removeEventListener('afterprint', restore)
+  }
+  window.addEventListener('afterprint', restore, { once: true })
   window.print()
+}
+
+async function exportPdfDocument() {
+  const document = store.currentDocument
+  if (!document) return
+  if (!isTauriRuntime()) { printDocument(); return }
+  const settings = advancedSettings.value
+  const printStyle = `<style>@page{size:${settings.printPageSize};margin:${settings.printMargin}mm}body{print-color-adjust:${settings.printBackground ? 'exact' : 'economy'};-webkit-print-color-adjust:${settings.printBackground ? 'exact' : 'economy'}}h1,h2,h3{break-after:avoid}pre,table,figure{break-inside:avoid}body::before{content:${JSON.stringify(settings.printHeader)};position:fixed;top:-${Math.max(8, settings.printMargin - 5)}mm;left:0;right:0;text-align:center;font-size:9pt;color:#667}body::after{content:${JSON.stringify(settings.printFooter)};position:fixed;bottom:-${Math.max(8, settings.printMargin - 5)}mm;left:0;right:0;text-align:center;font-size:9pt;color:#667}</style>`
+  const html = exportHtmlSource(document).replace('</head>', `${printStyle}</head>`)
+  try {
+    const path = await savePdfExportFile(html, document.title || '文档')
+    if (path) notify(`已导出 PDF：${path}`)
+  } catch (error) { notify(error instanceof Error ? error.message : 'PDF 导出失败') }
 }
 
 async function replaceSearchMatches() {
@@ -1553,7 +1669,7 @@ async function importClipboardContent(html: string, text: string, saveToFile = f
     if (!path) return
     if (!saveToFile) {
       const usedPaths = new Set(store.documents.map((document) => normalizedPath(document.path).toLowerCase()))
-      const base = path.replace(/\.md$/i, '')
+      const base = path.replace(/\.(?:md|markdown|qmd)$/i, '')
       let suffix = 2
       while (usedPaths.has(normalizedPath(path).toLowerCase())) path = `${base}-${suffix++}.md`
     }
@@ -1698,7 +1814,7 @@ function validEntryName(value: string) {
 
 function markdownName(value: string) {
   const name = value.trim()
-  return /\.(md|markdown)$/i.test(name) ? name : `${name}.${advancedSettings.value.defaultExtension}`
+  return /\.(md|markdown|qmd)$/i.test(name) ? name : `${name}.${advancedSettings.value.defaultExtension}`
 }
 
 function hasCurrentFile(path: string) {
@@ -1895,7 +2011,7 @@ async function createFileContextFile() {
   if (busyAction.value) return
   busyAction.value = 'file'
   try {
-    await createMarkdownFile(path, `# ${name.replace(/\.(md|markdown)$/i, '')}\n\n`)
+    await createMarkdownFile(path, `# ${name.replace(/\.(md|markdown|qmd)$/i, '')}\n\n`)
     await refreshFileTree()
     await refreshFilesystemDirectory(directory)
     notify(`已新建 ${name}`)
@@ -1928,7 +2044,7 @@ function searchFileContextEntry() {
   const file = fileContextMenu.value?.file
   fileContextMenu.value = null
   if (!file || !isMarkdownEntry(file)) return
-  query.value = file.name.replace(/\.(md|markdown)$/i, '')
+  query.value = file.name.replace(/\.(md|markdown|qmd)$/i, '')
   openSearch('all')
 }
 
@@ -2059,7 +2175,7 @@ async function openFilesystemTreeNode(node: FileSystemTreeNode) {
     await toggleFilesystemNode(node)
     return
   }
-  if (!/\.(md|markdown)$/i.test(node.name)) {
+  if (!/\.(md|markdown|qmd)$/i.test(node.name)) {
     notify('当前阅读器只支持打开 Markdown 文件')
     return
   }
@@ -2080,8 +2196,8 @@ async function renameFileContextEntry() {
   if (busyAction.value) return
   busyAction.value = 'file'
   try {
-    await renameMarkdownPath(file.path, nextPath)
-    if (file.documentId) await store.renameDocument(file.documentId, nextPath)
+    const renamedSource = await renameMarkdownPath(file.path, nextPath)
+    if (file.documentId) await store.renameDocument(file.documentId, nextPath, renamedSource ?? undefined)
     await refreshFileTree()
     await refreshFilesystemDirectory(fileDirectoryPath(file.path))
     notify(`已重命名为 ${name}`)
@@ -2090,12 +2206,33 @@ async function renameFileContextEntry() {
   } finally { busyAction.value = null }
 }
 
+async function moveFileContextEntry() {
+  const file = fileContextMenu.value?.file
+  fileContextMenu.value = null
+  if (!file || !canManageMarkdownEntry(file)) return
+  const directory = await selectFileSystemDirectory()
+  if (!directory || filePathKey(directory) === filePathKey(fileDirectoryPath(file.path))) return
+  const nextPath = joinFilePath(directory, file.name)
+  if (busyAction.value) return
+  busyAction.value = 'file'
+  try {
+    const movedSource = await renameMarkdownPath(file.path, nextPath)
+    if (file.documentId) await store.renameDocument(file.documentId, nextPath, movedSource ?? undefined)
+    await refreshFileTree()
+    await refreshFilesystemDirectory(fileDirectoryPath(file.path))
+    await refreshFilesystemDirectory(directory)
+    notify(`已移动到 ${directory}`)
+  } catch (error) {
+    notify(error instanceof Error ? error.message : '移动文件失败')
+  } finally { busyAction.value = null }
+}
+
 async function duplicateFileContextEntry() {
   const file = fileContextMenu.value?.file
   fileContextMenu.value = null
   if (!file || !canManageMarkdownEntry(file)) return
-  const base = file.name.replace(/\.(md|markdown)$/i, '')
-  const extension = file.name.match(/\.(md|markdown)$/i)?.[0] ?? '.md'
+  const base = file.name.replace(/\.(md|markdown|qmd)$/i, '')
+  const extension = file.name.match(/\.(md|markdown|qmd)$/i)?.[0] ?? '.md'
   const value = window.prompt('创建文件副本', `${base} - 副本${extension}`)
   if (value === null) return
   const name = markdownName(value)
@@ -2266,6 +2403,7 @@ watch(advancedSettings, (settings) => {
   localStorage.setItem('moyue:advanced-settings', JSON.stringify(settings))
   if (!settings.rememberRecent) localStorage.removeItem('moyue:reader-session')
 }, { deep: true })
+watch(fileSort, (value) => localStorage.setItem('moyue:file-sort', value))
 watch(() => store.mode, (mode) => { if (mode !== 'focus') stopFocusTimer() })
 watch(() => store.currentDocument?.path, (path) => { fileSyncState.value = 'idle'; focusScrollTargetId = null; outlineQuery.value = ''; selectedFilePaths.value = []; invalidateRegionLayout(); void refreshFileTree(); if (path) void syncFilesystemTreeTarget(path) }, { immediate: true })
 watch(currentDirectoryFiles, (files) => {
@@ -2486,8 +2624,8 @@ async function importNativeDroppedPaths(paths: string[]) {
     finally { busyAction.value = null }
     return
   }
-  const markdownPaths = paths.filter((path) => /\.(md|markdown)$/i.test(path))
-  if (!markdownPaths.length) { notify('请拖入 .md 或 .markdown 文件'); return }
+  const markdownPaths = paths.filter((path) => /\.(md|markdown|qmd)$/i.test(path))
+  if (!markdownPaths.length) { notify('请拖入 .md、.markdown 或 .qmd 文件'); return }
   if (busyAction.value) return
   busyAction.value = 'drop'
   try {
@@ -2503,8 +2641,8 @@ async function onDrop(event: DragEvent) {
   if (busyAction.value) return
   draggingFiles.value = false
   const droppedFiles = Array.from(event.dataTransfer?.files ?? [])
-  const files = droppedFiles.filter((file) => /\.(md|markdown)$/i.test(file.name))
-  if (!files.length) { notify('请拖入 .md 或 .markdown 文件'); return }
+  const files = droppedFiles.filter((file) => /\.(md|markdown|qmd)$/i.test(file.name))
+  if (!files.length) { notify('请拖入 .md、.markdown 或 .qmd 文件'); return }
   busyAction.value = 'drop'
   try {
     const assets = createBrowserAssetMap(droppedFiles)
@@ -2587,7 +2725,7 @@ async function refreshFileTree() {
     if (request === fileTreeRequest) filesystemFiles.value = []
   }
 }
-function displayTitle(title = '') { return title.replace(/\.(?:md|markdown)$/i, '') }
+function displayTitle(title = '') { return title.replace(/\.(?:md|markdown|qmd)$/i, '') }
 function filePathKey(path: string) { return normalizedPath(path).replace(/\/$/, '').toLowerCase() }
 function setFileSyncState(state: FileSyncState) { if (store.currentDocument) fileSyncState.value = state }
 function scheduleDocumentReload(path: string) {
@@ -2653,7 +2791,7 @@ function fileStatus(file: { documentId?: string }) {
 async function openFileTreeEntry(file: { path: string; name: string; documentId?: string }) {
   if (fileBrowserMode.value === 'tree') filesystemTreeTarget.value = file.path
   if (file.documentId) { await chooseDocument(file.documentId); return }
-  if (!/\.(md|markdown)$/i.test(file.name)) { notify('当前只支持打开 Markdown 文件'); return }
+  if (!/\.(md|markdown|qmd)$/i.test(file.name)) { notify('当前只支持打开 Markdown / Quarto 文件'); return }
   if (busyAction.value) return
   busyAction.value = 'file'
   try {
@@ -3208,6 +3346,52 @@ async function copySelectionMarkdown() {
   }
   selectionToolbar.value = null
 }
+async function copySelectionHtml() {
+  if (!selectionToolbar.value) return
+  const plain = selectionToolbar.value.text
+  const html = `<p>${escapeHtml(plain).replace(/\r?\n/g, '<br>')}</p>`
+  try {
+    if (navigator.clipboard?.write && typeof ClipboardItem !== 'undefined') {
+      await navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([plain], { type: 'text/plain' }) })])
+    } else await navigator.clipboard.writeText(plain)
+    notify('已复制 HTML（不带主题样式）')
+  } catch { notify('当前环境不允许访问剪贴板') }
+  selectionToolbar.value = null
+}
+async function copySelectionMathMl() {
+  if (!selectionToolbar.value) return
+  const selected = selectionToolbar.value
+  const region = store.currentDocument?.regions.find((item) => item.id === selected.regionId)
+  const mathml = renderMathMl(region?.type === 'math' ? region.textContent : selected.text, region?.type === 'math')
+  try {
+    await navigator.clipboard.writeText(mathml)
+    notify('已复制 MathML')
+  } catch { notify('当前环境不允许访问剪贴板') }
+  selectionToolbar.value = null
+}
+async function copyDocumentHtml() {
+  const document = store.currentDocument
+  if (!document) return
+  const html = exportHtmlSource(document, false)
+  const plain = document.regions.map((region) => region.textContent).filter(Boolean).join('\n\n')
+  try {
+    if (navigator.clipboard?.write && typeof ClipboardItem !== 'undefined') {
+      await navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([plain], { type: 'text/plain' }) })])
+      notify('已复制整篇 HTML（不带主题）')
+    } else {
+      await navigator.clipboard.writeText(plain)
+      notify('当前环境不支持 HTML 剪贴板，已复制整篇纯文本')
+    }
+  } catch { notify('当前环境不允许访问剪贴板') }
+}
+async function copyDocumentPlain() {
+  const document = store.currentDocument
+  if (!document) return
+  try {
+    await navigator.clipboard.writeText(document.regions.map((region) => region.textContent).filter(Boolean).join('\n\n'))
+    notify('已复制整篇纯文本')
+  } catch { notify('当前环境不允许访问剪贴板') }
+}
 function searchSelection() {
   if (!selectionToolbar.value) return
   query.value = selectionToolbar.value.text
@@ -3376,6 +3560,7 @@ async function requestFullscreen() {
             <button type="button" role="menuitem" @click="showDocumentTreeForEntry(fileContextMenu.file)"><AppIcon name="library" :size="13" />文档树</button>
             <div class="file-context-divider" />
             <button v-if="canManageMarkdownEntry(fileContextMenu.file)" type="button" role="menuitem" @click="renameFileContextEntry"><AppIcon name="edit" :size="13" />重命名</button>
+            <button v-if="canManageMarkdownEntry(fileContextMenu.file)" type="button" role="menuitem" @click="moveFileContextEntry"><AppIcon name="folder" :size="13" />移动到目录</button>
             <button v-if="canManageMarkdownEntry(fileContextMenu.file)" type="button" role="menuitem" @click="duplicateFileContextEntry"><AppIcon name="copy" :size="13" />创建副本</button>
             <button v-if="isTauriRuntime() && hasRealFilesystemPath(fileContextMenu.file.path)" type="button" role="menuitem" @click="openFileContextDirectory"><AppIcon name="folder" :size="13" />{{ fileContextMenu.file.isDirectory ? '打开文件夹' : '打开所在目录' }}</button>
             <button type="button" role="menuitem" @click="copyFileContextValue('name')"><AppIcon name="copy" :size="13" />复制名称</button>
@@ -3419,6 +3604,7 @@ async function requestFullscreen() {
               <div class="file-filter-toolbar" aria-label="文件侧栏筛选">
                 <select v-model="sidebarFilter" aria-label="文件筛选方式"><option value="markdown">Markdown 文件</option><option value="hidden">包含隐藏文件</option><option value="all">全部文件</option><option value="glob">自定义 glob</option></select>
                 <input v-if="sidebarFilter === 'glob'" v-model="sidebarGlob" aria-label="自定义 glob" placeholder="例如 *.md" />
+                <select v-model="fileSort" aria-label="文件排序方式"><option value="name">名称</option><option value="natural">自然顺序</option><option value="created">创建时间</option><option value="modified">修改时间</option><option value="size">文件大小</option></select>
               </div>
               <div v-if="fileBrowserMode === 'tree'" class="filesystem-tree-panel">
                 <div v-if="filesystemTree" class="filesystem-tree" :aria-label="filesystemTreeScope === 'system' ? '当前目录文档树' : '工作区文档树'"><FileSystemTree :node="filesystemTree" :selected-path="filesystemTreeTarget" @toggle="toggleFilesystemNode" @open="openFilesystemTreeNode" @contextmenu="openFilesystemContextMenu" /></div>
@@ -3473,6 +3659,8 @@ async function requestFullscreen() {
                       <button type="button" @click="exportDocument('markdown')">导出 Markdown</button>
                       <button type="button" @click="exportDocument('html')">导出 HTML</button>
                       <button type="button" @click="exportDocument('html-clean')">导出无样式 HTML</button>
+                      <button type="button" @click="copyDocumentHtml">复制整篇 HTML</button>
+                      <button type="button" @click="copyDocumentPlain">复制整篇纯文本</button>
                       <button type="button" @click="exportDocument('image')">导出 PNG 长图</button>
                       <button type="button" @click="exportDocument('docx')">导出 DOCX</button>
                       <button type="button" @click="exportDocument('epub')">导出 EPUB</button>
@@ -3480,7 +3668,8 @@ async function requestFullscreen() {
                       <button type="button" @click="exportDocument('odt')">导出 ODT</button>
                       <button type="button" @click="exportDocument('rtf')">导出 RTF</button>
                       <button type="button" @click="exportDocument('mediawiki')">导出 MediaWiki</button>
-                      <button type="button" @click="printDocument">打印 / PDF</button>
+                      <button type="button" @click="exportPdfDocument">导出 PDF</button>
+                      <button type="button" @click="printDocument">打印</button>
                     </div>
                   </details>
                 </div>
@@ -3620,10 +3809,20 @@ async function requestFullscreen() {
               <button type="button" role="menuitem" @click="wrapEditorSelection('**', '**', '粗体'); closeEditorContextMenu()">粗体</button>
               <button type="button" role="menuitem" @click="wrapEditorSelection('*', '*', '斜体'); closeEditorContextMenu()">斜体</button>
               <button type="button" role="menuitem" @click="wrapEditorSelection('`', '`', '代码'); closeEditorContextMenu()">行内代码</button>
+              <button type="button" role="menuitem" @click="wrapEditorSelection('==', '==', '高亮'); closeEditorContextMenu()">高亮</button>
+              <button type="button" role="menuitem" @click="wrapEditorSelection('~', '~', '下标'); closeEditorContextMenu()">下标</button>
+              <button type="button" role="menuitem" @click="wrapEditorSelection('^', '^', '上标'); closeEditorContextMenu()">上标</button>
+              <button type="button" role="menuitem" @click="insertEditorLink(); closeEditorContextMenu()">链接</button>
               <button type="button" role="menuitem" @click="prefixEditorLines('# '); closeEditorContextMenu()">一级标题</button>
               <button type="button" role="menuitem" @click="prefixEditorLines('- '); closeEditorContextMenu()">无序列表</button>
+              <button type="button" role="menuitem" @click="prefixEditorLines('1. '); closeEditorContextMenu()">有序列表</button>
               <button type="button" role="menuitem" @click="prefixEditorLines('- [ ] '); closeEditorContextMenu()">任务列表</button>
               <button type="button" role="menuitem" @click="prefixEditorLines('> '); closeEditorContextMenu()">引用</button>
+              <button type="button" role="menuitem" @click="insertEditorCodeBlock(); closeEditorContextMenu()">代码块</button>
+              <button type="button" role="menuitem" @click="insertEditorAlert('NOTE'); closeEditorContextMenu()">警告框</button>
+              <button type="button" role="menuitem" @click="selectEditorLine(); closeEditorContextMenu()">选中当前行</button>
+              <button type="button" role="menuitem" @click="cutEditorLine(); closeEditorContextMenu()">剪切当前行</button>
+              <button type="button" role="menuitem" @click="deleteEditorLine(); closeEditorContextMenu()">删除当前行</button>
             </div>
           </Teleport>
         <aside v-if="contextPanelOpen && store.mode !== 'focus' && store.mode !== 'clean'" class="context-panel">
@@ -3647,7 +3846,7 @@ async function requestFullscreen() {
         </div>
         <div v-if="store.mode === 'region-focus'" class="focus-hud" role="status"><span v-if="focusPosition" class="focus-hud-position">{{ focusPosition }}</span><span class="focus-hud-shortcut"><kbd>↑</kbd><kbd>↓</kbd>切换</span><button type="button" @click="clearRegionFocus"><kbd>Esc</kbd>退出聚焦</button></div>
         <div v-if="store.mode === 'clean'" class="clean-mode-hud"><span><AppIcon name="eye" :size="13" />纯净阅读</span><button type="button" @click="toggleCleanMode">退出 <kbd>Esc</kbd></button></div>
-        <div v-if="selectionToolbar" class="selection-toolbar"><span class="selection-label">{{ selectionToolbar.text.slice(0, 28) }}{{ selectionToolbar.text.length > 28 ? '…' : '' }}</span><button type="button" @click="highlightSelection">{{ selectionIsHighlighted() ? '取消高亮' : '高亮' }}</button><button type="button" @click="beginAnnotation">批注</button><button type="button" @click="searchSelection">搜索</button><button type="button" @click="assist('translate')">翻译</button><button type="button" @click="copySelectionMarkdown">复制 Markdown</button><button type="button" @click="copySelection">复制</button></div>
+        <div v-if="selectionToolbar" class="selection-toolbar"><span class="selection-label">{{ selectionToolbar.text.slice(0, 28) }}{{ selectionToolbar.text.length > 28 ? '…' : '' }}</span><button type="button" @click="highlightSelection">{{ selectionIsHighlighted() ? '取消高亮' : '高亮' }}</button><button type="button" @click="beginAnnotation">批注</button><button type="button" @click="searchSelection">搜索</button><button type="button" @click="assist('translate')">翻译</button><button type="button" @click="copySelectionMarkdown">复制 Markdown</button><button type="button" @click="copySelectionHtml">复制 HTML</button><button type="button" @click="copySelectionMathMl">复制 MathML</button><button type="button" @click="copySelection">复制纯文本</button></div>
       </section>
 
       <ThemeCenter v-else-if="view === 'themes'" :themes="store.themes" :active-theme-id="store.activeThemeId" :active-theme="store.activeTheme" @apply="applyReaderTheme" @install="store.installTheme" @notify="notify" />
@@ -3672,7 +3871,7 @@ async function requestFullscreen() {
     <div v-if="searchOpen" class="overlay search-overlay" @click.self="searchOpen = false"><div class="search-dialog"><div class="search-input-row"><AppIcon name="search" :size="17" /><input v-model="query" autofocus :placeholder="searchScope === 'current' ? '搜索当前文档…' : '搜索文档、标题、内容…'" aria-label="搜索内容" @keydown.esc="searchOpen = false" /><kbd>ESC</kbd></div><div class="search-scope-row"><div class="search-scope-tabs" role="tablist" aria-label="搜索范围"><button type="button" :class="{ active: searchScope === 'all' }" @click="searchScope = 'all'">全部文档</button><button type="button" :class="{ active: searchScope === 'current' }" :disabled="!store.currentDocument" @click="searchScope = 'current'">当前文档</button><button type="button" :class="{ active: replaceOpen }" @click="replaceOpen = !replaceOpen">查找替换</button></div><span>{{ searchResults.reduce((total, result) => total + result.matchCount, 0) }} 个匹配</span><small>Ctrl/Cmd + F 搜当前文档</small></div><div v-if="replaceOpen" class="replace-row"><input v-model="replaceValue" placeholder="替换为…" aria-label="替换内容" /><label><input v-model="searchRegex" type="checkbox" /> 正则</label><button type="button" :disabled="!searchPattern || searchPatternError" @click="replaceSearchMatches">全部替换</button></div><p v-if="searchPatternError" class="search-error">正则表达式无效</p><div v-if="searchResults.length" class="search-results"><button v-for="(result, index) in searchResults" :key="`${result.document.id}-${result.region.id}`" type="button" :class="{ selected: searchIndex === index }" @click="chooseSearchResult(result.document.id, result.region.id)"><span class="result-kind">{{ result.region.type }}</span><span><b>{{ displayTitle(result.document.title) }}</b><small>{{ result.region.textContent.slice(0, 100) }} · {{ result.matchCount }} 处匹配</small></span><AppIcon name="external" :size="14" /></button></div><div v-else class="empty-search">{{ query ? '没有找到相关内容' : searchScope === 'current' ? '输入关键词，搜索当前文档' : '输入关键词，搜索你的阅读空间' }}</div></div></div>
 
     <div v-if="tableBuilderOpen" class="overlay editor-dialog-overlay" @click.self="tableBuilderOpen = false"><div class="editor-dialog" role="dialog" aria-modal="true" aria-label="插入表格"><span class="section-kicker">表格工具</span><h2>插入可编辑表格</h2><div class="setting-form-grid"><label class="setting-input">行数<input v-model.number="tableBuilder.rows" type="number" min="2" max="20" /></label><label class="setting-input">列数<input v-model.number="tableBuilder.columns" type="number" min="1" max="12" /></label><label class="setting-input">对齐<select v-model="tableBuilder.alignment"><option value="left">左对齐</option><option value="center">居中</option><option value="right">右对齐</option></select></label></div><div class="note-actions"><button class="ghost-button" type="button" @click="tableBuilderOpen = false">取消</button><button class="primary-button" type="button" @click="confirmInsertEditorTable">插入表格</button></div></div></div>
-    <div v-if="tableEditor" class="overlay editor-dialog-overlay" @click.self="tableEditor = null"><div class="editor-dialog table-editor-dialog" role="dialog" aria-modal="true" aria-label="编辑表格"><div class="extensions-head"><div><span class="section-kicker">表格工具</span><h2>可视化编辑</h2></div><div><button class="ghost-button" type="button" @click="addTableEditorRow">增加行</button><button class="ghost-button" type="button" @click="addTableEditorColumn">增加列</button></div></div><div class="table-editor-grid" :style="{ gridTemplateColumns: `repeat(${tableEditor.alignments.length}, minmax(120px, 1fr))` }"><template v-for="(alignment, column) in tableEditor.alignments" :key="`alignment-${column}`"><select v-model="tableEditor.alignments[column]" :aria-label="`第 ${column + 1} 列对齐方式`"><option value="left">左对齐</option><option value="center">居中</option><option value="right">右对齐</option></select></template><template v-for="(row, rowIndex) in tableEditor.rows" :key="`row-${rowIndex}`"><input v-for="(_, column) in tableEditor.alignments" :key="`${rowIndex}-${column}`" v-model="row[column]" :class="{ 'table-header-input': rowIndex === 0 }" :aria-label="`第 ${rowIndex + 1} 行第 ${column + 1} 列`" /></template></div><div class="note-actions"><button class="ghost-button" type="button" @click="tableEditor = null">取消</button><button class="primary-button" type="button" @click="saveTableEditor">保存表格</button></div></div></div>
+<div v-if="tableEditor" class="overlay editor-dialog-overlay" @click.self="tableEditor = null"><div class="editor-dialog table-editor-dialog" role="dialog" aria-modal="true" aria-label="编辑表格"><div class="extensions-head"><div><span class="section-kicker">表格工具</span><h2>可视化编辑</h2></div><div><button class="ghost-button" type="button" @click="addTableEditorRow">增加行</button><button class="ghost-button" type="button" @click="addTableEditorColumn">增加列</button></div></div><div class="table-alignment-actions" aria-label="统一设置列对齐"><span>{{ tableEditor.selectedColumns.length ? `已选 ${tableEditor.selectedColumns.length} 列：` : '全部列：' }}</span><button type="button" @click="setTableEditorAlignment('left')">左</button><button type="button" @click="setTableEditorAlignment('center')">中</button><button type="button" @click="setTableEditorAlignment('right')">右</button></div><div class="table-column-selection" aria-label="选择需要对齐的列"><span>选择列：</span><button v-for="(_, column) in tableEditor.alignments" :key="`column-${column}`" type="button" :class="{ active: tableEditor.selectedColumns.includes(column) }" @click="toggleTableEditorColumn(column)">第 {{ column + 1 }} 列</button><small>不选择时作用于全部列</small></div><div class="table-editor-grid" :style="{ gridTemplateColumns: `repeat(${tableEditor.alignments.length}, minmax(120px, 1fr))` }"><template v-for="(alignment, column) in tableEditor.alignments" :key="`alignment-${column}`"><select v-model="tableEditor.alignments[column]" :aria-label="`第 ${column + 1} 列对齐方式`"><option value="left">左对齐</option><option value="center">居中</option><option value="right">右对齐</option></select></template><template v-for="(row, rowIndex) in tableEditor.rows" :key="`row-${rowIndex}`"><input v-for="(_, column) in tableEditor.alignments" :key="`${rowIndex}-${column}`" v-model="row[column]" :class="{ 'table-header-input': rowIndex === 0 }" :aria-label="`第 ${rowIndex + 1} 行第 ${column + 1} 列`" /></template></div><div class="note-actions"><button class="ghost-button" type="button" @click="tableEditor = null">取消</button><button class="primary-button" type="button" @click="saveTableEditor">保存表格</button></div></div></div>
     <div v-if="imageManagerOpen" class="overlay editor-dialog-overlay" @click.self="imageManagerOpen = false"><div class="editor-dialog image-manager-dialog" role="dialog" aria-modal="true" aria-label="图片管理"><div class="extensions-head"><div><span class="section-kicker">文档资源</span><h2>图片管理</h2></div><button class="ghost-button" type="button" @click="downloadAllEditorImages">下载全部远程图片</button></div><div v-if="editorImages.length" class="image-manager-list"><div v-for="image in editorImages" :key="`${image.index}-${image.url}`" class="image-manager-row"><img :src="resolveMarkdownAssetUrl(store.currentDocument?.path ?? '', image.url, editorInlineAssets)" :alt="image.alt" /><span><b>{{ image.alt }}</b><small>{{ image.url }}</small></span><button v-if="!image.remote" type="button" @click="renameEditorImage(image.url)">重命名</button><button v-if="!image.remote" class="danger-button" type="button" @click="deleteEditorImage(image.url)">删除</button></div></div><p v-else class="empty-search">当前文档没有图片。</p><div class="note-actions"><button class="ghost-button" type="button" @click="imageManagerOpen = false">完成</button></div></div></div>
     <div v-if="viewer" class="overlay viewer-overlay" :class="{ 'is-viewer-fullscreen': viewerFullscreen }" @click.self="closeViewer">
       <div class="viewer-shell" role="dialog" aria-modal="true" :aria-label="`${viewerKind(viewer.type)}独立查看`" :class="{ 'is-fullscreen': viewerFullscreen }">

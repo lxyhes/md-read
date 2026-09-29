@@ -3,6 +3,7 @@ import { hashText, makeImplicitMarkdownHeadingsExplicit, parseMarkdown, renderMa
 import { asciiDiagramToMermaid, asciiTreeToTree, markdownToTree } from './asciiDiagram'
 import { formatClipboardImage, formatClipboardToMarkdown, formatPastedText, isLikelyProseBlock, normalizeMixedOrderedListSource, suggestPastedMarkdownName } from './pasteMarkdown'
 import { resolveMarkdownAssetUrl } from './fileService'
+import { renderMathMl } from './markdown/shared'
 
 describe('Moyue markdown region parser', () => {
   const source = '# Title\n\nA paragraph.\n\n```mermaid\nflowchart LR\nA --> B\n```'
@@ -41,6 +42,11 @@ $$`)
     expect(document.regions[0].html).toContain('MathJax')
     expect(document.regions[1].type).toBe('math')
     expect(document.regions[1].html).toContain('frac')
+  })
+
+  it('exports semantic MathML for copied formulas', () => {
+    expect(renderMathMl('x^2', false)).toContain('<msup')
+    expect(renderMathMl(String.raw`\frac{a}{b}`, true)).toContain('<mfrac')
   })
 
   it('accepts LaTeX parenthesis and bracket delimiters', () => {
@@ -139,6 +145,13 @@ $$`)
     expect(document.regions[0].metadata?.url).toBe('asset://assets/demo.mp4')
     expect(document.regions[0].html).toContain('<video')
     expect(document.regions[0].html).toContain('controls')
+  })
+
+  it('renders video poster and subtitle track metadata', () => {
+    const document = parseMarkdown('notes/readme.md', '[视频](assets/demo.mp4 "poster=assets/cover.png;track=assets/subtitles.vtt;lang=zh-CN")')
+    expect(document.regions[0].html).toContain('poster="assets/cover.png"')
+    expect(document.regions[0].html).toContain('src="assets/subtitles.vtt"')
+    expect(document.regions[0].html).toContain('srclang="zh-CN"')
   })
 
   it('resolves browser assets relative to the Markdown file', () => {

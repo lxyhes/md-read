@@ -1,6 +1,6 @@
 import type { HeadingItem, ReaderDocument, ReaderRegion, ReaderRegionType } from './types'
-import { blockHtmlWithSourceIndent, renderFootnotes } from './markdown/render'
-import { createRenderContext, escapeHtml, nodeText, safeUrl, type MarkdownUrlResolver, type MdastNode } from './markdown/shared'
+import { blockHtmlWithSourceIndent, renderFootnotes, renderVideoNode } from './markdown/render'
+import { createRenderContext, nodeText, type MarkdownUrlResolver, type MdastNode } from './markdown/shared'
 import { formatPastedText, isLikelyProseBlock, normalizeMixedOrderedListSource } from './pasteMarkdown'
 import { isTimestampedParagraph, markdownProcessor as processor, normalizeArticleStrong, normalizeLatexDelimiters, normalizeMixedOrderedLists, promoteTimestampedParagraphs, removeEmptyListItems } from './markdown/fragment'
 
@@ -156,7 +156,7 @@ export function parseMarkdown(path: string, source: string, resolveUrl: Markdown
     if (type === 'image') metadata.url = resolveUrl(imageNode(node)?.url ?? '')
     if (type === 'video') metadata.url = resolveUrl(videoNode(node)?.url ?? '')
     const html = type === 'video'
-      ? `<figure class="markdown-video"><video src="${safeUrl(String(metadata.url ?? ''))}" controls preload="metadata"></video><figcaption>${escapeHtml(videoNode(node)?.title || textContent || '视频')}</figcaption></figure>`
+      ? renderVideoNode(videoNode(node) ?? { type: 'link', url: String(metadata.url ?? ''), title: null, children: [] }, resolveUrl, textContent || '视频')
       : blockHtmlWithSourceIndent(node, normalizedSource, resolveUrl, context)
     const region: ReaderRegion = {
       id, documentId, type, index: regions.length, textContent, sourceStart: start, sourceEnd: end,
@@ -178,7 +178,7 @@ export function parseMarkdown(path: string, source: string, resolveUrl: Markdown
     regions.push({ id, documentId, type: 'footnotes', index: regions.length, textContent: '脚注', sourceStart: source.length, sourceEnd: source.length, html: footnotesHtml, metadata: {} })
   }
 
-  const title = documentTitle || path.split(/[\\/]/).pop()?.replace(/\.markdown?$/i, '') || '未命名文档'
+  const title = documentTitle || path.split(/[\\/]/).pop()?.replace(/\.qmd$/i, '').replace(/\.markdown?$/i, '') || '未命名文档'
   const wordCount = source.replace(/```[\s\S]*?```/g, '').trim().length
   return {
     id: documentId,

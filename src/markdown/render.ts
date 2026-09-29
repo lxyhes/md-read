@@ -111,6 +111,28 @@ function standaloneVideoNode(node: MdastNode): MdastNode | null {
   return label === '视频' || label === 'video' || /\.(?:mp4|webm|mov|m4v|ogv|ogg)(?:[?#].*)?$/i.test(link.url ?? '') ? link : null
 }
 
+function videoOptions(title: string | null | undefined) {
+  const options = { poster: '', track: '', lang: 'zh-CN', label: '字幕' }
+  for (const item of (title ?? '').split(';')) {
+    const [key, ...rest] = item.split('=')
+    const value = rest.join('=').trim()
+    if (!value) continue
+    if (key.trim().toLowerCase() === 'poster') options.poster = value
+    if (key.trim().toLowerCase() === 'track') options.track = value
+    if (key.trim().toLowerCase() === 'lang') options.lang = value
+    if (key.trim().toLowerCase() === 'label') options.label = value
+  }
+  return options
+}
+
+export function renderVideoNode(video: MdastNode, resolveUrl: MarkdownUrlResolver = (url) => url, fallbackCaption = '视频'): string {
+  const options = videoOptions(video.title)
+  const poster = options.poster ? ` poster="${safeUrl(resolveUrl(options.poster))}"` : ''
+  const track = options.track ? `<track src="${safeUrl(resolveUrl(options.track))}" kind="subtitles" srclang="${escapeHtml(options.lang)}" label="${escapeHtml(options.label)}" default />` : ''
+  const caption = options.poster || options.track ? fallbackCaption : video.title || nodeText(video) || fallbackCaption
+  return `<figure class="markdown-video"><video src="${safeUrl(resolveUrl(video.url ?? ''))}"${poster} controls preload="metadata">${track}</video><figcaption>${escapeHtml(caption)}</figcaption></figure>`
+}
+
 function blockHtml(node: MdastNode, resolveUrl: MarkdownUrlResolver = (url) => url, context = createRenderContext()): string {
   const children = () => (node.children ?? []).map((child) => blockHtml(child, resolveUrl, context)).join('')
   const inlineChildren = (preserveSoftBreaks = false) => (node.children ?? []).map((child) => inlineHtml(child, preserveSoftBreaks, resolveUrl, context)).join('')
@@ -129,7 +151,7 @@ function blockHtml(node: MdastNode, resolveUrl: MarkdownUrlResolver = (url) => u
       const standaloneImage = standaloneImageNode(node)
       if (standaloneImage) return blockHtml(standaloneImage, resolveUrl, context)
       const video = standaloneVideoNode(node)
-      if (video) return `<figure class="markdown-video"><video src="${safeUrl(resolveUrl(video.url ?? ''))}" controls preload="metadata"></video><figcaption>${escapeHtml(video.title || nodeText(video) || '视频')}</figcaption></figure>`
+      if (video) return renderVideoNode(video, resolveUrl)
       return `<p>${inlineChildren(true)}</p>`
     }
     case 'blockquote': return calloutHtml(node, resolveUrl, context) ?? `<blockquote>${children()}</blockquote>`
