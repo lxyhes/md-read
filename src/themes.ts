@@ -31,23 +31,23 @@ export const builtInThemes: MoyueTheme[] = [
   },
   {
     builtIn: true,
-    manifest: { schemaVersion: 1, id: 'xuan-paper', name: '淡墨宣纸', version: '1.0.0', author: 'Moyue', mode: 'light', description: '微黄宣纸、淡墨灰阶与一枚小小朱印，适合长文慢读', entry: { tokens: 'tokens.json', reader: 'reader.css', markdown: 'markdown.css', components: 'components.css' } },
-    tokens: { color: { appBackground: '#d8d2c5', surface: '#eae4d7', surfaceRaised: '#f7f2e7', text: '#292b28', textMuted: '#62635d', accent: '#53665b', accentSoft: '#d2d8cf', border: 'rgba(44,48,43,.21)', codeBackground: '#e3ded3' }, reader: { width: 800, fontSize: 18, lineHeight: 1.94, paragraphGap: 24, fontFamily: 'Noto Serif SC, Source Han Serif SC, Songti SC, SimSun, serif' } }
+    manifest: { schemaVersion: 1, id: 'xuan-paper', name: '松烟水墨', version: '1.0.0', author: 'Moyue', mode: 'light', description: '冷宣纸、松烟墨与飞白笔触，以墨分五色承托长文阅读', entry: { tokens: 'tokens.json', reader: 'reader.css', markdown: 'markdown.css', components: 'components.css' } },
+    tokens: { color: { appBackground: '#d9dbd7', surface: '#e8e9e4', surfaceRaised: '#f3f3ee', text: '#20221f', textMuted: '#676b65', accent: '#343936', accentSoft: '#d5d8d2', border: 'rgba(30,34,30,.2)', codeBackground: '#e1e3de' }, reader: { width: 800, fontSize: 18, lineHeight: 1.94, paragraphGap: 24, fontFamily: 'Noto Serif SC, Source Han Serif SC, Songti SC, SimSun, serif' } }
   },
   {
     builtIn: true,
     manifest: { schemaVersion: 1, id: 'inkstone', name: '浓墨砚台', version: '1.0.0', author: 'Moyue', mode: 'dark', description: '墨池般的深黑、低亮砚色与微弱飞白，适合夜间慢读', entry: { tokens: 'tokens.json', reader: 'reader.css', markdown: 'markdown.css', components: 'components.css' } },
-    tokens: { color: { appBackground: '#0f1110', surface: '#191b18', surfaceRaised: '#242722', text: '#e8e4d8', textMuted: '#aaa99f', accent: '#b7ad91', accentSoft: '#3c3f38', border: 'rgba(232,228,216,.2)', codeBackground: '#0b0d0b' }, reader: { width: 790, fontSize: 18, lineHeight: 1.92, paragraphGap: 23, fontFamily: 'Noto Serif SC, Source Han Serif SC, Songti SC, SimSun, serif' } }
+    tokens: { color: { appBackground: '#0c0e0d', surface: '#141715', surfaceRaised: '#1b1f1c', text: '#e4e6df', textMuted: '#979c95', accent: '#b9bdb5', accentSoft: '#303530', border: 'rgba(228,230,223,.16)', codeBackground: '#090b0a' }, reader: { width: 790, fontSize: 18, lineHeight: 1.92, paragraphGap: 23, fontFamily: 'Noto Serif SC, Source Han Serif SC, Songti SC, SimSun, serif' } }
   },
   {
     builtIn: true,
     manifest: { schemaVersion: 1, id: 'bamboo-shadow', name: '烟雨竹影', version: '1.0.0', author: 'Moyue', mode: 'light', description: '冷白宣纸、淡墨竹影和湿润的灰青，适合白天阅读与笔记', entry: { tokens: 'tokens.json', reader: 'reader.css', markdown: 'markdown.css', components: 'components.css' } },
-    tokens: { color: { appBackground: '#d8ddd6', surface: '#e7ebe3', surfaceRaised: '#f5f6ef', text: '#29332e', textMuted: '#58665d', accent: '#526b5c', accentSoft: '#d0d9d1', border: 'rgba(43,55,48,.2)', codeBackground: '#dfe6df' }, reader: { width: 790, fontSize: 18, lineHeight: 1.92, paragraphGap: 23, fontFamily: 'FangSong, STFangsong, Noto Serif SC, SimSun, serif' } }
+    tokens: { color: { appBackground: '#d7dbd7', surface: '#e7ebe7', surfaceRaised: '#f2f4ef', text: '#222824', textMuted: '#626b64', accent: '#465b4d', accentSoft: '#d2dad3', border: 'rgba(34,45,38,.19)', codeBackground: '#dfe5df' }, reader: { width: 790, fontSize: 18, lineHeight: 1.92, paragraphGap: 23, fontFamily: 'FangSong, STFangsong, Noto Serif SC, SimSun, serif' } }
   },
   {
     builtIn: true,
     manifest: { schemaVersion: 1, id: 'cinnabar-scroll', name: '朱砂小笺', version: '1.0.0', author: 'Moyue', mode: 'light', description: '旧纸、墨线与一方克制的朱砂印，适合摘录和个人笔记', entry: { tokens: 'tokens.json', reader: 'reader.css', markdown: 'markdown.css', components: 'components.css' } },
-    tokens: { color: { appBackground: '#ded2c5', surface: '#ede2d5', surfaceRaised: '#f9f1e6', text: '#342f2b', textMuted: '#675d56', accent: '#963a2f', accentSoft: '#e6ccc3', border: 'rgba(61,49,42,.21)', codeBackground: '#eaded3' }, reader: { width: 800, fontSize: 18, lineHeight: 1.9, paragraphGap: 23, fontFamily: 'Noto Serif SC, Source Han Serif SC, Songti SC, SimSun, serif' } }
+    tokens: { color: { appBackground: '#dcdbd5', surface: '#ebeae4', surfaceRaised: '#f5f3ec', text: '#252522', textMuted: '#6a6861', accent: '#913b32', accentSoft: '#e5d4cf', border: 'rgba(42,39,35,.19)', codeBackground: '#e5e3dc' }, reader: { width: 800, fontSize: 18, lineHeight: 1.9, paragraphGap: 23, fontFamily: 'Noto Serif SC, Source Han Serif SC, Songti SC, SimSun, serif' } }
   }
 ]
 
