@@ -2656,6 +2656,16 @@ button:focus-visible,
   max-width: 100%;
   margin-inline: auto;
 }
+.reader-content .mermaid-block.diagram-compact .mermaid-svg,
+.reader-content .mermaid-block:has(.node:only-child) .mermaid-svg {
+  width: min(100%, 40em);
+  margin-inline: auto;
+}
+.reader-content .mermaid-block.diagram-compact .mermaid-svg svg,
+.reader-content .mermaid-block:has(.node:only-child) .mermaid-svg svg {
+  width: 100%;
+  max-width: 100%;
+}
 @media (max-width: 720px) {
   .reader-content .mermaid-block.diagram-landscape .mermaid-svg svg,
   .reader-content .mermaid-block.diagram-wide .mermaid-svg svg {
