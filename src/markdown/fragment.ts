@@ -9,7 +9,7 @@ import { normalizeMixedOrderedListSource } from '../pasteMarkdown'
 
 export const markdownProcessor = unified()
   .use(remarkParse)
-  .use(remarkGfm)
+  .use(remarkGfm, { singleTilde: false })
   .use(remarkFrontmatter, ['yaml', 'toml'])
   .use(remarkMath)
 
@@ -161,7 +161,8 @@ export function renderMarkdownFragment(source: string, resolveUrl: MarkdownUrlRe
   promoteTimestampedParagraphs(tree)
   removeEmptyListItems(tree)
   normalizeArticleStrong(tree)
-  const context = createRenderContext()
+  const headings = (tree.children ?? []).filter((node) => node.type === 'heading').map((node, index) => ({ id: `moyue-heading-${index + 1}`, text: nodeText(node), depth: node.depth ?? 1 }))
+  const context = createRenderContext(new Map(), headings)
   const html = (tree.children ?? [])
     .filter((node) => node.type !== 'yaml' && node.type !== 'toml' && node.type !== 'footnoteDefinition')
     .map((node) => blockHtmlWithSourceIndent(node, normalizedSource, resolveUrl, context))

@@ -9,6 +9,7 @@ export interface OpenedFile { path: string; source: string; assets?: BrowserAsse
 export interface WorkspaceFile { path: string; name: string }
 export interface FileSystemEntry { path: string; name: string; isDirectory: boolean }
 export interface MarkdownExportAsset { url: string; name: string; mime: string; bytes: Uint8Array }
+export type PandocExportFormat = 'odt' | 'rtf' | 'mediawiki'
 
 export async function watchMarkdownPath(path: string, onChange: () => void): Promise<(() => void) | null> {
   if (!isTauri()) return null
@@ -267,6 +268,39 @@ export async function saveBinaryExportFile(bytes: Uint8Array, defaultName: strin
   const path = selected.toLowerCase().endsWith(`.${extension.toLowerCase()}`) ? selected : `${selected}.${extension}`
   await writeFile(path, bytes)
   return path
+}
+
+export async function importDocumentWithPandoc(defaultExtension: 'md' | 'markdown' = 'md'): Promise<OpenedFile | null> {
+  if (!isTauri()) throw new Error('Office / 电子书导入需要桌面端和 Pandoc')
+  const selected = await open({
+    multiple: false,
+    filters: [{ name: '可转换文档', extensions: ['docx', 'odt', 'rtf', 'epub', 'tex', 'latex', 'ltx', 'rst', 'rest', 'org', 'wiki', 'dokuwiki', 'textile', 'opml'] }],
+  })
+  if (!selected || Array.isArray(selected)) return null
+  const sourceName = selected.replace(/\\/g, '/').split('/').pop()?.replace(/\.[^.]+$/, '') || '导入文档'
+  const target = await save({
+    defaultPath: `${sourceName}.${defaultExtension}`,
+    filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }],
+  })
+  if (!target) return null
+  const targetPath = /\.(md|markdown)$/i.test(target) ? target : `${target}.${defaultExtension}`
+  await invoke('pandoc_import_document', { sourcePath: selected, targetPath })
+  return { path: targetPath, source: await readTextFile(targetPath) }
+}
+
+export async function exportDocumentWithPandoc(source: string, defaultName: string, format: PandocExportFormat, markdownPath: string): Promise<string | null> {
+  if (!isTauri()) throw new Error('ODT / RTF / MediaWiki 导出需要桌面端和 Pandoc')
+  const formats: Record<PandocExportFormat, { extension: string; name: string }> = {
+    odt: { extension: 'odt', name: 'OpenDocument 文档' },
+    rtf: { extension: 'rtf', name: 'RTF 文档' },
+    mediawiki: { extension: 'wiki', name: 'MediaWiki 源码' },
+  }
+  const meta = formats[format]
+  const selected = await save({ defaultPath: `${defaultName}.${meta.extension}`, filters: [{ name: meta.name, extensions: [meta.extension] }] })
+  if (!selected) return null
+  const targetPath = selected.toLowerCase().endsWith(`.${meta.extension}`) ? selected : `${selected}.${meta.extension}`
+  await invoke('pandoc_export_document', { source, targetPath, format, resourcePath: dirnameOf(markdownPath) || null })
+  return targetPath
 }
 
 export async function importMarkdownAsset(markdownPath: string, kind: 'image' | 'video'): Promise<string | null> {

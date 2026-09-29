@@ -6942,6 +6942,17 @@ body.is-resizing-outline * {
 .editor-preview .editor-semantic-heading { margin: 28px 0 10px; color: var(--ink); font: 650 19px/1.35 var(--ui-font); letter-spacing: -.02em; }
 .editor-preview strong { color: var(--ink); font-weight: 700; }
 .editor-preview em { color: color-mix(in srgb, var(--ink) 84%, var(--editor-accent)); }
+.reader-content mark:not(.reader-highlight), .editor-preview mark, .editor-rich-content mark { padding: .05em .18em; border-radius: .18em; background: color-mix(in srgb, #e6bd58 36%, transparent); color: inherit; }
+.reader-content sub, .reader-content sup, .editor-preview sub, .editor-preview sup, .editor-rich-content sub, .editor-rich-content sup { color: var(--editor-accent, var(--accent)); font-size: .74em; }
+.markdown-toc { margin: 22px 0 28px; padding: 16px 18px; border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.markdown-toc > strong { display: block; margin-bottom: 8px; color: var(--ink); font: 650 13px var(--ui-font); }
+.markdown-toc ol { margin: 0; padding: 0; list-style: none; }
+.markdown-toc li { margin: 3px 0; }
+.markdown-toc .toc-depth-2 { padding-left: 1em; }
+.markdown-toc .toc-depth-3 { padding-left: 2em; }
+.markdown-toc .toc-depth-4, .markdown-toc .toc-depth-5, .markdown-toc .toc-depth-6 { padding-left: 3em; }
+.markdown-toc a { color: var(--muted); text-decoration: none; }
+.markdown-toc a:hover, .markdown-toc a:focus-visible { color: var(--accent); }
 .editor-preview del { color: var(--muted); text-decoration-color: var(--editor-accent); }
 .editor-preview a { color: var(--editor-accent); }
 .editor-preview blockquote { margin: 18px 0; padding: 5px 17px; border-left: 3px solid var(--editor-accent); background: color-mix(in srgb, var(--editor-accent) 7%, transparent); color: var(--editor-ink-soft); }
@@ -7112,12 +7123,80 @@ body.is-resizing-outline * {
 .editor-rich-content table { width: 100%; margin: 18px 0; border-collapse: collapse; }
 .editor-rich-content th, .editor-rich-content td { min-width: 80px; padding: 8px 10px; border: 1px solid var(--border); text-align: left; }
 .editor-rich-content a { color: var(--editor-accent); }
+.editor-rich-block { transition: opacity .16s ease; }
+.editor-typewriter-mode .editor-rich-block { opacity: .3; }
+.editor-typewriter-mode .editor-rich-block.is-current { opacity: 1; }
 .editor-tool-button:disabled { opacity: .35; transform: none; cursor: not-allowed; }
 .markdown-video { margin: 20px 0; }
 .markdown-video video, .video-region video, .editor-preview video { display: block; width: min(100%, 900px); max-height: 70vh; margin: 0 auto; border-radius: 10px; background: #000; }
 .markdown-video figcaption { margin-top: 8px; color: var(--muted); text-align: center; font: 10px var(--ui-font); }
 @media (max-width: 620px) {
   .editor-rich-content { min-height: 430px; padding: 28px 20px 60px; }
+}
+
+/* Visual correction: keep typewriter focus, but never sacrifice reading contrast. */
+.editor-typewriter-mode .editor-rich-block { opacity: .72; }
+.editor-typewriter-mode .editor-rich-block:first-child,
+.editor-typewriter-mode .editor-rich-block.is-current { opacity: 1; }
+
+/* The writing toolbar is a ribbon of tools, not a second wall of controls. */
+.app-shell.is-editor-studio .editor-toolbar {
+  min-height: 54px;
+  padding-block: 5px;
+  border-bottom: 1px solid color-mix(in srgb, var(--editor-accent) 18%, var(--border));
+}
+.app-shell.is-editor-studio .editor-toolbar-group {
+  gap: 4px;
+}
+.app-shell.is-editor-studio .editor-toolbar-group + .editor-toolbar-group {
+  margin-left: 9px;
+  padding-left: 10px;
+  border-left: 1px solid color-mix(in srgb, var(--editor-accent) 18%, var(--border));
+}
+.app-shell.is-editor-studio .editor-tool-button {
+  min-height: 32px;
+  padding-inline: 9px;
+  border-radius: 7px;
+  color: color-mix(in srgb, var(--ink) 82%, var(--muted));
+}
+.app-shell.is-editor-studio .editor-tool-button:hover,
+.app-shell.is-editor-studio .editor-tool-button:focus-visible {
+  background: color-mix(in srgb, var(--editor-accent) 10%, transparent);
+  color: var(--editor-accent);
+}
+.app-shell.is-editor-studio .editor-toolbar-actions {
+  gap: 8px;
+}
+.app-shell.is-editor-studio .editor-rich-pane {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.app-shell.is-editor-studio .editor-rich-pane .editor-pane-heading {
+  min-height: 38px;
+  padding: 0 2px 9px;
+  border-bottom: 1px solid color-mix(in srgb, var(--editor-accent) 18%, var(--border));
+}
+.app-shell.is-editor-studio .editor-rich-pane .editor-pane-heading small {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: color-mix(in srgb, var(--muted) 86%, var(--ink));
+}
+.app-shell.is-editor-studio .editor-rich-content {
+  font-size: 16px;
+  line-height: 1.9;
+}
+.app-shell.is-editor-studio .editor-rich-content h1 {
+  font-size: clamp(28px, 2.6vw, 34px);
+}
+@media (max-width: 620px) {
+  .app-shell.is-editor-studio .editor-toolbar-group + .editor-toolbar-group {
+    margin-left: 0;
+    padding-left: 0;
+    border-left: 0;
+  }
 }
 
 /* Settings read like a paper index: one active section, separated by rules. */
@@ -8206,6 +8285,8 @@ a:active > .app-icon-vector { transform: scale(.92); }
 .reader-more-popover {
   right: auto;
   left: 0;
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
 }
 .reader-more-popover .font-picker-compact {
   justify-content: space-between;

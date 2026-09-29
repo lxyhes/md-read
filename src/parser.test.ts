@@ -61,6 +61,16 @@ $$`)
     expect(document.regions.at(-1)?.html).toContain('脚注内容')
   })
 
+  it('renders Typora-style toc, highlight, subscript and superscript', () => {
+    const document = parseMarkdown('extended.md', '# 标题\n\n[toc]\n\n正文 ==重点== H~2~O x^2^。\n\n## 章节')
+    expect(document.regions[0].html).toContain('id="moyue-heading-1"')
+    expect(document.regions[1].html).toContain('class="markdown-toc"')
+    expect(document.regions[1].html).toContain('href="#moyue-heading-2"')
+    expect(document.regions[2].html).toContain('<mark>重点</mark>')
+    expect(document.regions[2].html).toContain('H<sub>2</sub>O')
+    expect(document.regions[2].html).toContain('x<sup>2</sup>')
+  })
+
   it('renders GitHub-style callouts', () => {
     const document = parseMarkdown('callout.md', '> [!WARNING]\n> 这是一条提醒。')
     expect(document.regions[0].html).toContain('markdown-callout')

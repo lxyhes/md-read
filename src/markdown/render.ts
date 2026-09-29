@@ -16,10 +16,17 @@ function autoLinkEnabled() {
   catch { return true }
 }
 
+function extendedTextHtml(value: string) {
+  return escapeHtml(value)
+    .replace(/==([^=\n]+)==/g, '<mark>$1</mark>')
+    .replace(/(^|[^~])~([^~\n]+)~(?!~)/g, '$1<sub>$2</sub>')
+    .replace(/\^([^\^\n]+)\^/g, '<sup>$1</sup>')
+}
+
 function inlineHtml(node: MdastNode, preserveSoftBreaks = false, resolveUrl: MarkdownUrlResolver = (url) => url, context = createRenderContext()): string {
   const children = () => (node.children ?? []).map((child) => inlineHtml(child, preserveSoftBreaks, resolveUrl, context)).join('')
   switch (node.type) {
-    case 'text': return escapeHtml(node.value ?? '').replace(preserveSoftBreaks ? /\r?\n/g : /$^/g, '<br />')
+    case 'text': return extendedTextHtml(node.value ?? '').replace(preserveSoftBreaks ? /\r?\n/g : /$^/g, '<br />')
     case 'emphasis': return `<em>${children()}</em>`
     case 'strong': return `<strong>${children()}</strong>`
     case 'delete': return `<del>${children()}</del>`
@@ -37,6 +44,11 @@ function inlineHtml(node: MdastNode, preserveSoftBreaks = false, resolveUrl: Mar
     case 'html': return '<span class="unsafe-inline">HTML 已隐藏</span>'
     default: return children()
   }
+}
+
+function tocHtml(context: RenderContext) {
+  if (!context.headings.length) return '<nav class="markdown-toc"><p>当前文档还没有标题。</p></nav>'
+  return `<nav class="markdown-toc" aria-label="文档目录"><strong>目录</strong><ol>${context.headings.map((heading) => `<li class="toc-depth-${heading.depth}"><a href="#${heading.id}">${escapeHtml(heading.text)}</a></li>`).join('')}</ol></nav>`
 }
 
 const calloutTitles: Record<string, string> = {
@@ -105,12 +117,15 @@ function blockHtml(node: MdastNode, resolveUrl: MarkdownUrlResolver = (url) => u
   switch (node.type) {
     case 'heading': {
       const depth = node.depth ?? 1
+      const heading = context.headings[context.headingIndex++]
+      const id = heading?.id ? ` id="${heading.id}"` : ''
       const number = numberedHeading(nodeText(node))
       const plainTextHeading = (node.children ?? []).every((child) => child.type === 'text')
-      if (!number || !plainTextHeading) return `<h${depth}>${inlineChildren()}</h${depth}>`
-      return `<h${depth} class="numbered-heading"><span class="heading-number">${escapeHtml(number.number)}</span><span class="heading-text">${escapeHtml(number.title)}</span></h${depth}>`
+      if (!number || !plainTextHeading) return `<h${depth}${id}>${inlineChildren()}</h${depth}>`
+      return `<h${depth}${id} class="numbered-heading"><span class="heading-number">${escapeHtml(number.number)}</span><span class="heading-text">${escapeHtml(number.title)}</span></h${depth}>`
     }
     case 'paragraph': {
+      if (nodeText(node).trim().toLowerCase() === '[toc]') return tocHtml(context)
       const standaloneImage = standaloneImageNode(node)
       if (standaloneImage) return blockHtml(standaloneImage, resolveUrl, context)
       const video = standaloneVideoNode(node)
