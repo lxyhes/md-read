@@ -5,9 +5,10 @@ use serde::Serialize;
 use std::borrow::Cow;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+use std::io::Write;
 use std::net::IpAddr;
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Stdio};
 use tauri::Manager;
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::System::DataExchange::GetClipboardSequenceNumber;
@@ -399,20 +400,102 @@ fn open_external_url(url: String) -> Result<(), String> {
     result.map(|_| ()).map_err(|error| format!("打开链接失败：{error}"))
 }
 
+fn pandoc_import_extension(path: &Path) -> bool {
+    matches!(
+        path.extension().and_then(|value| value.to_str()).map(str::to_ascii_lowercase).as_deref(),
+        Some("docx" | "odt" | "rtf" | "epub" | "tex" | "latex" | "ltx" | "rst" | "rest" | "org" | "wiki" | "dokuwiki" | "textile" | "opml")
+    )
+}
+
+fn pandoc_export_format(format: &str) -> Option<(&'static str, &'static str)> {
+    match format {
+        "odt" => Some(("odt", "odt")),
+        "rtf" => Some(("rtf", "rtf")),
+        "mediawiki" => Some(("mediawiki", "wiki")),
+        _ => None,
+    }
+}
+
+fn pandoc_error(error: std::io::Error) -> String {
+    if error.kind() == std::io::ErrorKind::NotFound {
+        "未检测到 Pandoc。请安装 Pandoc 后重试；墨阅不会自动安装系统软件。".into()
+    } else {
+        format!("启动 Pandoc 失败：{error}")
+    }
+}
+
+fn pandoc_failure(output: std::process::Output) -> Result<(), String> {
+    if output.status.success() {
+        return Ok(());
+    }
+    let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    Err(if detail.is_empty() { "Pandoc 转换失败".into() } else { format!("Pandoc 转换失败：{detail}") })
+}
+
+#[tauri::command]
+fn pandoc_import_document(source_path: String, target_path: String) -> Result<(), String> {
+    let source = Path::new(&source_path);
+    let target = Path::new(&target_path);
+    if !source.is_file() || !pandoc_import_extension(source) {
+        return Err("请选择受支持的 DOCX、ODT、RTF、EPUB、LaTeX 或其他 Pandoc 文档".into());
+    }
+    if !matches!(target.extension().and_then(|value| value.to_str()).map(str::to_ascii_lowercase).as_deref(), Some("md" | "markdown")) {
+        return Err("导入目标必须是 Markdown 文件".into());
+    }
+    let parent = target.parent().filter(|path| path.is_dir()).ok_or("目标目录不存在")?;
+    let target_name = target.file_name().ok_or("目标文件名无效")?;
+    let stem = target.file_stem().and_then(|value| value.to_str()).unwrap_or("document");
+    let media_directory = format!(".moyue-assets/{stem}-media");
+    std::fs::create_dir_all(parent.join(".moyue-assets")).map_err(|error| format!("创建媒体目录失败：{error}"))?;
+
+    let output = Command::new("pandoc")
+        .current_dir(parent)
+        .arg(source)
+        .args(["--to", "gfm+footnotes+task_lists", "--wrap=none", "--extract-media"])
+        .arg(media_directory)
+        .arg("--output")
+        .arg(target_name)
+        .output()
+        .map_err(pandoc_error)?;
+    pandoc_failure(output)
+}
+
+#[tauri::command]
+fn pandoc_export_document(source: String, target_path: String, format: String, resource_path: Option<String>) -> Result<(), String> {
+    let (writer, extension) = pandoc_export_format(&format).ok_or("不支持的 Pandoc 导出格式")?;
+    let target = Path::new(&target_path);
+    if target.extension().and_then(|value| value.to_str()).map(str::to_ascii_lowercase).as_deref() != Some(extension) {
+        return Err(format!("导出目标必须使用 .{extension} 扩展名"));
+    }
+    let parent = target.parent().filter(|path| path.is_dir()).ok_or("目标目录不存在")?;
+    let working_directory = resource_path.as_deref().map(Path::new).filter(|path| path.is_dir()).unwrap_or(parent);
+    let mut child = Command::new("pandoc")
+        .current_dir(working_directory)
+        .args(["--from", "gfm+footnotes+task_lists", "--to", writer, "--wrap=none", "--output"])
+        .arg(target)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(pandoc_error)?;
+    child.stdin.take().ok_or("无法向 Pandoc 写入文档")?.write_all(source.as_bytes()).map_err(|error| format!("写入 Pandoc 失败：{error}"))?;
+    pandoc_failure(child.wait_with_output().map_err(|error| format!("等待 Pandoc 失败：{error}"))?)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
-        .invoke_handler(tauri::generate_handler![allow_asset_directory, read_local_image, read_clipboard_image, read_clipboard_snapshot, read_clipboard_signature, write_clipboard_snapshot, read_remote_image, download_remote_image, upload_piclist_image, open_directory, open_external_url])
+        .invoke_handler(tauri::generate_handler![allow_asset_directory, read_local_image, read_clipboard_image, read_clipboard_snapshot, read_clipboard_signature, write_clipboard_snapshot, read_remote_image, download_remote_image, upload_piclist_image, open_directory, open_external_url, pandoc_import_document, pandoc_export_document])
         .run(tauri::generate_context!())
         .expect("error while running Moyue application");
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{is_allowed_external_url, is_image, is_safe_remote_image_url, remote_image_referer};
+    use super::{is_allowed_external_url, is_image, is_safe_remote_image_url, pandoc_export_format, pandoc_import_extension, remote_image_referer};
     use std::path::Path;
 
     #[test]
@@ -441,5 +524,19 @@ mod tests {
         assert!(is_safe_remote_image_url(&reqwest::Url::parse("https://example.com/a.png").unwrap()));
         assert!(!is_safe_remote_image_url(&reqwest::Url::parse("http://127.0.0.1/a.png").unwrap()));
         assert!(!is_safe_remote_image_url(&reqwest::Url::parse("http://192.168.1.2/a.png").unwrap()));
+    }
+
+    #[test]
+    fn pandoc_import_only_accepts_document_formats() {
+        assert!(pandoc_import_extension(Path::new("book.EPUB")));
+        assert!(pandoc_import_extension(Path::new("draft.docx")));
+        assert!(!pandoc_import_extension(Path::new("script.exe")));
+    }
+
+    #[test]
+    fn pandoc_export_formats_are_fixed() {
+        assert_eq!(pandoc_export_format("mediawiki"), Some(("mediawiki", "wiki")));
+        assert_eq!(pandoc_export_format("odt"), Some(("odt", "odt")));
+        assert_eq!(pandoc_export_format("html"), None);
     }
 }

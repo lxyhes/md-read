@@ -139,7 +139,8 @@ export function parseMarkdown(path: string, source: string, resolveUrl: Markdown
   let documentTitle = ''
   const children = tree.children ?? []
   const footnotes = new Map(children.filter((node) => node.type === 'footnoteDefinition' && (node.identifier ?? node.label)).map((node) => [node.identifier ?? node.label ?? '', node]))
-  const context = createRenderContext(footnotes)
+  const renderHeadings = children.filter((node) => node.type === 'heading').map((node, index) => ({ id: `moyue-heading-${index + 1}`, text: nodeText(node), depth: node.depth ?? 1 }))
+  const context = createRenderContext(footnotes, renderHeadings)
 
   children.flatMap((node) => expandProseCodeBlock(node, source)).forEach((node) => {
     if (node.type === 'yaml' || node.type === 'toml' || node.type === 'footnoteDefinition') return

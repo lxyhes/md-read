@@ -153,6 +153,9 @@ function inline(node: Node): string {
     case 'i': return `*${content().trim()}*`
     case 's':
     case 'del': return `~~${content().trim()}~~`
+    case 'mark': return `==${content().trim()}==`
+    case 'sub': return `~${content().trim()}~`
+    case 'sup': return `^${content().trim()}^`
     case 'code': return `\`${(element.textContent ?? '').replace(/`/g, '\\`')}\``
     case 'kbd': return `\`${(element.textContent ?? '').replace(/`/g, '\\`')}\``
     case 'a': {

@@ -27,10 +27,12 @@ export type MdastNode = {
 export type RenderContext = {
   footnotes: Map<string, MdastNode>
   footnoteOrder: string[]
+  headings: Array<{ id: string; text: string; depth: number }>
+  headingIndex: number
 }
 
-export function createRenderContext(footnotes = new Map<string, MdastNode>()): RenderContext {
-  return { footnotes, footnoteOrder: [] }
+export function createRenderContext(footnotes = new Map<string, MdastNode>(), headings: RenderContext['headings'] = []): RenderContext {
+  return { footnotes, footnoteOrder: [], headings, headingIndex: 0 }
 }
 
 export function escapeHtml(value: string): string {
