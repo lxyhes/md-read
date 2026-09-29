@@ -66,7 +66,7 @@ function apply() { emit('apply', clone(draft.value)) }
         <label>代码背景<input v-model="draft.tokens.color.codeBackground" type="color" /></label>
       </template>
       <template v-else-if="section === 'type'">
-        <label>阅读宽度<input v-model.number="draft.tokens.reader.width" type="range" min="620" max="980" step="10" /><output>{{ draft.tokens.reader.width }} px</output></label>
+        <label>阅读宽度<input v-model.number="draft.tokens.reader.width" type="range" min="620" max="1280" step="10" /><output>{{ draft.tokens.reader.width }} px</output></label>
         <label>字号<input v-model.number="draft.tokens.reader.fontSize" type="range" min="15" max="24" step="1" /><output>{{ draft.tokens.reader.fontSize }} px</output></label>
         <label>行距<input v-model.number="draft.tokens.reader.lineHeight" type="range" min="1.4" max="2.2" step="0.05" /><output>{{ draft.tokens.reader.lineHeight }}</output></label>
         <div class="field-wide"><FontPicker v-model="draft.tokens.reader.fontFamily" compact label="主题字体" fallback-family="serif" default-label="默认衬线字体" /></div>

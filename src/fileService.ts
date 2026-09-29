@@ -560,6 +560,10 @@ function resolveLocalAssetPath(markdownPath: string, assetPath: string) {
   return normalizeLocalPath(directory ? `${directory}/${assetPath}` : assetPath)
 }
 
+export function resolveMarkdownPath(markdownPath: string, targetPath: string): string {
+  return resolveLocalAssetPath(markdownPath, targetPath)
+}
+
 function assetKey(path: string) {
   return normalizeLocalPath(path).replace(/^\.\//, '').toLowerCase()
 }

@@ -8,6 +8,7 @@ const SESSION_KEY = 'moyue:reader-session'
 const THEME_KEY = 'moyue:theme'
 const THEME_STYLE_ID = 'moyue-active-theme'
 const DEFAULT_THEME_ID = 'paper-white'
+const READER_WIDTH_VERSION_KEY = 'moyue:reader-width-v2'
 
 function readSession() {
   try {
@@ -307,6 +308,11 @@ export const useReaderStore = defineStore('reader', () => {
 function readSettings() {
   try {
     const saved = JSON.parse(localStorage.getItem('moyue:reader-settings') ?? '{}') as Partial<typeof defaultTokens.reader> & { interfaceFontFamily?: string }
+    if (!localStorage.getItem(READER_WIDTH_VERSION_KEY)) {
+      if (typeof saved.width === 'number') saved.width = Math.min(1280, saved.width + 240)
+      localStorage.setItem(READER_WIDTH_VERSION_KEY, '1')
+      localStorage.setItem('moyue:reader-settings', JSON.stringify(saved))
+    }
     return { ...defaultTokens.reader, ...saved,
       fontFamily: typeof saved?.fontFamily === 'string' && saved.fontFamily !== defaultTokens.reader.fontFamily ? saved.fontFamily : '',
       interfaceFontFamily: typeof saved?.interfaceFontFamily === 'string' ? saved.interfaceFontFamily : '',
