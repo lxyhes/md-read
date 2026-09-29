@@ -143,7 +143,7 @@ function handleContentClick(event: MouseEvent) {
   const url = link?.getAttribute('href')?.trim()
   if (link) {
     event.stopPropagation()
-    if (!url || !/^(?:https?:|mailto:|tel:|\/\/)/i.test(url)) return
+    if (!url) return
     event.preventDefault()
     emit('open-link', url)
     return

@@ -976,7 +976,6 @@ html, body, #app { background: var(--app-bg, #070d22); }
   min-width: 0;
 }
 .reader-content .region-content p {
-  max-width: 72ch;
   margin: 0 0 18px;
   color: color-mix(in srgb, var(--ink) 88%, var(--muted));
   line-height: 1.86;
@@ -2081,14 +2080,8 @@ html, body, #app { background: var(--app-bg, #070d22); }
 
 @media (min-width: 1500px) {
   .app-shell:not(.is-focus) .reader-content {
-    width: min(1080px, calc(100% - 72px));
     padding-top: 28px;
     padding-bottom: 52px;
-  }
-  .app-shell:not(.is-focus) .reader-content .region-content p,
-  .app-shell:not(.is-focus) .reader-content .region-content li,
-  .app-shell:not(.is-focus) .reader-content .region-content blockquote {
-    max-width: 78ch;
   }
 }
 
@@ -2637,25 +2630,6 @@ button:focus-visible,
   .app-shell:not(.is-focus) .reader-content .region-content hr {
     margin-top: 18px;
     margin-bottom: 18px;
-  }
-}
-
-@media (min-width: 1500px) {
-  .app-shell:not(.is-focus) .reader-content {
-    width: min(1080px, calc(100% - 72px));
-    padding-top: 28px;
-    padding-bottom: 52px;
-  }
-  .app-shell:not(.is-focus) .reader-content .region-content p,
-  .app-shell:not(.is-focus) .reader-content .region-content li,
-  .app-shell:not(.is-focus) .reader-content .region-content blockquote {
-    max-width: 78ch;
-  }
-}
-
-@media (min-width: 1900px) {
-  .app-shell:not(.is-focus) .reader-content {
-    width: min(1160px, calc(100% - 64px));
   }
 }
 

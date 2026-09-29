@@ -11,7 +11,7 @@ import FontPicker from './components/FontPicker.vue'
 import { interfaceFont } from './fonts'
 import FileSystemTree, { type FileSystemTreeNode } from './components/FileSystemTree.vue'
 import ClipboardManager from './components/ClipboardManager.vue'
-import { copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, downloadMarkdownImages, exportDocumentWithPandoc, importDocumentWithPandoc, importMarkdownAsset, importMarkdownAssetFromPath, listDirectoryFiles, listFileSystemEntries, openFileSystemDirectory, openMarkdownDirectory, openMarkdownFile, organizeMarkdownAssets, readMarkdownExportAssets, readMarkdownPath, removeMarkdownAsset, renameMarkdownAsset, renameMarkdownPath, resolveMarkdownAssetUrl, saveBinaryExportFile, saveClipboardImage, saveExportFile, saveMarkdownFile, savePdfExportFile, selectFileSystemDirectory, uploadMarkdownImage, watchMarkdownPath, writeMarkdownFile, type PandocExportFormat, type WorkspaceFile } from './fileService'
+import { copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, downloadMarkdownImages, exportDocumentWithPandoc, importDocumentWithPandoc, importMarkdownAsset, importMarkdownAssetFromPath, listDirectoryFiles, listFileSystemEntries, openFileSystemDirectory, openMarkdownDirectory, openMarkdownFile, organizeMarkdownAssets, readMarkdownExportAssets, readMarkdownPath, removeMarkdownAsset, renameMarkdownAsset, renameMarkdownPath, resolveMarkdownAssetUrl, resolveMarkdownPath, saveBinaryExportFile, saveClipboardImage, saveExportFile, saveMarkdownFile, savePdfExportFile, selectFileSystemDirectory, uploadMarkdownImage, watchMarkdownPath, writeMarkdownFile, type PandocExportFormat, type WorkspaceFile } from './fileService'
 import type { Annotation, ReaderDocument, ReaderRegion, ViewerType } from './types'
 import { escapeHtml, renderMathMl } from './markdown/shared'
 import { makeImplicitMarkdownHeadingsExplicit, parseMarkdown, renderMarkdownFragment } from './parser'
@@ -366,14 +366,64 @@ const focusPosition = computed(() => {
   return index < 0 ? '' : `${index + 1} / ${readerRegions.value.length}`
 })
 function isTauriRuntime() { return tauriIsTauri() }
-function openExternalLink(url: string) {
+function linkHeadingSlug(value: string) {
+  return value.trim().toLowerCase().replace(/[^\w\u3400-\u9fff -]/g, '').replace(/\s+/g, '-')
+}
+
+function decodeLinkPart(value: string) {
+  try { return decodeURIComponent(value) } catch { return value }
+}
+
+function findDocumentHeading(document: ReaderDocument | null, fragment: string) {
+  const needle = decodeLinkPart(fragment.replace(/^#/, '')).trim().toLowerCase()
+  if (!document || !needle) return null
+  return document.headings.find((heading) => heading.id.toLowerCase() === needle || linkHeadingSlug(heading.text) === needle || heading.text.trim().toLowerCase() === needle) ?? null
+}
+
+async function openExternalLink(url: string) {
   const normalized = url.trim()
   if (!normalized) return
+  if (/^(?:https?:|mailto:|tel:|\/\/)/i.test(normalized)) {
+    if (!isTauriRuntime()) {
+      window.open(normalized, '_blank', 'noopener,noreferrer')
+      return
+    }
+    await invoke('open_external_url', { url: normalized }).catch(() => notify('链接打开失败，请检查链接地址'))
+    return
+  }
+
+  const current = store.currentDocument
+  if (!current) return
+  if (normalized.startsWith('#')) {
+    const heading = findDocumentHeading(current, normalized)
+    if (heading) scrollToHeading(heading.regionId)
+    else notify('未找到对应章节')
+    return
+  }
   if (!isTauriRuntime()) {
     window.open(normalized, '_blank', 'noopener,noreferrer')
     return
   }
-  void invoke('open_external_url', { url: normalized }).catch(() => notify('链接打开失败，请检查链接地址'))
+
+  const [pathPart, fragment = ''] = normalized.split('#', 2)
+  const targetPath = resolveMarkdownPath(current.path, decodeLinkPart(pathPart))
+  if (!/\.(?:md|markdown|qmd)$/i.test(targetPath)) {
+    notify('当前仅支持打开 Markdown / Quarto 文件链接')
+    return
+  }
+  try {
+    const existing = store.documents.find((document) => filePathKey(document.path) === filePathKey(targetPath))
+    if (existing) await chooseDocument(existing.id, { skipResumePrompt: true })
+    else await store.addOpenedFiles([{ path: targetPath, source: await readMarkdownPath(targetPath) }])
+    if (fragment) {
+      await nextTick()
+      const heading = findDocumentHeading(store.currentDocument, `#${fragment}`)
+      if (heading) scrollToHeading(heading.regionId)
+      else notify('文件已打开，但未找到对应章节')
+    }
+  } catch (error) {
+    notify(error instanceof Error ? error.message : '打开文件链接失败')
+  }
 }
 function normalizedPath(path: string) { return path.replace(/\\/g, '/') }
 function directoryOf(path: string) {
@@ -1347,17 +1397,76 @@ function prefixEditorLines(prefix: string) {
   })
 }
 
+function editorBlockLineRange(lines: string[], line: number) {
+  if (!lines[line]?.trim()) return { startLine: line, endLine: line }
+  const fence = /^\s*(?:```|~~~)/
+  let fenceStart = -1
+  for (let index = 0; index <= line; index += 1) {
+    if (!fence.test(lines[index] ?? '')) continue
+    if (fenceStart < 0) {
+      fenceStart = index
+      continue
+    }
+    if (line <= index) return { startLine: fenceStart, endLine: index }
+    fenceStart = -1
+  }
+  if (fenceStart >= 0) {
+    let fenceEnd = lines.length - 1
+    for (let index = fenceStart + 1; index < lines.length; index += 1) {
+      if (fence.test(lines[index] ?? '')) { fenceEnd = index; break }
+    }
+    return { startLine: fenceStart, endLine: fenceEnd }
+  }
+  let startLine = line
+  let endLine = line
+  while (startLine > 0 && lines[startLine - 1]?.trim()) startLine -= 1
+  while (endLine + 1 < lines.length && lines[endLine + 1]?.trim()) endLine += 1
+  return { startLine, endLine }
+}
+
+function lineOffset(lines: string[], line: number) {
+  return lines.slice(0, line).join('\n').length + (line ? 1 : 0)
+}
+
 function moveEditorLine(delta: number) {
   if (editorMode.value === 'rich') return
   updateEditor((value, start, end) => {
     const lines = value.split('\n')
-    const lineIndex = value.slice(0, start).split('\n').length - 1
-    const targetIndex = lineIndex + delta
-    if (targetIndex < 0 || targetIndex >= lines.length) return { value, start, end }
-    ;[lines[lineIndex], lines[targetIndex]] = [lines[targetIndex], lines[lineIndex]]
-    const next = lines.join('\n')
-    const offset = lines.slice(0, targetIndex).join('\n').length + (targetIndex ? 1 : 0)
-    return { value: next, start: offset, end: offset + lines[targetIndex].length }
+    const startLine = value.slice(0, start).split('\n').length - 1
+    const endLine = value.slice(0, Math.max(start, end - 1)).split('\n').length - 1
+    const firstBlock = editorBlockLineRange(lines, startLine)
+    const lastBlock = editorBlockLineRange(lines, endLine)
+    const blockStart = Math.min(firstBlock.startLine, lastBlock.startLine)
+    const blockEnd = Math.max(firstBlock.endLine, lastBlock.endLine)
+    const blockStartOffset = lineOffset(lines, blockStart)
+    const relativeStart = Math.max(0, start - blockStartOffset)
+    const relativeEnd = Math.max(relativeStart, end - blockStartOffset)
+
+    if (delta < 0) {
+      let previousEnd = blockStart - 1
+      while (previousEnd >= 0 && !lines[previousEnd]?.trim()) previousEnd -= 1
+      if (previousEnd < 0) return { value, start, end }
+      const previous = editorBlockLineRange(lines, previousEnd)
+      const previousBlock = lines.slice(previous.startLine, previous.endLine + 1)
+      const between = lines.slice(previous.endLine + 1, blockStart)
+      const currentBlock = lines.slice(blockStart, blockEnd + 1)
+      const nextLines = [...lines]
+      nextLines.splice(previous.startLine, blockEnd - previous.startLine + 1, ...currentBlock, ...between, ...previousBlock)
+      const nextStart = lineOffset(nextLines, previous.startLine)
+      return { value: nextLines.join('\n'), start: nextStart + relativeStart, end: nextStart + relativeEnd }
+    }
+
+    let nextStartLine = blockEnd + 1
+    while (nextStartLine < lines.length && !lines[nextStartLine]?.trim()) nextStartLine += 1
+    if (nextStartLine >= lines.length) return { value, start, end }
+    const nextBlock = editorBlockLineRange(lines, nextStartLine)
+    const currentBlock = lines.slice(blockStart, blockEnd + 1)
+    const between = lines.slice(blockEnd + 1, nextBlock.startLine)
+    const followingBlock = lines.slice(nextBlock.startLine, nextBlock.endLine + 1)
+    const nextLines = [...lines]
+    nextLines.splice(blockStart, nextBlock.endLine - blockStart + 1, ...followingBlock, ...between, ...currentBlock)
+    const nextStart = lineOffset(nextLines, blockStart + followingBlock.length + between.length)
+    return { value: nextLines.join('\n'), start: nextStart + relativeStart, end: nextStart + relativeEnd }
   })
 }
 
@@ -3724,8 +3833,8 @@ async function requestFullscreen() {
                     <button class="editor-tool-button" type="button" title="分隔线" @click="insertEditorDivider">分隔线</button>
                   </div>
                   <div class="editor-toolbar-group" aria-label="段落移动">
-                    <button class="editor-tool-button icon-only" type="button" title="上移当前行（Alt+↑）" aria-label="上移当前行" :disabled="editorMode === 'rich'" @click="moveEditorLine(-1)"><AppIcon name="arrow-up" :size="14" /></button>
-                    <button class="editor-tool-button icon-only" type="button" title="下移当前行（Alt+↓）" aria-label="下移当前行" :disabled="editorMode === 'rich'" @click="moveEditorLine(1)"><AppIcon name="arrow-down" :size="14" /></button>
+                    <button class="editor-tool-button icon-only" type="button" title="上移当前段落（Alt+↑）" aria-label="上移当前段落" :disabled="editorMode === 'rich'" @click="moveEditorLine(-1)"><AppIcon name="arrow-up" :size="14" /></button>
+                    <button class="editor-tool-button icon-only" type="button" title="下移当前段落（Alt+↓）" aria-label="下移当前段落" :disabled="editorMode === 'rich'" @click="moveEditorLine(1)"><AppIcon name="arrow-down" :size="14" /></button>
                   </div>
                   <span class="editor-toolbar-spacer" />
                   <div class="editor-toolbar-actions">
@@ -3783,7 +3892,7 @@ async function requestFullscreen() {
                   <span>Ln {{ editorCursor.line }}, Col {{ editorCursor.column }}</span>
                   <span class="editor-status-spacer" />
                   <span>支持 Markdown / GFM / 数学公式</span>
-                  <span>Alt+↑↓ 移动当前行</span>
+                  <span>Alt+↑↓ 移动当前段落</span>
                 </div>
               </div>
               <nav v-if="!editorOpen && store.mode === 'clean' && (store.currentDocument?.headings.length ?? 0) > 0" class="reading-progress-rail" aria-label="阅读进度导航"><span class="reading-progress-rail-caption">{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}%</span><div class="reading-progress-rail-track"><span class="reading-progress-rail-fill" :style="{ height: `${(currentProgress?.scrollPercent ?? 0) * 100}%` }" /><button v-for="(heading, index) in store.currentDocument?.headings" :key="heading.id" type="button" class="reading-progress-marker" :class="{ active: store.activeHeadingId === heading.id }" :style="{ top: headingRailPosition(index) }" :aria-label="`跳转到 ${heading.text}`" :title="heading.text" @click.stop="scrollToHeading(heading.regionId)"><i /><span>{{ heading.text }}</span></button></div></nav>
@@ -3864,7 +3973,7 @@ async function requestFullscreen() {
         <div v-show="settingsTab === 'editing'" class="settings-card"><span class="section-kicker">输入辅助</span><h2>链接识别</h2><label class="setting-check"><input v-model="advancedSettings.autoLink" type="checkbox" />自动把裸网址渲染为链接</label><p class="muted-copy">关闭后，仍保留明确写出的 Markdown 链接。</p></div>
         <div v-show="settingsTab === 'editing'" class="settings-card"><span class="section-kicker">图片上传</span><h2>PicList</h2><label class="setting-input">服务地址<input v-model="advancedSettings.picListEndpoint" placeholder="http://127.0.0.1:36677/upload" /></label><label class="setting-input">接口密钥<input v-model="advancedSettings.picListKey" type="password" placeholder="可选" /></label><p class="muted-copy">仅连接本机 PicList 服务；图片不会经过墨阅服务器。</p></div>
         <div v-show="settingsTab === 'editing'" class="settings-card"><span class="section-kicker">导出</span><h2>电子书与打印</h2><label class="setting-row"><span>EPUB 目录层级 <b>H{{ advancedSettings.epubChapterDepth }}</b></span><input v-model.number="advancedSettings.epubChapterDepth" type="range" min="1" max="6" /></label><div class="setting-form-grid"><label class="setting-input">纸张<select v-model="advancedSettings.printPageSize"><option value="A4">A4</option><option value="Letter">Letter</option></select></label><label class="setting-input">页边距（mm）<input v-model.number="advancedSettings.printMargin" type="number" min="8" max="40" /></label><label class="setting-input">页眉<input v-model="advancedSettings.printHeader" /></label><label class="setting-input">页脚<input v-model="advancedSettings.printFooter" /></label></div><label class="setting-check"><input v-model="advancedSettings.printBackground" type="checkbox" />打印主题背景</label></div>
-        <div v-show="settingsTab === 'reading'" class="settings-card"><span class="section-kicker">阅读</span><h2>阅读偏好</h2><label class="setting-row"><span>正文宽度 <b>{{ store.readerSettings.width }}px</b></span><input :value="store.readerSettings.width" type="range" min="620" max="980" step="10" @input="changeSetting('width', Number(($event.target as HTMLInputElement).value))" /></label><label class="setting-row"><span>字号 <b>{{ store.readerSettings.fontSize }}px</b></span><input :value="store.readerSettings.fontSize" type="range" min="15" max="24" step="1" @input="changeSetting('fontSize', Number(($event.target as HTMLInputElement).value))" /></label><label class="setting-row"><span>行距 <b>{{ store.readerSettings.lineHeight }}</b></span><input :value="store.readerSettings.lineHeight" type="range" min="1.4" max="2.2" step=".05" @input="changeSetting('lineHeight', Number(($event.target as HTMLInputElement).value))" /></label><div class="setting-toggle-row"><span>显示阅读进度</span><i class="toggle-on" /></div><div class="setting-toggle-row"><span>启用专注模式</span><i class="toggle-on" /></div></div><div v-show="settingsTab === 'reading'" class="settings-card"><span class="section-kicker">辅助功能</span><h2>翻译与解释</h2><p class="muted-copy">使用适配器连接你自己的翻译或解释服务；配置后可从划词工具栏调用。</p><label class="setting-input">服务标识<input v-model="customProvider" placeholder="例如：local-llm / my-translator" /></label><button class="primary-button" type="button" @click="notify(customProvider ? '适配器标识已保存' : '保持未配置状态')"><AppIcon name="check" :size="14" />保存配置</button></div><div v-show="settingsTab === 'shortcuts'" class="settings-card shortcuts-card"><span class="section-kicker">快捷操作</span><h2>快捷键</h2><div class="shortcut-row"><span>全局搜索</span><kbd>Ctrl / Cmd + K</kbd></div><div class="shortcut-row"><span>当前文档搜索</span><kbd>Ctrl / Cmd + F</kbd></div><div class="shortcut-row"><span>阅读缩放</span><kbd>Ctrl / Cmd + + / -</kbd></div><div class="shortcut-row"><span>专注模式</span><kbd>F</kbd></div><div class="shortcut-row"><span>退出聚焦</span><kbd>Esc</kbd></div><div class="shortcut-row"><span>切换区域</span><kbd>↑ ↓</kbd></div></div><div v-show="settingsTab === 'extensions'" class="settings-card extensions-card"><div class="extensions-head"><div><span class="section-kicker">插件中心</span><h2>插件扩展</h2></div><button class="ghost-button" type="button" @click="notify('插件运行时将在后续版本启用')"><AppIcon name="plugin" :size="14" />打开插件目录</button></div><div class="extension-filter"><AppIcon name="search" :size="14" /><span>按需扩展阅读能力</span></div><div class="extension-list"><div class="extension-item"><span class="extension-icon purple"><AppIcon name="sparkle" :size="17" /></span><span><b>AI 阅读助手</b><small>总结、解释与问答适配器</small></span><button type="button" @click="notify('请先在翻译与解释中配置服务')">配置</button></div><div class="extension-item"><span class="extension-icon green"><AppIcon name="download" :size="17" /></span><span><b>导出增强</b><small>为阅读内容准备更多导出格式</small></span><button type="button" @click="notify('导出增强将在下一阶段接入')">安装</button></div><div class="extension-item"><span class="extension-icon pink"><AppIcon name="components" :size="17" /></span><span><b>思维导图</b><small>把长文转换为结构化视图</small></span><button type="button" @click="notify('插件运行时暂未启用')">安装</button></div></div></div></div></section>
+        <div v-show="settingsTab === 'reading'" class="settings-card"><span class="section-kicker">阅读</span><h2>阅读偏好</h2><label class="setting-row"><span>正文宽度 <b>{{ store.readerSettings.width }}px</b></span><input :value="store.readerSettings.width" type="range" min="620" max="1280" step="10" @input="changeSetting('width', Number(($event.target as HTMLInputElement).value))" /></label><label class="setting-row"><span>字号 <b>{{ store.readerSettings.fontSize }}px</b></span><input :value="store.readerSettings.fontSize" type="range" min="15" max="24" step="1" @input="changeSetting('fontSize', Number(($event.target as HTMLInputElement).value))" /></label><label class="setting-row"><span>行距 <b>{{ store.readerSettings.lineHeight }}</b></span><input :value="store.readerSettings.lineHeight" type="range" min="1.4" max="2.2" step=".05" @input="changeSetting('lineHeight', Number(($event.target as HTMLInputElement).value))" /></label><div class="setting-toggle-row"><span>显示阅读进度</span><i class="toggle-on" /></div><div class="setting-toggle-row"><span>启用专注模式</span><i class="toggle-on" /></div></div><div v-show="settingsTab === 'reading'" class="settings-card"><span class="section-kicker">辅助功能</span><h2>翻译与解释</h2><p class="muted-copy">使用适配器连接你自己的翻译或解释服务；配置后可从划词工具栏调用。</p><label class="setting-input">服务标识<input v-model="customProvider" placeholder="例如：local-llm / my-translator" /></label><button class="primary-button" type="button" @click="notify(customProvider ? '适配器标识已保存' : '保持未配置状态')"><AppIcon name="check" :size="14" />保存配置</button></div><div v-show="settingsTab === 'shortcuts'" class="settings-card shortcuts-card"><span class="section-kicker">快捷操作</span><h2>快捷键</h2><div class="shortcut-row"><span>全局搜索</span><kbd>Ctrl / Cmd + K</kbd></div><div class="shortcut-row"><span>当前文档搜索</span><kbd>Ctrl / Cmd + F</kbd></div><div class="shortcut-row"><span>阅读缩放</span><kbd>Ctrl / Cmd + + / -</kbd></div><div class="shortcut-row"><span>专注模式</span><kbd>F</kbd></div><div class="shortcut-row"><span>退出聚焦</span><kbd>Esc</kbd></div><div class="shortcut-row"><span>切换区域</span><kbd>↑ ↓</kbd></div></div><div v-show="settingsTab === 'extensions'" class="settings-card extensions-card"><div class="extensions-head"><div><span class="section-kicker">插件中心</span><h2>插件扩展</h2></div><button class="ghost-button" type="button" @click="notify('插件运行时将在后续版本启用')"><AppIcon name="plugin" :size="14" />打开插件目录</button></div><div class="extension-filter"><AppIcon name="search" :size="14" /><span>按需扩展阅读能力</span></div><div class="extension-list"><div class="extension-item"><span class="extension-icon purple"><AppIcon name="sparkle" :size="17" /></span><span><b>AI 阅读助手</b><small>总结、解释与问答适配器</small></span><button type="button" @click="notify('请先在翻译与解释中配置服务')">配置</button></div><div class="extension-item"><span class="extension-icon green"><AppIcon name="download" :size="17" /></span><span><b>导出增强</b><small>为阅读内容准备更多导出格式</small></span><button type="button" @click="notify('导出增强将在下一阶段接入')">安装</button></div><div class="extension-item"><span class="extension-icon pink"><AppIcon name="components" :size="17" /></span><span><b>思维导图</b><small>把长文转换为结构化视图</small></span><button type="button" @click="notify('插件运行时暂未启用')">安装</button></div></div></div></div></section>
       <ClipboardManager v-show="view === 'clipboard'" @notify="notify" />
     </main>
 
