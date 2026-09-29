@@ -176,6 +176,7 @@ const virtualViewportHeight = ref(0)
 const virtualRegionThreshold = 240
 const virtualGap = 8
 let focusScrollTargetId: string | null = null
+let focusWheelAt = -Infinity
 let stopNativeFileDrop: (() => void) | null = null
 const documentWatchers = new Map<string, () => void>()
 const documentReloadTimers = new Map<string, number>()
@@ -2321,7 +2322,7 @@ function moveFocus(delta: number) {
     if (!viewport) return
     if (!target && virtualizedReader.value) {
       const index = virtualLayout.value.regions.findIndex((region) => region.id === next.id)
-      if (index >= 0) viewport.scrollTo({ top: Math.max(0, virtualLayout.value.offsets[index] - Math.min(viewport.clientHeight * .34, 280)), behavior: 'auto' })
+      if (index >= 0) viewport.scrollTop = Math.max(0, virtualLayout.value.offsets[index] - Math.min(viewport.clientHeight * .34, 280))
       return
     }
     if (!target) return
@@ -2331,7 +2332,7 @@ function moveFocus(delta: number) {
     const targetCenter = viewport.scrollTop + targetRect.top - viewportRect.top + targetRect.height / 2
     const targetTop = targetCenter - probeOffset
     const maxScroll = Math.max(0, viewport.scrollHeight - viewport.clientHeight)
-    viewport.scrollTo({ top: Math.min(maxScroll, Math.max(0, targetTop)), behavior: 'auto' })
+    viewport.scrollTop = Math.min(maxScroll, Math.max(0, targetTop))
   })
 }
 
@@ -2709,6 +2710,16 @@ function restoreViewportPercent(percent: number) {
       virtualViewportHeight.value = viewport.clientHeight
     }
   })
+}
+function onReaderWheel(event: WheelEvent) {
+  const viewport = readerViewport.value
+  const isFocusMode = store.mode === 'region-focus' || store.mode === 'focus'
+  if (!viewport || !isFocusMode || event.ctrlKey || event.deltaY === 0) return
+  event.preventDefault()
+  const now = performance.now()
+  if (now - focusWheelAt < 180) return
+  focusWheelAt = now
+  moveFocus(event.deltaY > 0 ? 1 : -1)
 }
 function onReaderPointerDown() { focusScrollTargetId = null }
 function onReaderScroll() {
@@ -3379,7 +3390,7 @@ async function requestFullscreen() {
                 <button type="button" @click="closeEditor">退出编辑</button>
               </div>
             </div>
-            <div ref="readerViewport" class="reader-viewport" @scroll="onReaderScroll" @pointerdown="onReaderPointerDown" @mouseup="captureSelection">
+            <div ref="readerViewport" class="reader-viewport" @scroll="onReaderScroll" @wheel="onReaderWheel" @pointerdown="onReaderPointerDown" @mouseup="captureSelection">
               <div v-if="editorOpen" class="editor-surface" :class="{ 'editor-calm-mode': editorCalmMode }" @contextmenu="openEditorContextMenu">
                 <div v-if="!editorCalmMode" class="editor-toolbar" aria-label="Markdown 编辑工具栏">
                   <div class="editor-toolbar-group" aria-label="文字格式">

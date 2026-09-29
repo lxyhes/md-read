@@ -1296,6 +1296,11 @@ html, body, #app { background: var(--app-bg, #070d22); }
   overscroll-behavior: contain;
   scroll-padding-block: 34px;
 }
+/* Focus navigation is discrete: never let CSS smooth scrolling queue steps. */
+.app-shell.is-region-focus .reader-viewport,
+.app-shell.is-focus .reader-viewport {
+  scroll-behavior: auto;
+}
 .region-block {
   scroll-margin-block: 34px;
   transition: opacity .32s ease, filter .32s ease, background .24s ease, transform .32s cubic-bezier(.2, .8, .2, 1), border-color .24s ease, box-shadow .24s ease;
