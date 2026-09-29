@@ -7,7 +7,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::io::Write;
 use std::net::IpAddr;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use tauri::Manager;
 #[cfg(target_os = "windows")]
@@ -482,13 +482,64 @@ fn pandoc_export_document(source: String, target_path: String, format: String, r
     pandoc_failure(child.wait_with_output().map_err(|error| format!("等待 Pandoc 失败：{error}"))?)
 }
 
+fn pdf_browser() -> Option<PathBuf> {
+    #[cfg(target_os = "windows")]
+    let candidates = [
+        std::env::var_os("ProgramFiles").map(|root| PathBuf::from(root).join("Google/Chrome/Application/chrome.exe")),
+        std::env::var_os("ProgramFiles(x86)").map(|root| PathBuf::from(root).join("Microsoft/Edge/Application/msedge.exe")),
+        std::env::var_os("LOCALAPPDATA").map(|root| PathBuf::from(root).join("Google/Chrome/Application/chrome.exe")),
+    ];
+    #[cfg(target_os = "macos")]
+    let candidates = [
+        Some(PathBuf::from("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")),
+        Some(PathBuf::from("/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge")),
+    ];
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let candidates = [
+        Some(PathBuf::from("/usr/bin/google-chrome")),
+        Some(PathBuf::from("/usr/bin/chromium")),
+        Some(PathBuf::from("/usr/bin/microsoft-edge")),
+    ];
+    candidates.into_iter().flatten().find(|path| path.is_file()).or_else(|| {
+        ["google-chrome", "chromium", "msedge", "chrome"].into_iter().find_map(|name| {
+            Command::new(name).arg("--version").output().ok().filter(|output| output.status.success()).map(|_| PathBuf::from(name))
+        })
+    })
+}
+
+#[tauri::command]
+fn export_html_to_pdf(source: String, path: String) -> Result<(), String> {
+    let target = Path::new(&path);
+    if target.extension().and_then(|value| value.to_str()).map(str::to_ascii_lowercase).as_deref() != Some("pdf") {
+        return Err("PDF 导出目标必须使用 .pdf 扩展名".into());
+    }
+    let parent = target.parent().filter(|value| value.is_dir()).ok_or("PDF 目标目录不存在")?;
+    let browser = pdf_browser().ok_or("未找到 Chrome 或 Edge，无法直接导出 PDF；可使用打印并选择“另存为 PDF”")?;
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(|error| format!("生成临时文件名失败：{error}"))?.as_millis();
+    let temporary = std::env::temp_dir().join(format!("moyue-pdf-{}-{stamp}.html", std::process::id()));
+    std::fs::write(&temporary, source).map_err(|error| format!("写入 PDF 临时文件失败：{error}"))?;
+    let file_url = format!("file:///{}", temporary.to_string_lossy().replace('\\', "/").replace('#', "%23"));
+    let output_path = format!("--print-to-pdf={}", target.to_string_lossy());
+    let result = Command::new(browser)
+        .args(["--headless=new", "--disable-gpu", "--no-sandbox", "--no-pdf-header-footer", "--run-all-compositor-stages-before-draw", &output_path, &file_url])
+        .output();
+    let _ = std::fs::remove_file(&temporary);
+    let output = result.map_err(|error| format!("启动浏览器 PDF 引擎失败：{error}"))?;
+    if !output.status.success() || !target.is_file() {
+        let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if detail.is_empty() { "浏览器 PDF 导出失败".into() } else { format!("浏览器 PDF 导出失败：{detail}") });
+    }
+    let _ = parent;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
-        .invoke_handler(tauri::generate_handler![allow_asset_directory, read_local_image, read_clipboard_image, read_clipboard_snapshot, read_clipboard_signature, write_clipboard_snapshot, read_remote_image, download_remote_image, upload_piclist_image, open_directory, open_external_url, pandoc_import_document, pandoc_export_document])
+        .invoke_handler(tauri::generate_handler![allow_asset_directory, read_local_image, read_clipboard_image, read_clipboard_snapshot, read_clipboard_signature, write_clipboard_snapshot, read_remote_image, download_remote_image, upload_piclist_image, open_directory, open_external_url, pandoc_import_document, pandoc_export_document, export_html_to_pdf])
         .run(tauri::generate_context!())
         .expect("error while running Moyue application");
 }

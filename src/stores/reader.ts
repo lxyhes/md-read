@@ -136,10 +136,10 @@ export const useReaderStore = defineStore('reader', () => {
     return document
   }
 
-  async function renameDocument(id: string, nextPath: string) {
+  async function renameDocument(id: string, nextPath: string, nextSource?: string) {
     const existing = documents.value.find((item) => item.id === id)
     if (!existing) return null
-    const document = await parseOpenedFile({ path: nextPath, source: existing.source })
+    const document = await parseOpenedFile({ path: nextPath, source: nextSource ?? existing.source })
     const previousProgress = progress.value[id] ?? await getProgress(id)
     const previousAnnotations = loadAnnotations(id)
     const wasCurrent = currentDocumentId.value === id

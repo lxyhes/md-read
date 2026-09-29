@@ -3,10 +3,12 @@ import { liteAdaptor } from '@mathjax/src/js/adaptors/liteAdaptor.js'
 import { RegisterHTMLHandler } from '@mathjax/src/js/handlers/html.js'
 import { TeX } from '@mathjax/src/js/input/tex.js'
 import { SVG } from '@mathjax/src/js/output/svg.js'
+import { SerializedMmlVisitor } from '@mathjax/src/js/core/MmlTree/SerializedMmlVisitor.js'
 
 const mathAdaptor = liteAdaptor()
 RegisterHTMLHandler(mathAdaptor)
 const mathDocument = mathjax.document('', { InputJax: new TeX(), OutputJax: new SVG({ fontCache: 'local' }) })
+const mathMlVisitor = new SerializedMmlVisitor()
 
 export type MdastNode = {
   type: string
@@ -64,5 +66,16 @@ export function renderMath(value: string, displayMode: boolean): string {
     return mathAdaptor.outerHTML(mathDocument.convert(value, { display: displayMode }))
   } catch {
     return `<code class="math-error">${escapeHtml(value)}</code>`
+  }
+}
+
+export function renderMathMl(value: string, displayMode: boolean): string {
+  try {
+    const item = new mathDocument.options.MathItem(value, mathDocument.inputJax[0], displayMode)
+    item.compile(mathDocument)
+    return mathMlVisitor.visitTree(item.root)
+  } catch {
+    const display = displayMode ? ' display="block"' : ''
+    return `<math xmlns="http://www.w3.org/1998/Math/MathML"${display}><mtext>${escapeHtml(value)}</mtext></math>`
   }
 }

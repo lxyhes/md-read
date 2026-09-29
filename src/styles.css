@@ -6832,7 +6832,14 @@ body.is-resizing-outline * {
 .file-filter-toolbar { display: flex; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
 .file-filter-toolbar select, .file-filter-toolbar input { min-width: 0; width: 100%; padding: 6px 7px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-raised); color: var(--ink); font: 10px var(--ui-font); }
 .file-filter-toolbar select { flex: 1 1 92px; }
+.file-filter-toolbar select:last-child { flex-basis: 78px; }
 .file-filter-toolbar input { flex: 1 1 76px; }
+.table-alignment-actions { display: flex; align-items: center; gap: 5px; margin: 0 0 10px; color: var(--muted); font: 10px var(--ui-font); }
+.table-alignment-actions button { min-width: 26px; padding: 4px 7px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface-raised); color: var(--ink); font: inherit; }
+.table-column-selection { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin: 0 0 10px; color: var(--muted); font: 10px var(--ui-font); }
+.table-column-selection button { padding: 4px 7px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface-raised); color: var(--ink); font: inherit; }
+.table-column-selection button.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.table-column-selection small { margin-left: 4px; color: var(--muted); }
 .reader-edit-actions button { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--muted); font: 10px var(--ui-font); }
 .reader-edit-actions button:hover, .reader-edit-actions button.active { border-color: var(--accent); color: var(--accent); }
 .reader-editing-meta { display: flex; flex: 0 0 auto; gap: 10px; align-items: center; margin-left: auto; }
