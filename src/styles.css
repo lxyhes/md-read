@@ -7093,6 +7093,7 @@ body.is-resizing-outline * {
   }
 }
 
+
 .editor-workspace.editor-mode-rich { grid-template-columns: minmax(0, 1fr); }
 .editor-rich-pane { display: flex; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-top: 2px solid var(--editor-accent); border-radius: 12px; background: color-mix(in srgb, var(--surface-raised) 96%, transparent); }
 .editor-rich-content { flex: 1; width: min(860px, 100%); min-height: 520px; margin: 0 auto; padding: 38px clamp(24px, 6vw, 76px) 80px; overflow: auto; outline: none; color: var(--ink); caret-color: var(--editor-accent); font: 15px/1.85 var(--reader-font); }
@@ -8378,4 +8379,216 @@ a:active > .app-icon-vector { transform: scale(.92); }
   .app-shell:not(.is-focus) .reader-layout.context-open .context-panel {
     display: none;
   }
+}
+
+
+/* Water-ink edition — paper, ink density and dry-brush rhythm replace ornamental nostalgia. */
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) {
+  --ink-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", STSong, serif;
+  --ink-ui: "Noto Sans SC", "Source Han Sans SC", "PingFang SC", system-ui, sans-serif;
+  --ink-vermilion: #913b32;
+  font-family: var(--ink-ui);
+}
+
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus)::before {
+  opacity: .48;
+  background:
+    repeating-linear-gradient(91deg, transparent 0 17px, rgba(25, 28, 25, .018) 18px, transparent 19px 34px),
+    repeating-linear-gradient(1deg, transparent 0 23px, rgba(255, 255, 255, .08) 24px, transparent 25px 42px);
+}
+
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) :is(.global-nav, .topbar, .reader-tabbar) {
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  border-color: color-mix(in srgb, var(--ink) 16%, transparent);
+  box-shadow: none;
+  backdrop-filter: blur(12px) grayscale(.45);
+}
+
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll) .reader-page {
+  background: var(--surface-raised);
+}
+
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll) .reader-page::before {
+  opacity: .78;
+  background:
+    radial-gradient(ellipse 29% 8% at 82% 4%, color-mix(in srgb, var(--ink) 7%, transparent), transparent 76%),
+    radial-gradient(ellipse 18% 6% at 76% 10%, color-mix(in srgb, var(--ink) 4%, transparent), transparent 78%),
+    repeating-linear-gradient(88deg, transparent 0 19px, color-mix(in srgb, var(--ink) 1.2%, transparent) 20px, transparent 21px 39px);
+}
+
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .reader-content {
+  position: relative;
+  isolation: isolate;
+  font-family: var(--ink-serif);
+}
+
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll) .reader-content::after {
+  position: absolute;
+  top: -35px;
+  right: -85px;
+  z-index: -1;
+  width: 390px;
+  height: 190px;
+  background: url('./assets/ink-wash-landscape.svg') right top / contain no-repeat;
+  content: "";
+  opacity: .72;
+  pointer-events: none;
+}
+
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .reader-title {
+  position: relative;
+  max-width: 18ch;
+  color: var(--ink);
+  font-family: var(--ink-serif);
+  font-weight: 650;
+  letter-spacing: -.06em;
+  line-height: 1.08;
+  text-shadow: none;
+  text-wrap: balance;
+}
+
+.app-shell.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .reader-rule {
+  width: min(42%, 310px);
+  height: 12px;
+  margin: 24px 0 39px;
+  background:
+    radial-gradient(ellipse at 3% 48%, color-mix(in srgb, var(--ink) 88%, transparent) 0 4px, transparent 8px),
+    linear-gradient(90deg, color-mix(in srgb, var(--ink) 84%, transparent) 0 29%, transparent 31% 34%, color-mix(in srgb, var(--ink) 57%, transparent) 36% 54%, transparent 57% 61%, color-mix(in srgb, var(--ink) 32%, transparent) 64% 78%, transparent 94%);
+  box-shadow: none;
+  clip-path: polygon(0 28%, 9% 16%, 18% 36%, 31% 19%, 45% 43%, 60% 26%, 74% 51%, 89% 33%, 100% 49%, 88% 72%, 72% 61%, 57% 79%, 39% 59%, 20% 78%, 0 65%);
+  filter: blur(.15px);
+}
+
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .reader-content .region-content :is(h2, h3)::before {
+  width: 7px;
+  height: 7px;
+  border-radius: 50% 43% 56% 45%;
+  background: color-mix(in srgb, var(--ink) 74%, var(--accent));
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--ink) 5%, transparent);
+  clip-path: none;
+  transform: translateY(-1px) rotate(-12deg);
+}
+
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .reader-content .region-content blockquote {
+  margin-left: 0;
+  padding: 17px 22px 17px 25px;
+  border: 0;
+  border-radius: 0;
+  background:
+    radial-gradient(ellipse 22px 72% at 0 50%, color-mix(in srgb, var(--ink) 13%, transparent), transparent 78%),
+    linear-gradient(90deg, color-mix(in srgb, var(--ink) 6%, transparent), transparent 78%);
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--ink) 72%, transparent);
+  color: color-mix(in srgb, var(--ink) 78%, var(--muted));
+}
+
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .reader-content .region-content blockquote::before {
+  content: none;
+}
+
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .reader-content :is(.code-frame, .table-scroll) {
+  border-color: color-mix(in srgb, var(--ink) 14%, transparent);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--code-bg) 92%, var(--surface-raised));
+  box-shadow: none;
+}
+
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone):not(.is-focus) :is(.nav-item, .reader-tab, .reader-display-switch, .reader-navigation) {
+  border-radius: 2px;
+}
+
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone):not(.is-focus) .nav-item.active {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--ink) 9%, transparent), transparent 88%);
+}
+
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone):not(.is-focus) .nav-item.active::before {
+  width: 3px;
+  border-radius: 0;
+  background: var(--ink);
+  box-shadow: none;
+  clip-path: polygon(20% 0, 100% 5%, 72% 49%, 100% 82%, 24% 100%, 0 68%, 23% 34%);
+}
+
+.app-shell.theme-xuan-paper .reader-title::after {
+  right: -44px;
+  bottom: .08em;
+  width: 31px;
+  height: 31px;
+  border: 1px solid color-mix(in srgb, var(--ink-vermilion) 78%, transparent);
+  border-radius: 1px;
+  background: transparent;
+  color: var(--ink-vermilion);
+  content: "水墨";
+  font: 9px/1 var(--ink-serif);
+  letter-spacing: -.08em;
+  transform: rotate(-4deg);
+}
+
+.app-shell.theme-inkstone:not(.is-focus) {
+  background: #0c0e0d;
+}
+
+.app-shell.theme-inkstone:not(.is-focus)::before {
+  opacity: .5;
+  background:
+    radial-gradient(ellipse 52% 13% at 8% 2%, rgba(228, 230, 223, .055), transparent 74%),
+    repeating-linear-gradient(91deg, transparent 0 21px, rgba(228, 230, 223, .012) 22px, transparent 23px 41px);
+}
+
+.app-shell.theme-inkstone:not(.is-focus) :is(.global-nav, .topbar, .reader-tabbar) {
+  background: rgba(15, 18, 16, .94);
+  border-color: rgba(228, 230, 223, .11);
+  box-shadow: none;
+}
+
+.app-shell.theme-inkstone .reader-page {
+  background: #111412;
+}
+
+.app-shell.theme-inkstone .reader-page::before {
+  opacity: .5;
+  background: radial-gradient(ellipse 58% 12% at 9% 1%, rgba(228, 230, 223, .06), transparent 76%);
+}
+
+.app-shell.theme-bamboo-shadow .reader-rule {
+  background: linear-gradient(90deg, rgba(34, 40, 36, .76), rgba(70, 91, 77, .32) 54%, transparent 94%);
+}
+
+.app-shell.theme-cinnabar-scroll .reader-title::after {
+  display: inline-grid;
+  width: 25px;
+  height: 25px;
+  margin-left: .42em;
+  place-items: center;
+  border: 1px solid rgba(145, 59, 50, .72);
+  color: #913b32;
+  content: "朱";
+  font-size: 10px;
+  line-height: 1;
+  transform: translateY(-.04em) rotate(3deg);
+}
+
+.theme-card.theme-card-xuan-paper .theme-swatch::before {
+  background:
+    radial-gradient(ellipse 62% 9% at 18% 24%, rgba(32, 34, 31, .3), transparent 70%),
+    repeating-linear-gradient(88deg, transparent 0 15px, rgba(32, 34, 31, .025) 16px, transparent 17px 31px),
+    #f3f3ee;
+}
+
+.theme-card.theme-card-xuan-paper .theme-card-mark {
+  border-radius: 1px;
+  background: #913b32;
+  color: #f3f3ee;
+}
+
+@media (max-width: 1260px) {
+  .app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll) .reader-content::after {
+    right: -30px;
+    width: 300px;
+    opacity: .42;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-shell.theme-xuan-paper .reader-title::after,
+  .app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll) .reader-content::after { display: none; }
 }
