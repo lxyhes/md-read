@@ -342,8 +342,12 @@ html, body, #app { background: var(--app-bg, #070d22); }
 .image-manager-row button, .danger-button { min-height: 30px; padding: 0 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-raised); color: var(--ink); }
 .image-manager-row .danger-button, .danger-button { color: #b54b4b; }
 .table-editor-dialog { width: min(920px, calc(100vw - 32px)); }
+.table-editor-fields { min-width: 0; margin: 0; padding: 0; border: 0; }
+.table-editor-dialog::backdrop { background: rgba(7, 6, 5, .64); backdrop-filter: blur(10px); }
 .table-editor-grid { display: grid; gap: 5px; margin: 18px 0; overflow: auto; }
 .table-editor-grid input, .table-editor-grid select { min-width: 0; height: 36px; padding: 0 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--ink); }
+.table-editor-grid textarea { min-width: 0; min-height: 36px; max-height: 160px; padding: 7px 9px; resize: vertical; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--ink); font: 13px/1.5 var(--ui-font); }
+.table-editor-grid :focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .table-editor-grid .table-header-input { border-color: color-mix(in srgb, var(--accent) 48%, var(--border)); font-weight: 650; }
 .region-copy-image { position: absolute; right: 10px; bottom: 10px; opacity: 0; transition: opacity .15s ease; }
 .region-block:hover .region-copy-image, .region-block:focus-within .region-copy-image { opacity: 1; }
@@ -6809,6 +6813,16 @@ body.is-resizing-outline * {
 .reader-display-split .reader-mindmap-heading strong {
   font-size: clamp(22px, calc(var(--reader-size) * 1.35), 28px);
 }
+/* Draft tools stay within the writing surface and inherit the active theme. */
+.editor-find-panel { flex: none; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--surface); font: 12px var(--ui-font); }
+.editor-find-row, .editor-find-options { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.editor-find-row + .editor-find-row, .editor-find-options { margin-top: 8px; }
+.editor-find-row > input { flex: 1; min-width: 180px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 5px; color: var(--ink); background: var(--surface-raised); }
+.editor-find-row > span { min-width: 54px; color: var(--muted); text-align: center; }
+.editor-find-options label { display: inline-flex; align-items: center; gap: 4px; color: var(--ink); }
+.editor-find-options small { color: var(--muted); }
+.editor-find-panel :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 @media (max-width: 760px) {
   .tree-root-children {
     display: block;

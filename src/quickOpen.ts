@@ -4,7 +4,7 @@ export type QuickOpenEntry = {
 }
 
 function normalizedQuery(query: string) {
-  return query.trim().toLowerCase().replace(/\s+/g, '')
+  return query.trim().toLowerCase().replace(/\\/g, '/').replace(/\s+/g, '')
 }
 
 function fuzzyScore(query: string, value: string) {
