@@ -1,6 +1,6 @@
 import type { HeadingItem, ReaderDocument, ReaderRegion, ReaderRegionType } from './types'
 import { blockHtmlWithSourceIndent, renderFootnotes, renderVideoNode } from './markdown/render'
-import { createRenderContext, nodeText, type MarkdownUrlResolver, type MdastNode } from './markdown/shared'
+import { createRenderContext, nodeText, renderMath, type MarkdownUrlResolver, type MdastNode } from './markdown/shared'
 import { formatPastedText, isLikelyProseBlock, normalizeMixedOrderedListSource } from './pasteMarkdown'
 import { isTimestampedParagraph, markdownProcessor as processor, normalizeArticleStrong, normalizeLatexDelimiters, normalizeMixedOrderedLists, promoteTimestampedParagraphs, removeEmptyListItems } from './markdown/fragment'
 
@@ -22,6 +22,16 @@ function mermaidCode(node: MdastNode): string | null {
   const value = (node.value ?? '').trim()
   const match = value.match(/^(?:`{3}|~~~)\s*mermaid[^\r\n]*\r?\n([\s\S]*?)\r?\n(?:`{3}|~~~)$/i)
   return match?.[1] ?? null
+}
+
+function gitlabMathCode(node: MdastNode): string | null {
+  return node.type === 'code' && node.lang?.trim().toLowerCase() === 'math' ? node.value ?? '' : null
+}
+
+function frontMatterTitle(source: string): string {
+  const body = source.match(/^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/)?.[1]
+  const value = body?.match(/^title\s*:\s*(.+?)\s*$/im)?.[1]?.trim() ?? ''
+  return value.replace(/^(?:"(.*)"|'(.*)')$/, '$1$2').trim()
 }
 
 function standaloneStrongText(node: MdastNode): string | null {
@@ -46,6 +56,7 @@ function videoNode(node: MdastNode): MdastNode | null {
 
 function regionType(node: MdastNode): ReaderRegionType {
   if (mermaidCode(node) !== null) return 'mermaid'
+  if (gitlabMathCode(node) !== null) return 'math'
   if (videoNode(node)) return 'video'
   if (imageNode(node)) return 'image'
   if (node.type === 'table') return 'table'
@@ -146,7 +157,8 @@ export function parseMarkdown(path: string, source: string, resolveUrl: Markdown
     if (node.type === 'yaml' || node.type === 'toml' || node.type === 'footnoteDefinition') return
     const type = regionType(node)
     const diagramCode = type === 'mermaid' ? mermaidCode(node) ?? '' : null
-    const textContent = (diagramCode ?? nodeText(node)).trim()
+    const mathCode = type === 'math' ? gitlabMathCode(node) : null
+    const textContent = (diagramCode ?? mathCode ?? nodeText(node)).trim()
     const start = node.position?.start?.offset ?? 0
     const end = node.position?.end?.offset ?? start + textContent.length
     const id = `reg_${hashText(`${path}:${node.type}:${start}:${end}:${textContent.slice(0, 120)}`)}`
@@ -157,6 +169,7 @@ export function parseMarkdown(path: string, source: string, resolveUrl: Markdown
     if (type === 'video') metadata.url = resolveUrl(videoNode(node)?.url ?? '')
     const html = type === 'video'
       ? renderVideoNode(videoNode(node) ?? { type: 'link', url: String(metadata.url ?? ''), title: null, children: [] }, resolveUrl, textContent || '视频')
+      : mathCode !== null ? `<div class="math-block">${renderMath(mathCode, true)}</div>`
       : blockHtmlWithSourceIndent(node, normalizedSource, resolveUrl, context)
     const region: ReaderRegion = {
       id, documentId, type, index: regions.length, textContent, sourceStart: start, sourceEnd: end,
@@ -178,7 +191,7 @@ export function parseMarkdown(path: string, source: string, resolveUrl: Markdown
     regions.push({ id, documentId, type: 'footnotes', index: regions.length, textContent: '脚注', sourceStart: source.length, sourceEnd: source.length, html: footnotesHtml, metadata: {} })
   }
 
-  const title = documentTitle || path.split(/[\\/]/).pop()?.replace(/\.qmd$/i, '').replace(/\.markdown?$/i, '') || '未命名文档'
+  const title = documentTitle || frontMatterTitle(source) || path.split(/[\\/]/).pop()?.replace(/\.qmd$/i, '').replace(/\.markdown?$/i, '') || '未命名文档'
   const wordCount = source.replace(/```[\s\S]*?```/g, '').trim().length
   return {
     id: documentId,

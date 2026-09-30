@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { hashText, makeImplicitMarkdownHeadingsExplicit, parseMarkdown, renderMarkdownFragment } from './parser'
 import { asciiDiagramToMermaid, asciiTreeToTree, markdownToTree } from './asciiDiagram'
 import { formatClipboardImage, formatClipboardToMarkdown, formatPastedText, isLikelyProseBlock, normalizeMixedOrderedListSource, suggestPastedMarkdownName } from './pasteMarkdown'
-import { resolveMarkdownAssetUrl } from './fileService'
+import { resolveMarkdownAssetUrl, splitMarkdownLinkTarget, withRelativePathPrefix } from './fileService'
 import { renderMathMl } from './markdown/shared'
 
 describe('Moyue markdown region parser', () => {
@@ -14,6 +14,12 @@ describe('Moyue markdown region parser', () => {
     expect(first.regions.map((region) => region.id)).toEqual(second.regions.map((region) => region.id))
     expect(first.headings[0].text).toBe('Title')
     expect(first.regions.map((region) => region.type)).toEqual(['heading', 'paragraph', 'mermaid'])
+  })
+
+  it('uses a YAML title when the document has no H1', () => {
+    const document = parseMarkdown('untitled.md', '---\ntitle: "YAML 文档标题"\nauthor: 墨阅\n---\n\n正文内容。')
+    expect(document.title).toBe('YAML 文档标题')
+    expect(parseMarkdown('headed.md', '---\ntitle: 元数据标题\n---\n\n# 正文标题').title).toBe('正文标题')
   })
 
   it('styles numeric article headings like public-account chapter headings', () => {
@@ -42,6 +48,13 @@ $$`)
     expect(document.regions[0].html).toContain('MathJax')
     expect(document.regions[1].type).toBe('math')
     expect(document.regions[1].html).toContain('frac')
+  })
+
+  it('renders GitLab math fences as display math', () => {
+    const document = parseMarkdown('gitlab-math.md', ['```math', String.raw`\frac{a}{b}`, '```'].join('\n'))
+    expect(document.regions[0].type).toBe('math')
+    expect(document.regions[0].html).toContain('MathJax')
+    expect(document.regions[0].html).toContain('frac')
   })
 
   it('exports semantic MathML for copied formulas', () => {
@@ -137,6 +150,7 @@ $$`)
     expect(document.regions[0].type).toBe('image')
     expect(document.regions[0].metadata?.url).toBe('https://example.com/cover.png')
     expect(document.regions[0].html).toContain('loading="eager"')
+    expect(document.regions[0].html).not.toContain('referrerpolicy')
   })
 
   it('renders a standalone video link as a playable video block', () => {
@@ -167,6 +181,18 @@ $$`)
   it('keeps relative asset query strings after resolving them', () => {
     const document = parseMarkdown('notes/readme.md', '![local](../assets/cover.png?raw=1#top)', (url) => resolveMarkdownAssetUrl('notes/readme.md', url, { 'assets/cover.png': 'blob:test-image' }))
     expect(document.regions[0].html).toContain('src="blob:test-image?raw=1#top"')
+  })
+
+  it('keeps hashes in local Markdown file names while preserving heading fragments', () => {
+    expect(splitMarkdownLinkTarget('plans#2026.md')).toEqual({ path: 'plans#2026.md', fragment: '' })
+    expect(splitMarkdownLinkTarget('plans#2026.md#roadmap')).toEqual({ path: 'plans#2026.md', fragment: 'roadmap' })
+    expect(splitMarkdownLinkTarget('plans.md#roadmap')).toEqual({ path: 'plans.md', fragment: 'roadmap' })
+  })
+
+  it('optionally prefixes generated relative media paths with dot slash', () => {
+    expect(withRelativePathPrefix('.moyue-assets/cover.png', true)).toBe('./.moyue-assets/cover.png')
+    expect(withRelativePathPrefix('./.moyue-assets/cover.png', true)).toBe('./.moyue-assets/cover.png')
+    expect(withRelativePathPrefix('https://example.com/cover.png', true)).toBe('https://example.com/cover.png')
   })
 
   it('converts box-and-arrow text diagrams into Mermaid', () => {

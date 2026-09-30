@@ -16,6 +16,12 @@ function autoLinkEnabled() {
   catch { return true }
 }
 
+function imageReferrerPolicyAttribute() {
+  if (typeof localStorage === 'undefined') return ''
+  try { return JSON.parse(localStorage.getItem('moyue:advanced-settings') ?? '{}').remoteImagePrivacy === true ? ' referrerpolicy="no-referrer"' : '' }
+  catch { return '' }
+}
+
 function extendedTextHtml(value: string) {
   return escapeHtml(value)
     .replace(/==([^=\n]+)==/g, '<mark>$1</mark>')
@@ -32,7 +38,7 @@ function inlineHtml(node: MdastNode, preserveSoftBreaks = false, resolveUrl: Mar
     case 'delete': return `<del>${children()}</del>`
     case 'inlineCode': return `<code>${escapeHtml(node.value ?? '')}</code>`
     case 'link': return !autoLinkEnabled() && nodeText(node) === node.url ? escapeHtml(nodeText(node)) : `<a href="${safeUrl(resolveUrl(node.url ?? ''))}" target="_blank" rel="noreferrer">${children()}</a>`
-    case 'image': return `<img src="${safeImageUrl(resolveUrl(node.url ?? ''))}" alt="${escapeHtml(node.title ?? nodeText(node))}" loading="lazy" decoding="async" referrerpolicy="no-referrer" />`
+    case 'image': return `<img src="${safeImageUrl(resolveUrl(node.url ?? ''))}" alt="${escapeHtml(node.title ?? nodeText(node))}" loading="lazy" decoding="async"${imageReferrerPolicyAttribute()} />`
     case 'break': return '<br />'
     case 'inlineMath': return renderMath(node.value ?? '', false)
     case 'footnoteReference': {
@@ -164,7 +170,7 @@ function blockHtml(node: MdastNode, resolveUrl: MarkdownUrlResolver = (url) => u
     }
     case 'code': return `<pre><code data-language="${escapeHtml(node.lang ?? 'text')}">${escapeHtml(node.value ?? '')}</code></pre>`
     case 'math': return `<div class="math-block">${renderMath(node.value ?? '', true)}</div>`
-    case 'image': return `<img src="${safeImageUrl(resolveUrl(node.url ?? ''))}" alt="${escapeHtml(node.title ?? '')}" loading="eager" decoding="async" referrerpolicy="no-referrer" />`
+    case 'image': return `<img src="${safeImageUrl(resolveUrl(node.url ?? ''))}" alt="${escapeHtml(node.title ?? '')}" loading="eager" decoding="async"${imageReferrerPolicyAttribute()} />`
     case 'thematicBreak': return '<hr />'
     case 'table': {
       const rows = node.children ?? []
