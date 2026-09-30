@@ -347,6 +347,9 @@ html, body, #app { background: var(--app-bg, #070d22); }
 .table-editor-grid .table-header-input { border-color: color-mix(in srgb, var(--accent) 48%, var(--border)); font-weight: 650; }
 .region-copy-image { position: absolute; right: 10px; bottom: 10px; opacity: 0; transition: opacity .15s ease; }
 .region-block:hover .region-copy-image, .region-block:focus-within .region-copy-image { opacity: 1; }
+.math-copy-actions { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 6px; opacity: 0; transition: opacity .15s ease; }
+.math-copy-actions .inline-view-action { margin: 0; }
+.region-block:hover .math-copy-actions, .region-block:focus-within .math-copy-actions { opacity: 1; }
 
 @media (max-width: 720px) {
   .setting-form-grid { grid-template-columns: 1fr; }
@@ -1791,6 +1794,8 @@ html, body, #app { background: var(--app-bg, #070d22); }
 .search-scope-tabs button:disabled { cursor: not-allowed; opacity: .45; }
 .search-scope-row > span { margin-left: auto; color: var(--accent); font-family: var(--mono); }
 .search-scope-row > small { color: var(--muted); opacity: .8; }
+.quick-open-meta strong { color: var(--ink); font: 600 10px var(--ui-font); }
+.quick-open-results .quick-open-path { font-family: var(--mono); letter-spacing: -.01em; }
 .resume-prompt { position: absolute; left: 50%; bottom: 18px; z-index: 3; display: flex; align-items: center; gap: 28px; width: min(640px, calc(100% - 48px)); margin: 0; padding: 16px 18px 16px 20px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border)); border-radius: 14px; background: linear-gradient(112deg, var(--surface-raised), color-mix(in srgb, var(--surface-raised) 92%, var(--accent))); box-shadow: 0 12px 30px color-mix(in srgb, var(--app-bg) 22%, transparent), 0 0 0 1px color-mix(in srgb, var(--accent) 6%, transparent); transform: translateX(-50%); animation: resume-prompt-in .3s cubic-bezier(.22, 1, .36, 1) both; }
 .resume-prompt::before { position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--accent); content: ""; }
 .resume-prompt-copy { position: relative; min-width: 0; flex: 1; padding-left: 1px; }
@@ -6818,6 +6823,8 @@ body.is-resizing-outline * {
 .file-filter-toolbar select { flex: 1 1 92px; }
 .file-filter-toolbar select:last-child { flex-basis: 78px; }
 .file-filter-toolbar input { flex: 1 1 76px; }
+.file-tree-mix { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 4px; padding: 0 2px; color: var(--muted); font: 9px var(--ui-font); white-space: nowrap; }
+.file-tree-mix input { width: 12px; min-width: 12px; height: 12px; margin: 0; accent-color: var(--accent); }
 .table-alignment-actions { display: flex; align-items: center; gap: 5px; margin: 0 0 10px; color: var(--muted); font: 10px var(--ui-font); }
 .table-alignment-actions button { min-width: 26px; padding: 4px 7px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface-raised); color: var(--ink); font: inherit; }
 .table-column-selection { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin: 0 0 10px; color: var(--muted); font: 10px var(--ui-font); }
@@ -8299,6 +8306,14 @@ a:active > .app-icon-vector { transform: scale(.92); }
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   color: var(--ink);
 }
+.recent-folders-popover { width: min(350px, calc(100vw - 48px)); max-height: min(340px, 54vh); overflow: auto; }
+.recent-folder-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; border-top: 1px solid color-mix(in srgb, var(--border) 76%, transparent); }
+.recent-folder-row:first-child { border-top: 0; }
+.library-more-popover .recent-folder-open { width: auto; min-width: 0; padding: 8px 9px; }
+.recent-folder-open strong, .recent-folder-open small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recent-folder-open strong { color: var(--ink); font: 600 10px var(--ui-font); }
+.recent-folder-open small { margin-top: 3px; color: var(--muted); font: 9px var(--mono); }
+.library-more-popover .recent-folder-action { width: auto; padding: 7px 6px; color: var(--accent); font: 9px var(--ui-font); white-space: nowrap; }
 
 /* Library landing: one useful reading gesture, then the shelf. */
 .app-shell:not(.is-focus) .library-page {

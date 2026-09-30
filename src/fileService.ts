@@ -157,9 +157,8 @@ export async function openMarkdownFile(): Promise<OpenedFile[]> {
 
 export async function openMarkdownFolder(): Promise<OpenedFile[]> {
   if (isTauri()) {
-    const selected = await open({ directory: true, multiple: false })
-    if (!selected || Array.isArray(selected)) return []
-    return scanDirectory(selected)
+    const selected = await selectMarkdownFolder()
+    return selected ? openMarkdownFolderAt(selected) : []
   }
   return new Promise((resolve) => {
     const input = document.createElement('input')
@@ -176,6 +175,17 @@ export async function openMarkdownFolder(): Promise<OpenedFile[]> {
     input.oncancel = () => { settled = true; resolve([]) }
     input.click()
   })
+}
+
+export async function selectMarkdownFolder(): Promise<string | null> {
+  if (!isTauri()) return null
+  const selected = await open({ directory: true, multiple: false })
+  return !selected || Array.isArray(selected) ? null : selected
+}
+
+export async function openMarkdownFolderAt(path: string): Promise<OpenedFile[]> {
+  if (!isTauri()) throw new Error('浏览器预览无法重新打开本地文件夹，请使用桌面端')
+  return scanDirectory(path)
 }
 
 export async function listMarkdownFiles(path: string): Promise<WorkspaceFile[]> {

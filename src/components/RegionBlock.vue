@@ -6,9 +6,10 @@ import TreeDiagram from './TreeDiagram.vue'
 import AppIcon from './AppIcon.vue'
 import IconButton from './IconButton.vue'
 import { asciiDiagramToMermaid, asciiTreeToTree } from '../asciiDiagram'
+import { renderMathMl } from '../markdown/shared'
 
 const props = defineProps<{ region: ReaderRegion; annotations?: Annotation[]; focused: boolean; active: boolean; focusDistance?: number; themeMode?: ThemeManifest['mode']; themeKey?: string }>()
-const emit = defineEmits<{ focus: []; openViewer: []; 'open-link': [url: string]; 'code-copied': []; 'toggle-task': []; 'copy-image': [] }>()
+const emit = defineEmits<{ focus: []; openViewer: []; 'open-link': [url: string]; 'code-copied': []; 'math-copied': []; 'math-copy-failed': []; 'toggle-task': []; 'copy-image': [] }>()
 const codeLanguage = computed(() => String(props.region.metadata?.language ?? 'text'))
 const proseCodeLanguage = computed(() => /^(?:text|plaintext|markdown|md)$/i.test(codeLanguage.value))
 const asciiDiagramCandidate = computed(() => props.region.type === 'code' && proseCodeLanguage.value)
@@ -130,6 +131,26 @@ async function copyCodeText(text: string) {
 }
 function copySelectedCode() { void copyCodeText(selectedCodeText.value) }
 function copyActiveCodeLine() { void copyCodeText(activeCodeLine.value) }
+async function copyMathMl() {
+  const mathMl = renderMathMl(props.region.textContent, true)
+  try {
+    if (navigator.clipboard?.write && typeof ClipboardItem !== 'undefined') {
+      await navigator.clipboard.write([new ClipboardItem({
+        'text/html': new Blob([mathMl], { type: 'text/html' }),
+        'text/plain': new Blob([mathMl], { type: 'text/plain' }),
+      })])
+    } else {
+      await navigator.clipboard.writeText(mathMl)
+    }
+    copied.value = true
+    emit('math-copied')
+    if (copyTimer) window.clearTimeout(copyTimer)
+    copyTimer = window.setTimeout(() => { copied.value = false }, 1400)
+  } catch {
+    copied.value = false
+    emit('math-copy-failed')
+  }
+}
 function handleContentClick(event: MouseEvent) {
   const target = event.target
   if (!(target instanceof Element)) return
@@ -191,7 +212,10 @@ function handleContentClick(event: MouseEvent) {
         <div v-html="renderedHtml" />
       </div>
       <div v-else v-html="renderedHtml" />
-      <button v-if="region.type === 'math'" class="inline-view-action region-copy-image" type="button" @click.stop="emit('copy-image')">复制为图片</button>
+      <div v-if="region.type === 'math'" class="math-copy-actions">
+        <button class="inline-view-action" type="button" title="复制标准 MathML" @click.stop="copyMathMl">{{ copied ? '已复制 MathML' : '复制 MathML' }}</button>
+        <button class="inline-view-action" type="button" @click.stop="emit('copy-image')">复制为图片</button>
+      </div>
     </div>
     <IconButton v-if="region.type === 'image'" class="region-more image-region-more" icon="expand" size="sm" label="放大查看原图" @click.stop="emit('openViewer')" />
     <IconButton v-else-if="!focused" class="region-more" icon="focus" size="sm" label="聚焦此区域" @click.stop="emit('focus')" />

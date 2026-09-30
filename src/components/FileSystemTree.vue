@@ -7,6 +7,9 @@ export interface FileSystemTreeNode {
   name: string
   isDirectory: boolean
   documentId?: string
+  size?: number
+  createdAt?: number
+  modifiedAt?: number
   expanded: boolean
   loading: boolean
   children: FileSystemTreeNode[] | null
