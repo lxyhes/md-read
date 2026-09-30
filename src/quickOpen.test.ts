@@ -8,6 +8,9 @@ const entries = [
 ]
 
 describe('quick open matching', () => {
+  it('accepts Windows path separators in the query', () => {
+    expect(matchQuickOpen('notes\\project\\api', entries)[0]?.name).toBe('api-design.md')
+  })
   it('prefers a contiguous filename match', () => {
     expect(matchQuickOpen('api', entries)[0]?.path).toBe('E:/notes/project/api-design.md')
   })

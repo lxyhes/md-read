@@ -19,6 +19,10 @@ import { getDocumentStatistics } from './documentStats'
 import { asciiDiagramToMermaid, asciiTreeToTree, markdownToTree } from './asciiDiagram'
 import { formatClipboardImage, formatClipboardToMarkdown, htmlToMarkdown, normalizeMixedOrderedListSource, suggestPastedMarkdownName } from './pasteMarkdown'
 import { matchQuickOpen } from './quickOpen'
+import { indentSelection, codeIndentInsertion, isFenceBacktickInput, selectedLineRange, removeSelectedLines } from './editorInput'
+import { createEditorHistory, recordEditorHistory, stepEditorHistory, type EditorSnapshot } from './editorHistory'
+import { findEditorMatches, replaceEditorMatches } from './editorFind'
+import { parseEditableTable, serializeEditableTable, moveTableRow, moveTableColumn, deleteTableRow, deleteTableColumn, pasteTableCells, type TableAlignment } from './tableEditing'
 import { sortFileTreeEntries, type FileTreeSortMode } from './fileTreeSort'
 import { orderRecentFolders, pinRecentFolder, rememberRecentFolder, removeRecentFolder, type RecentFolder } from './recentFolders'
 import { createDocx, createEpub, createLatex } from './exportService'
@@ -146,8 +150,20 @@ const fileContextMenu = ref<{ file: FileTreeEntry; x: number; y: number } | null
 const fileContextMenuElement = ref<HTMLElement | null>(null)
 const fileProperties = ref<FileTreeEntry | null>(null)
 const editorOpen = ref(false)
+const editorFindOpen = ref(false)
+const editorFindQuery = ref('')
+const editorFindReplacement = ref('')
+const editorFindInput = ref<HTMLInputElement | null>(null)
+const editorFindIndex = ref(-1)
+const editorFindOptions = ref({ caseSensitive: false, wholeWord: false, regex: false })
+const editorFindScope = ref<{ start: number; end: number } | undefined>()
+let editorFindReplacing = false
+const editorFindResult = computed(() => findEditorMatches(editorSource.value, editorFindQuery.value, { ...editorFindOptions.value, scope: editorFindScope.value }))
 const editorSource = ref('')
 const editorTextarea = ref<HTMLTextAreaElement | null>(null)
+const editorHistory = ref(createEditorHistory({ value: '', start: 0, end: 0 }))
+let editorHistoryRestoring = false
+let editorBeforeInput: { snapshot: EditorSnapshot; group: string } | null = null
 const editorRich = ref<HTMLElement | null>(null)
 const editorRichBaseSource = ref('')
 const editorPreview = ref<HTMLElement | null>(null)
@@ -157,7 +173,14 @@ const editorContextMenu = ref<{ x: number; y: number } | null>(null)
 const imageManagerOpen = ref(false)
 const tableBuilderOpen = ref(false)
 const tableBuilder = ref({ rows: 3, columns: 3, alignment: 'left' as 'left' | 'center' | 'right' })
-const tableEditor = ref<{ region: ReaderRegion; rows: string[][]; alignments: Array<'left' | 'center' | 'right'>; selectedColumns: number[] } | null>(null)
+const tableEditor = ref<{ region: ReaderRegion; rows: string[][]; alignments: TableAlignment[]; selectedColumns: number[]; row: number; column: number; documentId: string; baseSource: string; initialState: string; draft: boolean } | null>(null)
+const tableEditorDialog = ref<HTMLDialogElement | null>(null)
+const tableEditorSaving = ref(false)
+const tableEditorMessage = ref('')
+const tableEditorState = computed(() => tableEditor.value ? JSON.stringify({ rows: tableEditor.value.rows, alignments: tableEditor.value.alignments }) : null)
+const tableEditorHistory = ref(createEditorHistory({ value: '', start: 0, end: 0 }))
+let tableEditorHistoryRestoring = false
+let tableEditorHistoryGroup = ''
 const editorCodeLanguage = ref(advancedSettings.value.defaultCodeLanguage)
 const lastMediaAction = ref<{ source: string; path: string | null } | null>(null)
 const editorOriginalSource = ref('')
@@ -681,6 +704,7 @@ function closeEditor() {
   if (editorMode.value === 'rich') syncRichEditorSource()
   if (editorDirty.value && !window.confirm('还有未保存的编辑内容，确定要退出吗？')) return
   editorOpen.value = false
+  editorFindOpen.value = false
   editorContextMenu.value = null
   clearEditorInlineAssets()
 }
@@ -767,6 +791,95 @@ function onEditorCaretActivity() {
   centerEditorCaret()
 }
 
+function captureEditorBeforeInput(event: InputEvent) {
+  const element = editorTextarea.value
+  if (!element) return
+  if (event.inputType === 'historyUndo' || event.inputType === 'historyRedo') {
+    event.preventDefault()
+    restoreEditorHistory(event.inputType === 'historyUndo' ? -1 : 1)
+    return
+  }
+  editorBeforeInput = {
+    snapshot: { value: editorSource.value, start: element.selectionStart, end: element.selectionEnd },
+    group: element.selectionStart === element.selectionEnd
+      && (/^(insertCompositionText|deleteContentBackward|deleteContentForward)$/.test(event.inputType)
+        || (event.inputType === 'insertText' && event.data?.length === 1)) ? event.inputType : '',
+  }
+}
+
+function openEditorFind() {
+  if (editorMode.value === 'rich' || editorMode.value === 'preview') setEditorMode('write')
+  const element = editorTextarea.value
+  if (element && element.selectionStart !== element.selectionEnd) {
+    const selected = editorSource.value.slice(element.selectionStart, element.selectionEnd)
+    if (!selected.includes('\n')) editorFindQuery.value = selected
+  }
+  editorFindScope.value = undefined
+  editorFindIndex.value = -1
+  editorFindOpen.value = true
+  void nextTick(() => { editorFindInput.value?.focus(); editorFindInput.value?.select() })
+}
+
+function closeEditorFind() {
+  editorFindOpen.value = false
+  void nextTick(() => editorTextarea.value?.focus())
+}
+
+function toggleEditorFindScope() {
+  if (editorFindScope.value) { editorFindScope.value = undefined; return }
+  const element = editorTextarea.value
+  if (!element || element.selectionStart === element.selectionEnd) { notify('先在源码中选中要查找的范围'); return }
+  editorFindScope.value = { start: element.selectionStart, end: element.selectionEnd }
+}
+
+function navigateEditorFind(direction: -1 | 1) {
+  const matches = editorFindResult.value.matches
+  if (!matches.length) return
+  const index = editorFindIndex.value
+  editorFindIndex.value = index < 0 ? (direction === 1 ? 0 : matches.length - 1) : (index + direction + matches.length) % matches.length
+  const match = matches[editorFindIndex.value]
+  applyEditorChange(editorSource.value, match.start, match.end)
+  void nextTick(() => {
+    const element = editorTextarea.value
+    if (!element) return
+    const line = editorSource.value.slice(0, match.start).split('\n').length - 1
+    const height = Number.parseFloat(getComputedStyle(element).lineHeight) || 26
+    element.scrollTop = Math.max(0, line * height - element.clientHeight / 2)
+  })
+}
+
+function replaceEditorFind(all: boolean) {
+  const matches = editorFindResult.value.matches
+  if (editorFindResult.value.error || !matches.length) return
+  const index = editorFindIndex.value < 0 ? 0 : editorFindIndex.value
+  const selected = all ? matches : [matches[index]]
+  if (!selected[0]) return
+  const result = replaceEditorMatches(editorSource.value, selected, editorFindReplacement.value, editorFindOptions.value.regex)
+  if (editorFindScope.value) editorFindScope.value = { ...editorFindScope.value, end: editorFindScope.value.end + result.delta }
+  const caret = all ? selected[0].start : selected[0].end + result.delta
+  editorFindReplacing = true
+  try { applyEditorChange(result.value, caret) }
+  finally { editorFindReplacing = false }
+  editorFindIndex.value = -1
+  if (!all) void nextTick(() => {
+    const next = editorFindResult.value.matches.findIndex((match) => match.start >= caret)
+    editorFindIndex.value = next >= 0 ? next : editorFindResult.value.matches.length ? 0 : -1
+    const match = editorFindResult.value.matches[editorFindIndex.value]
+    if (match) applyEditorChange(editorSource.value, match.start, match.end)
+  })
+  notify(`已替换 ${selected.length} 处，可用 Ctrl/Cmd+Z 撤销`)
+}
+
+function restoreEditorHistory(direction: -1 | 1) {
+  if (editorMode.value === 'rich' || editorMode.value === 'preview') return
+  const snapshot = stepEditorHistory(editorHistory.value, direction)
+  if (!snapshot) return
+  editorBeforeInput = null
+  editorHistoryRestoring = true
+  try { applyEditorChange(snapshot.value, snapshot.start, snapshot.end) }
+  finally { editorHistoryRestoring = false }
+}
+
 function toggleTypewriterMode() {
   advancedSettings.value.typewriterMode = !advancedSettings.value.typewriterMode
   if (!advancedSettings.value.typewriterMode) editorRich.value?.querySelectorAll('.editor-rich-block').forEach((item) => item.classList.remove('is-current'))
@@ -793,6 +906,7 @@ function onRichEditorPaste(event: ClipboardEvent) {
 }
 
 function setEditorMode(mode: 'write' | 'split' | 'rich' | 'preview') {
+  if (mode === 'rich' || mode === 'preview') editorFindOpen.value = false
   if (editorMode.value === 'rich' && mode !== 'rich') syncRichEditorSource()
   if (mode !== 'split') stopEditorSplitResize()
   editorMode.value = mode
@@ -894,17 +1008,18 @@ function updateEditorCursor() {
     line: (before.match(/\n/g)?.length ?? 0) + 1,
     column: position - lastBreak,
   }
+  const current = editorHistory.value.entries[editorHistory.value.index]
+  if (current.value === editorSource.value) {
+    current.start = element.selectionStart
+    current.end = element.selectionEnd
+  }
 }
 
 function updateEditor(transform: (value: string, start: number, end: number) => { value: string; start: number; end: number }) {
   const element = editorTextarea.value
   if (!element) return
   const result = transform(editorSource.value, element.selectionStart, element.selectionEnd)
-  editorSource.value = result.value
-  void nextTick(() => {
-    element.focus()
-    element.setSelectionRange(result.start, result.end)
-  })
+  applyEditorChange(result.value, result.start, result.end)
 }
 
 function applyEditorChange(value: string, start: number, end = start) {
@@ -946,29 +1061,8 @@ function normalizeEditorLists() {
 function indentEditorSelection(outdent: boolean) {
   const element = editorTextarea.value
   if (!element) return
-  const value = editorSource.value
-  const start = element.selectionStart
-  const end = element.selectionEnd
-  const lineStart = value.lastIndexOf('\n', Math.max(0, start - 1)) + 1
-  const lineEnd = value.indexOf('\n', end)
-  const blockEnd = lineEnd < 0 ? value.length : lineEnd
-  const block = value.slice(lineStart, blockEnd)
-  if (start === end) {
-    if (!outdent) {
-      applyEditorChange(`${value.slice(0, start)}  ${value.slice(start)}`, start + 2)
-      return
-    }
-    const line = value.slice(lineStart, start)
-    const removed = line.match(/^ {1,2}/)?.[0].length ?? 0
-    if (!removed) return
-    applyEditorChange(`${value.slice(0, lineStart)}${value.slice(lineStart + removed)}`, Math.max(lineStart, start - removed))
-    return
-  }
-  const lines = block.split('\n')
-  const nextLines = outdent ? lines.map((line) => line.replace(/^ {1,2}/, '')) : lines.map((line) => `  ${line}`)
-  const nextBlock = nextLines.join('\n')
-  const delta = nextBlock.length - block.length
-  applyEditorChange(`${value.slice(0, lineStart)}${nextBlock}${value.slice(blockEnd)}`, Math.max(lineStart, start + (outdent ? nextLines[0].length - lines[0].length : 2)), Math.max(lineStart, end + delta))
+  const result = indentSelection(editorSource.value, element.selectionStart, element.selectionEnd, outdent)
+  applyEditorChange(result.value, result.start, result.end)
 }
 
 function continueEditorList() {
@@ -1011,24 +1105,16 @@ function continueEditorCodeIndent() {
   if (!element || element.selectionStart !== element.selectionEnd) return false
   const value = editorSource.value
   const cursor = element.selectionStart
-  const fenceCount = (value.slice(0, cursor).match(/^\s*(```|~~~)/gm) ?? []).length
-  if (fenceCount % 2 === 0) return false
-  const lineStart = value.lastIndexOf('\n', Math.max(0, cursor - 1)) + 1
-  const line = value.slice(lineStart, cursor)
-  const indent = line.match(/^\s*/)?.[0] ?? ''
-  const continuation = /(?:\{|\(|\[|：|:)\s*$/.test(line.trimEnd()) ? '  ' : ''
-  const insertion = `\n${indent}${continuation}`
-  applyEditorChange(`${value.slice(0, cursor)}${insertion}${value.slice(cursor)}`, cursor + insertion.length)
+  const insertion = codeIndentInsertion(value, cursor)
+  if (insertion === null) return false
+  applyEditorChange(`${value.slice(0, cursor)}${insertion.text}${value.slice(cursor)}`, cursor + insertion.caret)
   return true
 }
 
 function editorLineRange() {
   const element = editorTextarea.value
   if (!element) return null
-  const value = editorSource.value
-  const start = value.lastIndexOf('\n', Math.max(0, element.selectionStart - 1)) + 1
-  const end = value.indexOf('\n', element.selectionEnd)
-  return { start, end: end < 0 ? value.length : end }
+  return selectedLineRange(editorSource.value, element.selectionStart, element.selectionEnd)
 }
 
 function selectEditorLine() {
@@ -1043,35 +1129,48 @@ function deleteEditorLine() {
   if (editorMode.value === 'rich') return
   const range = editorLineRange()
   if (!range) return
-  updateEditor((value) => {
-    const removeEnd = range.end < value.length ? range.end + 1 : range.start > 0 ? range.start : range.end
-    const removeStart = range.end < value.length ? range.start : range.start > 0 ? range.start - 1 : range.start
-    return { value: `${value.slice(0, removeStart)}${value.slice(removeEnd)}`, start: removeStart, end: removeStart }
-  })
+  const result = removeSelectedLines(editorSource.value, range.start, range.end)
+  applyEditorChange(result.value, result.start, result.end)
 }
 
-function cutEditorLine() {
+async function cutEditorLine() {
+  if (!['write', 'split'].includes(editorMode.value)) return
   const range = editorLineRange()
   if (!range) return
-  const line = editorSource.value.slice(range.start, range.end)
-  void navigator.clipboard?.writeText(line)
-  deleteEditorLine()
+  const source = editorSource.value
+  const documentId = store.currentDocumentId
+  const line = source.slice(range.start, range.end < source.length ? range.end + 1 : range.end)
+  try {
+    if (!navigator.clipboard) throw new Error('Clipboard unavailable')
+    await navigator.clipboard.writeText(line)
+    if (!editorOpen.value || !['write', 'split'].includes(editorMode.value) || store.currentDocumentId !== documentId || editorSource.value !== source) {
+      notify('已复制原行；文档发生变化，未删除内容')
+      return
+    }
+    const result = removeSelectedLines(source, range.start, range.end)
+    applyEditorChange(result.value, result.start, result.end)
+  } catch { notify('剪切失败：无法写入剪贴板，原文已保留') }
 }
 
-function copyEditorLine() {
+function onEditorLineClipboard(event: ClipboardEvent, cut: boolean) {
+  const element = editorTextarea.value
+  if (!element || element.selectionStart !== element.selectionEnd || !event.clipboardData) return
   const range = editorLineRange()
-  if (range) void navigator.clipboard?.writeText(editorSource.value.slice(range.start, range.end))
+  if (!range) return
+  try {
+    event.clipboardData.setData('text/plain', editorSource.value.slice(range.start, range.end < editorSource.value.length ? range.end + 1 : range.end))
+    event.preventDefault()
+    if (cut) deleteEditorLine()
+  } catch { event.preventDefault(); notify('剪贴板操作失败，原文已保留') }
 }
 
 function onEditorKeydown(event: KeyboardEvent) {
-  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c' && editorTextarea.value?.selectionStart === editorTextarea.value?.selectionEnd) {
+  if (event.isComposing || event.keyCode === 229) return
+  editorBeforeInput = null
+  if (event.ctrlKey || event.metaKey || ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key)) editorHistory.value.group = ''
+  if ((event.ctrlKey || event.metaKey) && ['z', 'y'].includes(event.key.toLowerCase()) && !event.altKey) {
     event.preventDefault()
-    copyEditorLine()
-    return
-  }
-  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'x' && editorTextarea.value?.selectionStart === editorTextarea.value?.selectionEnd) {
-    event.preventDefault()
-    cutEditorLine()
+    restoreEditorHistory(event.key.toLowerCase() === 'y' || event.shiftKey ? 1 : -1)
     return
   }
   if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'k') {
@@ -1092,7 +1191,13 @@ function onEditorKeydown(event: KeyboardEvent) {
   const element = editorTextarea.value
   if (!element) return
   const pairs: Record<string, string> = { '(': ')', '[': ']', '{': '}', '`': '`' }
+  if (event.key === '`' && element.selectionStart === element.selectionEnd && isFenceBacktickInput(editorSource.value, element.selectionStart)) return
   const closing = new Set(Object.values(pairs))
+  if (closing.has(event.key) && element.selectionStart === element.selectionEnd && editorSource.value[element.selectionStart] === event.key) {
+    event.preventDefault()
+    applyEditorChange(editorSource.value, element.selectionStart + 1)
+    return
+  }
   if (pairs[event.key]) {
     event.preventDefault()
     const start = element.selectionStart
@@ -1101,10 +1206,6 @@ function onEditorKeydown(event: KeyboardEvent) {
     const insertion = `${event.key}${selected}${pairs[event.key]}`
     applyEditorChange(`${editorSource.value.slice(0, start)}${insertion}${editorSource.value.slice(end)}`, start + 1, start + 1 + selected.length)
     return
-  }
-  if (closing.has(event.key) && element.selectionStart === element.selectionEnd && editorSource.value[element.selectionStart] === event.key) {
-    event.preventDefault()
-    applyEditorChange(editorSource.value, element.selectionStart + 1)
   }
 }
 
@@ -1372,35 +1473,156 @@ function confirmInsertEditorTable() {
   tableBuilderOpen.value = false
 }
 
-function markdownTableCells(line: string) {
-  return line.trim().replace(/^\||\|$/g, '').split('|').map((cell) => cell.trim().replace(/\\\|/g, '|'))
+function openTableEditor(region: ReaderRegion, draft = false) {
+  const document = store.currentDocument
+  if (!document) return
+  const baseSource = draft ? editorSource.value : document.source
+  const table = parseEditableTable(baseSource.slice(region.sourceStart, region.sourceEnd))
+  if (!table) { notify('当前表格无法进入可视化编辑'); return }
+  tableEditorMessage.value = ''
+  tableEditor.value = {
+    region, ...table, selectedColumns: [], row: 0, column: 0,
+    documentId: document.id, baseSource, initialState: JSON.stringify(table), draft,
+  }
+  void nextTick(() => { tableEditorDialog.value?.showModal(); focusTableCell(0, 0) })
 }
 
-function openTableEditor(region: ReaderRegion) {
-  const source = store.currentDocument?.source.slice(region.sourceStart, region.sourceEnd) ?? ''
-  const lines = source.split(/\r?\n/).filter((line) => line.includes('|'))
-  if (lines.length < 2) { notify('当前表格无法进入可视化编辑'); return }
-  const markers = markdownTableCells(lines[1])
-  tableEditor.value = {
-    region,
-    rows: [markdownTableCells(lines[0]), ...lines.slice(2).map(markdownTableCells)],
-    alignments: markers.map((marker) => marker.startsWith(':') && marker.endsWith(':') ? 'center' : marker.endsWith(':') ? 'right' : 'left'),
-    selectedColumns: [],
+function closeTableEditor() {
+  if (tableEditorSaving.value) return
+  const draft = tableEditor.value?.draft
+  tableEditorDialog.value?.close()
+  tableEditor.value = null
+  if (draft) void nextTick(() => editorTextarea.value?.focus())
+}
+
+function onTableEditorDialogKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Tab' || event.defaultPrevented || event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return
+  const controls = [...(tableEditorDialog.value?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]') ?? [])].filter((element) => element.getClientRects().length)
+  const first = controls[0]
+  const last = controls[controls.length - 1]
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault()
+    last?.focus()
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault()
+    first?.focus()
   }
 }
 
+function restoreTableEditorHistory(direction: -1 | 1) {
+  const editor = tableEditor.value
+  if (!editor || tableEditorSaving.value) return
+  const snapshot = stepEditorHistory(tableEditorHistory.value, direction)
+  if (!snapshot) return
+  const restored = JSON.parse(snapshot.value) as { rows: string[][]; alignments: TableAlignment[] }
+  tableEditorHistoryRestoring = true
+  editor.rows = restored.rows
+  editor.alignments = restored.alignments
+  editor.selectedColumns = []
+  editor.row = Math.min(snapshot.start, editor.rows.length - 1)
+  editor.column = Math.min(snapshot.end, editor.alignments.length - 1)
+  focusTableCell(editor.row, editor.column)
+  void nextTick(() => { tableEditorHistoryRestoring = false })
+}
+
+function onTableCellFocus(row: number, column: number) {
+  const editor = tableEditor.value
+  if (!editor) return
+  if (editor.row !== row || editor.column !== column) tableEditorHistory.value.group = ''
+  editor.row = row
+  editor.column = column
+  const current = tableEditorHistory.value.entries[tableEditorHistory.value.index]
+  current.start = row
+  current.end = column
+}
+
+function onTableCellBeforeInput(event: InputEvent, row: number, column: number) {
+  tableEditorMessage.value = ''
+  if (event.inputType === 'historyUndo' || event.inputType === 'historyRedo') {
+    event.preventDefault()
+    restoreTableEditorHistory(event.inputType === 'historyUndo' ? -1 : 1)
+    return
+  }
+  const element = event.currentTarget as HTMLTextAreaElement
+  tableEditorHistoryGroup = element.selectionStart === element.selectionEnd && /^(insertText|insertCompositionText|deleteContentBackward|deleteContentForward)$/.test(event.inputType) ? `cell-${row}-${column}-${event.inputType}` : ''
+}
+
+function openDraftTableEditor() {
+  const cursor = editorTextarea.value?.selectionStart
+  if (cursor === undefined) return
+  const region = editorPreviewDocument.value?.regions.find((region) => region.type === 'table' && cursor >= region.sourceStart && cursor <= region.sourceEnd)
+  if (!region) { notify('先把光标放到要编辑的 Markdown 表格中'); return }
+  openTableEditor(region, true)
+}
+
+function changeTableStructure(kind: 'delete-row' | 'delete-column' | 'up' | 'down' | 'left' | 'right') {
+  tableEditorHistoryGroup = ''
+  tableEditorMessage.value = ''
+  const editor = tableEditor.value
+  if (!editor) return
+  if (kind === 'delete-row') {
+    if (deleteTableRow(editor, editor.row)) editor.row = Math.min(editor.row, editor.rows.length - 1)
+  } else if (kind === 'up' || kind === 'down') editor.row = moveTableRow(editor, editor.row, kind === 'up' ? -1 : 1)
+  else if (kind === 'delete-column') {
+    const column = editor.column
+    if (deleteTableColumn(editor, column)) {
+      editor.selectedColumns = editor.selectedColumns.filter((item) => item !== column).map((item) => item > column ? item - 1 : item)
+      editor.column = Math.min(column, editor.alignments.length - 1)
+    }
+  } else {
+    const column = editor.column
+    const target = moveTableColumn(editor, column, kind === 'left' ? -1 : 1)
+    editor.selectedColumns = editor.selectedColumns.map((item) => item === column ? target : item === target ? column : item)
+    editor.column = target
+  }
+  focusTableCell(editor.row, editor.column)
+}
+
+function focusTableCell(row: number, column: number) {
+  void nextTick(() => tableEditorDialog.value?.querySelector<HTMLTextAreaElement>(`[data-table-cell="${row}-${column}"]`)?.focus())
+}
+
+function onTableCellKeydown(event: KeyboardEvent, row: number, column: number) {
+  const editor = tableEditor.value
+  if (event.ctrlKey || event.metaKey || ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key)) tableEditorHistory.value.group = ''
+  if (!editor || event.isComposing || !['Tab', 'Enter'].includes(event.key) || event.ctrlKey || event.metaKey || event.altKey) return
+  if (event.key === 'Enter' && event.shiftKey) return
+  const width = editor.alignments.length
+  let index = row * width + column + (event.key === 'Tab' ? (event.shiftKey ? -1 : 1) : (event.shiftKey ? -width : width))
+  if (index < 0) return
+  if (index >= editor.rows.length * width) {
+    if (editor.rows.length >= 500) return
+    addTableEditorRow()
+  }
+  event.preventDefault()
+  focusTableCell(Math.floor(index / width), index % width)
+}
+
+function onTableCellPaste(event: ClipboardEvent, row: number, column: number) {
+  const text = event.clipboardData?.getData('text/plain') ?? ''
+  if (!tableEditor.value || !/[\t\r\n]/.test(text)) return
+  event.preventDefault()
+  tableEditorHistoryGroup = ''
+  const error = pasteTableCells(tableEditor.value, row, column, text)
+  tableEditorMessage.value = error
+  if (!error) focusTableCell(row, column)
+}
+
 function addTableEditorRow() {
-  if (!tableEditor.value) return
+  tableEditorHistoryGroup = ''
+  if (!tableEditor.value || tableEditor.value.rows.length >= 500) return
   tableEditor.value.rows.push(Array.from({ length: tableEditor.value.alignments.length }, () => ''))
 }
 
 function addTableEditorColumn() {
+  tableEditorHistoryGroup = ''
   if (!tableEditor.value || tableEditor.value.alignments.length >= 12) return
   tableEditor.value.alignments.push('left')
   for (const row of tableEditor.value.rows) row.push('')
 }
 
 function setTableEditorAlignment(alignment: 'left' | 'center' | 'right') {
+  tableEditorHistoryGroup = ''
   if (!tableEditor.value) return
   const selected = new Set(tableEditor.value.selectedColumns)
   tableEditor.value.alignments = tableEditor.value.alignments.map((current, column) => !selected.size || selected.has(column) ? alignment : current)
@@ -1416,19 +1638,35 @@ function toggleTableEditorColumn(column: number) {
 async function saveTableEditor() {
   const editor = tableEditor.value
   const document = store.currentDocument
-  if (!editor || !document) return
-  const escapeCell = (value: string) => value.replace(/\|/g, '\\|').replace(/\r?\n/g, '<br>')
-  const row = (cells: string[]) => `| ${editor.alignments.map((_, index) => escapeCell(cells[index] ?? '')).join(' | ')} |`
-  const markers = `| ${editor.alignments.map((alignment) => alignment === 'center' ? ':---:' : alignment === 'right' ? '---:' : ':---').join(' | ')} |`
-  const source = [row(editor.rows[0] ?? []), markers, ...editor.rows.slice(1).map(row)].join('\n')
-  const nextSource = `${document.source.slice(0, editor.region.sourceStart)}${source}${document.source.slice(editor.region.sourceEnd)}`
+  if (!editor || !document || tableEditorSaving.value) return
+  if (tableEditorState.value === editor.initialState) {
+    closeTableEditor()
+    notify('表格未改变，已保留原始 Markdown 格式')
+    return
+  }
+  const currentSource = editor.draft ? editorSource.value : document.source
+  if (document.id !== editor.documentId || currentSource !== editor.baseSource || (editor.draft && !editorOpen.value)) {
+    tableEditorMessage.value = '文档已变化，未覆盖内容；请关闭并重新打开表格编辑器'
+    return
+  }
+  const source = serializeEditableTable(editor)
+  const nextSource = `${currentSource.slice(0, editor.region.sourceStart)}${source}${currentSource.slice(editor.region.sourceEnd)}`
+  if (editor.draft) {
+    applyEditorChange(nextSource, editor.region.sourceStart, editor.region.sourceStart + source.length)
+    closeTableEditor()
+    notify('表格已应用到草稿，可撤销；保存文档后才写入文件')
+    return
+  }
+  tableEditorSaving.value = true
   try {
     if (isRealDocumentPath(document.path)) await writeMarkdownFile(document.path, nextSource)
     await store.replaceDocumentSource(document.id, nextSource)
-    tableEditor.value = null
+    tableEditorSaving.value = false
+    closeTableEditor()
     closeViewer()
     notify('表格已更新')
-  } catch (error) { notify(error instanceof Error ? error.message : '保存表格失败') }
+  } catch (error) { tableEditorMessage.value = error instanceof Error ? error.message : '保存表格失败，请重试' }
+  finally { tableEditorSaving.value = false }
 }
 
 function insertEditorAlert(kind = 'NOTE') {
@@ -2622,6 +2860,36 @@ onUnmounted(() => {
   regionMeasurementObserver?.disconnect()
   viewportResizeObserver?.disconnect()
 })
+watch(editorSource, (value, oldValue) => {
+  if (editorHistoryRestoring) return
+  const element = editorTextarea.value
+  const after = { value, start: element?.selectionStart ?? 0, end: element?.selectionEnd ?? 0 }
+  if (!editorOpen.value || editorMode.value === 'rich') editorHistory.value = createEditorHistory(after)
+  else {
+    const before = editorBeforeInput?.snapshot ?? { ...after, value: oldValue }
+    recordEditorHistory(editorHistory.value, before, after, editorBeforeInput?.group ?? '')
+  }
+  editorBeforeInput = null
+}, { flush: 'sync' })
+watch(editorOpen, () => {
+  editorHistory.value = createEditorHistory({ value: editorSource.value, start: 0, end: 0 })
+  editorBeforeInput = null
+})
+watch(tableEditorState, (value, oldValue) => {
+  if (value === null || oldValue === null) {
+    tableEditorHistory.value = createEditorHistory({ value: value ?? '', start: 0, end: 0 })
+  } else if (!tableEditorHistoryRestoring && tableEditor.value) {
+    const current = tableEditorHistory.value.entries[tableEditorHistory.value.index]
+    recordEditorHistory(tableEditorHistory.value, { ...current, value: oldValue }, { value, start: tableEditor.value.row, end: tableEditor.value.column }, tableEditorHistoryGroup)
+  }
+  tableEditorHistoryGroup = ''
+})
+watch(quickOpenResults, () => { quickOpenIndex.value = 0 })
+watch([editorFindQuery, editorFindOptions, editorFindScope], () => { editorFindIndex.value = -1 }, { deep: true })
+watch(editorSource, () => {
+  editorFindIndex.value = -1
+  if (!editorFindReplacing) editorFindScope.value = undefined
+}, { flush: 'sync' })
 watch(query, () => {
   searchIndex.value = 0
   if (searchTimer !== null) window.clearTimeout(searchTimer)
@@ -2675,6 +2943,16 @@ watch(() => [store.activeHeadingId, leftPanelTab.value, store.mode], () => {
 })
 
 function onKeydown(event: KeyboardEvent) {
+  if (event.isComposing || event.keyCode === 229 || event.defaultPrevented) return
+  if (tableEditor.value) {
+    if (event.key === 'Escape') { event.preventDefault(); closeTableEditor() }
+    if ((event.ctrlKey || event.metaKey) && ['z', 'y'].includes(event.key.toLowerCase()) && !event.altKey) {
+      event.preventDefault()
+      restoreTableEditorHistory(event.key.toLowerCase() === 'y' || event.shiftKey ? 1 : -1)
+    }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); void saveTableEditor() }
+    return
+  }
   if (annotationEditor.value || viewer.value) {
     if (event.key === 'Escape') {
       event.preventDefault()
@@ -2691,7 +2969,14 @@ function onKeydown(event: KeyboardEvent) {
     }
     return
   }
-  if (editorOpen.value) {
+  if (editorOpen.value && !quickOpenOpen.value && !searchOpen.value) {
+    if ((event.ctrlKey || event.metaKey) && ['f', 'h'].includes(event.key.toLowerCase())) {
+      event.preventDefault()
+      openEditorFind()
+      return
+    }
+    if (editorFindOpen.value && event.key === 'F3') { event.preventDefault(); navigateEditorFind(event.shiftKey ? -1 : 1); return }
+    if (editorFindOpen.value && event.key === 'Escape') { event.preventDefault(); closeEditorFind(); return }
     if (event.ctrlKey || event.metaKey) {
       const shortcut = event.key.toLowerCase()
       if (shortcut === 'b' || shortcut === 'i' || shortcut === 'k') {
@@ -4040,6 +4325,9 @@ async function requestFullscreen() {
               <div v-if="editorOpen" class="editor-surface" :class="{ 'editor-calm-mode': editorCalmMode, 'editor-typewriter-mode': advancedSettings.typewriterMode }" @contextmenu="openEditorContextMenu">
                 <div v-if="!editorCalmMode" class="editor-toolbar" aria-label="Markdown 编辑工具栏">
                   <div class="editor-toolbar-group" aria-label="文字格式">
+                    <button class="editor-tool-button" type="button" title="查找替换草稿（Ctrl/Cmd+F / Ctrl+H）" @click="openEditorFind">查找</button>
+                    <button v-if="editorMode === 'write' || editorMode === 'split'" class="editor-tool-button" type="button" title="撤销（Ctrl/Cmd+Z）" :disabled="editorHistory.index === 0" @click="restoreEditorHistory(-1)">撤销</button>
+                    <button v-if="editorMode === 'write' || editorMode === 'split'" class="editor-tool-button" type="button" title="重做（Ctrl/Cmd+Shift+Z / Ctrl+Y）" :disabled="editorHistory.index === editorHistory.entries.length - 1" @click="restoreEditorHistory(1)">重做</button>
                     <button class="editor-tool-button" type="button" title="粗体（Ctrl/Cmd+B）" @click="wrapEditorSelection('**', '**', '粗体')"><b>B</b></button>
                     <button class="editor-tool-button" type="button" title="斜体（Ctrl/Cmd+I）" @click="wrapEditorSelection('*', '*', '斜体')"><i>I</i></button>
                     <button class="editor-tool-button" type="button" title="删除线 ~~文字~~" @click="wrapEditorSelection('~~', '~~', '删除线')"><s>S</s></button>
@@ -4060,6 +4348,7 @@ async function requestFullscreen() {
                     <button class="editor-tool-button" type="button" title="将当前段落或选中行切换为 GitHub Alert" @click="toggleEditorAlert('NOTE')">警告框</button>
                     <button class="editor-tool-button" type="button" title="插入自动目录 [toc]" @click="insertEditorToc">目录</button>
                     <button class="editor-tool-button" type="button" title="表格" @click="insertEditorTable">表格</button>
+                    <button class="editor-tool-button" type="button" :disabled="editorMode === 'rich' || editorMode === 'preview'" title="把光标放到 Markdown 表格中后编辑" @click="openDraftTableEditor">编辑表格</button>
                     <button class="editor-tool-button" type="button" title="图片" @click="insertEditorImage">图片</button>
                     <button class="editor-tool-button" type="button" title="通过 PicList 上传图片" @click="uploadEditorImage">上传</button>
                     <button class="editor-tool-button" type="button" title="导入视频" @click="insertEditorVideo">视频</button>
@@ -4087,6 +4376,28 @@ async function requestFullscreen() {
                   </div>
                 </div>
                 <button v-if="editorCalmMode" class="editor-calm-exit" type="button" @click="toggleEditorCalmMode">退出静写 · 显示工具栏</button>
+                <section v-if="editorFindOpen" class="editor-find-panel" aria-label="草稿查找替换" @keydown.esc.prevent.stop="closeEditorFind">
+                  <div class="editor-find-row">
+                    <input ref="editorFindInput" v-model="editorFindQuery" aria-label="查找草稿内容" placeholder="查找当前草稿…" :aria-invalid="!!editorFindResult.error" @keydown.enter.prevent="navigateEditorFind($event.shiftKey ? -1 : 1)" />
+                    <span aria-live="polite">{{ editorFindIndex < 0 ? 0 : editorFindIndex + 1 }} / {{ editorFindResult.matches.length }}</span>
+                    <button class="editor-tool-button" type="button" :disabled="!editorFindResult.matches.length" title="上一个（Shift+F3）" @click="navigateEditorFind(-1)">上一个</button>
+                    <button class="editor-tool-button" type="button" :disabled="!editorFindResult.matches.length" title="下一个（F3）" @click="navigateEditorFind(1)">下一个</button>
+                    <button class="editor-tool-button" type="button" aria-label="关闭草稿查找" @click="closeEditorFind">关闭</button>
+                  </div>
+                  <div class="editor-find-row">
+                    <input v-model="editorFindReplacement" aria-label="草稿替换内容" placeholder="替换为…（留空则删除匹配）" @keydown.enter.prevent="replaceEditorFind(false)" />
+                    <button class="editor-tool-button" type="button" :disabled="!editorFindResult.matches.length" @click="replaceEditorFind(false)">替换一处</button>
+                    <button class="editor-tool-button" type="button" :disabled="!editorFindResult.matches.length" @click="replaceEditorFind(true)">全部替换</button>
+                  </div>
+                  <div class="editor-find-options">
+                    <label><input v-model="editorFindOptions.caseSensitive" type="checkbox" />区分大小写</label>
+                    <label><input v-model="editorFindOptions.wholeWord" type="checkbox" />整词</label>
+                    <label><input v-model="editorFindOptions.regex" type="checkbox" />正则</label>
+                    <button class="editor-tool-button" type="button" :aria-pressed="!!editorFindScope" @click="toggleEditorFindScope">{{ editorFindScope ? '取消选区范围' : '仅在选区查找' }}</button>
+                    <small>只修改草稿，不写入文件</small>
+                  </div>
+                  <p v-if="editorFindResult.error" role="alert" class="search-error">{{ editorFindResult.error }}</p>
+                </section>
                 <div class="editor-workspace" :class="[`editor-mode-${editorMode}`, { 'is-resizing-split': editorSplitResizing }]" :style="editorMode === 'split' ? { '--editor-split-ratio': `${editorSplitRatio}%` } : undefined">
                   <section v-if="editorMode === 'write' || editorMode === 'split'" class="editor-source-pane" aria-label="Markdown 源码">
                     <div class="editor-pane-heading">
@@ -4097,7 +4408,7 @@ async function requestFullscreen() {
                         <small>{{ editorSourceStats.lines }} 行 · {{ editorSourceStats.characters }} 字符</small>
                       </span>
                     </div>
-                    <textarea ref="editorTextarea" v-model="editorSource" class="editor-textarea" :spellcheck="advancedSettings.spellcheck" aria-label="Markdown 源码编辑器" @focus="normalizeEditorLists" @paste="onEditorPaste" @keydown="onEditorKeydown" @input="onEditorCaretActivity" @keyup="onEditorCaretActivity" @click="onEditorCaretActivity" @select="onEditorCaretActivity" />
+                    <textarea ref="editorTextarea" v-model="editorSource" class="editor-textarea" :spellcheck="advancedSettings.spellcheck" aria-label="Markdown 源码编辑器" @focus="normalizeEditorLists" @beforeinput="captureEditorBeforeInput" @copy="onEditorLineClipboard($event, false)" @cut="onEditorLineClipboard($event, true)" @paste="onEditorPaste" @keydown="onEditorKeydown" @input="onEditorCaretActivity" @keyup="onEditorCaretActivity" @click="onEditorCaretActivity(); editorHistory.group = ''" @select="onEditorCaretActivity" />
                     <div v-if="editorEmojiSuggestions.length" class="editor-emoji-menu" role="listbox" aria-label="Emoji 建议"><button v-for="emoji in editorEmojiSuggestions" :key="emoji.code" type="button" @click="insertEditorEmoji(emoji.value)"><span>{{ emoji.value }}</span>:{{ emoji.code }}:</button></div>
                   </section>
                   <div v-if="editorMode === 'split'" class="editor-split-divider" role="separator" tabindex="0" aria-orientation="vertical" :aria-valuemin="36" :aria-valuemax="70" :aria-valuenow="Math.round(editorSplitRatio)" aria-label="调整源码与预览宽度" title="拖动调整源码与预览宽度，左右方向键微调" @pointerdown="startEditorSplitResize" @keydown="onEditorSplitResizeKeydown"><span /></div>
@@ -4243,7 +4554,33 @@ async function requestFullscreen() {
     <div v-if="searchOpen" class="overlay search-overlay" @click.self="searchOpen = false"><div class="search-dialog"><div class="search-input-row"><AppIcon name="search" :size="17" /><input v-model="query" autofocus :placeholder="searchScope === 'current' ? '搜索当前文档…' : '搜索文档、标题、内容…'" aria-label="搜索内容" @keydown.esc="searchOpen = false" /><kbd>ESC</kbd></div><div class="search-scope-row"><div class="search-scope-tabs" role="tablist" aria-label="搜索范围"><button type="button" :class="{ active: searchScope === 'all' }" @click="searchScope = 'all'">全部文档</button><button type="button" :class="{ active: searchScope === 'current' }" :disabled="!store.currentDocument" @click="searchScope = 'current'">当前文档</button><button type="button" :class="{ active: replaceOpen }" @click="replaceOpen = !replaceOpen">查找替换</button></div><span>{{ searchResults.reduce((total, result) => total + result.matchCount, 0) }} 个匹配</span><small>Ctrl/Cmd + F 搜当前文档</small></div><div v-if="replaceOpen" class="replace-row"><input v-model="replaceValue" placeholder="替换为…" aria-label="替换内容" /><label><input v-model="searchRegex" type="checkbox" /> 正则</label><button type="button" :disabled="!searchPattern || searchPatternError" @click="replaceSearchMatches">全部替换</button></div><p v-if="searchPatternError" class="search-error">正则表达式无效</p><div v-if="searchResults.length" class="search-results"><button v-for="(result, index) in searchResults" :key="`${result.document.id}-${result.region.id}`" type="button" :class="{ selected: searchIndex === index }" @click="chooseSearchResult(result.document.id, result.region.id)"><span class="result-kind">{{ result.region.type }}</span><span><b>{{ displayTitle(result.document.title) }}</b><small>{{ result.region.textContent.slice(0, 100) }} · {{ result.matchCount }} 处匹配</small></span><AppIcon name="external" :size="14" /></button></div><div v-else class="empty-search">{{ query ? '没有找到相关内容' : searchScope === 'current' ? '输入关键词，搜索当前文档' : '输入关键词，搜索你的阅读空间' }}</div></div></div>
 
     <div v-if="tableBuilderOpen" class="overlay editor-dialog-overlay" @click.self="tableBuilderOpen = false"><div class="editor-dialog" role="dialog" aria-modal="true" aria-label="插入表格"><span class="section-kicker">表格工具</span><h2>插入可编辑表格</h2><div class="setting-form-grid"><label class="setting-input">行数<input v-model.number="tableBuilder.rows" type="number" min="2" max="20" /></label><label class="setting-input">列数<input v-model.number="tableBuilder.columns" type="number" min="1" max="12" /></label><label class="setting-input">对齐<select v-model="tableBuilder.alignment"><option value="left">左对齐</option><option value="center">居中</option><option value="right">右对齐</option></select></label></div><div class="note-actions"><button class="ghost-button" type="button" @click="tableBuilderOpen = false">取消</button><button class="primary-button" type="button" @click="confirmInsertEditorTable">插入表格</button></div></div></div>
-<div v-if="tableEditor" class="overlay editor-dialog-overlay" @click.self="tableEditor = null"><div class="editor-dialog table-editor-dialog" role="dialog" aria-modal="true" aria-label="编辑表格"><div class="extensions-head"><div><span class="section-kicker">表格工具</span><h2>可视化编辑</h2></div><div><button class="ghost-button" type="button" @click="addTableEditorRow">增加行</button><button class="ghost-button" type="button" @click="addTableEditorColumn">增加列</button></div></div><div class="table-alignment-actions" aria-label="统一设置列对齐"><span>{{ tableEditor.selectedColumns.length ? `已选 ${tableEditor.selectedColumns.length} 列：` : '全部列：' }}</span><button type="button" @click="setTableEditorAlignment('left')">左</button><button type="button" @click="setTableEditorAlignment('center')">中</button><button type="button" @click="setTableEditorAlignment('right')">右</button></div><div class="table-column-selection" aria-label="选择需要对齐的列"><span>选择列：</span><button v-for="(_, column) in tableEditor.alignments" :key="`column-${column}`" type="button" :class="{ active: tableEditor.selectedColumns.includes(column) }" @click="toggleTableEditorColumn(column)">第 {{ column + 1 }} 列</button><small>不选择时作用于全部列</small></div><div class="table-editor-grid" :style="{ gridTemplateColumns: `repeat(${tableEditor.alignments.length}, minmax(120px, 1fr))` }"><template v-for="(alignment, column) in tableEditor.alignments" :key="`alignment-${column}`"><select v-model="tableEditor.alignments[column]" :aria-label="`第 ${column + 1} 列对齐方式`"><option value="left">左对齐</option><option value="center">居中</option><option value="right">右对齐</option></select></template><template v-for="(row, rowIndex) in tableEditor.rows" :key="`row-${rowIndex}`"><input v-for="(_, column) in tableEditor.alignments" :key="`${rowIndex}-${column}`" v-model="row[column]" :class="{ 'table-header-input': rowIndex === 0 }" :aria-label="`第 ${rowIndex + 1} 行第 ${column + 1} 列`" /></template></div><div class="note-actions"><button class="ghost-button" type="button" @click="tableEditor = null">取消</button><button class="primary-button" type="button" @click="saveTableEditor">保存表格</button></div></div></div>
+      <dialog v-if="tableEditor" ref="tableEditorDialog" class="editor-dialog table-editor-dialog" aria-label="编辑表格" @cancel.prevent="closeTableEditor" @keydown="onTableEditorDialogKeydown">
+        <fieldset class="table-editor-fields" :disabled="tableEditorSaving">
+        <div class="extensions-head"><div><h2>编辑表格</h2><small>{{ tableEditor.draft ? '应用到草稿，可撤销；不会自动写入文件' : '保存后更新当前文档' }}</small></div><div><button class="ghost-button" type="button" :disabled="tableEditor.rows.length >= 500" @click="addTableEditorRow">增加行</button><button class="ghost-button" type="button" :disabled="tableEditor.alignments.length >= 12" @click="addTableEditorColumn">增加列</button></div></div>
+        <div class="table-alignment-actions" aria-label="表格编辑历史">
+          <button type="button" :disabled="tableEditorHistory.index === 0 || tableEditorSaving" @click="restoreTableEditorHistory(-1)">撤销表格修改</button>
+          <button type="button" :disabled="tableEditorHistory.index === tableEditorHistory.entries.length - 1 || tableEditorSaving" @click="restoreTableEditorHistory(1)">重做表格修改</button>
+        </div>
+        <p v-if="tableEditorMessage" role="alert" class="search-error">{{ tableEditorMessage }}</p>
+        <div class="table-alignment-actions" aria-label="当前行列操作">
+          <span>{{ tableEditor.row === 0 ? '表头' : `数据行 ${tableEditor.row}` }} / 第 {{ tableEditor.column + 1 }} 列</span>
+          <button type="button" :disabled="tableEditor.row <= 1" @click="changeTableStructure('up')">上移行</button>
+          <button type="button" :disabled="tableEditor.row === 0 || tableEditor.row === tableEditor.rows.length - 1" @click="changeTableStructure('down')">下移行</button>
+          <button type="button" :disabled="tableEditor.row === 0" @click="changeTableStructure('delete-row')">删除行</button>
+          <button type="button" :disabled="tableEditor.column === 0" @click="changeTableStructure('left')">左移列</button>
+          <button type="button" :disabled="tableEditor.column === tableEditor.alignments.length - 1" @click="changeTableStructure('right')">右移列</button>
+          <button type="button" :disabled="tableEditor.alignments.length <= 1" @click="changeTableStructure('delete-column')">删除列</button>
+        </div>
+        <div class="table-alignment-actions" aria-label="统一设置列对齐"><span>{{ tableEditor.selectedColumns.length ? `已选 ${tableEditor.selectedColumns.length} 列：` : '全部列：' }}</span><button type="button" @click="setTableEditorAlignment('left')">左</button><button type="button" @click="setTableEditorAlignment('center')">中</button><button type="button" @click="setTableEditorAlignment('right')">右</button></div>
+        <div class="table-column-selection" aria-label="选择需要对齐的列"><span>选择列：</span><button v-for="(_, column) in tableEditor.alignments" :key="`column-${column}`" type="button" :class="{ active: tableEditor.selectedColumns.includes(column) }" @click="toggleTableEditorColumn(column)">第 {{ column + 1 }} 列</button><small>不选择时作用于全部列</small></div>
+        <div class="table-editor-grid" :style="{ gridTemplateColumns: `repeat(${tableEditor.alignments.length}, minmax(120px, 1fr))` }">
+          <template v-for="(_, column) in tableEditor.alignments" :key="`alignment-${column}`"><select v-model="tableEditor.alignments[column]" :aria-label="`第 ${column + 1} 列对齐方式`"><option value="left">左对齐</option><option value="center">居中</option><option value="right">右对齐</option></select></template>
+          <template v-for="(row, rowIndex) in tableEditor.rows" :key="`row-${rowIndex}`"><textarea v-for="(_, column) in tableEditor.alignments" :key="`${rowIndex}-${column}`" v-model="row[column]" :rows="Math.min(4, Math.max(1, row[column].split(/\r?\n/).length))" :data-table-cell="`${rowIndex}-${column}`" :class="{ 'table-header-input': rowIndex === 0 }" :aria-label="`第 ${rowIndex + 1} 行第 ${column + 1} 列`" :disabled="tableEditorSaving" @focus="onTableCellFocus(rowIndex, column)" @click="tableEditorHistory.group = ''" @beforeinput="onTableCellBeforeInput($event, rowIndex, column)" @keydown="onTableCellKeydown($event, rowIndex, column)" @paste="onTableCellPaste($event, rowIndex, column)" /></template>
+        </div>
+        <p>Tab 切换单元格，Enter 向下，Shift+Enter 换行；末尾自动增行。支持粘贴表格数据和 Ctrl/Cmd+Z 撤销。</p>
+        <div class="note-actions"><button class="ghost-button" type="button" :disabled="tableEditorSaving" @click="closeTableEditor">取消</button><button class="primary-button" type="button" :disabled="tableEditorSaving" @click="saveTableEditor">{{ tableEditorSaving ? '正在保存…' : tableEditor.draft ? '应用到草稿' : '保存表格' }}</button></div>
+        </fieldset>
+      </dialog>
     <div v-if="imageManagerOpen" class="overlay editor-dialog-overlay" @click.self="imageManagerOpen = false"><div class="editor-dialog image-manager-dialog" role="dialog" aria-modal="true" aria-label="图片管理"><div class="extensions-head"><div><span class="section-kicker">文档资源</span><h2>图片管理</h2></div><button class="ghost-button" type="button" @click="downloadAllEditorImages">下载全部远程图片</button></div><div v-if="editorImages.length" class="image-manager-list"><div v-for="image in editorImages" :key="`${image.index}-${image.url}`" class="image-manager-row"><img :src="resolveMarkdownAssetUrl(store.currentDocument?.path ?? '', image.url, editorInlineAssets)" :alt="image.alt" /><span><b>{{ image.alt }}</b><small>{{ image.url }}</small></span><button v-if="!image.remote" type="button" @click="renameEditorImage(image.url)">重命名</button><button v-if="!image.remote" class="danger-button" type="button" @click="deleteEditorImage(image.url)">删除</button></div></div><p v-else class="empty-search">当前文档没有图片。</p><div class="note-actions"><button class="ghost-button" type="button" @click="imageManagerOpen = false">完成</button></div></div></div>
     <div v-if="viewer" class="overlay viewer-overlay" :class="{ 'is-viewer-fullscreen': viewerFullscreen }" @click.self="closeViewer">
       <div class="viewer-shell" role="dialog" aria-modal="true" :aria-label="`${viewerKind(viewer.type)}独立查看`" :class="{ 'is-fullscreen': viewerFullscreen }">
