@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
+import { computed, defineAsyncComponent, getCurrentInstance, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { invoke, isTauri as tauriIsTauri } from '@tauri-apps/api/core'
 import { useReaderStore } from './stores/reader'
 import RegionBlock from './components/RegionBlock.vue'
@@ -8,10 +8,13 @@ import TreeDiagram from './components/TreeDiagram.vue'
 import AppIcon from './components/AppIcon.vue'
 import IconButton from './components/IconButton.vue'
 import FontPicker from './components/FontPicker.vue'
+import MarkdownEditor from './components/MarkdownEditor.vue'
+import EditorExportMenu from './components/EditorExportMenu.vue'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import { interfaceFont } from './fonts'
 import FileSystemTree, { type FileSystemTreeNode } from './components/FileSystemTree.vue'
 import ClipboardManager from './components/ClipboardManager.vue'
-import { copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, downloadMarkdownImages, exportDocumentWithPandoc, importDocumentWithPandoc, importMarkdownAsset, importMarkdownAssetFromPath, listDirectoryFiles, listFileSystemEntries, markdownPathExists, openFileSystemDirectory, openMarkdownDirectory, openMarkdownFile, openMarkdownFolderAt, organizeMarkdownAssets, readMarkdownExportAssets, readMarkdownPath, removeMarkdownAsset, renameMarkdownAsset, renameMarkdownPath, resolveMarkdownAssetUrl, resolveMarkdownPath, saveBinaryExportFile, saveClipboardImage, saveExportFile, saveMarkdownFile, savePdfExportFile, selectFileSystemDirectory, selectMarkdownFolder, splitMarkdownLinkTarget, uploadMarkdownImage, watchMarkdownPath, writeMarkdownFile, type PandocExportFormat, type WorkspaceFile } from './fileService'
+import { copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, downloadMarkdownImages, exportDocumentWithPandoc, importDocumentWithPandoc, importMarkdownAsset, importMarkdownAssetFromPath, listDirectoryFiles, listFileSystemEntries, markdownPathExists, openFileSystemDirectory, openMarkdownDirectory, openMarkdownFile, openMarkdownFolderAt, organizeMarkdownAssets, readMarkdownExportAssets, readMarkdownPath, removeMarkdownAsset, renameMarkdownAsset, renameMarkdownPath, resolveMarkdownAssetUrl, resolveMarkdownPath, saveBinaryExportFile, saveClipboardImage, saveExportFile, saveMarkdownFile, savePdfExportFile, selectDocxReference, selectFileSystemDirectory, selectMarkdownFolder, splitMarkdownLinkTarget, uploadMarkdownImage, watchMarkdownPath, writeMarkdownFile, type PandocExportFormat, type WorkspaceFile } from './fileService'
 import type { Annotation, ReaderDocument, ReaderRegion, ViewerType } from './types'
 import { escapeHtml, renderMathMl } from './markdown/shared'
 import { makeImplicitMarkdownHeadingsExplicit, parseMarkdown, renderMarkdownFragment } from './parser'
@@ -20,12 +23,19 @@ import { asciiDiagramToMermaid, asciiTreeToTree, markdownToTree } from './asciiD
 import { formatClipboardImage, formatClipboardToMarkdown, htmlToMarkdown, normalizeMixedOrderedListSource, suggestPastedMarkdownName } from './pasteMarkdown'
 import { matchQuickOpen } from './quickOpen'
 import { indentSelection, codeIndentInsertion, isFenceBacktickInput, selectedLineRange, removeSelectedLines } from './editorInput'
-import { createEditorHistory, recordEditorHistory, stepEditorHistory, type EditorSnapshot } from './editorHistory'
+import { createEditorHistory, recordEditorHistory, stepEditorHistory } from './editorHistory'
 import { findEditorMatches, replaceEditorMatches } from './editorFind'
 import { parseEditableTable, serializeEditableTable, moveTableRow, moveTableColumn, deleteTableRow, deleteTableColumn, pasteTableCells, type TableAlignment } from './tableEditing'
 import { sortFileTreeEntries, type FileTreeSortMode } from './fileTreeSort'
 import { orderRecentFolders, pinRecentFolder, rememberRecentFolder, removeRecentFolder, type RecentFolder } from './recentFolders'
 import { createDocx, createEpub, createLatex } from './exportService'
+import { createExportCss, createPortableHtml } from './exportPresentation'
+import { prepareExportDiagrams } from './exportDiagrams'
+import { createDocumentPng } from './exportPng'
+import { createPrintHtml, printPortableHtml } from './exportPrint'
+import { embedExportImages, rasterizeExportImages } from './exportImages'
+import { normalizeLatexDelimiters } from './markdown/fragment'
+import { readEditorDraft, saveEditorDraft, removeEditorDraft, hasSaveConflict } from './editorDrafts'
 import logoAsset from './assets/moyue-logo-256.png'
 
 const FocusAmbiencePicker = defineAsyncComponent(() => import('./components/FocusAmbiencePicker.vue'))
@@ -39,6 +49,7 @@ type FileSortMode = FileTreeSortMode
 type SearchScope = 'all' | 'current'
 type FileTreeEntry = { path: string; name: string; documentId?: string; isDirectory?: boolean; size?: number; createdAt?: number; modifiedAt?: number }
 const store = useReaderStore()
+const exportAppContext = getCurrentInstance()!.appContext
 const view = ref<View>('library')
 const libraryTab = ref<'home' | 'all'>('all')
 const librarySearchQuery = ref('')
@@ -79,6 +90,7 @@ type AdvancedSettings = {
   picListEndpoint: string
   picListKey: string
   epubChapterDepth: number
+  referenceDocx: string
   printPageSize: 'A4' | 'Letter'
   printMargin: number
   printHeader: string
@@ -86,11 +98,12 @@ type AdvancedSettings = {
   printBackground: boolean
   spellcheck: boolean
   typewriterMode: boolean
+  editorAutoSave: boolean
   remoteImagePrivacy: boolean
   relativeImagePathPrefix: boolean
 }
 const RECENT_FOLDERS_KEY = 'moyue:recent-folders'
-const advancedDefaults: AdvancedSettings = { defaultExtension: 'md', defaultCodeLanguage: 'text', rememberCodeLanguage: true, emojiAutocomplete: true, autoLink: true, rememberRecent: true, dropBehavior: 'insert', picListEndpoint: 'http://127.0.0.1:36677/upload', picListKey: '', epubChapterDepth: 3, printPageSize: 'A4', printMargin: 18, printHeader: '', printFooter: '', printBackground: true, spellcheck: true, typewriterMode: false, remoteImagePrivacy: false, relativeImagePathPrefix: false }
+const advancedDefaults: AdvancedSettings = { defaultExtension: 'md', defaultCodeLanguage: 'text', rememberCodeLanguage: true, emojiAutocomplete: true, autoLink: true, rememberRecent: true, dropBehavior: 'insert', picListEndpoint: 'http://127.0.0.1:36677/upload', picListKey: '', epubChapterDepth: 3, referenceDocx: '', printPageSize: 'A4', printMargin: 18, printHeader: '', printFooter: '', printBackground: true, spellcheck: true, typewriterMode: false, editorAutoSave: false, remoteImagePrivacy: false, relativeImagePathPrefix: false }
 function readAdvancedSettings(): AdvancedSettings {
   try { return { ...advancedDefaults, ...JSON.parse(localStorage.getItem('moyue:advanced-settings') ?? '{}') } }
   catch { return { ...advancedDefaults } }
@@ -128,6 +141,8 @@ const resumePrompt = ref<{ documentId: string; percent: number } | null>(null)
 let viewerPointer = { x: 0, y: 0 }
 const customProvider = ref('')
 const busyAction = ref<BusyAction>(null)
+const exporting = ref(false)
+const exportError = ref('')
 const draggingFiles = ref(false)
 const leftPanelTab = ref<'files' | 'outline'>('files')
 const contextPanelOpen = ref(false)
@@ -160,15 +175,23 @@ const editorFindScope = ref<{ start: number; end: number } | undefined>()
 let editorFindReplacing = false
 const editorFindResult = computed(() => findEditorMatches(editorSource.value, editorFindQuery.value, { ...editorFindOptions.value, scope: editorFindScope.value }))
 const editorSource = ref('')
-const editorTextarea = ref<HTMLTextAreaElement | null>(null)
-const editorHistory = ref(createEditorHistory({ value: '', start: 0, end: 0 }))
-let editorHistoryRestoring = false
-let editorBeforeInput: { snapshot: EditorSnapshot; group: string } | null = null
-const editorRich = ref<HTMLElement | null>(null)
-const editorRichBaseSource = ref('')
+const editorTextarea = ref<InstanceType<typeof MarkdownEditor> | null>(null)
+const editorUndoAvailable = ref(false)
+const editorRedoAvailable = ref(false)
+const editorFocusMode = ref(localStorage.getItem('moyue:editor-focus') === 'true')
+
+
 const editorPreview = ref<HTMLElement | null>(null)
-const editorMode = ref<'write' | 'split' | 'rich' | 'preview'>('split')
-const editorCalmMode = ref(false)
+const savedEditorMode = localStorage.getItem('moyue:editor-mode')
+const editorMode = ref<'write' | 'split' | 'rich' | 'preview'>(savedEditorMode && ['write', 'split', 'rich', 'preview'].includes(savedEditorMode) ? savedEditorMode as 'write' | 'split' | 'rich' | 'preview' : 'rich')
+const editorCalmMode = ref(localStorage.getItem('moyue:editor-calm') !== 'false')
+const editorDocumentPath = ref('')
+const editorDocumentId = ref('')
+const editorBackupError = ref('')
+const editorConflict = ref(false)
+let editorAutoSaveTimer: number | null = null
+let stopEditorCloseGuard: (() => void) | undefined
+let editorAppDisposed = false
 const editorContextMenu = ref<{ x: number; y: number } | null>(null)
 const imageManagerOpen = ref(false)
 const tableBuilderOpen = ref(false)
@@ -192,7 +215,7 @@ const editorSplitRatio = ref(58)
 const editorSplitResizing = ref(false)
 let editorSplitResizeCleanup: (() => void) | null = null
 const editorListNormalization = computed(() => normalizeMixedOrderedListSource(restoreEditorInlineImages(editorSource.value)))
-const editorSourceForSave = computed(() => editorListNormalization.value.source)
+const editorSourceForSave = computed(() => restoreEditorInlineImages(editorSource.value))
 const editorDirty = computed(() => editorOpen.value && editorSourceForSave.value !== editorOriginalSource.value)
 const editorSourceStats = computed(() => {
   const source = editorSource.value
@@ -658,7 +681,15 @@ function openQuickOpen() {
 
 async function openEditor() {
   if (!store.currentDocument) return
-  const originalSource = store.currentDocument.source
+  const document = store.currentDocument
+  let originalSource = document.source
+  if (isRealDocumentPath(document.path)) {
+    try { originalSource = await readMarkdownPath(document.path) }
+    catch (error) { notify(`无法读取原文件，未开始编辑：${String(error)}`); return }
+    if (store.currentDocumentId !== document.id) return
+    if (originalSource !== document.source) await store.replaceDocumentSource(document.id, originalSource)
+  }
+  const recovered = readEditorDraft(document.path)
   const realPath = isRealDocumentPath(store.currentDocument.path)
   let migrated = { source: originalSource, count: 0 }
   let migrationMode: 'file' | 'memory' | 'none' = 'none'
@@ -681,13 +712,13 @@ async function openEditor() {
     if (migrated.count) migrationMode = 'memory'
     else notify('内嵌图片转换失败，可继续编辑并稍后重试')
   }
-  const repairedList = normalizeMixedOrderedListSource(migrated.source)
-  if (repairedList.converted) migrated = { ...migrated, source: repairedList.source }
-  editorSource.value = migrated.source
-  editorOriginalSource.value = store.currentDocument.source
+  editorDocumentPath.value = document.path
+  editorDocumentId.value = document.id
+  editorSource.value = recovered?.source ?? migrated.source
+  editorOriginalSource.value = recovered?.baseSource ?? originalSource
+  editorConflict.value = Boolean(recovered && hasSaveConflict(recovered.baseSource, originalSource, recovered.source))
+  editorBackupError.value = ''
   editorCursor.value = { line: 1, column: 1 }
-  editorMode.value = 'rich'
-  editorCalmMode.value = false
   editorOpen.value = true
   view.value = 'reader'
   editorContextMenu.value = null
@@ -696,119 +727,57 @@ async function openEditor() {
       ? `已将 ${migrated.count} 张内嵌图片转换为本地图片，请保存文档`
       : `已将 ${migrated.count} 张内嵌图片收纳为短引用`)
   }
-  if (repairedList.converted) notify(`已整理 ${repairedList.converted} 行列表编号，请保存文档`)
+  if (recovered) notify(editorConflict.value ? '已恢复草稿；磁盘原文有变更，请另存副本后合并' : '已恢复上次未保存的草稿')
+  persistEditorDraft()
   void nextTick(mountRichEditor)
 }
 
 function closeEditor() {
-  if (editorMode.value === 'rich') syncRichEditorSource()
-  if (editorDirty.value && !window.confirm('还有未保存的编辑内容，确定要退出吗？')) return
+  if (editorDirty.value && !persistEditorDraft()) { notify('草稿备份失败，请先保存或另存副本再退出'); return }
   editorOpen.value = false
   editorFindOpen.value = false
   editorContextMenu.value = null
   clearEditorInlineAssets()
 }
 
-function richEditorHtml() {
-  const path = store.currentDocument?.path ?? ''
-  const parsed = parseMarkdown(path || '编辑.md', editorSource.value)
-  if (!parsed.regions.length) return '<section class="editor-rich-block" data-source-start="0" data-source-end="0"><p><br></p></section>'
-  return parsed.regions.map((region) => {
-    const blockSource = editorSource.value.slice(region.sourceStart, region.sourceEnd)
-    const root = document.createElement('div')
-    root.innerHTML = region.html
-    const imageUrls = [...blockSource.matchAll(/!\[[^\]]*\]\((<[^>]+>|[^)\n]+)\)/g)].map((match) => match[1].replace(/^<|>$/g, ''))
-    const videoUrls = [...blockSource.matchAll(/\[(?:视频|video)\]\((<[^>]+>|[^)\n]+?)(?:\s+["']([^"']*)["'])?\)/gi)].map((match) => ({ url: match[1].replace(/^<|>$/g, ''), title: match[2] ?? '' }))
-    root.querySelectorAll<HTMLImageElement>('img[src]').forEach((media, index) => {
-      const markdownSource = imageUrls[index] ?? media.getAttribute('src') ?? ''
-      media.dataset.markdownSrc = markdownSource
-      media.src = resolveMarkdownAssetUrl(path, markdownSource, editorInlineAssets.value)
-    })
-    root.querySelectorAll<HTMLVideoElement>('video[src]').forEach((media, index) => {
-      const video = videoUrls[index]
-      const markdownSource = video?.url ?? media.getAttribute('src') ?? ''
-      media.dataset.markdownSrc = markdownSource
-      if (video?.title) media.dataset.markdownTitle = video.title
-      media.src = resolveMarkdownAssetUrl(path, markdownSource, editorInlineAssets.value)
-    })
-    return `<section class="editor-rich-block" data-source-start="${region.sourceStart}" data-source-end="${region.sourceEnd}">${root.innerHTML}</section>`
-  }).join('')
+function persistEditorDraft() {
+  if (!editorOpen.value || !editorDocumentPath.value) return true
+  try {
+    if (editorDirty.value) saveEditorDraft({ path: editorDocumentPath.value, source: editorSourceForSave.value, baseSource: editorOriginalSource.value, updatedAt: Date.now() })
+    else removeEditorDraft(editorDocumentPath.value)
+    editorBackupError.value = ''
+    return true
+  } catch {
+    editorBackupError.value = '草稿备份失败（存储空间不足或不可用），请立即保存或另存副本'
+    return false
+  }
 }
 
-function mountRichEditor() {
-  if (!editorRich.value) return
-  editorRichBaseSource.value = editorSource.value
-  editorRich.value.innerHTML = richEditorHtml()
-  editorRich.value.focus()
+function protectUnsavedEditor(event: BeforeUnloadEvent) {
+  if (editorDirty.value && !persistEditorDraft()) { event.preventDefault(); event.returnValue = '' }
 }
 
-function syncRichEditorSource() {
-  if (!editorRich.value) return
-  const changes = [...editorRich.value.querySelectorAll<HTMLElement>('.editor-rich-block[data-rich-dirty="true"]')].map((block) => ({
-    start: Number(block.dataset.sourceStart),
-    end: Number(block.dataset.sourceEnd),
-    markdown: htmlToMarkdown(block.innerHTML),
-  })).filter((change) => Number.isFinite(change.start) && Number.isFinite(change.end)).sort((left, right) => right.start - left.start)
-  if (!changes.length) return
-  let source = editorRichBaseSource.value
-  for (const change of changes) source = `${source.slice(0, change.start)}${change.markdown}${source.slice(change.end)}`
-  editorSource.value = source
+async function saveEditorCopy() {
+  const source = editorSourceForSave.value
+  try {
+    const path = await saveMarkdownFile(source, `${store.currentDocument?.title || '文档'}-草稿副本`)
+    if (path) notify(`草稿副本已保存：${path}；原文件未覆盖`)
+  } catch (error) { notify(String(error)) }
 }
 
-function markRichSelectionDirty() {
-  const anchor = window.getSelection()?.anchorNode
-  const element = anchor instanceof Element ? anchor : anchor?.parentElement
-  element?.closest<HTMLElement>('.editor-rich-block')?.setAttribute('data-rich-dirty', 'true')
-}
+function mountRichEditor() { editorTextarea.value?.focus() }
 
-function onRichEditorInput() {
-  markRichSelectionDirty()
-  syncRichEditorSource()
-  centerEditorCaret()
-}
-
-function centerEditorCaret() {
-  if (!advancedSettings.value.typewriterMode) return
-  void nextTick(() => window.requestAnimationFrame(() => {
-    if (editorMode.value === 'rich' && editorRich.value) {
-      const anchor = window.getSelection()?.anchorNode
-      const element = anchor instanceof Element ? anchor : anchor?.parentElement
-      const block = element?.closest<HTMLElement>('.editor-rich-block') ?? editorRich.value.querySelector<HTMLElement>('.editor-rich-block.is-current, .editor-rich-block')
-      editorRich.value.querySelectorAll('.editor-rich-block').forEach((item) => item.classList.toggle('is-current', item === block))
-      block?.scrollIntoView({ behavior: 'auto', block: 'center' })
-      return
-    }
-    const textarea = editorTextarea.value
-    if (!textarea) return
-    const lineHeight = Number.parseFloat(getComputedStyle(textarea).lineHeight) || 26
-    const line = editorSource.value.slice(0, textarea.selectionStart).split('\n').length - 1
-    textarea.scrollTo({ top: Math.max(0, line * lineHeight - textarea.clientHeight / 2), behavior: 'auto' })
-  }))
-}
+function centerEditorCaret() { editorTextarea.value?.centerCaret() }
 
 function onEditorCaretActivity() {
   updateEditorCursor()
   centerEditorCaret()
 }
 
-function captureEditorBeforeInput(event: InputEvent) {
-  const element = editorTextarea.value
-  if (!element) return
-  if (event.inputType === 'historyUndo' || event.inputType === 'historyRedo') {
-    event.preventDefault()
-    restoreEditorHistory(event.inputType === 'historyUndo' ? -1 : 1)
-    return
-  }
-  editorBeforeInput = {
-    snapshot: { value: editorSource.value, start: element.selectionStart, end: element.selectionEnd },
-    group: element.selectionStart === element.selectionEnd
-      && (/^(insertCompositionText|deleteContentBackward|deleteContentForward)$/.test(event.inputType)
-        || (event.inputType === 'insertText' && event.data?.length === 1)) ? event.inputType : '',
-  }
-}
+
 
 function openEditorFind() {
-  if (editorMode.value === 'rich' || editorMode.value === 'preview') setEditorMode('write')
+  if (editorMode.value === 'preview') setEditorMode('rich')
   const element = editorTextarea.value
   if (element && element.selectionStart !== element.selectionEnd) {
     const selected = editorSource.value.slice(element.selectionStart, element.selectionEnd)
@@ -839,13 +808,7 @@ function navigateEditorFind(direction: -1 | 1) {
   editorFindIndex.value = index < 0 ? (direction === 1 ? 0 : matches.length - 1) : (index + direction + matches.length) % matches.length
   const match = matches[editorFindIndex.value]
   applyEditorChange(editorSource.value, match.start, match.end)
-  void nextTick(() => {
-    const element = editorTextarea.value
-    if (!element) return
-    const line = editorSource.value.slice(0, match.start).split('\n').length - 1
-    const height = Number.parseFloat(getComputedStyle(element).lineHeight) || 26
-    element.scrollTop = Math.max(0, line * height - element.clientHeight / 2)
-  })
+
 }
 
 function replaceEditorFind(all: boolean) {
@@ -871,48 +834,20 @@ function replaceEditorFind(all: boolean) {
 }
 
 function restoreEditorHistory(direction: -1 | 1) {
-  if (editorMode.value === 'rich' || editorMode.value === 'preview') return
-  const snapshot = stepEditorHistory(editorHistory.value, direction)
-  if (!snapshot) return
-  editorBeforeInput = null
-  editorHistoryRestoring = true
-  try { applyEditorChange(snapshot.value, snapshot.start, snapshot.end) }
-  finally { editorHistoryRestoring = false }
+  if (direction === -1) editorTextarea.value?.undo()
+  else editorTextarea.value?.redo()
 }
 
 function toggleTypewriterMode() {
   advancedSettings.value.typewriterMode = !advancedSettings.value.typewriterMode
-  if (!advancedSettings.value.typewriterMode) editorRich.value?.querySelectorAll('.editor-rich-block').forEach((item) => item.classList.remove('is-current'))
-  else centerEditorCaret()
-}
-
-function runRichCommand(command: string, value?: string) {
-  editorRich.value?.focus()
-  document.execCommand(command, false, value)
-  markRichSelectionDirty()
-  syncRichEditorSource()
-}
-
-function insertRichHtml(html: string) {
-  runRichCommand('insertHTML', html)
-}
-
-function onRichEditorPaste(event: ClipboardEvent) {
-  event.preventDefault()
-  const html = event.clipboardData?.getData('text/html') ?? ''
-  const text = event.clipboardData?.getData('text/plain') ?? ''
-  const markdown = formatClipboardToMarkdown(html, text)
-  insertRichHtml(renderMarkdownFragment(markdown))
 }
 
 function setEditorMode(mode: 'write' | 'split' | 'rich' | 'preview') {
-  if (mode === 'rich' || mode === 'preview') editorFindOpen.value = false
-  if (editorMode.value === 'rich' && mode !== 'rich') syncRichEditorSource()
+  if (mode === 'preview') editorFindOpen.value = false
   if (mode !== 'split') stopEditorSplitResize()
   editorMode.value = mode
   void nextTick(() => {
-    if (mode === 'rich') mountRichEditor()
-    else if (mode !== 'preview') editorTextarea.value?.focus()
+    if (mode !== 'preview') editorTextarea.value?.focus()
   })
 }
 
@@ -957,7 +892,7 @@ function startEditorSplitResize(event: PointerEvent) {
 
 function toggleEditorCalmMode() {
   editorCalmMode.value = !editorCalmMode.value
-  void nextTick(() => editorMode.value === 'rich' ? editorRich.value?.focus() : editorTextarea.value?.focus())
+  void nextTick(() => editorTextarea.value?.focus())
 }
 
 function openEditorPreviewImage(event: MouseEvent) {
@@ -980,22 +915,32 @@ function isRealDocumentPath(path: string) {
 }
 
 async function saveEditor() {
-  const document = store.currentDocument
+  const document = store.documents.find(item => item.id === editorDocumentId.value)
   if (!document || !editorOpen.value || editorSaving.value) return
+  const sourceToSave = editorSourceForSave.value
+  const original = editorOriginalSource.value
+  const documentId = document.id
   editorSaving.value = true
   try {
-    if (editorMode.value === 'rich') syncRichEditorSource()
-    const sourceToSave = editorSourceForSave.value
-    if (isRealDocumentPath(document.path)) await writeMarkdownFile(document.path, sourceToSave)
-    await store.replaceDocumentSource(document.id, sourceToSave)
-    editorOriginalSource.value = sourceToSave
-    closeEditor()
+    if (isRealDocumentPath(document.path)) await writeMarkdownFile(document.path, sourceToSave, original)
+    await store.replaceDocumentSource(documentId, sourceToSave)
+    if (editorDocumentId.value === documentId) {
+      editorOriginalSource.value = sourceToSave
+      editorConflict.value = false
+      persistEditorDraft()
+    } else {
+      const draft = readEditorDraft(document.path)
+      if (draft?.source === sourceToSave) removeEditorDraft(document.path)
+      else if (draft) saveEditorDraft({ ...draft, baseSource: sourceToSave })
+    }
     notify('Markdown 已保存')
   } catch (error) {
-    notify(error instanceof Error ? error.message : '保存 Markdown 失败')
-  } finally {
-    editorSaving.value = false
-  }
+    if (editorDocumentId.value === documentId) {
+      editorConflict.value = String(error).includes('其他程序修改')
+      persistEditorDraft()
+    }
+    notify(String(error instanceof Error ? error.message : error))
+  } finally { editorSaving.value = false }
 }
 
 function updateEditorCursor() {
@@ -1008,11 +953,6 @@ function updateEditorCursor() {
     line: (before.match(/\n/g)?.length ?? 0) + 1,
     column: position - lastBreak,
   }
-  const current = editorHistory.value.entries[editorHistory.value.index]
-  if (current.value === editorSource.value) {
-    current.start = element.selectionStart
-    current.end = element.selectionEnd
-  }
 }
 
 function updateEditor(transform: (value: string, start: number, end: number) => { value: string; start: number; end: number }) {
@@ -1023,13 +963,10 @@ function updateEditor(transform: (value: string, start: number, end: number) => 
 }
 
 function applyEditorChange(value: string, start: number, end = start) {
-  const element = editorTextarea.value
+  editorTextarea.value?.replaceSource(value, start, end)
   editorSource.value = value
-  void nextTick(() => {
-    element?.focus()
-    element?.setSelectionRange(start, end)
-    updateEditorCursor()
-  })
+  editorTextarea.value?.focus()
+  updateEditorCursor()
 }
 
 function normalizeEditorMarkdown() {
@@ -1126,7 +1063,6 @@ function selectEditorLine() {
 }
 
 function deleteEditorLine() {
-  if (editorMode.value === 'rich') return
   const range = editorLineRange()
   if (!range) return
   const result = removeSelectedLines(editorSource.value, range.start, range.end)
@@ -1134,7 +1070,6 @@ function deleteEditorLine() {
 }
 
 async function cutEditorLine() {
-  if (!['write', 'split'].includes(editorMode.value)) return
   const range = editorLineRange()
   if (!range) return
   const source = editorSource.value
@@ -1143,7 +1078,7 @@ async function cutEditorLine() {
   try {
     if (!navigator.clipboard) throw new Error('Clipboard unavailable')
     await navigator.clipboard.writeText(line)
-    if (!editorOpen.value || !['write', 'split'].includes(editorMode.value) || store.currentDocumentId !== documentId || editorSource.value !== source) {
+    if (!editorOpen.value || editorMode.value === 'preview' || store.currentDocumentId !== documentId || editorSource.value !== source) {
       notify('已复制原行；文档发生变化，未删除内容')
       return
     }
@@ -1166,8 +1101,6 @@ function onEditorLineClipboard(event: ClipboardEvent, cut: boolean) {
 
 function onEditorKeydown(event: KeyboardEvent) {
   if (event.isComposing || event.keyCode === 229) return
-  editorBeforeInput = null
-  if (event.ctrlKey || event.metaKey || ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key)) editorHistory.value.group = ''
   if ((event.ctrlKey || event.metaKey) && ['z', 'y'].includes(event.key.toLowerCase()) && !event.altKey) {
     event.preventDefault()
     restoreEditorHistory(event.key.toLowerCase() === 'y' || event.shiftKey ? 1 : -1)
@@ -1226,13 +1159,19 @@ function insertEditorTextAt(text: string, start: number, end: number, block = fa
 }
 
 async function onEditorPaste(event: ClipboardEvent) {
-  const element = event.currentTarget as HTMLTextAreaElement | null
+  const element = editorTextarea.value
   if (!element) return
   const clipboard = event.clipboardData
   const imageItem = Array.from(clipboard?.items ?? []).find((item) => item.kind === 'file' && /^image\//i.test(item.type))
   const plainText = clipboard?.getData('text/plain') ?? ''
   const hasText = Boolean(clipboard?.getData('text/html') || plainText)
   if (!imageItem && hasText) {
+    const html = clipboard?.getData('text/html') ?? ''
+    if (html) {
+      event.preventDefault(); event.stopPropagation()
+      insertEditorTextAt(formatClipboardToMarkdown(html, plainText), element.selectionStart, element.selectionEnd)
+      return
+    }
     const normalized = normalizeMixedOrderedListSource(plainText)
     if (normalized.converted) {
       event.preventDefault()
@@ -1249,6 +1188,9 @@ async function onEditorPaste(event: ClipboardEvent) {
   event.stopPropagation()
   const start = element.selectionStart
   const end = element.selectionEnd
+  const sourceAtPaste = editorSource.value
+  const documentId = editorDocumentId.value
+  const documentPath = editorDocumentPath.value
   busyAction.value = 'paste-image'
   try {
     const image = imageItem?.getAsFile() ?? await readNativeClipboardImage()
@@ -1256,10 +1198,12 @@ async function onEditorPaste(event: ClipboardEvent) {
       notify('剪贴板里没有可读取的图片')
       return
     }
-    const imagePath = store.currentDocument?.path && isRealDocumentPath(store.currentDocument.path)
-      ? await saveClipboardImage(store.currentDocument.path, image, advancedSettings.value.relativeImagePathPrefix)
+    if (!editorOpen.value || editorDocumentId.value !== documentId || editorSource.value !== sourceAtPaste) { notify('文档已变化，未插入图片，请重新粘贴'); return }
+    const imagePath = isRealDocumentPath(documentPath)
+      ? await saveClipboardImage(documentPath, image, advancedSettings.value.relativeImagePathPrefix)
       : null
     const imageMarkdown = formatClipboardImage(imagePath ?? await blobToDataUrl(image))
+    if (!editorOpen.value || editorDocumentId.value !== documentId || editorSource.value !== sourceAtPaste) { notify(imagePath ? `图片已保存至 ${imagePath}；文档已变化，未插入错误位置` : '文档已变化，未插入图片，请重新粘贴'); return }
     insertEditorTextAt(imageMarkdown, start, end, true)
     notify(imagePath ? '图片已保存并插入 Markdown 编辑器' : '图片已插入 Markdown 编辑器')
   } catch (error) {
@@ -1270,44 +1214,22 @@ async function onEditorPaste(event: ClipboardEvent) {
 }
 
 function wrapEditorSelection(before: string, after: string, placeholder: string) {
-  if (editorMode.value === 'rich') {
-    if (before === '**') runRichCommand('bold')
-    else if (before === '*') runRichCommand('italic')
-    else if (before === '~~') runRichCommand('strikeThrough')
-    else if (before === '~') runRichCommand('subscript')
-    else if (before === '^') runRichCommand('superscript')
-    else if (before === '==') insertRichHtml(`<mark>${escapeHtml(window.getSelection()?.toString() || placeholder)}</mark>`)
-    else {
-      const selected = window.getSelection()?.toString() || placeholder
-      insertRichHtml(before.startsWith('```') ? `<pre><code>${escapeHtml(selected)}</code></pre>` : `<code>${escapeHtml(selected)}</code>`)
-    }
-    return
-  }
+  if (editorTextarea.value?.wrapInlineCell(before, after, placeholder)) return
   updateEditor((value, start, end) => {
     const selected = value.slice(start, end) || placeholder
-    const next = `${value.slice(0, start)}${before}${selected}${after}${value.slice(end)}`
-    return { value: next, start: start + before.length, end: start + before.length + selected.length }
+    if (start >= before.length && value.slice(start - before.length, start) === before && value.slice(end, end + after.length) === after) {
+      return { value: value.slice(0, start - before.length) + selected + value.slice(end + after.length), start: start - before.length, end: end - before.length }
+    }
+    return { value: value.slice(0, start) + before + selected + after + value.slice(end), start: start + before.length, end: start + before.length + selected.length }
   })
 }
 
 function insertEditorToc() {
-  if (editorMode.value === 'rich') {
-    syncRichEditorSource()
-    editorSource.value = `${editorSource.value.trimEnd()}\n\n[toc]\n`
-    void nextTick(mountRichEditor)
-    return
-  }
   const element = editorTextarea.value
   if (element) insertEditorTextAt('[toc]', element.selectionStart, element.selectionEnd, true)
 }
 
 function insertEditorLink() {
-  if (editorMode.value === 'rich') {
-    const selected = window.getSelection()?.toString() || '链接文字'
-    const url = window.prompt('链接地址', 'https://')?.trim()
-    if (url) insertRichHtml(`<a href="${escapeHtml(url)}">${escapeHtml(selected)}</a>`)
-    return
-  }
   updateEditor((value, start, end) => {
     const selected = value.slice(start, end) || '链接文字'
     const next = `${value.slice(0, start)}[${selected}](https://)${value.slice(end)}`
@@ -1317,13 +1239,6 @@ function insertEditorLink() {
 }
 
 function insertEditorMedia(kind: 'image' | 'video', markdownUrl: string, videoTitle = '') {
-  if (editorMode.value === 'rich') {
-    const resolved = resolveMarkdownAssetUrl(store.currentDocument?.path ?? '', markdownUrl, editorInlineAssets.value)
-    insertRichHtml(kind === 'image'
-      ? `<img src="${escapeHtml(resolved)}" data-markdown-src="${escapeHtml(markdownUrl)}" alt="图片" />`
-      : `<figure><video src="${escapeHtml(resolved)}" data-markdown-src="${escapeHtml(markdownUrl)}" data-markdown-title="${escapeHtml(videoTitle)}" controls></video><figcaption>视频</figcaption></figure>`)
-    return
-  }
   const markup = kind === 'image' ? `![图片](${markdownUrl})` : `[视频](${markdownUrl}${videoTitle ? ` "${videoTitle}"` : ''})`
   updateEditor((value, start, end) => ({ value: `${value.slice(0, start)}${markup}${value.slice(end)}`, start: start + markup.length, end: start + markup.length }))
 }
@@ -1378,7 +1293,6 @@ async function uploadEditorImage() {
 async function downloadAllEditorImages() {
   const document = store.currentDocument
   if (!document || !isRealDocumentPath(document.path)) { notify('请先在桌面端保存 Markdown'); return }
-  if (editorMode.value === 'rich') syncRichEditorSource()
   busyAction.value = 'file'
   try {
     const previous = editorSource.value
@@ -1435,7 +1349,6 @@ async function organizeEditorMedia() {
     notify('请先在桌面端保存 Markdown，再整理媒体')
     return
   }
-  if (editorMode.value === 'rich') syncRichEditorSource()
   busyAction.value = 'file'
   try {
     const result = await organizeMarkdownAssets(document.path, editorSource.value, advancedSettings.value.relativeImagePathPrefix)
@@ -1465,11 +1378,8 @@ function confirmInsertEditorTable() {
   const divider = `| ${Array.from({ length: columns }, () => marker).join(' | ')} |`
   const body = Array.from({ length: rows - 1 }, () => `| ${Array.from({ length: columns }, () => ' ').join(' | ')} |`).join('\n')
   const table = `${header}\n${divider}\n${body}`
-  if (editorMode.value === 'rich') {
-    insertRichHtml(`${renderMarkdownFragment(table)}<p><br></p>`)
-  } else {
-    updateEditor((value, start, end) => ({ value: `${value.slice(0, start)}${table}${value.slice(end)}`, start: start + table.length, end: start + table.length }))
-  }
+  const element = editorTextarea.value
+  if (element) insertEditorTextAt(table, element.selectionStart, element.selectionEnd, true)
   tableBuilderOpen.value = false
 }
 
@@ -1659,7 +1569,7 @@ async function saveTableEditor() {
   }
   tableEditorSaving.value = true
   try {
-    if (isRealDocumentPath(document.path)) await writeMarkdownFile(document.path, nextSource)
+    if (isRealDocumentPath(document.path)) await writeMarkdownFile(document.path, nextSource, document.source)
     await store.replaceDocumentSource(document.id, nextSource)
     tableEditorSaving.value = false
     closeTableEditor()
@@ -1671,12 +1581,10 @@ async function saveTableEditor() {
 
 function insertEditorAlert(kind = 'NOTE') {
   const source = `> [!${kind}]\n> 在这里填写内容`
-  if (editorMode.value === 'rich') insertRichHtml(renderMarkdownFragment(source))
-  else updateEditor((value, start, end) => ({ value: `${value.slice(0, start)}${source}${value.slice(end)}`, start: start + source.length, end: start + source.length }))
+  updateEditor((value, start, end) => ({ value: `${value.slice(0, start)}${source}${value.slice(end)}`, start: start + source.length, end: start + source.length }))
 }
 
 function toggleEditorAlert(kind = 'NOTE') {
-  if (editorMode.value === 'rich') { insertEditorAlert(kind); return }
   const element = editorTextarea.value
   if (!element) return
   const value = editorSource.value
@@ -1711,10 +1619,6 @@ function insertEditorEmoji(value: string) {
 }
 
 function insertEditorDivider() {
-  if (editorMode.value === 'rich') {
-    runRichCommand('insertHorizontalRule')
-    return
-  }
   updateEditor((value, start, end) => {
     const divider = '---'
     const next = `${value.slice(0, start)}${divider}${value.slice(end)}`
@@ -1723,13 +1627,6 @@ function insertEditorDivider() {
 }
 
 function prefixEditorLines(prefix: string) {
-  if (editorMode.value === 'rich') {
-    if (prefix === '# ') runRichCommand('formatBlock', 'h1')
-    else if (prefix === '> ') runRichCommand('formatBlock', 'blockquote')
-    else if (prefix === '- ') runRichCommand('insertUnorderedList')
-    else if (prefix === '- [ ] ') insertRichHtml('<ul><li><input type="checkbox" />任务</li></ul>')
-    return
-  }
   updateEditor((value, start, end) => {
     const lineStart = value.lastIndexOf('\n', Math.max(0, start - 1)) + 1
     const lineEnd = value.indexOf('\n', end)
@@ -1777,7 +1674,6 @@ function lineOffset(lines: string[], line: number) {
 }
 
 function moveEditorLine(delta: number) {
-  if (editorMode.value === 'rich') return
   updateEditor((value, start, end) => {
     const lines = value.split('\n')
     const startLine = value.slice(0, start).split('\n').length - 1
@@ -1825,115 +1721,81 @@ function openEditorContextMenu(event: MouseEvent) {
 
 function closeEditorContextMenu() { editorContextMenu.value = null }
 
-function exportHtmlSource(document: ReaderDocument, styled = true) {
-  const body = document.regions.map((region) => region.html).join('\n')
-  const styles = styled ? '<style>body{max-width:860px;margin:48px auto;padding:0 24px;color:#263238;font:16px/1.8 system-ui,sans-serif}img{max-width:100%}pre{padding:16px;overflow:auto;background:#f4f6f8;border-radius:8px}blockquote{border-left:4px solid #6b63d9;padding-left:16px;color:#58616b}table{border-collapse:collapse}td,th{border:1px solid #ccd3d9;padding:6px 10px}</style>' : ''
-  return `<!doctype html>\n<html lang="zh-CN"><head><meta charset="utf-8"><title>${escapeHtml(document.title)}</title>${styles}</head><body><h1>${escapeHtml(document.title)}</h1>${body}</body></html>`
-}
-
-async function renderDocumentPng(document: ReaderDocument): Promise<Uint8Array> {
-  const width = Math.min(1100, Math.max(720, store.readerSettings.width + 96))
-  const host = window.document.createElement('div')
-  host.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml')
-  host.style.cssText = `position:fixed;left:-100000px;top:0;box-sizing:border-box;width:${width}px;padding:48px;background:#fff;color:#24312f;font:16px/1.8 ${store.readerSettings.fontFamily || 'system-ui,sans-serif'};overflow:hidden`
-  host.innerHTML = `<style>*{box-sizing:border-box}h1,h2,h3,h4,h5,h6{line-height:1.3;margin:1.2em 0 .55em}p,blockquote,pre,ul,ol,table{margin:.8em 0}img,video,svg{max-width:100%;height:auto}pre{white-space:pre-wrap;padding:16px;background:#f4f6f8;border-radius:8px}code{font-family:ui-monospace,monospace}blockquote{margin-left:0;border-left:4px solid #6b63d9;padding-left:16px;color:#58616b}table{width:100%;border-collapse:collapse}td,th{border:1px solid #ccd3d9;padding:6px 10px;text-align:left}mark{background:#fff2a8}</style><h1>${escapeHtml(document.title)}</h1>${document.regions.map((region) => region.html).join('\n')}`
-  window.document.body.append(host)
-  try {
-    await Promise.all([...host.querySelectorAll('img')].map((image) => image.complete ? Promise.resolve() : new Promise<void>((resolve) => {
-      image.addEventListener('load', () => resolve(), { once: true })
-      image.addEventListener('error', () => resolve(), { once: true })
-      window.setTimeout(resolve, 3000)
-    })))
-    const height = Math.ceil(host.scrollHeight)
-    if (height > 16000) throw new Error('文档长图超过 16000 像素，请分章导出或使用 PDF')
-    const printable = host.cloneNode(true) as HTMLElement
-    printable.style.position = 'static'
-    printable.style.left = 'auto'
-    printable.style.top = 'auto'
-    printable.style.height = `${height}px`
-    const serialized = new XMLSerializer().serializeToString(printable)
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><foreignObject width="100%" height="100%">${serialized}</foreignObject></svg>`
-    const svgUrl = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }))
-    try {
-      const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-        const candidate = new Image()
-        candidate.onload = () => resolve(candidate)
-        candidate.onerror = () => reject(new Error('文档图片渲染失败，请先下载远程图片再重试'))
-        candidate.src = svgUrl
-      })
-      const canvas = window.document.createElement('canvas')
-      canvas.width = width
-      canvas.height = height
-      const context = canvas.getContext('2d')
-      if (!context) throw new Error('当前系统不支持 PNG 画布')
-      context.drawImage(image, 0, 0)
-      const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob((value) => value ? resolve(value) : reject(new Error('PNG 编码失败')), 'image/png'))
-      return new Uint8Array(await blob.arrayBuffer())
-    } finally { URL.revokeObjectURL(svgUrl) }
-  } finally { host.remove() }
-}
-
-async function exportDocument(format: 'markdown' | 'html' | 'html-clean' | 'docx' | 'epub' | 'latex' | 'image' | PandocExportFormat) {
+function exportSnapshot() {
   const document = store.currentDocument
-  if (!document) return
+  if (!document) return null
+  return editorOpen.value && editorDocumentId.value === document.id
+    ? parseMarkdown(document.path, editorSourceForSave.value) : document
+}
+
+async function chooseDocxReference() {
+  try {
+    const path = await selectDocxReference()
+    if (path) { advancedSettings.value.referenceDocx = path; notify('Word 样式模板已设置') }
+  } catch (error) { notify(String(error instanceof Error ? error.message : error)) }
+}
+
+async function exportHtmlSource(document: ReaderDocument, styled = true) {
+  const source = await prepareExportDiagrams(document.source, exportAppContext)
+  const assets = await rasterizeExportImages(await readMarkdownExportAssets(document.path, source))
+  return createPortableHtml(document.title, source, assets, styled ? createExportCss(store.activeTheme, store.readerSettings) : '')
+}
+
+async function renderDocumentPng(document: ReaderDocument) {
+  return createDocumentPng(await exportHtmlSource(document), Math.min(1400, Math.max(720, store.readerSettings.width + 96)))
+}
+
+async function exportDocument(format: 'markdown' | 'html' | 'html-clean' | 'image' | PandocExportFormat) {
+  const document = exportSnapshot()
+  if (!document || exporting.value) return
+  exporting.value = true
+  exportError.value = ''
   try {
     let path: string | null = null
-    if (format === 'docx') {
-      const assets = await readMarkdownExportAssets(document.path, document.source)
-      path = await saveBinaryExportFile(createDocx(document.title, document.source, assets), document.title || '文档', 'docx', 'Word 文档', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
-    } else if (format === 'epub') {
-      const assets = await readMarkdownExportAssets(document.path, document.source)
-      path = await saveBinaryExportFile(createEpub(document.title, document.source, assets, { chapterDepth: advancedSettings.value.epubChapterDepth }), document.title || '文档', 'epub', 'EPUB 电子书', 'application/epub+zip')
+    if (isTauriRuntime() && ['docx', 'latex', 'odt', 'rtf', 'mediawiki'].includes(format)) {
+      let source = await prepareExportDiagrams(normalizeLatexDelimiters(document.source), exportAppContext)
+      if (format === 'docx' || format === 'latex') source = embedExportImages(source, await rasterizeExportImages(await readMarkdownExportAssets(document.path, source), true))
+      path = await exportDocumentWithPandoc(source, document.title || '文档', format as PandocExportFormat, document.path, { css: createExportCss(store.activeTheme, store.readerSettings), referenceDocx: advancedSettings.value.referenceDocx, chapterDepth: advancedSettings.value.epubChapterDepth, title: document.title })
+    } else if (format === 'docx' || format === 'epub') {
+      const source = await prepareExportDiagrams(document.source, exportAppContext)
+      const assets = await readMarkdownExportAssets(document.path, source)
+      const bytes = format === 'docx' ? createDocx(document.title, source, assets) : createEpub(document.title, source, assets, { chapterDepth: advancedSettings.value.epubChapterDepth, css: createExportCss(store.activeTheme, store.readerSettings) })
+      path = await saveBinaryExportFile(bytes, document.title || '文档', format, format === 'docx' ? 'Word 文档' : 'EPUB 电子书', format === 'docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'application/epub+zip')
     } else if (format === 'image') {
       path = await saveBinaryExportFile(await renderDocumentPng(document), document.title || '文档', 'png', 'PNG 长图', 'image/png')
     } else if (format === 'odt' || format === 'rtf' || format === 'mediawiki') {
-      path = await exportDocumentWithPandoc(document.source, document.title || '文档', format, document.path)
+      throw new Error('此格式需要桌面端和 Pandoc')
     } else {
       const extension = format === 'html' || format === 'html-clean' ? 'html' : format === 'latex' ? 'tex' : 'md'
-      const source = format === 'html' ? exportHtmlSource(document) : format === 'html-clean' ? exportHtmlSource(document, false) : format === 'latex' ? createLatex(document.title, document.source) : document.source
-      path = await saveExportFile(source, document.title || '文档', extension, format === 'html' ? 'HTML' : format === 'html-clean' ? '无样式 HTML' : format === 'latex' ? 'LaTeX' : 'Markdown')
+      const source = format === 'html' || format === 'html-clean' ? await exportHtmlSource(document, format === 'html') : format === 'latex' ? createLatex(document.title, document.source) : document.source
+      path = await saveExportFile(source, document.title || '文档', extension, format === 'latex' ? 'LaTeX' : extension.toUpperCase())
     }
     if (path) notify(`已导出：${path}`)
   } catch (error) {
-    notify(error instanceof Error ? error.message : '导出失败')
-  }
+    exportError.value = String(error instanceof Error ? error.message : error)
+    notify(exportError.value)
+  } finally { exporting.value = false }
 }
 
 function printDocument() {
-  if (!store.currentDocument) return
-  const settings = advancedSettings.value
-  const previousTitle = document.title
-  document.title = store.currentDocument.title
-  let style = document.querySelector<HTMLStyleElement>('#moyue-print-settings')
-  if (!style) {
-    style = document.createElement('style')
-    style.id = 'moyue-print-settings'
-    document.head.append(style)
-  }
-  style.textContent = `@page{size:${settings.printPageSize};margin:${settings.printMargin}mm}@media print{body{print-color-adjust:${settings.printBackground ? 'exact' : 'economy'};-webkit-print-color-adjust:${settings.printBackground ? 'exact' : 'economy'}}body::before{content:attr(data-print-header);position:fixed;top:-${Math.max(8, settings.printMargin - 5)}mm;left:0;right:0;text-align:center;font-size:9pt;color:#667}body::after{content:attr(data-print-footer);position:fixed;bottom:-${Math.max(8, settings.printMargin - 5)}mm;left:0;right:0;text-align:center;font-size:9pt;color:#667}.reader-content h1,.reader-content h2,.reader-content h3{break-after:avoid}.reader-content pre,.reader-content table,.reader-content figure{break-inside:avoid}.reader-content video{max-width:100%;height:auto}}`
-  document.body.dataset.printHeader = settings.printHeader
-  document.body.dataset.printFooter = settings.printFooter
-  const restore = () => {
-    document.title = previousTitle
-    delete document.body.dataset.printHeader
-    delete document.body.dataset.printFooter
-    window.removeEventListener('afterprint', restore)
-  }
-  window.addEventListener('afterprint', restore, { once: true })
-  window.print()
+  void exportPdfDocument(true)
 }
 
-async function exportPdfDocument() {
-  const document = store.currentDocument
-  if (!document) return
-  if (!isTauriRuntime()) { printDocument(); return }
+async function exportPdfDocument(print = false) {
+  const document = exportSnapshot()
+  if (!document || exporting.value) return
+  exporting.value = true
+  exportError.value = ''
   const settings = advancedSettings.value
-  const printStyle = `<style>@page{size:${settings.printPageSize};margin:${settings.printMargin}mm}body{print-color-adjust:${settings.printBackground ? 'exact' : 'economy'};-webkit-print-color-adjust:${settings.printBackground ? 'exact' : 'economy'}}h1,h2,h3{break-after:avoid}pre,table,figure{break-inside:avoid}body::before{content:${JSON.stringify(settings.printHeader)};position:fixed;top:-${Math.max(8, settings.printMargin - 5)}mm;left:0;right:0;text-align:center;font-size:9pt;color:#667}body::after{content:${JSON.stringify(settings.printFooter)};position:fixed;bottom:-${Math.max(8, settings.printMargin - 5)}mm;left:0;right:0;text-align:center;font-size:9pt;color:#667}</style>`
-  const html = exportHtmlSource(document).replace('</head>', `${printStyle}</head>`)
   try {
+    const html = createPrintHtml(await exportHtmlSource(document), settings)
+    if (print || !isTauriRuntime()) { await printPortableHtml(html); return }
     const path = await savePdfExportFile(html, document.title || '文档')
     if (path) notify(`已导出 PDF：${path}`)
-  } catch (error) { notify(error instanceof Error ? error.message : 'PDF 导出失败') }
+  } catch (error) {
+    exportError.value = error instanceof Error ? error.message : '打印 / PDF 导出失败'
+    notify(exportError.value)
+  } finally { exporting.value = false }
 }
 
 async function replaceSearchMatches() {
@@ -1946,7 +1808,7 @@ async function replaceSearchMatches() {
       const matcher = new RegExp(pattern.source, pattern.flags)
       const nextSource = document.source.replace(matcher, replaceValue.value)
       if (nextSource === document.source) continue
-      if (isRealDocumentPath(document.path)) await writeMarkdownFile(document.path, nextSource)
+      if (isRealDocumentPath(document.path)) await writeMarkdownFile(document.path, nextSource, document.source)
       await store.replaceDocumentSource(document.id, nextSource)
       changed += 1
     }
@@ -1964,7 +1826,7 @@ async function toggleTask(region: ReaderRegion) {
   const nextRegion = original.replace(/\[([ xX])\]/, (_, mark: string) => mark.toLowerCase() === 'x' ? '[ ]' : '[x]')
   const nextSource = `${document.source.slice(0, region.sourceStart)}${nextRegion}${document.source.slice(region.sourceEnd)}`
   try {
-    if (isRealDocumentPath(document.path)) await writeMarkdownFile(document.path, nextSource)
+    if (isRealDocumentPath(document.path)) await writeMarkdownFile(document.path, nextSource, document.source)
     await store.replaceDocumentSource(document.id, nextSource)
     notify('任务状态已更新')
   } catch (error) {
@@ -2840,10 +2702,25 @@ onMounted(() => {
   void bindNativeFileDrop()
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('paste', onPaste)
+  window.addEventListener('beforeunload', protectUnsavedEditor)
+  if (isTauriRuntime()) void getCurrentWindow().onCloseRequested(event => {
+    if (editorDirty.value && !persistEditorDraft()) {
+      event.preventDefault()
+      notify('草稿备份失败，请保存或另存副本后关闭窗口')
+    }
+  }).then(stop => { if (editorAppDisposed) stop(); else stopEditorCloseGuard = stop }).catch(() => notify('关闭窗口保护未能注册，请先保存草稿再退出'))
+  editorAutoSaveTimer = window.setInterval(() => {
+    if (advancedSettings.value.editorAutoSave && editorOpen.value && editorDirty.value && !editorConflict.value && !tableEditor.value) void saveEditor()
+  }, 60000)
   document.addEventListener('fullscreenchange', onFullscreenChange)
   document.addEventListener('click', onTabOutsideClick)
 })
 onUnmounted(() => {
+  editorAppDisposed = true
+  stopEditorCloseGuard?.()
+  persistEditorDraft()
+  window.removeEventListener('beforeunload', protectUnsavedEditor)
+  if (editorAutoSaveTimer !== null) window.clearInterval(editorAutoSaveTimer)
   stopOutlinePanelResize()
   stopEditorSplitResize()
   window.removeEventListener('keydown', onKeydown)
@@ -2860,21 +2737,10 @@ onUnmounted(() => {
   regionMeasurementObserver?.disconnect()
   viewportResizeObserver?.disconnect()
 })
-watch(editorSource, (value, oldValue) => {
-  if (editorHistoryRestoring) return
-  const element = editorTextarea.value
-  const after = { value, start: element?.selectionStart ?? 0, end: element?.selectionEnd ?? 0 }
-  if (!editorOpen.value || editorMode.value === 'rich') editorHistory.value = createEditorHistory(after)
-  else {
-    const before = editorBeforeInput?.snapshot ?? { ...after, value: oldValue }
-    recordEditorHistory(editorHistory.value, before, after, editorBeforeInput?.group ?? '')
-  }
-  editorBeforeInput = null
-}, { flush: 'sync' })
-watch(editorOpen, () => {
-  editorHistory.value = createEditorHistory({ value: editorSource.value, start: 0, end: 0 })
-  editorBeforeInput = null
-})
+watch(editorSource, () => { persistEditorDraft() }, { flush: 'sync' })
+watch(editorCalmMode, value => localStorage.setItem('moyue:editor-calm', String(value)))
+watch(editorFocusMode, value => localStorage.setItem('moyue:editor-focus', String(value)))
+watch(editorMode, value => localStorage.setItem('moyue:editor-mode', value))
 watch(tableEditorState, (value, oldValue) => {
   if (value === null || oldValue === null) {
     tableEditorHistory.value = createEditorHistory({ value: value ?? '', start: 0, end: 0 })
@@ -2977,7 +2843,8 @@ function onKeydown(event: KeyboardEvent) {
     }
     if (editorFindOpen.value && event.key === 'F3') { event.preventDefault(); navigateEditorFind(event.shiftKey ? -1 : 1); return }
     if (editorFindOpen.value && event.key === 'Escape') { event.preventDefault(); closeEditorFind(); return }
-    if (event.ctrlKey || event.metaKey) {
+    const inEditorText = event.target instanceof HTMLElement && Boolean(event.target.closest('.cm-content')) && !event.target.closest('textarea, input, button')
+    if (inEditorText && (event.ctrlKey || event.metaKey)) {
       const shortcut = event.key.toLowerCase()
       if (shortcut === 'b' || shortcut === 'i' || shortcut === 'k') {
         event.preventDefault()
@@ -2992,7 +2859,7 @@ function onKeydown(event: KeyboardEvent) {
       void saveEditor()
       return
     }
-    if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+    if (inEditorText && event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
       event.preventDefault()
       moveEditorLine(event.key === 'ArrowUp' ? -1 : 1)
       return
@@ -3259,6 +3126,11 @@ async function startReadingOver() {
   await store.setProgress(0, null, null)
 }
 async function chooseDocument(id: string, options: { skipResumePrompt?: boolean } = {}) {
+  const continueEditing = editorOpen.value && id !== editorDocumentId.value
+  if (continueEditing) {
+    if (!persistEditorDraft()) { notify(editorBackupError.value); return }
+    editorOpen.value = false
+  }
   const wasCurrent = store.currentDocumentId === id
   const keepFocusMode = store.mode === 'focus'
   await store.openDocument(id)
@@ -3268,6 +3140,7 @@ async function chooseDocument(id: string, options: { skipResumePrompt?: boolean 
   invalidateRegionLayout()
   observeReaderLayout()
   if (options.skipResumePrompt || wasCurrent || !showResumePromptIfNeeded(id)) restoreScroll()
+  if (continueEditing) await openEditor()
 }
 async function chooseSearchResult(documentId: string, regionId: string) {
   await chooseDocument(documentId, { skipResumePrompt: true })
@@ -3311,6 +3184,12 @@ async function reloadDocumentFromDisk(path: string) {
   if (isCurrent) setFileSyncState('syncing')
   try {
     const source = await readMarkdownPath(path)
+    if (editorOpen.value && editorDocumentId.value === current.id) {
+      editorConflict.value = hasSaveConflict(editorOriginalSource.value, source, editorSourceForSave.value)
+      if (editorConflict.value) notify('磁盘文件已变更；正在编辑的草稿已保留，保存不会覆盖外部修改')
+      if (isCurrent) setFileSyncState(editorConflict.value ? 'error' : 'idle')
+      return
+    }
     if (source === current.source) { if (isCurrent) setFileSyncState('idle'); return }
     await store.reloadDocument({ path, source })
     if (isCurrent && store.currentDocumentId === current.id) {
@@ -3413,6 +3292,11 @@ async function confirmDeleteFile() {
   } finally { busyAction.value = null }
 }
 async function closeDocument(id: string) {
+  if (editorOpen.value && editorDocumentId.value === id) {
+    if (!persistEditorDraft()) { notify(editorBackupError.value); return }
+    editorOpen.value = false
+    clearEditorInlineAssets()
+  }
   if (store.openDocumentIds.includes(id)) recentlyClosedTabs.value = [id, ...recentlyClosedTabs.value.filter((item) => item !== id)].slice(0, 8)
   await store.closeDocument(id)
   if (!store.currentDocument) { view.value = 'library'; return }
@@ -3849,7 +3733,7 @@ async function deleteViewerDiagram() {
   if (!document || !region || viewer.value?.type !== 'mermaid' || !window.confirm('从文档中删除这张 Mermaid 图表？')) return
   const nextSource = `${document.source.slice(0, region.sourceStart)}${document.source.slice(region.sourceEnd)}`.replace(/\n{3,}/g, '\n\n')
   try {
-    if (isRealDocumentPath(document.path)) await writeMarkdownFile(document.path, nextSource)
+    if (isRealDocumentPath(document.path)) await writeMarkdownFile(document.path, nextSource, document.source)
     await store.replaceDocumentSource(document.id, nextSource)
     closeViewer()
     notify('图表已删除')
@@ -3998,7 +3882,7 @@ async function copySelectionMathMl() {
 async function copyDocumentHtml() {
   const document = store.currentDocument
   if (!document) return
-  const html = exportHtmlSource(document, false)
+  const html = await exportHtmlSource(document, false)
   const plain = document.regions.map((region) => region.textContent).filter(Boolean).join('\n\n')
   try {
     if (navigator.clipboard?.write && typeof ClipboardItem !== 'undefined') {
@@ -4273,7 +4157,7 @@ async function requestFullscreen() {
             <div class="reader-meta">
               <div class="reader-meta-document">
                 <span class="section-kicker reader-path" :title="store.currentDocument?.path"><AppIcon name="file" :size="13" /><span class="reader-path-value">{{ displayTitle(store.currentDocument?.title) }}</span></span>
-                <span class="reader-stat">{{ store.currentDocument?.wordCount }} 字 · 约 {{ store.currentDocument?.estimatedReadMinutes }} 分钟</span>
+                <span class="reader-stat">{{ (editorOpen ? editorPreviewDocument : store.currentDocument)?.wordCount ?? 0 }} 字 · 约 {{ (editorOpen ? editorPreviewDocument : store.currentDocument)?.estimatedReadMinutes ?? 0 }} 分钟</span>
               </div>
               <div v-if="!editorOpen" class="reader-meta-tools">
                 <div class="reader-edit-actions">
@@ -4297,7 +4181,7 @@ async function requestFullscreen() {
                       <button type="button" @click="exportDocument('odt')">导出 ODT</button>
                       <button type="button" @click="exportDocument('rtf')">导出 RTF</button>
                       <button type="button" @click="exportDocument('mediawiki')">导出 MediaWiki</button>
-                      <button type="button" @click="exportPdfDocument">导出 PDF</button>
+                      <button type="button" @click="exportPdfDocument()">导出 PDF</button>
                       <button type="button" @click="printDocument">打印</button>
                     </div>
                   </details>
@@ -4322,12 +4206,14 @@ async function requestFullscreen() {
               </div>
             </div>
             <div ref="readerViewport" class="reader-viewport" @scroll="onReaderScroll" @wheel="onReaderWheel" @pointerdown="onReaderPointerDown" @mouseup="captureSelection">
+              <div v-if="exportError || exporting" class="editor-safety-notice" :role="exportError ? 'alert' : 'status'"><span>{{ exportError || '正在生成完整导出文件…' }}</span><button v-if="exportError" type="button" @click="exportError = ''">关闭</button></div>
               <div v-if="editorOpen" class="editor-surface" :class="{ 'editor-calm-mode': editorCalmMode, 'editor-typewriter-mode': advancedSettings.typewriterMode }" @contextmenu="openEditorContextMenu">
+                <div v-if="editorBackupError || editorConflict" class="editor-safety-notice" role="alert"><span>{{ editorBackupError || '原文件有外部修改：草稿已保留，不会直接覆盖' }}</span><button type="button" @click="saveEditorCopy">另存草稿副本</button></div>
                 <div v-if="!editorCalmMode" class="editor-toolbar" aria-label="Markdown 编辑工具栏">
                   <div class="editor-toolbar-group" aria-label="文字格式">
                     <button class="editor-tool-button" type="button" title="查找替换草稿（Ctrl/Cmd+F / Ctrl+H）" @click="openEditorFind">查找</button>
-                    <button v-if="editorMode === 'write' || editorMode === 'split'" class="editor-tool-button" type="button" title="撤销（Ctrl/Cmd+Z）" :disabled="editorHistory.index === 0" @click="restoreEditorHistory(-1)">撤销</button>
-                    <button v-if="editorMode === 'write' || editorMode === 'split'" class="editor-tool-button" type="button" title="重做（Ctrl/Cmd+Shift+Z / Ctrl+Y）" :disabled="editorHistory.index === editorHistory.entries.length - 1" @click="restoreEditorHistory(1)">重做</button>
+                    <button class="editor-tool-button" type="button" title="撤销（Ctrl/Cmd+Z）" :disabled="!editorUndoAvailable" @click="restoreEditorHistory(-1)">撤销</button>
+                    <button class="editor-tool-button" type="button" title="重做（Ctrl/Cmd+Shift+Z / Ctrl+Y）" :disabled="!editorRedoAvailable" @click="restoreEditorHistory(1)">重做</button>
                     <button class="editor-tool-button" type="button" title="粗体（Ctrl/Cmd+B）" @click="wrapEditorSelection('**', '**', '粗体')"><b>B</b></button>
                     <button class="editor-tool-button" type="button" title="斜体（Ctrl/Cmd+I）" @click="wrapEditorSelection('*', '*', '斜体')"><i>I</i></button>
                     <button class="editor-tool-button" type="button" title="删除线 ~~文字~~" @click="wrapEditorSelection('~~', '~~', '删除线')"><s>S</s></button>
@@ -4348,7 +4234,7 @@ async function requestFullscreen() {
                     <button class="editor-tool-button" type="button" title="将当前段落或选中行切换为 GitHub Alert" @click="toggleEditorAlert('NOTE')">警告框</button>
                     <button class="editor-tool-button" type="button" title="插入自动目录 [toc]" @click="insertEditorToc">目录</button>
                     <button class="editor-tool-button" type="button" title="表格" @click="insertEditorTable">表格</button>
-                    <button class="editor-tool-button" type="button" :disabled="editorMode === 'rich' || editorMode === 'preview'" title="把光标放到 Markdown 表格中后编辑" @click="openDraftTableEditor">编辑表格</button>
+                    <button class="editor-tool-button" type="button" :disabled="editorMode === 'preview'" title="原地表格可直接编辑，也可打开详细编辑工具" @click="openDraftTableEditor">编辑表格</button>
                     <button class="editor-tool-button" type="button" title="图片" @click="insertEditorImage">图片</button>
                     <button class="editor-tool-button" type="button" title="通过 PicList 上传图片" @click="uploadEditorImage">上传</button>
                     <button class="editor-tool-button" type="button" title="导入视频" @click="insertEditorVideo">视频</button>
@@ -4358,8 +4244,8 @@ async function requestFullscreen() {
                     <button class="editor-tool-button" type="button" title="分隔线" @click="insertEditorDivider">分隔线</button>
                   </div>
                   <div class="editor-toolbar-group" aria-label="段落移动">
-                    <button class="editor-tool-button icon-only" type="button" title="上移当前段落（Alt+↑）" aria-label="上移当前段落" :disabled="editorMode === 'rich'" @click="moveEditorLine(-1)"><AppIcon name="arrow-up" :size="14" /></button>
-                    <button class="editor-tool-button icon-only" type="button" title="下移当前段落（Alt+↓）" aria-label="下移当前段落" :disabled="editorMode === 'rich'" @click="moveEditorLine(1)"><AppIcon name="arrow-down" :size="14" /></button>
+                    <button class="editor-tool-button icon-only" type="button" title="上移当前段落（Alt+↑）" aria-label="上移当前段落" @click="moveEditorLine(-1)"><AppIcon name="arrow-up" :size="14" /></button>
+                    <button class="editor-tool-button icon-only" type="button" title="下移当前段落（Alt+↓）" aria-label="下移当前段落" @click="moveEditorLine(1)"><AppIcon name="arrow-down" :size="14" /></button>
                   </div>
                   <span class="editor-toolbar-spacer" />
                   <div class="editor-toolbar-actions">
@@ -4370,12 +4256,14 @@ async function requestFullscreen() {
                       <button type="button" role="tab" :aria-selected="editorMode === 'preview'" :class="{ active: editorMode === 'preview' }" @click="setEditorMode('preview')">预览</button>
                     </div>
                     <button class="editor-calm-toggle" type="button" :class="{ active: editorCalmMode }" :aria-pressed="editorCalmMode" @click="toggleEditorCalmMode">静写</button>
+                    <button class="editor-calm-toggle" type="button" :aria-pressed="editorFocusMode" @click="editorFocusMode = !editorFocusMode">专注</button>
+                    <EditorExportMenu :disabled="exporting" @export="exportDocument" @pdf="exportPdfDocument" />
                     <button class="editor-calm-toggle" type="button" :class="{ active: advancedSettings.typewriterMode }" :aria-pressed="advancedSettings.typewriterMode" @click="toggleTypewriterMode">打字机</button>
                     <kbd>⌘/Ctrl + S</kbd>
                     <button class="primary-button editor-save-button" type="button" :disabled="!editorDirty || editorSaving" @click="saveEditor">{{ editorSaving ? '保存中…' : '保存' }}</button>
                   </div>
                 </div>
-                <button v-if="editorCalmMode" class="editor-calm-exit" type="button" @click="toggleEditorCalmMode">退出静写 · 显示工具栏</button>
+                <div v-if="editorCalmMode" class="editor-quiet-controls"><span>墨写</span><button type="button" @click="openEditorFind">查找</button><button type="button" @click="editorFocusMode = !editorFocusMode" :aria-pressed="editorFocusMode">专注</button><button type="button" @click="toggleTypewriterMode" :aria-pressed="advancedSettings.typewriterMode">打字机</button><button type="button" @click="setEditorMode(editorMode === 'rich' ? 'write' : 'rich')">{{ editorMode === 'rich' ? '源码' : '墨写' }}</button><button type="button" @click="toggleEditorCalmMode">工具</button><EditorExportMenu :disabled="exporting" @export="exportDocument" @pdf="exportPdfDocument" /><button type="button" :disabled="!editorDirty || editorSaving" @click="saveEditor">保存</button></div>
                 <section v-if="editorFindOpen" class="editor-find-panel" aria-label="草稿查找替换" @keydown.esc.prevent.stop="closeEditorFind">
                   <div class="editor-find-row">
                     <input ref="editorFindInput" v-model="editorFindQuery" aria-label="查找草稿内容" placeholder="查找当前草稿…" :aria-invalid="!!editorFindResult.error" @keydown.enter.prevent="navigateEditorFind($event.shiftKey ? -1 : 1)" />
@@ -4399,23 +4287,11 @@ async function requestFullscreen() {
                   <p v-if="editorFindResult.error" role="alert" class="search-error">{{ editorFindResult.error }}</p>
                 </section>
                 <div class="editor-workspace" :class="[`editor-mode-${editorMode}`, { 'is-resizing-split': editorSplitResizing }]" :style="editorMode === 'split' ? { '--editor-split-ratio': `${editorSplitRatio}%` } : undefined">
-                  <section v-if="editorMode === 'write' || editorMode === 'split'" class="editor-source-pane" aria-label="Markdown 源码">
-                    <div class="editor-pane-heading">
-                      <span class="editor-pane-title"><i class="editor-pane-dot editor-pane-dot-source" />Markdown 源码</span>
-                      <span class="editor-pane-heading-actions">
-                        <button v-if="editorMarkdownNormalization.converted" type="button" title="把智能识别的章节转换为明确的 ## Markdown 标题，不改普通正文" @click="normalizeEditorMarkdown">补全 MD</button>
-                        <button v-if="editorListNormalization.converted" type="button" title="把 - 1.、- 2. 这类混合编号整理为标准有序列表" @click="normalizeEditorLists">整理列表</button>
-                        <small>{{ editorSourceStats.lines }} 行 · {{ editorSourceStats.characters }} 字符</small>
-                      </span>
-                    </div>
-                    <textarea ref="editorTextarea" v-model="editorSource" class="editor-textarea" :spellcheck="advancedSettings.spellcheck" aria-label="Markdown 源码编辑器" @focus="normalizeEditorLists" @beforeinput="captureEditorBeforeInput" @copy="onEditorLineClipboard($event, false)" @cut="onEditorLineClipboard($event, true)" @paste="onEditorPaste" @keydown="onEditorKeydown" @input="onEditorCaretActivity" @keyup="onEditorCaretActivity" @click="onEditorCaretActivity(); editorHistory.group = ''" @select="onEditorCaretActivity" />
+                  <section v-show="editorMode !== 'preview'" class="editor-main-pane" :class="editorMode === 'rich' ? 'editor-rich-pane' : 'editor-source-pane'">
+                    <MarkdownEditor ref="editorTextarea" v-model="editorSource" :live="editorMode === 'rich'" :spellcheck="advancedSettings.spellcheck" :typewriter="advancedSettings.typewriterMode" :focus-mode="editorFocusMode" :resolve-url="url => resolveMarkdownAssetUrl(editorDocumentPath, url, editorInlineAssets)" @keydown="onEditorKeydown" @paste="onEditorPaste" @copy="onEditorLineClipboard($event, false)" @cut="onEditorLineClipboard($event, true)" @caret="updateEditorCursor" @history="editorUndoAvailable = $event.undo; editorRedoAvailable = $event.redo" @message="notify" @link="openExternalLink" />
                     <div v-if="editorEmojiSuggestions.length" class="editor-emoji-menu" role="listbox" aria-label="Emoji 建议"><button v-for="emoji in editorEmojiSuggestions" :key="emoji.code" type="button" @click="insertEditorEmoji(emoji.value)"><span>{{ emoji.value }}</span>:{{ emoji.code }}:</button></div>
                   </section>
-                  <div v-if="editorMode === 'split'" class="editor-split-divider" role="separator" tabindex="0" aria-orientation="vertical" :aria-valuemin="36" :aria-valuemax="70" :aria-valuenow="Math.round(editorSplitRatio)" aria-label="调整源码与预览宽度" title="拖动调整源码与预览宽度，左右方向键微调" @pointerdown="startEditorSplitResize" @keydown="onEditorSplitResizeKeydown"><span /></div>
-                  <section v-if="editorMode === 'rich'" class="editor-rich-pane" aria-label="富文本编辑器">
-                    <div class="editor-pane-heading"><span class="editor-pane-title"><i class="editor-pane-dot" />墨写</span><small>格式随笔触即时呈现，文件仍是 Markdown</small></div>
-                    <article ref="editorRich" class="editor-rich-content" contenteditable="true" :spellcheck="advancedSettings.spellcheck" aria-label="Markdown 所见即所得编辑器" @input="onRichEditorInput" @paste="onRichEditorPaste" @keyup="centerEditorCaret" @click="centerEditorCaret" />
-                  </section>
+                  <div v-if="editorMode === 'split'" class="editor-split-divider" role="separator" tabindex="0" aria-orientation="vertical" :aria-valuemin="36" :aria-valuemax="70" :aria-valuenow="Math.round(editorSplitRatio)" aria-label="调整源码与预览宽度" @pointerdown="startEditorSplitResize" @keydown="onEditorSplitResizeKeydown"><span /></div>
                   <section v-if="editorMode === 'split' || editorMode === 'preview'" class="editor-preview-pane" aria-label="实时阅读预览">
                     <div class="editor-pane-heading">
                       <span class="editor-pane-title"><i class="editor-pane-dot editor-pane-dot-preview" />阅读预览</span>
@@ -4435,7 +4311,7 @@ async function requestFullscreen() {
                 </div>
                 <div class="editor-statusbar">
                   <span>{{ editorMode === 'write' ? '源码写作' : editorMode === 'rich' ? '所见即所得' : editorMode === 'preview' ? '阅读预览' : '边写边读' }}</span>
-                  <span :class="{ 'editor-dirty': editorDirty }">{{ editorDirty ? '未保存更改' : '已保存' }}</span>
+                  <span :class="{ 'editor-dirty': editorDirty }">{{ editorBackupError ? '备份失败' : editorDirty ? '草稿已备份 · 未写入文件' : '已保存' }}</span>
                   <span>Ln {{ editorCursor.line }}, Col {{ editorCursor.column }}</span>
                   <span class="editor-status-spacer" />
                   <span>支持 Markdown / GFM / 数学公式</span>
@@ -4518,12 +4394,12 @@ async function requestFullscreen() {
             <p>用于菜单、侧栏与按钮。正文单独设置，代码保持等宽。</p>
           </div>
         </div>
-        <div v-show="settingsTab === 'editing'" class="settings-card settings-card-wide"><span class="section-kicker">写作</span><h2>编辑器行为</h2><div class="setting-form-grid"><label class="setting-input">默认扩展名<select v-model="advancedSettings.defaultExtension"><option value="md">.md</option><option value="markdown">.markdown</option></select></label><label class="setting-input">默认代码语言<input v-model="advancedSettings.defaultCodeLanguage" list="editor-code-languages" /></label><label class="setting-input">文件拖放<select v-model="advancedSettings.dropBehavior"><option value="insert">编辑时插入媒体</option><option value="open">只打开 Markdown</option></select></label></div><label class="setting-check"><input v-model="advancedSettings.rememberCodeLanguage" type="checkbox" />记住上次代码语言</label><label class="setting-check"><input v-model="advancedSettings.emojiAutocomplete" type="checkbox" />输入 : 时显示 Emoji 建议</label><label class="setting-check"><input v-model="advancedSettings.spellcheck" type="checkbox" />启用系统拼写检查</label><label class="setting-check"><input v-model="advancedSettings.typewriterMode" type="checkbox" />打字时让光标保持在屏幕中央</label><label class="setting-check"><input v-model="advancedSettings.rememberRecent" type="checkbox" />保存最近打开的文档</label></div>
+        <div v-show="settingsTab === 'editing'" class="settings-card settings-card-wide"><span class="section-kicker">写作</span><h2>编辑器行为</h2><div class="setting-form-grid"><label class="setting-input">默认扩展名<select v-model="advancedSettings.defaultExtension"><option value="md">.md</option><option value="markdown">.markdown</option></select></label><label class="setting-input">默认代码语言<input v-model="advancedSettings.defaultCodeLanguage" list="editor-code-languages" /></label><label class="setting-input">文件拖放<select v-model="advancedSettings.dropBehavior"><option value="insert">编辑时插入媒体</option><option value="open">只打开 Markdown</option></select></label></div><label class="setting-check"><input v-model="advancedSettings.rememberCodeLanguage" type="checkbox" />记住上次代码语言</label><label class="setting-check"><input v-model="advancedSettings.emojiAutocomplete" type="checkbox" />输入 : 时显示 Emoji 建议</label><label class="setting-check"><input v-model="advancedSettings.spellcheck" type="checkbox" />启用系统拼写检查</label><label class="setting-check"><input v-model="advancedSettings.editorAutoSave" type="checkbox" />每 60 秒自动保存文件（遇到外部修改时停止）</label><p class="muted-copy">无论是否启用自动保存，编辑草稿都会即时备份；再次编辑同一文档会自动恢复。</p><label class="setting-check"><input v-model="advancedSettings.typewriterMode" type="checkbox" />打字时让光标保持在屏幕中央</label><label class="setting-check"><input v-model="advancedSettings.rememberRecent" type="checkbox" />保存最近打开的文档</label></div>
         <div v-show="settingsTab === 'editing'" class="settings-card"><span class="section-kicker">输入辅助</span><h2>链接识别</h2><label class="setting-check"><input v-model="advancedSettings.autoLink" type="checkbox" />自动把裸网址渲染为链接</label><p class="muted-copy">关闭后，仍保留明确写出的 Markdown 链接。</p></div>
         <div v-show="settingsTab === 'editing'" class="settings-card"><span class="section-kicker">图片上传</span><h2>PicList</h2><label class="setting-input">服务地址<input v-model="advancedSettings.picListEndpoint" placeholder="http://127.0.0.1:36677/upload" /></label><label class="setting-input">接口密钥<input v-model="advancedSettings.picListKey" type="password" placeholder="可选" /></label><p class="muted-copy">仅连接本机 PicList 服务；图片不会经过墨阅服务器。</p></div>
         <div v-show="settingsTab === 'editing'" class="settings-card"><span class="section-kicker">图片路径</span><h2>相对路径</h2><label class="setting-check"><input v-model="advancedSettings.relativeImagePathPrefix" type="checkbox" />新插入的本地图片路径以 <code>./</code> 开头</label><p class="muted-copy">应用于导入、粘贴、拖入、下载、整理和重命名；已有引用保持不变。</p></div>
         <div v-show="settingsTab === 'editing'" class="settings-card"><span class="section-kicker">远程图片</span><h2>兼容与隐私</h2><label class="setting-check"><input v-model="advancedSettings.remoteImagePrivacy" type="checkbox" />不向图片服务发送来源信息</label><p class="muted-copy">默认采用浏览器标准策略，兼容需要来源信息的图床；启用后会以 no-referrer 请求远程图片。</p></div>
-        <div v-show="settingsTab === 'editing'" class="settings-card"><span class="section-kicker">导出</span><h2>电子书与打印</h2><label class="setting-row"><span>EPUB 目录层级 <b>H{{ advancedSettings.epubChapterDepth }}</b></span><input v-model.number="advancedSettings.epubChapterDepth" type="range" min="1" max="6" /></label><div class="setting-form-grid"><label class="setting-input">纸张<select v-model="advancedSettings.printPageSize"><option value="A4">A4</option><option value="Letter">Letter</option></select></label><label class="setting-input">页边距（mm）<input v-model.number="advancedSettings.printMargin" type="number" min="8" max="40" /></label><label class="setting-input">页眉<input v-model="advancedSettings.printHeader" /></label><label class="setting-input">页脚<input v-model="advancedSettings.printFooter" /></label></div><label class="setting-check"><input v-model="advancedSettings.printBackground" type="checkbox" />打印主题背景</label></div>
+        <div v-show="settingsTab === 'editing'" class="settings-card"><span class="section-kicker">导出</span><h2>电子书与打印</h2><p class="muted-copy">HTML / EPUB / PDF / 长图跟随当前主题与排版；桌面端 DOCX / LaTeX 使用 Pandoc；EPUB 内嵌图像、视频和字幕，保留公式、脚注和链接。</p><label class="setting-input">Word 样式模板（可选 .docx）<input :value="advancedSettings.referenceDocx" readonly placeholder="使用 Pandoc 默认样式" /></label><div class="setting-actions"><button class="ghost-button" type="button" @click="chooseDocxReference">选择模板</button><button v-if="advancedSettings.referenceDocx" class="ghost-button" type="button" @click="advancedSettings.referenceDocx = ''">恢复默认</button></div><label class="setting-row"><span>EPUB 目录层级 <b>H{{ advancedSettings.epubChapterDepth }}</b></span><input v-model.number="advancedSettings.epubChapterDepth" type="range" min="1" max="6" /></label><div class="setting-form-grid"><label class="setting-input">纸张<select v-model="advancedSettings.printPageSize"><option value="A4">A4</option><option value="Letter">Letter</option></select></label><label class="setting-input">页边距（mm）<input v-model.number="advancedSettings.printMargin" type="number" min="8" max="40" /></label><label class="setting-input">页眉<input v-model="advancedSettings.printHeader" /></label><label class="setting-input">页脚<input v-model="advancedSettings.printFooter" /></label></div><label class="setting-check"><input v-model="advancedSettings.printBackground" type="checkbox" />打印主题背景</label></div>
         <div v-show="settingsTab === 'reading'" class="settings-card"><span class="section-kicker">阅读</span><h2>阅读偏好</h2><label class="setting-row"><span>正文宽度 <b>{{ store.readerSettings.width }}px</b></span><input :value="store.readerSettings.width" type="range" min="620" max="1280" step="10" @input="changeSetting('width', Number(($event.target as HTMLInputElement).value))" /></label><label class="setting-row"><span>字号 <b>{{ store.readerSettings.fontSize }}px</b></span><input :value="store.readerSettings.fontSize" type="range" min="15" max="24" step="1" @input="changeSetting('fontSize', Number(($event.target as HTMLInputElement).value))" /></label><label class="setting-row"><span>行距 <b>{{ store.readerSettings.lineHeight }}</b></span><input :value="store.readerSettings.lineHeight" type="range" min="1.4" max="2.2" step=".05" @input="changeSetting('lineHeight', Number(($event.target as HTMLInputElement).value))" /></label><div class="setting-toggle-row"><span>显示阅读进度</span><i class="toggle-on" /></div><div class="setting-toggle-row"><span>启用专注模式</span><i class="toggle-on" /></div></div><div v-show="settingsTab === 'reading'" class="settings-card"><span class="section-kicker">辅助功能</span><h2>翻译与解释</h2><p class="muted-copy">使用适配器连接你自己的翻译或解释服务；配置后可从划词工具栏调用。</p><label class="setting-input">服务标识<input v-model="customProvider" placeholder="例如：local-llm / my-translator" /></label><button class="primary-button" type="button" @click="notify(customProvider ? '适配器标识已保存' : '保持未配置状态')"><AppIcon name="check" :size="14" />保存配置</button></div><div v-show="settingsTab === 'shortcuts'" class="settings-card shortcuts-card"><span class="section-kicker">快捷操作</span><h2>快捷键</h2><div class="shortcut-row"><span>全局搜索</span><kbd>Ctrl / Cmd + K</kbd></div><div class="shortcut-row"><span>当前文档搜索</span><kbd>Ctrl / Cmd + F</kbd></div><div class="shortcut-row"><span>阅读缩放</span><kbd>Ctrl / Cmd + + / -</kbd></div><div class="shortcut-row"><span>专注模式</span><kbd>F</kbd></div><div class="shortcut-row"><span>退出聚焦</span><kbd>Esc</kbd></div><div class="shortcut-row"><span>切换区域</span><kbd>↑ ↓</kbd></div></div><div v-show="settingsTab === 'extensions'" class="settings-card extensions-card"><div class="extensions-head"><div><span class="section-kicker">插件中心</span><h2>插件扩展</h2></div><button class="ghost-button" type="button" @click="notify('插件运行时将在后续版本启用')"><AppIcon name="plugin" :size="14" />打开插件目录</button></div><div class="extension-filter"><AppIcon name="search" :size="14" /><span>按需扩展阅读能力</span></div><div class="extension-list"><div class="extension-item"><span class="extension-icon purple"><AppIcon name="sparkle" :size="17" /></span><span><b>AI 阅读助手</b><small>总结、解释与问答适配器</small></span><button type="button" @click="notify('请先在翻译与解释中配置服务')">配置</button></div><div class="extension-item"><span class="extension-icon green"><AppIcon name="download" :size="17" /></span><span><b>导出增强</b><small>为阅读内容准备更多导出格式</small></span><button type="button" @click="notify('导出增强将在下一阶段接入')">安装</button></div><div class="extension-item"><span class="extension-icon pink"><AppIcon name="components" :size="17" /></span><span><b>思维导图</b><small>把长文转换为结构化视图</small></span><button type="button" @click="notify('插件运行时暂未启用')">安装</button></div></div></div></div></section>
       <ClipboardManager v-show="view === 'clipboard'" @notify="notify" />
     </main>

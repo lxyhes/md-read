@@ -4,6 +4,7 @@ import {
   nodeText,
   renderMath,
   safeImageUrl,
+  safeMediaUrl,
   safeUrl,
   type MarkdownUrlResolver,
   type MdastNode,
@@ -45,7 +46,9 @@ function inlineHtml(node: MdastNode, preserveSoftBreaks = false, resolveUrl: Mar
       const identifier = node.identifier ?? node.label ?? ''
       const existing = context.footnoteOrder.indexOf(identifier)
       const index = existing >= 0 ? existing : context.footnoteOrder.push(identifier) - 1
-      return `<sup class="footnote-ref"><a href="#footnote-${index + 1}" id="footnote-ref-${index + 1}">[${index + 1}]</a></sup>`
+      const occurrence = (context.footnoteReferences.get(identifier) ?? 0) + 1
+      context.footnoteReferences.set(identifier, occurrence)
+      return `<sup class="footnote-ref"><a href="#footnote-${index + 1}" id="footnote-ref-${index + 1}${occurrence > 1 ? `-${occurrence}` : ''}">[${index + 1}]</a></sup>`
     }
     case 'html': return '<span class="unsafe-inline">HTML 已隐藏</span>'
     default: return children()
@@ -133,10 +136,10 @@ function videoOptions(title: string | null | undefined) {
 
 export function renderVideoNode(video: MdastNode, resolveUrl: MarkdownUrlResolver = (url) => url, fallbackCaption = '视频'): string {
   const options = videoOptions(video.title)
-  const poster = options.poster ? ` poster="${safeUrl(resolveUrl(options.poster))}"` : ''
-  const track = options.track ? `<track src="${safeUrl(resolveUrl(options.track))}" kind="subtitles" srclang="${escapeHtml(options.lang)}" label="${escapeHtml(options.label)}" default />` : ''
+  const poster = options.poster ? ` poster="${safeImageUrl(resolveUrl(options.poster))}"` : ''
+  const track = options.track ? `<track src="${safeMediaUrl(resolveUrl(options.track))}" kind="subtitles" srclang="${escapeHtml(options.lang)}" label="${escapeHtml(options.label)}" default />` : ''
   const caption = options.poster || options.track ? fallbackCaption : video.title || nodeText(video) || fallbackCaption
-  return `<figure class="markdown-video"><video src="${safeUrl(resolveUrl(video.url ?? ''))}"${poster} controls preload="metadata">${track}</video><figcaption>${escapeHtml(caption)}</figcaption></figure>`
+  return `<figure class="markdown-video"><video src="${safeMediaUrl(resolveUrl(video.url ?? ''))}"${poster} controls preload="metadata">${track}</video><figcaption>${escapeHtml(caption)}</figcaption></figure>`
 }
 
 function blockHtml(node: MdastNode, resolveUrl: MarkdownUrlResolver = (url) => url, context = createRenderContext()): string {
@@ -224,7 +227,8 @@ export function renderFootnotes(context: RenderContext, resolveUrl: MarkdownUrlR
   const items = context.footnoteOrder.map((identifier, index) => {
     const definition = context.footnotes.get(identifier)
     const content = definition?.children?.map((child) => blockHtml(child, resolveUrl, context)).join('') ?? '<p>未找到脚注内容</p>'
-    return `<li id="footnote-${index + 1}">${content} <a class="footnote-backref" href="#footnote-ref-${index + 1}" aria-label="返回正文">↩</a></li>`
+    const backlinks = Array.from({ length: context.footnoteReferences.get(identifier) ?? 1 }, (_, occurrence) => `<a class="footnote-backref" href="#footnote-ref-${index + 1}${occurrence ? `-${occurrence + 1}` : ''}" aria-label="返回正文第 ${occurrence + 1} 处引用">↩</a>`).join(' ')
+    return `<li id="footnote-${index + 1}">${content} ${backlinks}</li>`
   }).join('')
   return `<section class="markdown-footnotes"><h4>脚注</h4><ol>${items}</ol></section>`
 }

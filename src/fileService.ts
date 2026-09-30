@@ -1,6 +1,7 @@
 import { convertFileSrc, invoke, isTauri as tauriIsTauri } from '@tauri-apps/api/core'
 import { open, save } from '@tauri-apps/plugin-dialog'
 import { copyFile, mkdir, readDir, readFile, readTextFile, remove, rename, stat, watch, writeFile, writeTextFile } from '@tauri-apps/plugin-fs'
+import { renderMarkdownFragment } from './markdown/fragment'
 
 const isTauri = () => tauriIsTauri()
 
@@ -9,7 +10,8 @@ export interface OpenedFile { path: string; source: string; assets?: BrowserAsse
 export interface WorkspaceFile { path: string; name: string; size?: number; createdAt?: number; modifiedAt?: number }
 export interface FileSystemEntry { path: string; name: string; isDirectory: boolean; size?: number; createdAt?: number; modifiedAt?: number }
 export interface MarkdownExportAsset { url: string; name: string; mime: string; bytes: Uint8Array }
-export type PandocExportFormat = 'odt' | 'rtf' | 'mediawiki'
+export type PandocExportFormat = 'docx' | 'epub' | 'latex' | 'odt' | 'rtf' | 'mediawiki'
+export interface PandocExportOptions { css?: string; referenceDocx?: string; chapterDepth?: number; title?: string }
 
 export async function watchMarkdownPath(path: string, onChange: () => void): Promise<(() => void) | null> {
   if (!isTauri()) return null
@@ -250,22 +252,15 @@ export async function saveMarkdownFile(source: string, defaultName = '剪贴板'
   return path
 }
 
-export async function writeMarkdownFile(path: string, source: string): Promise<void> {
+export async function writeMarkdownFile(path: string, source: string, expectedSource?: string): Promise<void> {
   if (!isTauri()) throw new Error('浏览器预览无法写入文件，请使用桌面端打开')
   if (!/\.(md|markdown|qmd)$/i.test(path)) throw new Error('只能写入 Markdown / Quarto 文件')
-  await writeTextFile(path, source)
+  await invoke('write_markdown_checked', { path, source, expectedSource: expectedSource ?? null })
 }
 
 export async function saveExportFile(source: string, defaultName: string, extension: string, filterName: string): Promise<string | null> {
   if (!isTauri()) {
-    const blob = new Blob([source], { type: filterName === 'HTML' ? 'text/html;charset=utf-8' : 'text/plain;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = `${defaultName}.${extension}`
-    anchor.click()
-    URL.revokeObjectURL(url)
-    return anchor.download
+    return downloadExport(new Blob([source], { type: extension === 'html' ? 'text/html;charset=utf-8' : 'text/plain;charset=utf-8' }), `${defaultName}.${extension}`)
   }
   const selected = await save({ defaultPath: `${defaultName}.${extension}`, filters: [{ name: filterName, extensions: [extension] }] })
   if (!selected) return null
@@ -277,19 +272,24 @@ export async function saveExportFile(source: string, defaultName: string, extens
 export async function saveBinaryExportFile(bytes: Uint8Array, defaultName: string, extension: string, filterName: string, mime: string): Promise<string | null> {
   if (!isTauri()) {
     const blob = new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], { type: mime })
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = `${defaultName}.${extension}`
-    anchor.click()
-    URL.revokeObjectURL(url)
-    return anchor.download
+    return downloadExport(blob, `${defaultName}.${extension}`)
   }
   const selected = await save({ defaultPath: `${defaultName}.${extension}`, filters: [{ name: filterName, extensions: [extension] }] })
   if (!selected) return null
   const path = selected.toLowerCase().endsWith(`.${extension.toLowerCase()}`) ? selected : `${selected}.${extension}`
   await writeFile(path, bytes)
   return path
+}
+
+function downloadExport(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url; anchor.download = filename; anchor.hidden = true
+  document.body.append(anchor)
+  anchor.click()
+  // WebViews may dispatch the download after click returns.
+  window.setTimeout(() => { anchor.remove(); URL.revokeObjectURL(url) }, 30000)
+  return filename
 }
 
 export async function savePdfExportFile(source: string, defaultName: string): Promise<string | null> {
@@ -319,9 +319,18 @@ export async function importDocumentWithPandoc(defaultExtension: 'md' | 'markdow
   return { path: targetPath, source: await readTextFile(targetPath) }
 }
 
-export async function exportDocumentWithPandoc(source: string, defaultName: string, format: PandocExportFormat, markdownPath: string): Promise<string | null> {
-  if (!isTauri()) throw new Error('ODT / RTF / MediaWiki 导出需要桌面端和 Pandoc')
+export async function selectDocxReference(): Promise<string | null> {
+  if (!isTauri()) throw new Error('Word 样式模板需要桌面端')
+  const path = await open({ multiple: false, filters: [{ name: 'Word 样式模板', extensions: ['docx'] }] })
+  return typeof path === 'string' ? path : null
+}
+
+export async function exportDocumentWithPandoc(source: string, defaultName: string, format: PandocExportFormat, markdownPath: string, options: PandocExportOptions = {}): Promise<string | null> {
+  if (!isTauri()) throw new Error('此导出格式需要桌面端和 Pandoc')
   const formats: Record<PandocExportFormat, { extension: string; name: string }> = {
+    docx: { extension: 'docx', name: 'Word 文档' },
+    epub: { extension: 'epub', name: 'EPUB 电子书' },
+    latex: { extension: 'tex', name: 'LaTeX 源码' },
     odt: { extension: 'odt', name: 'OpenDocument 文档' },
     rtf: { extension: 'rtf', name: 'RTF 文档' },
     mediawiki: { extension: 'wiki', name: 'MediaWiki 源码' },
@@ -330,7 +339,7 @@ export async function exportDocumentWithPandoc(source: string, defaultName: stri
   const selected = await save({ defaultPath: `${defaultName}.${meta.extension}`, filters: [{ name: meta.name, extensions: [meta.extension] }] })
   if (!selected) return null
   const targetPath = selected.toLowerCase().endsWith(`.${meta.extension}`) ? selected : `${selected}.${meta.extension}`
-  await invoke('pandoc_export_document', { source, targetPath, format, resourcePath: dirnameOf(markdownPath) || null })
+  await invoke('pandoc_export_document', { source, targetPath, format, resourcePath: dirnameOf(markdownPath) || null, css: options.css ?? null, referenceDocx: options.referenceDocx || null, chapterDepth: options.chapterDepth ?? 3, title: options.title ?? defaultName })
   return targetPath
 }
 
@@ -469,22 +478,22 @@ export async function organizeMarkdownAssets(markdownPath: string, source: strin
 
 export async function readMarkdownExportAssets(markdownPath: string, source: string): Promise<MarkdownExportAsset[]> {
   if (!isTauri()) return []
-  const pattern = /(?:!\[[^\]\n]*\]|\[(?:视频|video)\])\((<[^>\n]+>|[^)\n]+)\)/gi
+  const urls: string[] = []
+  renderMarkdownFragment(source, url => { urls.push(url); return url })
   const result: MarkdownExportAsset[] = []
-  for (const [index, original] of [...new Set([...source.matchAll(pattern)].map((match) => match[1].trim()))].entries()) {
-    const value = original.startsWith('<') && original.endsWith('>') ? original.slice(1, -1) : original
+  for (const [index, value] of [...new Set(urls)].entries()) {
     const rawPath = value.match(/^([^?#]*)/)?.[1] ?? value
     const localPath = localAssetPath(decodeUrlPath(rawPath))
-    if (!localPath || !/\.(?:avif|bmp|gif|jiff?|jfif|jpe?g|png|svg|webp|mp4|webm|ogv|ogg)$/i.test(localPath)) continue
+    if (!localPath || !/\.(?:avif|bmp|gif|jiff?|jfif|jpe?g|png|svg|webp|mp4|m4v|mov|webm|ogv|ogg|vtt)$/i.test(localPath)) continue
     const absolutePath = resolveLocalAssetPath(markdownPath, localPath)
     try {
       const extension = absolutePath.split('.').pop()?.toLowerCase() || 'bin'
       const base = absolutePath.split('/').pop()?.replace(/[^\w\u3400-\u9fff.-]+/g, '-') || `asset-${index + 1}.${extension}`
       const name = `${index + 1}-${base}`
-      const mime = extension === 'svg' ? 'image/svg+xml' : ['jpg', 'jpeg', 'jif', 'jfif', 'jiff'].includes(extension) ? 'image/jpeg' : extension === 'mp4' || extension === 'm4v' ? 'video/mp4' : extension === 'webm' ? 'video/webm' : extension === 'ogv' || extension === 'ogg' ? 'video/ogg' : `image/${extension}`
+      const mime = extension === 'vtt' ? 'text/vtt' : extension === 'svg' ? 'image/svg+xml' : ['jpg', 'jpeg', 'jif', 'jfif', 'jiff'].includes(extension) ? 'image/jpeg' : extension === 'mp4' || extension === 'm4v' ? 'video/mp4' : extension === 'mov' ? 'video/quicktime' : extension === 'webm' ? 'video/webm' : extension === 'ogv' || extension === 'ogg' ? 'video/ogg' : `image/${extension}`
       result.push({ url: value, name, mime, bytes: await readFile(absolutePath) })
     } catch {
-      // Missing media does not block the document export.
+      throw new Error(`导出资源读取失败：${value}。请修复缺失引用后重试，未导出不完整文件。`)
     }
   }
   return result
