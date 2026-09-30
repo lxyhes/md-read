@@ -11,13 +11,16 @@ import FontPicker from './components/FontPicker.vue'
 import { interfaceFont } from './fonts'
 import FileSystemTree, { type FileSystemTreeNode } from './components/FileSystemTree.vue'
 import ClipboardManager from './components/ClipboardManager.vue'
-import { copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, downloadMarkdownImages, exportDocumentWithPandoc, importDocumentWithPandoc, importMarkdownAsset, importMarkdownAssetFromPath, listDirectoryFiles, listFileSystemEntries, markdownPathExists, openFileSystemDirectory, openMarkdownDirectory, openMarkdownFile, organizeMarkdownAssets, readMarkdownExportAssets, readMarkdownPath, removeMarkdownAsset, renameMarkdownAsset, renameMarkdownPath, resolveMarkdownAssetUrl, resolveMarkdownPath, saveBinaryExportFile, saveClipboardImage, saveExportFile, saveMarkdownFile, savePdfExportFile, selectFileSystemDirectory, splitMarkdownLinkTarget, uploadMarkdownImage, watchMarkdownPath, writeMarkdownFile, type PandocExportFormat, type WorkspaceFile } from './fileService'
+import { copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, downloadMarkdownImages, exportDocumentWithPandoc, importDocumentWithPandoc, importMarkdownAsset, importMarkdownAssetFromPath, listDirectoryFiles, listFileSystemEntries, markdownPathExists, openFileSystemDirectory, openMarkdownDirectory, openMarkdownFile, openMarkdownFolderAt, organizeMarkdownAssets, readMarkdownExportAssets, readMarkdownPath, removeMarkdownAsset, renameMarkdownAsset, renameMarkdownPath, resolveMarkdownAssetUrl, resolveMarkdownPath, saveBinaryExportFile, saveClipboardImage, saveExportFile, saveMarkdownFile, savePdfExportFile, selectFileSystemDirectory, selectMarkdownFolder, splitMarkdownLinkTarget, uploadMarkdownImage, watchMarkdownPath, writeMarkdownFile, type PandocExportFormat, type WorkspaceFile } from './fileService'
 import type { Annotation, ReaderDocument, ReaderRegion, ViewerType } from './types'
 import { escapeHtml, renderMathMl } from './markdown/shared'
 import { makeImplicitMarkdownHeadingsExplicit, parseMarkdown, renderMarkdownFragment } from './parser'
 import { getDocumentStatistics } from './documentStats'
 import { asciiDiagramToMermaid, asciiTreeToTree, markdownToTree } from './asciiDiagram'
 import { formatClipboardImage, formatClipboardToMarkdown, htmlToMarkdown, normalizeMixedOrderedListSource, suggestPastedMarkdownName } from './pasteMarkdown'
+import { matchQuickOpen } from './quickOpen'
+import { sortFileTreeEntries, type FileTreeSortMode } from './fileTreeSort'
+import { orderRecentFolders, pinRecentFolder, rememberRecentFolder, removeRecentFolder, type RecentFolder } from './recentFolders'
 import { createDocx, createEpub, createLatex } from './exportService'
 import logoAsset from './assets/moyue-logo-256.png'
 
@@ -28,7 +31,8 @@ const ViewerCode = defineAsyncComponent(() => import('./components/ViewerCode.vu
 type View = 'library' | 'reader' | 'clipboard' | 'themes' | 'settings'
 type BusyAction = 'file' | 'folder' | 'drop' | 'paste' | 'paste-save' | 'paste-image' | 'pandoc' | 'delete' | null
 type FileSyncState = 'idle' | 'syncing' | 'updated' | 'error'
-type FileSortMode = 'name' | 'natural' | 'created' | 'modified' | 'size'
+type FileSortMode = FileTreeSortMode
+type SearchScope = 'all' | 'current'
 type FileTreeEntry = { path: string; name: string; documentId?: string; isDirectory?: boolean; size?: number; createdAt?: number; modifiedAt?: number }
 const store = useReaderStore()
 const view = ref<View>('library')
@@ -47,7 +51,10 @@ const searchOpen = ref(false)
 const query = ref('')
 const searchNeedle = ref('')
 const searchIndex = ref(0)
-const searchScope = ref<'all' | 'current'>('all')
+const searchScope = ref<SearchScope>('all')
+const quickOpenOpen = ref(false)
+const quickOpenQuery = ref('')
+const quickOpenIndex = ref(0)
 const searchRegex = ref(false)
 const replaceOpen = ref(false)
 const replaceValue = ref('')
@@ -78,12 +85,28 @@ type AdvancedSettings = {
   remoteImagePrivacy: boolean
   relativeImagePathPrefix: boolean
 }
+const RECENT_FOLDERS_KEY = 'moyue:recent-folders'
 const advancedDefaults: AdvancedSettings = { defaultExtension: 'md', defaultCodeLanguage: 'text', rememberCodeLanguage: true, emojiAutocomplete: true, autoLink: true, rememberRecent: true, dropBehavior: 'insert', picListEndpoint: 'http://127.0.0.1:36677/upload', picListKey: '', epubChapterDepth: 3, printPageSize: 'A4', printMargin: 18, printHeader: '', printFooter: '', printBackground: true, spellcheck: true, typewriterMode: false, remoteImagePrivacy: false, relativeImagePathPrefix: false }
 function readAdvancedSettings(): AdvancedSettings {
   try { return { ...advancedDefaults, ...JSON.parse(localStorage.getItem('moyue:advanced-settings') ?? '{}') } }
   catch { return { ...advancedDefaults } }
 }
+function readRecentFolders(): RecentFolder[] {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(RECENT_FOLDERS_KEY) ?? '[]')
+    if (!Array.isArray(value)) return []
+    return value.flatMap((entry) => {
+      if (!entry || typeof entry !== 'object') return []
+      const folder = entry as Partial<RecentFolder>
+      const openedAt = typeof folder.openedAt === 'number' ? folder.openedAt : Number.NaN
+      if (typeof folder.path !== 'string' || !folder.path.trim() || !Number.isFinite(openedAt)) return []
+      return [{ path: folder.path, pinned: Boolean(folder.pinned), openedAt }]
+    }).slice(0, 12)
+  } catch { return [] }
+}
 const advancedSettings = ref(readAdvancedSettings())
+const recentFolders = ref<RecentFolder[]>(advancedSettings.value.rememberRecent ? readRecentFolders() : [])
+const orderedRecentFolders = computed(() => orderRecentFolders(recentFolders.value))
 const viewer = ref<{ type: ViewerType; region: ReaderRegion } | null>(null)
 const viewerTab = ref<'preview' | 'source' | 'data'>('preview')
 const viewerFullscreen = ref(false)
@@ -110,6 +133,7 @@ const sidebarFilter = ref<'markdown' | 'all' | 'hidden' | 'glob'>('markdown')
 const sidebarGlob = ref('*.md')
 const savedFileSort = localStorage.getItem('moyue:file-sort') as FileSortMode | null
 const fileSort = ref<FileSortMode>(savedFileSort && ['name', 'natural', 'created', 'modified', 'size'].includes(savedFileSort) ? savedFileSort : 'name')
+const fileTreeMixFolders = ref(localStorage.getItem('moyue:file-tree-mix-folders') === 'true')
 const filesystemTree = ref<FileSystemTreeNode | null>(null)
 const filesystemTreeTarget = ref('')
 const filesystemTreeScope = ref<'system' | 'workspace'>('workspace')
@@ -223,6 +247,20 @@ const searchResults = computed(() => {
     return pattern.test(searchRegex.value ? text : text.toLowerCase())
   }).map((region) => ({ document, region, matchCount: countMatches(`${document.title} ${document.path} ${region.textContent}`, pattern) }))).slice(0, 18)
 })
+const quickOpenCandidates = computed<FileTreeEntry[]>(() => {
+  const entries = new Map<string, FileTreeEntry>()
+  for (const document of store.documents) {
+    const entry = { path: document.path, name: fileNameOf(document.path), documentId: document.id }
+    if (isMarkdownEntry(entry)) entries.set(normalizedPath(entry.path).toLowerCase(), entry)
+  }
+  for (const file of filesystemFiles.value) {
+    if (!isMarkdownEntry(file)) continue
+    const key = normalizedPath(file.path).toLowerCase()
+    if (!entries.has(key)) entries.set(key, file)
+  }
+  return [...entries.values()]
+})
+const quickOpenResults = computed(() => matchQuickOpen(quickOpenQuery.value, quickOpenCandidates.value))
 const searchPattern = computed(() => {
   const needle = searchNeedle.value.trim()
   if (!needle) return null
@@ -452,6 +490,25 @@ function directoryOf(path: string) {
 function fileNameOf(path: string) { return normalizedPath(path).split('/').pop() || path }
 function isMarkdownEntry(file: FileTreeEntry) { return !file.isDirectory && /\.(md|markdown|qmd)$/i.test(file.name) }
 function hasRealFilesystemPath(path: string) { return Boolean(filesystemRoot(path)) }
+function folderNameOf(path: string) { return normalizedPath(path).replace(/\/+$/, '').split('/').pop() || path }
+function persistRecentFolders() {
+  if (advancedSettings.value.rememberRecent) localStorage.setItem(RECENT_FOLDERS_KEY, JSON.stringify(recentFolders.value))
+}
+function rememberFolder(path: string) {
+  if (!advancedSettings.value.rememberRecent || !hasRealFilesystemPath(path)) return
+  recentFolders.value = rememberRecentFolder(recentFolders.value, path)
+  persistRecentFolders()
+}
+function toggleRecentFolderPin(path: string) {
+  const folder = recentFolders.value.find((item) => normalizedPath(item.path).toLowerCase() === normalizedPath(path).toLowerCase())
+  if (!folder) return
+  recentFolders.value = pinRecentFolder(recentFolders.value, path, !folder.pinned)
+  persistRecentFolders()
+}
+function removeSavedRecentFolder(path: string) {
+  recentFolders.value = removeRecentFolder(recentFolders.value, path)
+  persistRecentFolders()
+}
 function isHiddenFile(name: string) { return name.startsWith('.') || name.startsWith('~$') }
 function globRegExp(glob: string) {
   const source = glob.trim().replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.')
@@ -565,10 +622,15 @@ function setOutlineExpansion(expanded: boolean) {
   collapsedOutlineHeadingIds.value = new Set()
 }
 
-function openSearch(scope: 'all' | 'current' = 'all') {
+function openSearch(scope: SearchScope = 'all') {
   searchScope.value = scope
   searchIndex.value = 0
   searchOpen.value = true
+}
+function openQuickOpen() {
+  quickOpenQuery.value = ''
+  quickOpenIndex.value = 0
+  quickOpenOpen.value = true
 }
 
 async function openEditor() {
@@ -1992,8 +2054,14 @@ function filesystemDocumentRoot(path: string) {
   return directory !== '当前工作区' && filesystemRoot(path) ? directory : ''
 }
 
-function createFilesystemNode(path: string, name: string, isDirectory: boolean): FileSystemTreeNode {
-  return { path, name, isDirectory, expanded: false, loading: false, children: null }
+function createFilesystemNode(path: string, name: string, isDirectory: boolean, metadata: Pick<FileSystemTreeNode, 'size' | 'createdAt' | 'modifiedAt'> = {}): FileSystemTreeNode {
+  return { path, name, isDirectory, ...metadata, expanded: false, loading: false, children: null }
+}
+
+function sortFilesystemTree(node: FileSystemTreeNode) {
+  if (!node.children) return
+  node.children = sortFileTreeEntries(node.children, fileSort.value, fileTreeMixFolders.value)
+  for (const child of node.children) sortFilesystemTree(child)
 }
 
 function createWorkspaceTree(): FileSystemTreeNode {
@@ -2021,7 +2089,7 @@ function createWorkspaceTree(): FileSystemTreeNode {
   }
   function sortAndReveal(node: FileSystemTreeNode) {
     node.expanded = true
-    node.children?.sort((left, right) => Number(right.isDirectory) - Number(left.isDirectory) || left.name.localeCompare(right.name, 'zh-CN'))
+    node.children = sortFileTreeEntries(node.children ?? [], fileSort.value, fileTreeMixFolders.value)
     for (const child of node.children ?? []) {
       sortAndReveal(child)
     }
@@ -2035,7 +2103,10 @@ async function loadFilesystemNode(node: FileSystemTreeNode) {
   node.loading = true
   node.error = ''
   try {
-    node.children = (await listFileSystemEntries(node.path)).filter((entry) => entry.isDirectory || matchesSidebarFilter(entry.name)).map((entry) => createFilesystemNode(entry.path, entry.name, entry.isDirectory))
+    const children = (await listFileSystemEntries(node.path))
+      .filter((entry) => entry.isDirectory || matchesSidebarFilter(entry.name))
+      .map((entry) => createFilesystemNode(entry.path, entry.name, entry.isDirectory, entry))
+    node.children = sortFileTreeEntries(children, fileSort.value, fileTreeMixFolders.value)
   } catch (error) {
     node.children = []
     node.error = error instanceof Error ? error.message : '无法读取此目录'
@@ -2558,7 +2629,11 @@ watch(query, () => {
 })
 watch(advancedSettings, (settings) => {
   localStorage.setItem('moyue:advanced-settings', JSON.stringify(settings))
-  if (!settings.rememberRecent) localStorage.removeItem('moyue:reader-session')
+  if (!settings.rememberRecent) {
+    localStorage.removeItem('moyue:reader-session')
+    localStorage.removeItem(RECENT_FOLDERS_KEY)
+    recentFolders.value = []
+  }
 }, { deep: true })
 watch(() => advancedSettings.value.remoteImagePrivacy, () => {
   const document = store.currentDocument
@@ -2567,9 +2642,13 @@ watch(() => advancedSettings.value.remoteImagePrivacy, () => {
     notify('远程图片设置将在下次打开文档时生效')
   })
 })
-watch(fileSort, (value) => localStorage.setItem('moyue:file-sort', value))
+watch([fileSort, fileTreeMixFolders], ([sort, mixFolders]) => {
+  localStorage.setItem('moyue:file-sort', sort)
+  localStorage.setItem('moyue:file-tree-mix-folders', String(mixFolders))
+  if (filesystemTree.value) sortFilesystemTree(filesystemTree.value)
+})
 watch(() => store.mode, (mode) => { if (mode !== 'focus') stopFocusTimer() })
-watch(() => store.currentDocument?.path, (path) => { fileSyncState.value = 'idle'; focusScrollTargetId = null; outlineQuery.value = ''; selectedFilePaths.value = []; invalidateRegionLayout(); void refreshFileTree(); if (path) void syncFilesystemTreeTarget(path) }, { immediate: true })
+watch(() => store.currentDocument?.path, (path) => { fileSyncState.value = 'idle'; focusScrollTargetId = null; outlineQuery.value = ''; selectedFilePaths.value = []; invalidateRegionLayout(); void refreshFileTree(); if (path) { rememberFolder(directoryOf(path)); void syncFilesystemTreeTarget(path) } }, { immediate: true })
 watch(currentDirectoryFiles, (files) => {
   const available = new Set(files.filter(isBatchDeletableFile).map((file) => filePathKey(file.path)))
   selectedFilePaths.value = selectedFilePaths.value.filter((path) => available.has(path))
@@ -2639,6 +2718,16 @@ function onKeydown(event: KeyboardEvent) {
       return
     }
   }
+  if (quickOpenOpen.value) {
+    if (event.key === 'Escape') { event.preventDefault(); quickOpenOpen.value = false; return }
+    if (['ArrowDown', 'ArrowUp', 'Enter'].includes(event.key)) {
+      event.preventDefault()
+      if (event.key === 'ArrowDown') quickOpenIndex.value = Math.min(Math.max(0, quickOpenResults.value.length - 1), quickOpenIndex.value + 1)
+      if (event.key === 'ArrowUp') quickOpenIndex.value = Math.max(0, quickOpenIndex.value - 1)
+      if (event.key === 'Enter' && quickOpenResults.value[quickOpenIndex.value]) void chooseQuickOpenResult(quickOpenResults.value[quickOpenIndex.value])
+    }
+    return
+  }
   if (searchOpen.value) {
     if (event.key === 'Escape') { event.preventDefault(); searchOpen.value = false; return }
     if (['ArrowDown', 'ArrowUp', 'Enter'].includes(event.key)) {
@@ -2668,6 +2757,7 @@ function onKeydown(event: KeyboardEvent) {
       return
     }
   }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'p') { event.preventDefault(); openQuickOpen(); return }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); openSearch('all'); return }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') { event.preventDefault(); openSearch('current'); return }
   if ((event.ctrlKey || event.metaKey) && event.key === 'Tab' && view.value === 'reader') { event.preventDefault(); switchDocument(event.shiftKey ? -1 : 1); return }
@@ -2760,10 +2850,34 @@ async function openFolder() {
   if (busyAction.value) return
   busyAction.value = 'folder'
   try {
-    const count = await store.importFolder()
+    let count = 0
+    if (isTauriRuntime()) {
+      const folder = await selectMarkdownFolder()
+      if (!folder) return
+      count = await store.addOpenedFiles(await openMarkdownFolderAt(folder))
+      rememberFolder(folder)
+    } else {
+      count = await store.importFolder()
+    }
     if (count) { view.value = 'reader'; await nextTick(); restoreScroll(); notify(`已载入 ${count} 个 Markdown 文档`) }
   } catch (error) {
     notify(error instanceof Error ? error.message : '载入工作区失败')
+  } finally { busyAction.value = null }
+}
+async function openSavedRecentFolder(folder: RecentFolder) {
+  if (busyAction.value) return
+  busyAction.value = 'folder'
+  try {
+    const files = await openMarkdownFolderAt(folder.path)
+    if (!files.length) { notify('该文件夹没有 Markdown 文档'); return }
+    const count = await store.addOpenedFiles(files)
+    rememberFolder(folder.path)
+    const firstDocument = files.map((file) => store.documents.find((document) => normalizedPath(document.path).toLowerCase() === normalizedPath(file.path).toLowerCase())).find(Boolean)
+    if (firstDocument) await chooseDocument(firstDocument.id)
+    else { view.value = 'reader'; await nextTick(); restoreScroll() }
+    notify(count ? `已从 ${folderNameOf(folder.path)} 载入 ${count} 个 Markdown 文档` : '该文件夹中的文档已在阅读空间')
+  } catch (error) {
+    notify(error instanceof Error ? error.message : '无法重新打开该文件夹')
   } finally { busyAction.value = null }
 }
 function onDragEnter(event: DragEvent) { if (event.dataTransfer?.types.includes('Files')) draggingFiles.value = true }
@@ -2877,6 +2991,10 @@ async function chooseSearchResult(documentId: string, regionId: string) {
   store.activeRegionId = regionId
   await nextTick()
   scrollToHeading(regionId)
+}
+async function chooseQuickOpenResult(file: FileTreeEntry) {
+  quickOpenOpen.value = false
+  await openFileTreeEntry(file)
 }
 async function refreshFileTree() {
   const path = store.currentDocument?.path
@@ -3701,7 +3819,7 @@ async function requestFullscreen() {
     <main class="main-shell">
       <header class="topbar" :class="{ faded: store.mode === 'focus' }">
         <div class="crumbs"><strong>{{ view === 'reader' ? displayTitle(store.currentDocument?.title) : view === 'themes' ? '主题空间' : view === 'clipboard' ? '剪贴板' : view === 'settings' ? '偏好设置' : '我的文档' }}</strong></div>
-        <button class="command-trigger" type="button" @click="openSearch('all')"><span>搜索文档、标题、内容</span><kbd>⌘ K</kbd></button>
+        <button class="command-trigger" type="button" title="搜索：Ctrl/Cmd + K；快速打开：Ctrl/Cmd + P" @click="openSearch('all')"><span>搜索文档、标题、内容</span><kbd>⌘ K</kbd></button>
         <div class="top-actions">
           <IconButton icon="focus" label="专注阅读" :active="store.mode === 'focus'" @click="toggleFocusMode" />
           <IconButton icon="palette" label="切换主题" @click="view = 'themes'" />
@@ -3716,6 +3834,7 @@ async function requestFullscreen() {
         </div>
         <div class="page-toolbar reveal-2"><div class="library-toolbar-heading"><div><h2>最近阅读 <span>{{ filteredLibraryDocuments.length }}<i v-if="librarySearchQuery.trim()"> / {{ store.documents.length }}</i></span></h2></div><div class="library-search"><AppIcon name="search" :size="14" /><input v-model="librarySearchQuery" type="search" placeholder="搜索已打开的 Markdown…" aria-label="按名称搜索已打开的 Markdown" /><button v-if="librarySearchQuery" type="button" aria-label="清空搜索" @click="librarySearchQuery = ''"><AppIcon name="close" :size="12" /></button></div></div><div class="toolbar-actions">
           <details class="library-more-menu"><summary class="ghost-button"><AppIcon name="copy" :size="14" />更多导入</summary><div class="library-more-popover"><button type="button" :disabled="busyAction !== null" @click="importOfficeDocument">{{ busyAction === 'pandoc' ? '转换中…' : '导入 Word / EPUB…' }}</button><button type="button" :disabled="busyAction !== null" @click="() => pasteFromClipboard()">{{ busyAction === 'paste' ? '格式化中…' : '粘贴并格式化' }}</button><button type="button" :disabled="busyAction !== null" @click="() => pasteImageFromClipboard()">{{ busyAction === 'paste-image' ? '读取中…' : '粘贴图片' }}</button><button type="button" :disabled="busyAction !== null" @click="() => pasteFromClipboard(true)">{{ busyAction === 'paste-save' ? '保存中…' : '粘贴并保存' }}</button></div></details>
+          <details v-if="isTauriRuntime() && orderedRecentFolders.length" class="library-more-menu recent-folders-menu"><summary class="ghost-button"><AppIcon name="history" :size="14" />最近文件夹</summary><div class="library-more-popover recent-folders-popover"><div v-for="folder in orderedRecentFolders" :key="folder.path" class="recent-folder-row"><button class="recent-folder-open" type="button" :title="folder.path" :disabled="busyAction !== null" @click="openSavedRecentFolder(folder)"><strong>{{ folderNameOf(folder.path) }}</strong><small>{{ folder.path }}</small></button><button class="recent-folder-action" type="button" :title="folder.pinned ? '取消置顶' : '置顶文件夹'" @click="toggleRecentFolderPin(folder.path)">{{ folder.pinned ? '取消置顶' : '置顶' }}</button><button class="recent-folder-action" type="button" title="移除最近文件夹" @click="removeSavedRecentFolder(folder.path)">移除</button></div></div></details>
           <button class="ghost-button" type="button" :disabled="busyAction !== null" @click="openFolder"><AppIcon name="folder" :size="14" />{{ busyAction === 'folder' ? '扫描中…' : '打开文件夹' }}</button><button class="primary-button" type="button" :disabled="busyAction !== null" @click="openFile"><AppIcon name="plus" :size="14" />{{ busyAction === 'file' ? '打开中…' : '导入 Markdown' }}</button></div></div>
         <div class="document-grid reveal-3">
           <div v-if="librarySearchQuery.trim() && !filteredLibraryDocuments.length" class="library-empty"><AppIcon name="search" :size="20" /><strong>没有找到匹配的文档</strong><span>试试搜索其他 Markdown 名称</span></div>
@@ -3828,6 +3947,7 @@ async function requestFullscreen() {
                 <select v-model="sidebarFilter" aria-label="文件筛选方式"><option value="markdown">Markdown 文件</option><option value="hidden">包含隐藏文件</option><option value="all">全部文件</option><option value="glob">自定义 glob</option></select>
                 <input v-if="sidebarFilter === 'glob'" v-model="sidebarGlob" aria-label="自定义 glob" placeholder="例如 *.md" />
                 <select v-model="fileSort" aria-label="文件排序方式"><option value="name">名称</option><option value="natural">自然顺序</option><option value="created">创建时间</option><option value="modified">修改时间</option><option value="size">文件大小</option></select>
+                <label v-if="fileBrowserMode === 'tree'" class="file-tree-mix"><input v-model="fileTreeMixFolders" type="checkbox" />混排</label>
               </div>
               <div v-if="fileBrowserMode === 'tree'" class="filesystem-tree-panel">
                 <div v-if="filesystemTree" class="filesystem-tree" :aria-label="filesystemTreeScope === 'system' ? '当前目录文档树' : '工作区文档树'"><FileSystemTree :node="filesystemTree" :selected-path="filesystemTreeTarget" @toggle="toggleFilesystemNode" @open="openFilesystemTreeNode" @contextmenu="openFilesystemContextMenu" /></div>
@@ -4017,7 +4137,7 @@ async function requestFullscreen() {
                 <div class="regions-stack" :class="{ virtualized: virtualizedReader }">
                 <div v-if="virtualRange.before" class="virtual-spacer" :style="{ height: `${virtualRange.before}px` }" aria-hidden="true" />
                 <div class="virtual-regions">
-                  <RegionBlock v-for="region in virtualRange.regions" v-memo="[region.id, store.currentDocument?.sourceHash, store.activeRegionId === region.id, store.focusedRegionId === region.id, focusDistanceByRegion.get(region.id), store.mode, store.activeThemeId, currentAnnotationsByRegion.get(region.id)]" :key="region.id" :region="region" :annotations="currentAnnotationsByRegion.get(region.id)" :focused="store.focusedRegionId === region.id" :active="store.activeRegionId === region.id" :focus-distance="focusDistanceByRegion.get(region.id)" :theme-mode="store.activeTheme?.manifest.mode" :theme-key="`${store.mode}-${store.activeThemeId}`" @focus="focusRegion(region)" @open-viewer="openViewer(region)" @open-link="openExternalLink" @code-copied="notify('代码已复制')" @copy-image="copyRegionAsImage(region)" @toggle-task="toggleTask(region)" />
+                  <RegionBlock v-for="region in virtualRange.regions" v-memo="[region.id, store.currentDocument?.sourceHash, store.activeRegionId === region.id, store.focusedRegionId === region.id, focusDistanceByRegion.get(region.id), store.mode, store.activeThemeId, currentAnnotationsByRegion.get(region.id)]" :key="region.id" :region="region" :annotations="currentAnnotationsByRegion.get(region.id)" :focused="store.focusedRegionId === region.id" :active="store.activeRegionId === region.id" :focus-distance="focusDistanceByRegion.get(region.id)" :theme-mode="store.activeTheme?.manifest.mode" :theme-key="`${store.mode}-${store.activeThemeId}`" @focus="focusRegion(region)" @open-viewer="openViewer(region)" @open-link="openExternalLink" @code-copied="notify('代码已复制')" @math-copied="notify('MathML 已复制')" @math-copy-failed="notify('复制 MathML 失败，请检查剪贴板权限')" @copy-image="copyRegionAsImage(region)" @toggle-task="toggleTask(region)" />
                 </div>
                 <div v-if="virtualRange.after" class="virtual-spacer" :style="{ height: `${virtualRange.after}px` }" aria-hidden="true" />
                 </div></div>
@@ -4096,6 +4216,29 @@ async function requestFullscreen() {
         <div v-show="settingsTab === 'reading'" class="settings-card"><span class="section-kicker">阅读</span><h2>阅读偏好</h2><label class="setting-row"><span>正文宽度 <b>{{ store.readerSettings.width }}px</b></span><input :value="store.readerSettings.width" type="range" min="620" max="1280" step="10" @input="changeSetting('width', Number(($event.target as HTMLInputElement).value))" /></label><label class="setting-row"><span>字号 <b>{{ store.readerSettings.fontSize }}px</b></span><input :value="store.readerSettings.fontSize" type="range" min="15" max="24" step="1" @input="changeSetting('fontSize', Number(($event.target as HTMLInputElement).value))" /></label><label class="setting-row"><span>行距 <b>{{ store.readerSettings.lineHeight }}</b></span><input :value="store.readerSettings.lineHeight" type="range" min="1.4" max="2.2" step=".05" @input="changeSetting('lineHeight', Number(($event.target as HTMLInputElement).value))" /></label><div class="setting-toggle-row"><span>显示阅读进度</span><i class="toggle-on" /></div><div class="setting-toggle-row"><span>启用专注模式</span><i class="toggle-on" /></div></div><div v-show="settingsTab === 'reading'" class="settings-card"><span class="section-kicker">辅助功能</span><h2>翻译与解释</h2><p class="muted-copy">使用适配器连接你自己的翻译或解释服务；配置后可从划词工具栏调用。</p><label class="setting-input">服务标识<input v-model="customProvider" placeholder="例如：local-llm / my-translator" /></label><button class="primary-button" type="button" @click="notify(customProvider ? '适配器标识已保存' : '保持未配置状态')"><AppIcon name="check" :size="14" />保存配置</button></div><div v-show="settingsTab === 'shortcuts'" class="settings-card shortcuts-card"><span class="section-kicker">快捷操作</span><h2>快捷键</h2><div class="shortcut-row"><span>全局搜索</span><kbd>Ctrl / Cmd + K</kbd></div><div class="shortcut-row"><span>当前文档搜索</span><kbd>Ctrl / Cmd + F</kbd></div><div class="shortcut-row"><span>阅读缩放</span><kbd>Ctrl / Cmd + + / -</kbd></div><div class="shortcut-row"><span>专注模式</span><kbd>F</kbd></div><div class="shortcut-row"><span>退出聚焦</span><kbd>Esc</kbd></div><div class="shortcut-row"><span>切换区域</span><kbd>↑ ↓</kbd></div></div><div v-show="settingsTab === 'extensions'" class="settings-card extensions-card"><div class="extensions-head"><div><span class="section-kicker">插件中心</span><h2>插件扩展</h2></div><button class="ghost-button" type="button" @click="notify('插件运行时将在后续版本启用')"><AppIcon name="plugin" :size="14" />打开插件目录</button></div><div class="extension-filter"><AppIcon name="search" :size="14" /><span>按需扩展阅读能力</span></div><div class="extension-list"><div class="extension-item"><span class="extension-icon purple"><AppIcon name="sparkle" :size="17" /></span><span><b>AI 阅读助手</b><small>总结、解释与问答适配器</small></span><button type="button" @click="notify('请先在翻译与解释中配置服务')">配置</button></div><div class="extension-item"><span class="extension-icon green"><AppIcon name="download" :size="17" /></span><span><b>导出增强</b><small>为阅读内容准备更多导出格式</small></span><button type="button" @click="notify('导出增强将在下一阶段接入')">安装</button></div><div class="extension-item"><span class="extension-icon pink"><AppIcon name="components" :size="17" /></span><span><b>思维导图</b><small>把长文转换为结构化视图</small></span><button type="button" @click="notify('插件运行时暂未启用')">安装</button></div></div></div></div></section>
       <ClipboardManager v-show="view === 'clipboard'" @notify="notify" />
     </main>
+
+    <div v-if="quickOpenOpen" class="overlay search-overlay" @click.self="quickOpenOpen = false">
+      <div class="search-dialog quick-open-dialog" role="dialog" aria-modal="true" aria-label="快速打开文件">
+        <div class="search-input-row">
+          <AppIcon name="search" :size="17" />
+          <input v-model="quickOpenQuery" autofocus placeholder="按文件名或文件夹路径快速打开…" aria-label="按文件名或路径快速打开" @keydown.esc="quickOpenOpen = false" />
+          <kbd>ESC</kbd>
+        </div>
+        <div class="search-scope-row quick-open-meta">
+          <strong>快速打开</strong>
+          <span>{{ quickOpenResults.length }} 个文件</span>
+          <small>Ctrl/Cmd + P · 支持模糊路径</small>
+        </div>
+        <div v-if="quickOpenResults.length" class="search-results quick-open-results">
+          <button v-for="(result, index) in quickOpenResults" :key="result.path" type="button" :class="{ selected: quickOpenIndex === index }" @click="chooseQuickOpenResult(result)">
+            <span class="result-kind">{{ result.documentId ? '已打开' : '文件' }}</span>
+            <span><b>{{ result.name }}</b><small class="quick-open-path">{{ result.path }}</small></span>
+            <AppIcon name="external" :size="14" />
+          </button>
+        </div>
+        <div v-else class="empty-search">{{ quickOpenQuery ? '没有匹配的 Markdown 文档' : '输入文件名或文件夹路径；当前文件夹与已打开文档均可快速打开。' }}</div>
+      </div>
+    </div>
 
     <div v-if="searchOpen" class="overlay search-overlay" @click.self="searchOpen = false"><div class="search-dialog"><div class="search-input-row"><AppIcon name="search" :size="17" /><input v-model="query" autofocus :placeholder="searchScope === 'current' ? '搜索当前文档…' : '搜索文档、标题、内容…'" aria-label="搜索内容" @keydown.esc="searchOpen = false" /><kbd>ESC</kbd></div><div class="search-scope-row"><div class="search-scope-tabs" role="tablist" aria-label="搜索范围"><button type="button" :class="{ active: searchScope === 'all' }" @click="searchScope = 'all'">全部文档</button><button type="button" :class="{ active: searchScope === 'current' }" :disabled="!store.currentDocument" @click="searchScope = 'current'">当前文档</button><button type="button" :class="{ active: replaceOpen }" @click="replaceOpen = !replaceOpen">查找替换</button></div><span>{{ searchResults.reduce((total, result) => total + result.matchCount, 0) }} 个匹配</span><small>Ctrl/Cmd + F 搜当前文档</small></div><div v-if="replaceOpen" class="replace-row"><input v-model="replaceValue" placeholder="替换为…" aria-label="替换内容" /><label><input v-model="searchRegex" type="checkbox" /> 正则</label><button type="button" :disabled="!searchPattern || searchPatternError" @click="replaceSearchMatches">全部替换</button></div><p v-if="searchPatternError" class="search-error">正则表达式无效</p><div v-if="searchResults.length" class="search-results"><button v-for="(result, index) in searchResults" :key="`${result.document.id}-${result.region.id}`" type="button" :class="{ selected: searchIndex === index }" @click="chooseSearchResult(result.document.id, result.region.id)"><span class="result-kind">{{ result.region.type }}</span><span><b>{{ displayTitle(result.document.title) }}</b><small>{{ result.region.textContent.slice(0, 100) }} · {{ result.matchCount }} 处匹配</small></span><AppIcon name="external" :size="14" /></button></div><div v-else class="empty-search">{{ query ? '没有找到相关内容' : searchScope === 'current' ? '输入关键词，搜索当前文档' : '输入关键词，搜索你的阅读空间' }}</div></div></div>
 
