@@ -11,10 +11,11 @@ import FontPicker from './components/FontPicker.vue'
 import { interfaceFont } from './fonts'
 import FileSystemTree, { type FileSystemTreeNode } from './components/FileSystemTree.vue'
 import ClipboardManager from './components/ClipboardManager.vue'
-import { copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, downloadMarkdownImages, exportDocumentWithPandoc, importDocumentWithPandoc, importMarkdownAsset, importMarkdownAssetFromPath, listDirectoryFiles, listFileSystemEntries, openFileSystemDirectory, openMarkdownDirectory, openMarkdownFile, organizeMarkdownAssets, readMarkdownExportAssets, readMarkdownPath, removeMarkdownAsset, renameMarkdownAsset, renameMarkdownPath, resolveMarkdownAssetUrl, resolveMarkdownPath, saveBinaryExportFile, saveClipboardImage, saveExportFile, saveMarkdownFile, savePdfExportFile, selectFileSystemDirectory, uploadMarkdownImage, watchMarkdownPath, writeMarkdownFile, type PandocExportFormat, type WorkspaceFile } from './fileService'
+import { copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, downloadMarkdownImages, exportDocumentWithPandoc, importDocumentWithPandoc, importMarkdownAsset, importMarkdownAssetFromPath, listDirectoryFiles, listFileSystemEntries, markdownPathExists, openFileSystemDirectory, openMarkdownDirectory, openMarkdownFile, organizeMarkdownAssets, readMarkdownExportAssets, readMarkdownPath, removeMarkdownAsset, renameMarkdownAsset, renameMarkdownPath, resolveMarkdownAssetUrl, resolveMarkdownPath, saveBinaryExportFile, saveClipboardImage, saveExportFile, saveMarkdownFile, savePdfExportFile, selectFileSystemDirectory, splitMarkdownLinkTarget, uploadMarkdownImage, watchMarkdownPath, writeMarkdownFile, type PandocExportFormat, type WorkspaceFile } from './fileService'
 import type { Annotation, ReaderDocument, ReaderRegion, ViewerType } from './types'
 import { escapeHtml, renderMathMl } from './markdown/shared'
 import { makeImplicitMarkdownHeadingsExplicit, parseMarkdown, renderMarkdownFragment } from './parser'
+import { getDocumentStatistics } from './documentStats'
 import { asciiDiagramToMermaid, asciiTreeToTree, markdownToTree } from './asciiDiagram'
 import { formatClipboardImage, formatClipboardToMarkdown, htmlToMarkdown, normalizeMixedOrderedListSource, suggestPastedMarkdownName } from './pasteMarkdown'
 import { createDocx, createEpub, createLatex } from './exportService'
@@ -74,8 +75,10 @@ type AdvancedSettings = {
   printBackground: boolean
   spellcheck: boolean
   typewriterMode: boolean
+  remoteImagePrivacy: boolean
+  relativeImagePathPrefix: boolean
 }
-const advancedDefaults: AdvancedSettings = { defaultExtension: 'md', defaultCodeLanguage: 'text', rememberCodeLanguage: true, emojiAutocomplete: true, autoLink: true, rememberRecent: true, dropBehavior: 'insert', picListEndpoint: 'http://127.0.0.1:36677/upload', picListKey: '', epubChapterDepth: 3, printPageSize: 'A4', printMargin: 18, printHeader: '', printFooter: '', printBackground: true, spellcheck: true, typewriterMode: false }
+const advancedDefaults: AdvancedSettings = { defaultExtension: 'md', defaultCodeLanguage: 'text', rememberCodeLanguage: true, emojiAutocomplete: true, autoLink: true, rememberRecent: true, dropBehavior: 'insert', picListEndpoint: 'http://127.0.0.1:36677/upload', picListKey: '', epubChapterDepth: 3, printPageSize: 'A4', printMargin: 18, printHeader: '', printFooter: '', printBackground: true, spellcheck: true, typewriterMode: false, remoteImagePrivacy: false, relativeImagePathPrefix: false }
 function readAdvancedSettings(): AdvancedSettings {
   try { return { ...advancedDefaults, ...JSON.parse(localStorage.getItem('moyue:advanced-settings') ?? '{}') } }
   catch { return { ...advancedDefaults } }
@@ -84,7 +87,8 @@ const advancedSettings = ref(readAdvancedSettings())
 const viewer = ref<{ type: ViewerType; region: ReaderRegion } | null>(null)
 const viewerTab = ref<'preview' | 'source' | 'data'>('preview')
 const viewerFullscreen = ref(false)
-const selectionToolbar = ref<{ text: string; regionId: string; rect: { top: number; left: number; width: number; height: number } } | null>(null)
+const wordCountOpen = ref(false)
+const selectionToolbar = ref<{ text: string; html: string; regionId: string; rect: { top: number; left: number; width: number; height: number } } | null>(null)
 const annotationEditor = ref<{ text: string; regionId: string } | null>(null)
 const annotationNote = ref('')
 const annotationColor = ref('#e1a85b')
@@ -150,6 +154,7 @@ const editorSourceStats = computed(() => {
     lines: source ? source.split(/\r?\n/).length : 1,
   }
 })
+const wordCountStats = computed(() => getDocumentStatistics(store.currentDocument))
 const editorImages = computed(() => [...editorSource.value.matchAll(/!\[([^\]\n]*)\]\((<[^>\n]+>|[^)\n]+)\)/g)].map((match, index) => ({ index, alt: match[1] || `图片 ${index + 1}`, url: match[2].replace(/^<|>$/g, ''), remote: /^https?:\/\//i.test(match[2].replace(/^<|>$/g, '')) })))
 const emojiChoices = [{ code: 'smile', value: '😊' }, { code: 'joy', value: '😂' }, { code: 'heart', value: '❤️' }, { code: 'thumbsup', value: '👍' }, { code: 'warning', value: '⚠️' }, { code: 'check', value: '✅' }, { code: 'bulb', value: '💡' }, { code: 'rocket', value: '🚀' }]
 const editorEmojiSuggestions = computed(() => {
@@ -182,6 +187,7 @@ const virtualRegionThreshold = 240
 const virtualGap = 8
 let focusScrollTargetId: string | null = null
 let focusWheelAt = -Infinity
+let readerZoomWheelAt = -Infinity
 let stopNativeFileDrop: (() => void) | null = null
 const documentWatchers = new Map<string, () => void>()
 const documentReloadTimers = new Map<string, number>()
@@ -405,7 +411,7 @@ async function openExternalLink(url: string) {
     return
   }
 
-  const [pathPart, fragment = ''] = normalized.split('#', 2)
+  const { path: pathPart, fragment } = splitMarkdownLinkTarget(normalized)
   const targetPath = resolveMarkdownPath(current.path, decodeLinkPart(pathPart))
   if (!/\.(?:md|markdown|qmd)$/i.test(targetPath)) {
     notify('当前仅支持打开 Markdown / Quarto 文件链接')
@@ -414,7 +420,19 @@ async function openExternalLink(url: string) {
   try {
     const existing = store.documents.find((document) => filePathKey(document.path) === filePathKey(targetPath))
     if (existing) await chooseDocument(existing.id, { skipResumePrompt: true })
-    else await store.addOpenedFiles([{ path: targetPath, source: await readMarkdownPath(targetPath) }])
+    else {
+      let source: string
+      try { source = await readMarkdownPath(targetPath) }
+      catch (error) {
+        if (await markdownPathExists(targetPath)) throw error
+        const name = targetPath.replace(/[\\/]/g, '/').split('/').pop() ?? '未命名文档.md'
+        if (!window.confirm(`未找到「${name}」，是否创建空 Markdown 文件？`)) return
+        source = `# ${name.replace(/\.(md|markdown|qmd)$/i, '')}\n\n`
+        await createMarkdownFile(targetPath, source)
+        notify(`已创建 ${name}`)
+      }
+      await store.addOpenedFiles([{ path: targetPath, source }])
+    }
     if (fragment) {
       await nextTick()
       const heading = findDocumentHeading(store.currentDocument, `#${fragment}`)
@@ -978,7 +996,17 @@ function cutEditorLine() {
   deleteEditorLine()
 }
 
+function copyEditorLine() {
+  const range = editorLineRange()
+  if (range) void navigator.clipboard?.writeText(editorSource.value.slice(range.start, range.end))
+}
+
 function onEditorKeydown(event: KeyboardEvent) {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c' && editorTextarea.value?.selectionStart === editorTextarea.value?.selectionEnd) {
+    event.preventDefault()
+    copyEditorLine()
+    return
+  }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'x' && editorTextarea.value?.selectionStart === editorTextarea.value?.selectionEnd) {
     event.preventDefault()
     cutEditorLine()
@@ -1066,7 +1094,7 @@ async function onEditorPaste(event: ClipboardEvent) {
       return
     }
     const imagePath = store.currentDocument?.path && isRealDocumentPath(store.currentDocument.path)
-      ? await saveClipboardImage(store.currentDocument.path, image)
+      ? await saveClipboardImage(store.currentDocument.path, image, advancedSettings.value.relativeImagePathPrefix)
       : null
     const imageMarkdown = formatClipboardImage(imagePath ?? await blobToDataUrl(image))
     insertEditorTextAt(imageMarkdown, start, end, true)
@@ -1082,6 +1110,7 @@ function wrapEditorSelection(before: string, after: string, placeholder: string)
   if (editorMode.value === 'rich') {
     if (before === '**') runRichCommand('bold')
     else if (before === '*') runRichCommand('italic')
+    else if (before === '~~') runRichCommand('strikeThrough')
     else if (before === '~') runRichCommand('subscript')
     else if (before === '^') runRichCommand('superscript')
     else if (before === '==') insertRichHtml(`<mark>${escapeHtml(window.getSelection()?.toString() || placeholder)}</mark>`)
@@ -1147,7 +1176,7 @@ async function importEditorMedia(kind: 'image' | 'video') {
   }
   busyAction.value = 'file'
   try {
-    const url = await importMarkdownAsset(document.path, kind)
+    const url = await importMarkdownAsset(document.path, kind, kind === 'image' && advancedSettings.value.relativeImagePathPrefix)
     if (!url) return
     lastMediaAction.value = { source: editorSource.value, path: url }
     const videoTitle = kind === 'video'
@@ -1190,7 +1219,7 @@ async function downloadAllEditorImages() {
   busyAction.value = 'file'
   try {
     const previous = editorSource.value
-    const result = await downloadMarkdownImages(document.path, previous)
+    const result = await downloadMarkdownImages(document.path, previous, advancedSettings.value.relativeImagePathPrefix)
     if (!result.count) { notify('没有需要下载的远程图片'); return }
     lastMediaAction.value = { source: previous, path: null }
     editorSource.value = result.source
@@ -1221,7 +1250,7 @@ async function renameEditorImage(url: string) {
   const nextName = window.prompt('图片新文件名', currentName)?.trim()
   if (!nextName) return
   try {
-    const nextUrl = await renameMarkdownAsset(document.path, url, nextName)
+    const nextUrl = await renameMarkdownAsset(document.path, url, nextName, advancedSettings.value.relativeImagePathPrefix)
     editorSource.value = editorSource.value.split(url).join(nextUrl)
     notify(`图片已重命名为 ${nextName}`)
   } catch (error) { notify(error instanceof Error ? error.message : '图片重命名失败') }
@@ -1246,7 +1275,7 @@ async function organizeEditorMedia() {
   if (editorMode.value === 'rich') syncRichEditorSource()
   busyAction.value = 'file'
   try {
-    const result = await organizeMarkdownAssets(document.path, editorSource.value)
+    const result = await organizeMarkdownAssets(document.path, editorSource.value, advancedSettings.value.relativeImagePathPrefix)
     if (!result.count) {
       notify('没有需要移动的本地图片或视频')
       return
@@ -1344,6 +1373,25 @@ function insertEditorAlert(kind = 'NOTE') {
   const source = `> [!${kind}]\n> 在这里填写内容`
   if (editorMode.value === 'rich') insertRichHtml(renderMarkdownFragment(source))
   else updateEditor((value, start, end) => ({ value: `${value.slice(0, start)}${source}${value.slice(end)}`, start: start + source.length, end: start + source.length }))
+}
+
+function toggleEditorAlert(kind = 'NOTE') {
+  if (editorMode.value === 'rich') { insertEditorAlert(kind); return }
+  const element = editorTextarea.value
+  if (!element) return
+  const value = editorSource.value
+  const start = element.selectionStart
+  const end = element.selectionEnd
+  const lineStart = value.lastIndexOf('\n', Math.max(0, start - 1)) + 1
+  const lineEnd = value.indexOf('\n', Math.max(start, end - (end > start ? 1 : 0)))
+  const blockEnd = lineEnd < 0 ? value.length : lineEnd
+  const lines = value.slice(lineStart, blockEnd).split('\n')
+  if (!lines.some((line) => line.trim())) { insertEditorAlert(kind); return }
+  const currentAlert = /^>\s*\[![A-Z]+\](?:\s+.*)?$/i.test(lines[0] ?? '')
+  const next = currentAlert
+    ? lines.slice(1).map((line) => line.replace(/^>\s?/, '')).join('\n')
+    : [`> [!${kind}]`, ...lines.map((line) => `> ${line}`)].join('\n')
+  applyEditorChange(`${value.slice(0, lineStart)}${next}${value.slice(blockEnd)}`, lineStart, lineStart + next.length)
 }
 
 function insertEditorCodeBlock() {
@@ -1743,7 +1791,7 @@ async function migrateEmbeddedEditorImages(source: string, markdownPath: string)
     if (index < 0) continue
     const image = dataUrlToBlob(match[0].trim())
     if (!image) continue
-    const imagePath = await saveClipboardImage(markdownPath, image)
+    const imagePath = await saveClipboardImage(markdownPath, image, advancedSettings.value.relativeImagePathPrefix)
     if (!imagePath) continue
     nextSource += source.slice(lastIndex, index) + imagePath
     lastIndex = index + match[0].length
@@ -2512,6 +2560,13 @@ watch(advancedSettings, (settings) => {
   localStorage.setItem('moyue:advanced-settings', JSON.stringify(settings))
   if (!settings.rememberRecent) localStorage.removeItem('moyue:reader-session')
 }, { deep: true })
+watch(() => advancedSettings.value.remoteImagePrivacy, () => {
+  const document = store.currentDocument
+  if (!document || editorOpen.value) return
+  void store.reloadDocument({ path: document.path, source: document.source }).catch(() => {
+    notify('远程图片设置将在下次打开文档时生效')
+  })
+})
 watch(fileSort, (value) => localStorage.setItem('moyue:file-sort', value))
 watch(() => store.mode, (mode) => { if (mode !== 'focus') stopFocusTimer() })
 watch(() => store.currentDocument?.path, (path) => { fileSyncState.value = 'idle'; focusScrollTargetId = null; outlineQuery.value = ''; selectedFilePaths.value = []; invalidateRegionLayout(); void refreshFileTree(); if (path) void syncFilesystemTreeTarget(path) }, { immediate: true })
@@ -2719,13 +2774,13 @@ function onDragLeave(event: DragEvent) {
 }
 async function importNativeDroppedPaths(paths: string[]) {
   const document = store.currentDocument
-  const mediaPaths = paths.filter((path) => /\.(?:avif|bmp|gif|jpe?g|png|svg|webp|mp4|webm|mov|m4v|ogv|ogg)$/i.test(path))
+  const mediaPaths = paths.filter((path) => /\.(?:avif|bmp|gif|jiff?|jfif|jpe?g|png|svg|webp|mp4|webm|mov|m4v|ogv|ogg)$/i.test(path))
   if (editorOpen.value && advancedSettings.value.dropBehavior === 'insert' && document && isRealDocumentPath(document.path) && mediaPaths.length) {
     busyAction.value = 'drop'
     try {
       for (const path of mediaPaths) {
         const kind = /\.(?:mp4|webm|mov|m4v|ogv|ogg)$/i.test(path) ? 'video' : 'image'
-        const url = await importMarkdownAssetFromPath(document.path, kind, path)
+        const url = await importMarkdownAssetFromPath(document.path, kind, path, kind === 'image' && advancedSettings.value.relativeImagePathPrefix)
         insertEditorMedia(kind, url)
       }
       notify(`已插入 ${mediaPaths.length} 个媒体文件`)
@@ -3069,7 +3124,16 @@ function restoreViewportPercent(percent: number) {
 function onReaderWheel(event: WheelEvent) {
   const viewport = readerViewport.value
   const isFocusMode = store.mode === 'region-focus' || store.mode === 'focus'
-  if (!viewport || !isFocusMode || event.ctrlKey || event.deltaY === 0) return
+  if (!viewport || event.deltaY === 0) return
+  if ((event.ctrlKey || event.metaKey) && view.value === 'reader' && !editorOpen.value && !isTypingTarget(event.target)) {
+    event.preventDefault()
+    const now = performance.now()
+    if (now - readerZoomWheelAt < 60) return
+    readerZoomWheelAt = now
+    changeReaderZoom(event.deltaY > 0 ? -1 : 1)
+    return
+  }
+  if (!isFocusMode || event.ctrlKey || event.metaKey) return
   event.preventDefault()
   const now = performance.now()
   if (now - focusWheelAt < 180) return
@@ -3225,6 +3289,44 @@ async function copyViewerSource() {
   try {
     await navigator.clipboard.writeText(source)
     notify('Mermaid 源码已复制')
+  } catch {
+    notify('复制失败，请检查剪贴板权限')
+  }
+}
+function cleanSvgForClipboard(svg: SVGSVGElement) {
+  const copy = svg.cloneNode(true) as SVGSVGElement
+  copy.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+  const cleanElement = (element: Element) => {
+    if (['script', 'foreignobject'].includes(element.localName.toLowerCase())) {
+      element.remove()
+      return
+    }
+    for (const attribute of [...element.attributes]) {
+      const name = attribute.name.toLowerCase()
+      if (name.startsWith('on') || ((name === 'href' || name === 'xlink:href') && /^\s*javascript:/i.test(attribute.value))) element.removeAttribute(attribute.name)
+    }
+  }
+  cleanElement(copy)
+  copy.querySelectorAll('*').forEach(cleanElement)
+  return copy.outerHTML
+}
+async function copyViewerHtml() {
+  const svg = viewerStage.value?.querySelector<SVGSVGElement>('svg')
+  if (!svg) {
+    notify('请先等待图表渲染完成')
+    return
+  }
+  const html = cleanSvgForClipboard(svg)
+  try {
+    if (navigator.clipboard?.write && typeof ClipboardItem !== 'undefined') {
+      await navigator.clipboard.write([new ClipboardItem({
+        'text/html': new Blob([html], { type: 'text/html' }),
+        'text/plain': new Blob([mermaidSource()], { type: 'text/plain' }),
+      })])
+    } else {
+      await navigator.clipboard.writeText(html)
+    }
+    notify('图表 HTML 已复制')
   } catch {
     notify('复制失败，请检查剪贴板权限')
   }
@@ -3415,6 +3517,18 @@ function syncActiveHeading(regionId: string | null, ensureVisible = false) {
 }
 function focusHeading(regionId: string) { scrollToHeading(regionId) }
 
+function copyableSelectionHtml(range: Range) {
+  const host = document.createElement('div')
+  host.append(range.cloneContents())
+  host.querySelectorAll('.inline-view-action, .region-more, .code-toolbar').forEach((element) => element.remove())
+  host.querySelectorAll<HTMLElement>('*').forEach((element) => {
+    for (const attribute of [...element.attributes]) {
+      if (attribute.name === 'style' || attribute.name === 'class' || attribute.name === 'contenteditable' || attribute.name.startsWith('data-') || attribute.name.startsWith('on')) element.removeAttribute(attribute.name)
+    }
+  })
+  return host.innerHTML.trim()
+}
+
 async function captureSelection(event: MouseEvent) {
   await nextTick()
   const selection = window.getSelection()
@@ -3422,9 +3536,10 @@ async function captureSelection(event: MouseEvent) {
   if (!text) return
   const anchor = (event.target as HTMLElement).closest('[data-region-id]') as HTMLElement | null
   if (!anchor) return
-  const range = selection?.rangeCount ? selection.getRangeAt(0).getBoundingClientRect() : null
-  if (!range) return
-  selectionToolbar.value = { text, regionId: anchor.dataset.regionId ?? '', rect: { top: range.top, left: range.left, width: range.width, height: range.height } }
+  const selectedRange = selection?.rangeCount ? selection.getRangeAt(0) : null
+  const range = selectedRange?.getBoundingClientRect() ?? null
+  if (!range || !selectedRange) return
+  selectionToolbar.value = { text, html: copyableSelectionHtml(selectedRange), regionId: anchor.dataset.regionId ?? '', rect: { top: range.top, left: range.left, width: range.width, height: range.height } }
   await nextTick()
   const toolbar = document.querySelector('.selection-toolbar') as HTMLElement | null
   if (toolbar) {
@@ -3457,8 +3572,7 @@ async function copySelectionMarkdown() {
 }
 async function copySelectionHtml() {
   if (!selectionToolbar.value) return
-  const plain = selectionToolbar.value.text
-  const html = `<p>${escapeHtml(plain).replace(/\r?\n/g, '<br>')}</p>`
+  const { text: plain, html } = selectionToolbar.value
   try {
     if (navigator.clipboard?.write && typeof ClipboardItem !== 'undefined') {
       await navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([plain], { type: 'text/plain' }) })])
@@ -3765,6 +3879,7 @@ async function requestFullscreen() {
                       <FontPicker compact label="正文字体" :model-value="store.readerSettings.fontFamily" :fallback-family="store.activeTheme.tokens.reader.fontFamily" @update:model-value="store.updateSettings({ fontFamily: $event })" />
                       <button type="button" @click="toggleCleanMode">纯净阅读</button>
                       <button type="button" :class="{ active: contextPanelOpen }" @click="contextPanelOpen = !contextPanelOpen">{{ contextPanelOpen ? '收起阅读信息' : '查看阅读信息' }}</button>
+                      <button type="button" @click="wordCountOpen = true">字数统计</button>
                       <button type="button" @click="exportDocument('markdown')">导出 Markdown</button>
                       <button type="button" @click="exportDocument('html')">导出 HTML</button>
                       <button type="button" @click="exportDocument('html-clean')">导出无样式 HTML</button>
@@ -3807,6 +3922,7 @@ async function requestFullscreen() {
                   <div class="editor-toolbar-group" aria-label="文字格式">
                     <button class="editor-tool-button" type="button" title="粗体（Ctrl/Cmd+B）" @click="wrapEditorSelection('**', '**', '粗体')"><b>B</b></button>
                     <button class="editor-tool-button" type="button" title="斜体（Ctrl/Cmd+I）" @click="wrapEditorSelection('*', '*', '斜体')"><i>I</i></button>
+                    <button class="editor-tool-button" type="button" title="删除线 ~~文字~~" @click="wrapEditorSelection('~~', '~~', '删除线')"><s>S</s></button>
                     <button class="editor-tool-button" type="button" title="行内代码" @click="wrapEditorSelection('`', '`', '代码')">行内码</button>
                     <button class="editor-tool-button" type="button" title="高亮 ==文字==" @click="wrapEditorSelection('==', '==', '高亮')">高亮</button>
                     <button class="editor-tool-button" type="button" title="下标 ~文字~" @click="wrapEditorSelection('~', '~', '下标')">X₂</button>
@@ -3819,9 +3935,9 @@ async function requestFullscreen() {
                     <button class="editor-tool-button" type="button" title="无序列表" @click="prefixEditorLines('- ')">列表</button>
                     <button class="editor-tool-button" type="button" title="任务列表" @click="prefixEditorLines('- [ ] ')">任务</button>
                     <input v-model="editorCodeLanguage" class="editor-language-input" list="editor-code-languages" aria-label="代码语言" placeholder="语言" />
-                    <datalist id="editor-code-languages"><option v-for="language in ['text', 'typescript', 'javascript', 'python', 'rust', 'go', 'java', 'sql', 'bash', 'json', 'yaml', 'mermaid']" :key="language" :value="language" /></datalist>
+                    <datalist id="editor-code-languages"><option v-for="language in ['text', 'typescript', 'javascript', 'python', 'rust', 'go', 'java', 'sql', 'bash', 'json', 'yaml', 'mermaid', 'gas', 'url']" :key="language" :value="language" /></datalist>
                     <button class="editor-tool-button" type="button" title="插入带语言的代码块" @click="insertEditorCodeBlock">代码</button>
-                    <button class="editor-tool-button" type="button" title="GitHub Alert" @click="insertEditorAlert('NOTE')">警告框</button>
+                    <button class="editor-tool-button" type="button" title="将当前段落或选中行切换为 GitHub Alert" @click="toggleEditorAlert('NOTE')">警告框</button>
                     <button class="editor-tool-button" type="button" title="插入自动目录 [toc]" @click="insertEditorToc">目录</button>
                     <button class="editor-tool-button" type="button" title="表格" @click="insertEditorTable">表格</button>
                     <button class="editor-tool-button" type="button" title="图片" @click="insertEditorImage">图片</button>
@@ -3917,6 +4033,7 @@ async function requestFullscreen() {
             <div v-if="editorContextMenu" class="editor-context-menu" :style="{ top: `${editorContextMenu.y}px`, left: `${editorContextMenu.x}px` }" role="menu">
               <button type="button" role="menuitem" @click="wrapEditorSelection('**', '**', '粗体'); closeEditorContextMenu()">粗体</button>
               <button type="button" role="menuitem" @click="wrapEditorSelection('*', '*', '斜体'); closeEditorContextMenu()">斜体</button>
+              <button type="button" role="menuitem" @click="wrapEditorSelection('~~', '~~', '删除线'); closeEditorContextMenu()">删除线</button>
               <button type="button" role="menuitem" @click="wrapEditorSelection('`', '`', '代码'); closeEditorContextMenu()">行内代码</button>
               <button type="button" role="menuitem" @click="wrapEditorSelection('==', '==', '高亮'); closeEditorContextMenu()">高亮</button>
               <button type="button" role="menuitem" @click="wrapEditorSelection('~', '~', '下标'); closeEditorContextMenu()">下标</button>
@@ -3928,7 +4045,7 @@ async function requestFullscreen() {
               <button type="button" role="menuitem" @click="prefixEditorLines('- [ ] '); closeEditorContextMenu()">任务列表</button>
               <button type="button" role="menuitem" @click="prefixEditorLines('> '); closeEditorContextMenu()">引用</button>
               <button type="button" role="menuitem" @click="insertEditorCodeBlock(); closeEditorContextMenu()">代码块</button>
-              <button type="button" role="menuitem" @click="insertEditorAlert('NOTE'); closeEditorContextMenu()">警告框</button>
+              <button type="button" role="menuitem" @click="toggleEditorAlert('NOTE'); closeEditorContextMenu()">警告框</button>
               <button type="button" role="menuitem" @click="selectEditorLine(); closeEditorContextMenu()">选中当前行</button>
               <button type="button" role="menuitem" @click="cutEditorLine(); closeEditorContextMenu()">剪切当前行</button>
               <button type="button" role="menuitem" @click="deleteEditorLine(); closeEditorContextMenu()">删除当前行</button>
@@ -3956,6 +4073,7 @@ async function requestFullscreen() {
         <div v-if="store.mode === 'region-focus'" class="focus-hud" role="status"><span v-if="focusPosition" class="focus-hud-position">{{ focusPosition }}</span><span class="focus-hud-shortcut"><kbd>↑</kbd><kbd>↓</kbd>切换</span><button type="button" @click="clearRegionFocus"><kbd>Esc</kbd>退出聚焦</button></div>
         <div v-if="store.mode === 'clean'" class="clean-mode-hud"><span><AppIcon name="eye" :size="13" />纯净阅读</span><button type="button" @click="toggleCleanMode">退出 <kbd>Esc</kbd></button></div>
         <div v-if="selectionToolbar" class="selection-toolbar"><span class="selection-label">{{ selectionToolbar.text.slice(0, 28) }}{{ selectionToolbar.text.length > 28 ? '…' : '' }}</span><button type="button" @click="highlightSelection">{{ selectionIsHighlighted() ? '取消高亮' : '高亮' }}</button><button type="button" @click="beginAnnotation">批注</button><button type="button" @click="searchSelection">搜索</button><button type="button" @click="assist('translate')">翻译</button><button type="button" @click="copySelectionMarkdown">复制 Markdown</button><button type="button" @click="copySelectionHtml">复制 HTML</button><button type="button" @click="copySelectionMathMl">复制 MathML</button><button type="button" @click="copySelection">复制纯文本</button></div>
+        <div v-if="wordCountOpen && store.currentDocument" class="overlay file-properties-overlay" @click.self="wordCountOpen = false"><div class="file-properties-dialog" role="dialog" aria-modal="true" aria-labelledby="word-count-title"><div class="file-properties-heading"><div><span class="section-kicker">文档统计</span><h2 id="word-count-title">{{ displayTitle(store.currentDocument.title) }}</h2></div><IconButton icon="close" size="sm" label="关闭字数统计" @click="wordCountOpen = false" /></div><dl class="file-properties-list"><div><dt>正文字符</dt><dd>{{ wordCountStats.characters }}</dd></div><div><dt>中英文词</dt><dd>{{ wordCountStats.words }}</dd></div><div><dt>源文件行</dt><dd>{{ wordCountStats.lines }}</dd></div><div><dt>正文块</dt><dd>{{ wordCountStats.blocks }}</dd></div><div><dt>标题</dt><dd>{{ wordCountStats.headings }}</dd></div></dl><div class="file-properties-actions"><button class="ghost-button" type="button" @click="wordCountOpen = false">完成</button></div></div></div>
       </section>
 
       <ThemeCenter v-else-if="view === 'themes'" :themes="store.themes" :active-theme-id="store.activeThemeId" :active-theme="store.activeTheme" @apply="applyReaderTheme" @install="store.installTheme" @notify="notify" />
@@ -3972,6 +4090,8 @@ async function requestFullscreen() {
         <div v-show="settingsTab === 'editing'" class="settings-card settings-card-wide"><span class="section-kicker">写作</span><h2>编辑器行为</h2><div class="setting-form-grid"><label class="setting-input">默认扩展名<select v-model="advancedSettings.defaultExtension"><option value="md">.md</option><option value="markdown">.markdown</option></select></label><label class="setting-input">默认代码语言<input v-model="advancedSettings.defaultCodeLanguage" list="editor-code-languages" /></label><label class="setting-input">文件拖放<select v-model="advancedSettings.dropBehavior"><option value="insert">编辑时插入媒体</option><option value="open">只打开 Markdown</option></select></label></div><label class="setting-check"><input v-model="advancedSettings.rememberCodeLanguage" type="checkbox" />记住上次代码语言</label><label class="setting-check"><input v-model="advancedSettings.emojiAutocomplete" type="checkbox" />输入 : 时显示 Emoji 建议</label><label class="setting-check"><input v-model="advancedSettings.spellcheck" type="checkbox" />启用系统拼写检查</label><label class="setting-check"><input v-model="advancedSettings.typewriterMode" type="checkbox" />打字时让光标保持在屏幕中央</label><label class="setting-check"><input v-model="advancedSettings.rememberRecent" type="checkbox" />保存最近打开的文档</label></div>
         <div v-show="settingsTab === 'editing'" class="settings-card"><span class="section-kicker">输入辅助</span><h2>链接识别</h2><label class="setting-check"><input v-model="advancedSettings.autoLink" type="checkbox" />自动把裸网址渲染为链接</label><p class="muted-copy">关闭后，仍保留明确写出的 Markdown 链接。</p></div>
         <div v-show="settingsTab === 'editing'" class="settings-card"><span class="section-kicker">图片上传</span><h2>PicList</h2><label class="setting-input">服务地址<input v-model="advancedSettings.picListEndpoint" placeholder="http://127.0.0.1:36677/upload" /></label><label class="setting-input">接口密钥<input v-model="advancedSettings.picListKey" type="password" placeholder="可选" /></label><p class="muted-copy">仅连接本机 PicList 服务；图片不会经过墨阅服务器。</p></div>
+        <div v-show="settingsTab === 'editing'" class="settings-card"><span class="section-kicker">图片路径</span><h2>相对路径</h2><label class="setting-check"><input v-model="advancedSettings.relativeImagePathPrefix" type="checkbox" />新插入的本地图片路径以 <code>./</code> 开头</label><p class="muted-copy">应用于导入、粘贴、拖入、下载、整理和重命名；已有引用保持不变。</p></div>
+        <div v-show="settingsTab === 'editing'" class="settings-card"><span class="section-kicker">远程图片</span><h2>兼容与隐私</h2><label class="setting-check"><input v-model="advancedSettings.remoteImagePrivacy" type="checkbox" />不向图片服务发送来源信息</label><p class="muted-copy">默认采用浏览器标准策略，兼容需要来源信息的图床；启用后会以 no-referrer 请求远程图片。</p></div>
         <div v-show="settingsTab === 'editing'" class="settings-card"><span class="section-kicker">导出</span><h2>电子书与打印</h2><label class="setting-row"><span>EPUB 目录层级 <b>H{{ advancedSettings.epubChapterDepth }}</b></span><input v-model.number="advancedSettings.epubChapterDepth" type="range" min="1" max="6" /></label><div class="setting-form-grid"><label class="setting-input">纸张<select v-model="advancedSettings.printPageSize"><option value="A4">A4</option><option value="Letter">Letter</option></select></label><label class="setting-input">页边距（mm）<input v-model.number="advancedSettings.printMargin" type="number" min="8" max="40" /></label><label class="setting-input">页眉<input v-model="advancedSettings.printHeader" /></label><label class="setting-input">页脚<input v-model="advancedSettings.printFooter" /></label></div><label class="setting-check"><input v-model="advancedSettings.printBackground" type="checkbox" />打印主题背景</label></div>
         <div v-show="settingsTab === 'reading'" class="settings-card"><span class="section-kicker">阅读</span><h2>阅读偏好</h2><label class="setting-row"><span>正文宽度 <b>{{ store.readerSettings.width }}px</b></span><input :value="store.readerSettings.width" type="range" min="620" max="1280" step="10" @input="changeSetting('width', Number(($event.target as HTMLInputElement).value))" /></label><label class="setting-row"><span>字号 <b>{{ store.readerSettings.fontSize }}px</b></span><input :value="store.readerSettings.fontSize" type="range" min="15" max="24" step="1" @input="changeSetting('fontSize', Number(($event.target as HTMLInputElement).value))" /></label><label class="setting-row"><span>行距 <b>{{ store.readerSettings.lineHeight }}</b></span><input :value="store.readerSettings.lineHeight" type="range" min="1.4" max="2.2" step=".05" @input="changeSetting('lineHeight', Number(($event.target as HTMLInputElement).value))" /></label><div class="setting-toggle-row"><span>显示阅读进度</span><i class="toggle-on" /></div><div class="setting-toggle-row"><span>启用专注模式</span><i class="toggle-on" /></div></div><div v-show="settingsTab === 'reading'" class="settings-card"><span class="section-kicker">辅助功能</span><h2>翻译与解释</h2><p class="muted-copy">使用适配器连接你自己的翻译或解释服务；配置后可从划词工具栏调用。</p><label class="setting-input">服务标识<input v-model="customProvider" placeholder="例如：local-llm / my-translator" /></label><button class="primary-button" type="button" @click="notify(customProvider ? '适配器标识已保存' : '保持未配置状态')"><AppIcon name="check" :size="14" />保存配置</button></div><div v-show="settingsTab === 'shortcuts'" class="settings-card shortcuts-card"><span class="section-kicker">快捷操作</span><h2>快捷键</h2><div class="shortcut-row"><span>全局搜索</span><kbd>Ctrl / Cmd + K</kbd></div><div class="shortcut-row"><span>当前文档搜索</span><kbd>Ctrl / Cmd + F</kbd></div><div class="shortcut-row"><span>阅读缩放</span><kbd>Ctrl / Cmd + + / -</kbd></div><div class="shortcut-row"><span>专注模式</span><kbd>F</kbd></div><div class="shortcut-row"><span>退出聚焦</span><kbd>Esc</kbd></div><div class="shortcut-row"><span>切换区域</span><kbd>↑ ↓</kbd></div></div><div v-show="settingsTab === 'extensions'" class="settings-card extensions-card"><div class="extensions-head"><div><span class="section-kicker">插件中心</span><h2>插件扩展</h2></div><button class="ghost-button" type="button" @click="notify('插件运行时将在后续版本启用')"><AppIcon name="plugin" :size="14" />打开插件目录</button></div><div class="extension-filter"><AppIcon name="search" :size="14" /><span>按需扩展阅读能力</span></div><div class="extension-list"><div class="extension-item"><span class="extension-icon purple"><AppIcon name="sparkle" :size="17" /></span><span><b>AI 阅读助手</b><small>总结、解释与问答适配器</small></span><button type="button" @click="notify('请先在翻译与解释中配置服务')">配置</button></div><div class="extension-item"><span class="extension-icon green"><AppIcon name="download" :size="17" /></span><span><b>导出增强</b><small>为阅读内容准备更多导出格式</small></span><button type="button" @click="notify('导出增强将在下一阶段接入')">安装</button></div><div class="extension-item"><span class="extension-icon pink"><AppIcon name="components" :size="17" /></span><span><b>思维导图</b><small>把长文转换为结构化视图</small></span><button type="button" @click="notify('插件运行时暂未启用')">安装</button></div></div></div></div></section>
       <ClipboardManager v-show="view === 'clipboard'" @notify="notify" />
@@ -4019,7 +4139,7 @@ async function requestFullscreen() {
             <div class="viewer-source-toolbar"><span>图表结构</span></div>
             <pre class="viewer-source">{{ JSON.stringify(viewer.region.metadata ?? {}, null, 2) }}</pre>
           </div>
-          <div v-else-if="viewer.type === 'image'" class="image-viewer"><img :src="String(viewer.region.metadata?.url ?? '')" :alt="viewer.region.textContent" :style="viewerImageStyle" decoding="async" referrerpolicy="no-referrer" @load="fitViewer" /></div>
+          <div v-else-if="viewer.type === 'image'" class="image-viewer"><img :src="String(viewer.region.metadata?.url ?? '')" :alt="viewer.region.textContent" :style="viewerImageStyle" decoding="async" :referrerpolicy="advancedSettings.remoteImagePrivacy ? 'no-referrer' : undefined" @load="fitViewer" /></div>
           <ViewerCode v-else-if="viewer.type === 'code'" :region="viewer.region" :theme-mode="store.activeTheme?.manifest.mode" @copied="notify('代码已复制')" />
           <div v-else class="code-viewer table-viewer" v-html="viewer.region.html" />
         </div>
@@ -4027,6 +4147,7 @@ async function requestFullscreen() {
           <div class="viewer-footer-hint"><kbd>ESC</kbd><span>{{ viewerCanPan ? (viewer.type === 'image' ? '滚轮缩放 · 拖动查看 · 双击还原' : '滚轮缩放 · 拖动查看 · 双击还原 · +/- 调整') : '返回正文' }}</span></div>
           <div class="viewer-footer-actions">
             <button v-if="viewer.type === 'mermaid'" type="button" @click="copyViewerSource"><AppIcon name="copy" :size="14" />复制源码</button>
+            <button v-if="viewer.type === 'mermaid' && viewerTab === 'preview'" type="button" @click="copyViewerHtml"><AppIcon name="copy" :size="14" />复制 HTML</button>
             <button v-if="viewer.type === 'mermaid'" type="button" @click="exportViewer('svg')"><AppIcon name="download" :size="14" />导出 SVG</button>
             <button v-if="viewer.type === 'mermaid'" type="button" @click="exportViewer('png')"><AppIcon name="download" :size="14" />导出 PNG</button>
             <button v-if="viewer.type === 'mermaid'" type="button" @click="copyRegionAsImage(viewer.region)"><AppIcon name="copy" :size="14" />复制为图片</button>

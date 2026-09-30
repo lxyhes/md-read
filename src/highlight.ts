@@ -6,7 +6,7 @@ import type { ThemeManifest } from './types'
 
 const languageAliases: Record<string, string> = {
   js: 'javascript', jsx: 'jsx', ts: 'typescript', tsx: 'tsx', py: 'python', sh: 'bash', shell: 'bash', cpp: 'c', 'c++': 'c',
-  yml: 'yaml', md: 'markdown', text: 'text', plaintext: 'text', bat: 'bat', batch: 'bat', pgsql: 'sql', postgres: 'sql', postgresql: 'sql', hive: 'sql',
+  yml: 'yaml', md: 'markdown', text: 'text', plaintext: 'text', bat: 'bat', batch: 'bat', pgsql: 'sql', postgres: 'sql', postgresql: 'sql', hive: 'sql', gas: 'asm', assembly: 'asm', 'gnu-as': 'asm', url: 'hurl',
 }
 const languageLoaders: Record<string, () => Promise<unknown>> = {
   javascript: () => import('shiki/dist/langs/javascript.mjs').then((module) => module.default),
@@ -32,6 +32,8 @@ const languageLoaders: Record<string, () => Promise<unknown>> = {
   pascal: () => import('shiki/dist/langs/pascal.mjs').then((module) => module.default),
   stata: () => import('shiki/dist/langs/stata.mjs').then((module) => module.default),
   svelte: () => import('shiki/dist/langs/svelte.mjs').then((module) => module.default),
+  asm: () => import('shiki/dist/langs/asm.mjs').then((module) => module.default),
+  hurl: () => import('shiki/dist/langs/hurl.mjs').then((module) => module.default),
 }
 const cache = new Map<string, Promise<string>>()
 const languagePromises = new Map<string, Promise<void>>()
@@ -55,8 +57,12 @@ async function loadLanguage(language: string) {
   return true
 }
 
+export function normalizeCodeLanguage(language = 'text') {
+  return languageAliases[language.toLowerCase()] ?? (language.toLowerCase() || 'text')
+}
+
 export async function highlightCode(code: string, language = 'text', mode: ThemeManifest['mode'] = 'dark'): Promise<string> {
-  const normalizedLanguage = languageAliases[language.toLowerCase()] ?? (language.toLowerCase() || 'text')
+  const normalizedLanguage = normalizeCodeLanguage(language)
   const key = `${mode === 'light' ? 'light' : 'dark'}:${normalizedLanguage}:${code}`
   const cached = cache.get(key)
   if (cached) return cached

@@ -168,10 +168,14 @@ export const useReaderStore = defineStore('reader', () => {
     applyTheme(activeTheme.value)
     const saved = loadDocumentSnapshots()
     if (saved.length) {
+      const imagePrivacyEnabled = (() => {
+        try { return JSON.parse(localStorage.getItem('moyue:advanced-settings') ?? '{}').remoteImagePrivacy === true }
+        catch { return false }
+      })()
       const needsAssetRefresh = (document: ReaderDocument) => document.regions.some((region) => {
         if (region.type !== 'image') return false
         const url = String(region.metadata?.url ?? '')
-        return /loading=["']lazy["']/i.test(region.html) || url.startsWith('blob:') || /asset\.localhost/i.test(url) || !/^(?:https?:|data:|blob:)/i.test(url)
+        return /loading=["']lazy["']/i.test(region.html) || (!imagePrivacyEnabled && /referrerpolicy=["']no-referrer["']/i.test(region.html)) || url.startsWith('blob:') || /asset\.localhost/i.test(url) || !/^(?:https?:|data:|blob:)/i.test(url)
       })
       const stale = saved.filter(needsAssetRefresh)
       const loaded = stale.length
@@ -185,7 +189,7 @@ export const useReaderStore = defineStore('reader', () => {
           : { ...document, headings }
       })
       documents.value = refreshed
-      for (const document of refreshed) if (document !== loaded.find((item) => item.id === document.id)) await saveDocumentSnapshot(document)
+      for (const document of refreshed) if (document !== saved.find((item) => item.id === document.id)) await saveDocumentSnapshot(document)
     }
     else {
       const { parseMarkdown } = await import('../parser')

@@ -103,7 +103,11 @@ export async function authorizeMarkdownAssets(markdownPath: string): Promise<voi
  * Keeping the image out of the Markdown source avoids enormous base64 strings
  * making the editor difficult to navigate and keeps the document portable.
  */
-export async function saveClipboardImage(markdownPath: string, image: Blob): Promise<string | null> {
+export function withRelativePathPrefix(path: string, enabled = false) {
+  return enabled && path && !/^(?:[a-z][a-z\d+.-]*:|\/\/|\/|\.{1,2}\/|#)/i.test(path) ? `./${path}` : path
+}
+
+export async function saveClipboardImage(markdownPath: string, image: Blob, relativePathPrefix = false): Promise<string | null> {
   if (!isTauri()) return null
   const directory = dirnameOf(markdownPath)
   if (!directory) return null
@@ -115,7 +119,7 @@ export async function saveClipboardImage(markdownPath: string, image: Blob): Pro
   const absolutePath = `${assetDirectory}/${fileName}`
   await writeFile(absolutePath, new Uint8Array(await image.arrayBuffer()), { createNew: true })
   await authorizeMarkdownAssets(markdownPath)
-  return `.moyue-assets/${fileName}`
+  return withRelativePathPrefix(`.moyue-assets/${fileName}`, relativePathPrefix)
 }
 
 export function createBrowserAssetMap(files: File[]): Record<string, string> {
@@ -211,6 +215,11 @@ export async function listFileSystemEntries(path: string): Promise<FileSystemEnt
 export async function readMarkdownPath(path: string): Promise<string> {
   if (!isTauri()) throw new Error('浏览器预览无法读取未载入文件，请使用桌面端打开')
   return readTextFile(path)
+}
+
+export async function markdownPathExists(path: string): Promise<boolean> {
+  if (!isTauri()) return false
+  try { return !(await stat(path)).isDirectory } catch { return false }
 }
 
 export async function createMarkdownFile(path: string, source = ''): Promise<void> {
@@ -315,17 +324,17 @@ export async function exportDocumentWithPandoc(source: string, defaultName: stri
   return targetPath
 }
 
-export async function importMarkdownAsset(markdownPath: string, kind: 'image' | 'video'): Promise<string | null> {
+export async function importMarkdownAsset(markdownPath: string, kind: 'image' | 'video', relativePathPrefix = false): Promise<string | null> {
   if (!isTauri()) throw new Error('媒体导入需要桌面端，浏览器预览可继续使用网络地址')
   const filters = kind === 'image'
-    ? [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'bmp', 'svg'] }]
+    ? [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'jif', 'jfif', 'jiff', 'gif', 'webp', 'avif', 'bmp', 'svg'] }]
     : [{ name: '视频', extensions: ['mp4', 'webm', 'mov', 'm4v', 'ogv', 'ogg'] }]
   const selected = await open({ multiple: false, filters })
   if (!selected || Array.isArray(selected)) return null
-  return importMarkdownAssetFromPath(markdownPath, kind, selected)
+  return importMarkdownAssetFromPath(markdownPath, kind, selected, relativePathPrefix)
 }
 
-export async function importMarkdownAssetFromPath(markdownPath: string, kind: 'image' | 'video', selected: string): Promise<string> {
+export async function importMarkdownAssetFromPath(markdownPath: string, kind: 'image' | 'video', selected: string, relativePathPrefix = false): Promise<string> {
   if (!isTauri()) throw new Error('媒体导入需要桌面端')
   const directory = dirnameOf(markdownPath)
   if (!directory) throw new Error('请先将 Markdown 保存到本地，再导入媒体')
@@ -338,23 +347,23 @@ export async function importMarkdownAssetFromPath(markdownPath: string, kind: 'i
   const fileName = `${stem}-${Date.now().toString(36)}.${extension}`
   await copyFile(selected, `${assetDirectory}/${fileName}`)
   await authorizeMarkdownAssets(markdownPath)
-  return `.moyue-assets/${fileName}`
+  return withRelativePathPrefix(`.moyue-assets/${fileName}`, relativePathPrefix)
 }
 
 export async function uploadMarkdownImage(endpoint: string, key = ''): Promise<string | null> {
   if (!isTauri()) throw new Error('PicList 上传需要桌面端')
-  const selected = await open({ multiple: false, filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'bmp', 'svg'] }] })
+  const selected = await open({ multiple: false, filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'jif', 'jfif', 'jiff', 'gif', 'webp', 'avif', 'bmp', 'svg'] }] })
   if (!selected || Array.isArray(selected)) return null
   return invoke<string>('upload_piclist_image', { path: selected, endpoint, key: key || null })
 }
 
 function imageExtension(url: string, mime: string) {
   const fromUrl = url.match(/\.([a-z0-9]{2,5})(?:[?#]|$)/i)?.[1]?.toLowerCase()
-  if (fromUrl && /^(?:avif|bmp|gif|jpe?g|png|svg|webp)$/.test(fromUrl)) return fromUrl === 'jpeg' ? 'jpg' : fromUrl
+  if (fromUrl && /^(?:avif|bmp|gif|jiff?|jfif|jpe?g|png|svg|webp)$/.test(fromUrl)) return fromUrl === 'jpeg' ? 'jpg' : fromUrl
   return ({ 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp', 'image/svg+xml': 'svg', 'image/avif': 'avif', 'image/bmp': 'bmp' } as Record<string, string>)[mime] ?? 'jpg'
 }
 
-export async function downloadMarkdownImages(markdownPath: string, source: string): Promise<{ source: string; count: number }> {
+export async function downloadMarkdownImages(markdownPath: string, source: string, relativePathPrefix = false): Promise<{ source: string; count: number }> {
   if (!isTauri()) throw new Error('下载远程图片需要桌面端')
   const directory = dirnameOf(markdownPath)
   if (!directory) throw new Error('请先将 Markdown 保存到本地')
@@ -370,7 +379,7 @@ export async function downloadMarkdownImages(markdownPath: string, source: strin
       const extension = imageExtension(url, image.mime)
       const name = `download-${Date.now().toString(36)}-${index + 1}.${extension}`
       await writeFile(`${assetDirectory}/${name}`, Uint8Array.from(image.bytes))
-      replacements.set(url, `.moyue-assets/${name}`)
+      replacements.set(url, withRelativePathPrefix(`.moyue-assets/${name}`, relativePathPrefix))
     } catch {
       // One unreachable image should not block the rest of the document.
     }
@@ -396,14 +405,14 @@ function managedAssetPath(markdownPath: string, markdownUrl: string) {
   return absolute
 }
 
-export async function renameMarkdownAsset(markdownPath: string, markdownUrl: string, nextName: string): Promise<string> {
+export async function renameMarkdownAsset(markdownPath: string, markdownUrl: string, nextName: string, relativePathPrefix = false): Promise<string> {
   if (!isTauri()) throw new Error('图片重命名需要桌面端')
   const sourcePath = managedAssetPath(markdownPath, markdownUrl)
   const safeName = nextName.trim().replace(/[\\/:*?"<>|]/g, '-')
-  if (!safeName || !/\.(?:avif|bmp|gif|jpe?g|png|svg|webp)$/i.test(safeName)) throw new Error('请输入带图片扩展名的有效文件名')
+  if (!safeName || !/\.(?:avif|bmp|gif|jiff?|jfif|jpe?g|png|svg|webp)$/i.test(safeName)) throw new Error('请输入带图片扩展名的有效文件名')
   const targetPath = `${sourcePath.slice(0, sourcePath.lastIndexOf('/') + 1)}${safeName}`
   await rename(sourcePath, targetPath)
-  return `.moyue-assets/${safeName}`
+  return withRelativePathPrefix(`.moyue-assets/${safeName}`, relativePathPrefix || markdownUrl.trim().startsWith('./'))
 }
 
 export async function removeMarkdownAsset(markdownPath: string, markdownUrl: string): Promise<void> {
@@ -411,7 +420,7 @@ export async function removeMarkdownAsset(markdownPath: string, markdownUrl: str
   await remove(managedAssetPath(markdownPath, markdownUrl))
 }
 
-export async function organizeMarkdownAssets(markdownPath: string, source: string): Promise<{ source: string; count: number }> {
+export async function organizeMarkdownAssets(markdownPath: string, source: string, relativePathPrefix = false): Promise<{ source: string; count: number }> {
   if (!isTauri()) throw new Error('媒体整理需要桌面端')
   const directory = dirnameOf(markdownPath)
   if (!directory) throw new Error('请先将 Markdown 保存到本地，再整理媒体')
@@ -424,7 +433,7 @@ export async function organizeMarkdownAssets(markdownPath: string, source: strin
     const value = original.startsWith('<') && original.endsWith('>') ? original.slice(1, -1) : original
     const pathPart = value.match(/^([^?#]*)(.*)$/)
     const localPath = localAssetPath(decodeUrlPath(pathPart?.[1] ?? value))
-    if (!localPath || !/\.(?:avif|bmp|gif|jpe?g|png|svg|webp|mp4|webm|mov|m4v|ogv|ogg)$/i.test(localPath)) continue
+    if (!localPath || !/\.(?:avif|bmp|gif|jiff?|jfif|jpe?g|png|svg|webp|mp4|webm|mov|m4v|ogv|ogg)$/i.test(localPath)) continue
     const absolutePath = resolveLocalAssetPath(markdownPath, localPath)
     if (assetKey(absolutePath).startsWith(`${assetKey(assetDirectory)}/`)) continue
     if (!count) await mkdir(assetDirectory, { recursive: true })
@@ -440,7 +449,7 @@ export async function organizeMarkdownAssets(markdownPath: string, source: strin
     } else {
       await copyFile(absolutePath, targetPath)
     }
-    replacements.set(original, `.moyue-assets/${fileName}${pathPart?.[2] ?? ''}`)
+    replacements.set(original, withRelativePathPrefix(`.moyue-assets/${fileName}${pathPart?.[2] ?? ''}`, relativePathPrefix))
     count += 1
   }
   if (!count) return { source, count: 0 }
@@ -456,13 +465,13 @@ export async function readMarkdownExportAssets(markdownPath: string, source: str
     const value = original.startsWith('<') && original.endsWith('>') ? original.slice(1, -1) : original
     const rawPath = value.match(/^([^?#]*)/)?.[1] ?? value
     const localPath = localAssetPath(decodeUrlPath(rawPath))
-    if (!localPath || !/\.(?:avif|bmp|gif|jpe?g|png|svg|webp|mp4|webm|ogv|ogg)$/i.test(localPath)) continue
+    if (!localPath || !/\.(?:avif|bmp|gif|jiff?|jfif|jpe?g|png|svg|webp|mp4|webm|ogv|ogg)$/i.test(localPath)) continue
     const absolutePath = resolveLocalAssetPath(markdownPath, localPath)
     try {
       const extension = absolutePath.split('.').pop()?.toLowerCase() || 'bin'
       const base = absolutePath.split('/').pop()?.replace(/[^\w\u3400-\u9fff.-]+/g, '-') || `asset-${index + 1}.${extension}`
       const name = `${index + 1}-${base}`
-      const mime = extension === 'svg' ? 'image/svg+xml' : extension === 'jpg' || extension === 'jpeg' ? 'image/jpeg' : extension === 'mp4' || extension === 'm4v' ? 'video/mp4' : extension === 'webm' ? 'video/webm' : extension === 'ogv' || extension === 'ogg' ? 'video/ogg' : `image/${extension}`
+      const mime = extension === 'svg' ? 'image/svg+xml' : ['jpg', 'jpeg', 'jif', 'jfif', 'jiff'].includes(extension) ? 'image/jpeg' : extension === 'mp4' || extension === 'm4v' ? 'video/mp4' : extension === 'webm' ? 'video/webm' : extension === 'ogv' || extension === 'ogg' ? 'video/ogg' : `image/${extension}`
       result.push({ url: value, name, mime, bytes: await readFile(absolutePath) })
     } catch {
       // Missing media does not block the document export.
@@ -564,17 +573,23 @@ export function resolveMarkdownPath(markdownPath: string, targetPath: string): s
   return resolveLocalAssetPath(markdownPath, targetPath)
 }
 
+export function splitMarkdownLinkTarget(target: string) {
+  const value = target.trim()
+  const match = value.match(/^(.*\.(?:markdown|qmd|md))(?:#(.*))?$/i)
+  return { path: match?.[1] ?? value, fragment: match?.[2] ?? '' }
+}
+
 function assetKey(path: string) {
   return normalizeLocalPath(path).replace(/^\.\//, '').toLowerCase()
 }
 
 function isImagePath(path: string) {
-  return /\.(?:avif|bmp|gif|jpe?g|png|svg|webp)$/i.test(path)
+  return /\.(?:avif|bmp|gif|jiff?|jfif|jpe?g|png|svg|webp)$/i.test(path)
 }
 
 function imageMimeType(path: string) {
   const extension = path.split('.').pop()?.toLowerCase()
-  return extension === 'svg' ? 'image/svg+xml' : extension === 'jpg' || extension === 'jpeg' ? 'image/jpeg' : `image/${extension || 'png'}`
+  return extension === 'svg' ? 'image/svg+xml' : ['jpg', 'jpeg', 'jif', 'jfif', 'jiff'].includes(extension ?? '') ? 'image/jpeg' : `image/${extension || 'png'}`
 }
 
 function clipboardImageExtension(mime: string) {
