@@ -8693,3 +8693,67 @@ a:active > .app-icon-vector { transform: scale(.92); }
   .app-shell.theme-xuan-paper .reader-title::after,
   .app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll) .reader-content::after { display: none; }
 }
+.editor-main-pane { min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+.markdown-editor { flex: 1; min-height: 0; overflow: hidden; width: 100%; }
+.markdown-editor .cm-editor { height: 100%; color: var(--ink); background: transparent; outline: none; }
+.markdown-editor .cm-scroller { overflow: auto; font: 15px/1.7 var(--mono); }
+.markdown-editor .cm-content { padding: 32px 24px 45vh; caret-color: var(--accent); }
+.markdown-editor .cm-line { padding: 0 4px; }
+.markdown-editor .cm-focused { outline: none; }
+.markdown-editor .cm-cursor { border-left-color: var(--accent); }
+.markdown-editor .cm-selectionBackground, .markdown-editor .cm-focused .cm-selectionBackground { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.markdown-editor .cm-gutters { border: 0; background: transparent; color: var(--muted); }
+.markdown-editor.is-live .cm-scroller { font: var(--reader-size)/var(--reader-leading) var(--reader-font); }
+.markdown-editor.is-live .cm-content { max-width: min(var(--reader-width), 76ch); margin: 0 auto; width: 100%; padding: 32px clamp(18px, 4vw, 48px) 45vh; }
+.markdown-editor.is-live .cm-line { padding: 3px 0; }
+.markdown-editor .live-heading { font-family: var(--reader-font); font-weight: 650; line-height: 1.35; margin: 1.1em 0 .45em; }
+.markdown-editor .live-h1 { font-size: 1.9em; }
+.markdown-editor .live-h2 { font-size: 1.5em; }
+.markdown-editor .live-h3 { font-size: 1.25em; }
+.markdown-editor .live-h4, .markdown-editor .live-h5, .markdown-editor .live-h6 { font-size: 1.08em; }
+.markdown-editor .live-strong { font-weight: 700; }
+.markdown-editor .live-emphasis { font-style: italic; }
+.markdown-editor .live-strike { text-decoration: line-through; }
+.markdown-editor .live-link { color: var(--accent); text-decoration: underline; text-underline-offset: .2em; }
+.markdown-editor .live-quote { color: color-mix(in srgb, var(--ink) 75%, var(--accent)); }
+.markdown-editor .live-code { font-family: var(--mono); font-size: .9em; background: var(--code-bg); border-radius: 3px; }
+.markdown-editor .live-code-line { font: .85em/1.7 var(--mono); background: var(--code-bg); padding-inline: 16px !important; }
+.markdown-editor .live-sub { vertical-align: sub; font-size: .75em; }
+.markdown-editor .live-sup { vertical-align: super; font-size: .75em; }
+.markdown-editor.is-line-focus .cm-line { opacity: .65; }
+.markdown-editor.is-line-focus .cm-activeLine { opacity: 1; background: transparent; }
+.live-preview-widget { display: inline-block; vertical-align: middle; max-width: 100%; }
+.live-preview-widget p { margin: 0; }
+.live-preview-widget img, .live-preview-widget video { max-width: 100%; max-height: 60vh; object-fit: contain; }
+.live-preview-widget mjx-container { margin: 0 !important; }
+.live-table-widget { margin: 20px 0; overflow: auto; }
+.live-table-widget table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.live-table-widget th, .live-table-widget td { padding: 6px; border: 1px solid var(--border); min-width: 100px; }
+.live-table-widget th { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.live-table-widget textarea { width: 100%; min-height: 32px; resize: vertical; border: 0; border-radius: 3px; padding: 4px; background: transparent; color: var(--ink); font: .9em/1.6 var(--reader-font); }
+.live-table-widget textarea:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+.live-table-tools { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 7px; opacity: 0; transition: opacity .15s; }
+.live-table-widget:hover .live-table-tools, .live-table-widget:focus-within .live-table-tools { opacity: 1; }
+.live-table-tools button, .editor-quiet-controls button, .editor-safety-notice button { padding: 5px 8px; background: transparent; color: var(--muted); font: 12px var(--ui-font); border-radius: 4px; }
+.live-table-tools button:hover, .editor-quiet-controls button:hover, .editor-quiet-controls button[aria-pressed='true'] { background: var(--accent-soft); color: var(--ink); }
+.editor-quiet-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; padding: 7px 16px; border-bottom: 1px solid var(--border); }
+.editor-quiet-controls > span { margin-right: auto; color: var(--accent); font: 13px var(--ui-font); }
+.editor-surface.editor-calm-mode { padding-top: 0; }
+.editor-safety-notice { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; color: var(--ink); border-bottom: 1px solid var(--accent); background: var(--accent-soft); font: 13px/1.5 var(--ui-font); }
+@media (max-width: 720px) {
+  .markdown-editor.is-live .cm-content { padding: 20px 16px 45vh; }
+  .live-table-widget table { min-width: 420px; }
+}
+@media (prefers-reduced-motion: reduce) { .live-table-tools { transition: none; } }
+.live-diagram-widget { margin: 18px 0; }
+.live-diagram-widget .mermaid-block { width: 100%; border: 0; background: transparent; }
+.editor-export-menu { position: relative; font: 12px var(--ui-font); color: var(--muted); }
+.editor-export-menu summary { cursor: pointer; list-style: none; padding: 5px 8px; border-radius: 4px; }
+.editor-export-menu summary::-webkit-details-marker { display: none; }
+.editor-export-menu summary:hover, .editor-export-menu[open] summary { background: var(--accent-soft); color: var(--ink); }
+.editor-export-menu > div { position: absolute; top: 100%; right: 0; z-index: 20; display: grid; min-width: 164px; padding: 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-raised); box-shadow: 0 8px 24px rgb(0 0 0 / .12); }
+.editor-export-menu > div button { text-align: left; white-space: nowrap; color: var(--ink); }
+.editor-export-menu :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.live-highlight { background: var(--accent-soft); color: var(--ink); }
+.live-list-bullet { display: inline-block; width: 1em; color: var(--accent); }
+.live-footnote-ref { vertical-align: super; padding: 0 2px; color: var(--accent); background: transparent; font: .75em var(--reader-font); }

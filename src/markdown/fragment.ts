@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import remarkParse from 'remark-parse'
 import { blockHtmlWithSourceIndent, renderFootnotes } from './render'
-import { createRenderContext, nodeText, type MarkdownUrlResolver, type MdastNode } from './shared'
+import { createRenderContext, nodeText, resolveMarkdownReferences, type MarkdownUrlResolver, type MdastNode } from './shared'
 import { normalizeMixedOrderedListSource } from '../pasteMarkdown'
 
 export const markdownProcessor = unified()
@@ -157,12 +157,13 @@ export function makeImplicitMarkdownHeadingsExplicit(source: string): { source: 
 export function renderMarkdownFragment(source: string, resolveUrl: MarkdownUrlResolver = (url) => url): string {
   const normalizedSource = normalizeMixedOrderedListSource(normalizeLatexDelimiters(source)).source
   const tree = markdownProcessor.parse(normalizedSource) as unknown as MdastNode
+  resolveMarkdownReferences(tree)
   normalizeMixedOrderedLists(tree)
   promoteTimestampedParagraphs(tree)
   removeEmptyListItems(tree)
   normalizeArticleStrong(tree)
   const headings = (tree.children ?? []).filter((node) => node.type === 'heading').map((node, index) => ({ id: `moyue-heading-${index + 1}`, text: nodeText(node), depth: node.depth ?? 1 }))
-  const context = createRenderContext(new Map(), headings)
+  const context = createRenderContext(new Map((tree.children ?? []).filter(node => node.type === 'footnoteDefinition').map(node => [node.identifier ?? node.label ?? '', node])), headings)
   const html = (tree.children ?? [])
     .filter((node) => node.type !== 'yaml' && node.type !== 'toml' && node.type !== 'footnoteDefinition')
     .map((node) => blockHtmlWithSourceIndent(node, normalizedSource, resolveUrl, context))

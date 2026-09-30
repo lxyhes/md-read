@@ -20,6 +20,7 @@ export type MdastNode = {
   lang?: string | null
   url?: string
   title?: string | null
+  alt?: string | null
   identifier?: string
   label?: string | null
   children?: MdastNode[]
@@ -29,12 +30,13 @@ export type MdastNode = {
 export type RenderContext = {
   footnotes: Map<string, MdastNode>
   footnoteOrder: string[]
+  footnoteReferences: Map<string, number>
   headings: Array<{ id: string; text: string; depth: number }>
   headingIndex: number
 }
 
 export function createRenderContext(footnotes = new Map<string, MdastNode>(), headings: RenderContext['headings'] = []): RenderContext {
-  return { footnotes, footnoteOrder: [], headings, headingIndex: 0 }
+  return { footnotes, footnoteOrder: [], footnoteReferences: new Map(), headings, headingIndex: 0 }
 }
 
 export function escapeHtml(value: string): string {
@@ -54,9 +56,34 @@ export function safeImageUrl(value: string): string {
   return escapeHtml(value)
 }
 
+export function safeMediaUrl(value: string): string {
+  if (!value.trim().toLowerCase().startsWith('data:')) return safeUrl(value)
+  return /^data:(?:video\/(?:mp4|webm|ogg)|text\/vtt);base64,[a-z\d+/=\s]+$/i.test(value.trim()) ? escapeHtml(value) : ''
+}
+
 export function nodeText(node: MdastNode): string {
   if (typeof node.value === 'string') return node.value
+  if (typeof node.alt === 'string') return node.alt
   return (node.children ?? []).map(nodeText).join('')
+}
+
+export function resolveMarkdownReferences(tree: MdastNode) {
+  const definitions = new Map<string, MdastNode>()
+  const identifier = (node: MdastNode) => (node.identifier ?? node.label ?? '').replace(/\s+/g, ' ').toLowerCase()
+  const collect = (node: MdastNode) => {
+    if (node.type === 'definition' && !definitions.has(identifier(node))) definitions.set(identifier(node), node)
+    node.children?.forEach(collect)
+  }
+  collect(tree)
+  const resolve = (node: MdastNode) => {
+    if (node.type === 'imageReference' || node.type === 'linkReference') {
+      const definition = definitions.get(identifier(node))
+      if (definition) Object.assign(node, { type: node.type === 'imageReference' ? 'image' : 'link', url: definition.url, title: definition.title })
+    }
+    if (node.children) { node.children = node.children.filter(child => child.type !== 'definition'); node.children.forEach(resolve) }
+  }
+  resolve(tree)
+  return tree
 }
 
 export type MarkdownUrlResolver = (url: string) => string

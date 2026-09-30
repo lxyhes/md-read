@@ -65,6 +65,14 @@ npm run dev
 - 支持 Markdown 编辑、分栏预览、粘贴内容格式化和编辑器内图片处理。
 - 支持划词高亮、批注、复制为 Markdown 引用。
 
+### 源码不变，写作更自然
+
+- 静写模式默认保留简洁工具条，所见即所得、源码与分栏共用文档和撤销历史；公式、图表、图片及脚注可在正文中查看和编辑。
+- 表格单元格原地编辑，支持行列操作、TSV 粘贴及格式工具；查找替换无需切回源码模式。
+- 本地草稿恢复、磁盘外部冲突保护及临时文件安全保存；自动保存可选，默认不会自动覆盖原文件。
+- 专注与打字机模式独立，字体和正文排版跟随当前主题及阅读设置。
+- 支持 HTML、DOCX、EPUB、LaTeX、PNG、PDF 导出；桌面 DOCX/LaTeX 需要 Pandoc，支持 Word 模板与可携带图片。具体证据及限制见 [写作补齐验收记录](docs/typora-gap-verification.md)。
+
 ### 让代码与图表更容易理解
 
 - fenced code 使用 Shiki 进行语法高亮，显示语言、行号和行数，支持完整复制与横向滚动。
@@ -98,7 +106,8 @@ Vue 3 + TypeScript + Vite
 Tauri 2 + Rust
 Pinia
 remark-parse + remark-gfm + unified
-remark-math + KaTeX
+CodeMirror 6（源码与行内所见即所得）
+remark-math + MathJax
 Shiki
 Mermaid
 SQLite（Tauri SQL 插件）
@@ -143,7 +152,7 @@ npm run tauri build  # 构建桌面端安装包
 - 账号、云同步和社区主题市场
 - 插件脚本运行时
 - 固定的第三方 AI / 翻译服务
-- 原生安装包发布和自动更新
+- 自动更新和在线安装包分发
 
 欢迎使用、试读自己的 Markdown 文档，并通过 Issue 或 PR 告诉我们：你希望下一次阅读变得更顺手的地方是什么？
 
@@ -154,7 +163,7 @@ npm run test
 npm run build
 ```
 
-当前测试覆盖 Markdown Region 解析、标题与大纲、危险 HTML、软换行、相对资源解析、ASCII 图表转换和粘贴内容格式化。
+当前测试覆盖 Markdown Region 解析、危险 HTML、相对资源、粘贴、源码保真的实时编辑、草稿恢复、表格操作、导出 XML 及公式/脚注/媒体。原生外部工具验收的复现命令见 [验收记录](docs/typora-gap-verification.md)。
 
 ## 许可证
 

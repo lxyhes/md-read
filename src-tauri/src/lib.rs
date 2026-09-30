@@ -5,13 +5,41 @@ use serde::Serialize;
 use std::borrow::Cow;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use tauri::Manager;
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::System::DataExchange::GetClipboardSequenceNumber;
+
+#[tauri::command]
+fn write_markdown_checked(path: String, source: String, expected_source: Option<String>) -> Result<(), String> {
+    let target = Path::new(&path);
+    if !matches!(target.extension().and_then(|ext| ext.to_str()).map(str::to_ascii_lowercase).as_deref(), Some("md" | "markdown" | "qmd")) {
+        return Err("只能保存 Markdown / Quarto 文件".into());
+    }
+    let parent = target.parent().filter(|dir| dir.is_dir()).ok_or("文档目录不存在")?;
+    let check = || -> Result<(), String> {
+        if let Some(expected) = &expected_source {
+            let disk = std::fs::read_to_string(target).map_err(|error| format!("读取原文件失败，未覆盖：{error}"))?;
+            if disk != *expected && disk != source {
+                return Err("文件已被其他程序修改，未覆盖。草稿已保留，请另存副本或重新载入后合并。".into());
+            }
+        }
+        Ok(())
+    };
+    check()?;
+    let mut temporary = tempfile::NamedTempFile::new_in(parent).map_err(|error| format!("创建保存临时文件失败：{error}"))?;
+    temporary.write_all(source.as_bytes()).map_err(|error| format!("写入失败，原文件未改变：{error}"))?;
+    temporary.as_file().sync_all().map_err(|error| format!("同步保存失败：{error}"))?;
+    if let Ok(metadata) = target.metadata() {
+        temporary.as_file().set_permissions(metadata.permissions()).map_err(|error| format!("无法保留文件权限：{error}"))?;
+    }
+    check()?;
+    temporary.persist(target).map_err(|error| format!("替换文件失败，原文件未改变：{error}"))?;
+    Ok(())
+}
 
 fn is_image(path: &Path) -> bool {
     matches!(
@@ -409,6 +437,9 @@ fn pandoc_import_extension(path: &Path) -> bool {
 
 fn pandoc_export_format(format: &str) -> Option<(&'static str, &'static str)> {
     match format {
+        "docx" => Some(("docx", "docx")),
+        "epub" => Some(("epub3", "epub")),
+        "latex" => Some(("latex", "tex")),
         "odt" => Some(("odt", "odt")),
         "rtf" => Some(("rtf", "rtf")),
         "mediawiki" => Some(("mediawiki", "wiki")),
@@ -422,6 +453,18 @@ fn pandoc_error(error: std::io::Error) -> String {
     } else {
         format!("启动 Pandoc 失败：{error}")
     }
+}
+
+fn pandoc_command() -> Command {
+    // GUI processes may inherit an old PATH after a per-user Pandoc installation.
+    #[cfg(target_os = "windows")]
+    for candidate in [
+        std::env::var_os("LOCALAPPDATA").map(|root| PathBuf::from(root).join("Pandoc/pandoc.exe")),
+        std::env::var_os("ProgramFiles").map(|root| PathBuf::from(root).join("Pandoc/pandoc.exe")),
+    ].into_iter().flatten() {
+        if candidate.is_file() { return Command::new(candidate); }
+    }
+    Command::new("pandoc")
 }
 
 fn pandoc_failure(output: std::process::Output) -> Result<(), String> {
@@ -448,7 +491,7 @@ fn pandoc_import_document(source_path: String, target_path: String) -> Result<()
     let media_directory = format!(".moyue-assets/{stem}-media");
     std::fs::create_dir_all(parent.join(".moyue-assets")).map_err(|error| format!("创建媒体目录失败：{error}"))?;
 
-    let output = Command::new("pandoc")
+    let output = pandoc_command()
         .current_dir(parent)
         .arg(source)
         .args(["--to", "gfm+footnotes+task_lists", "--wrap=none", "--extract-media"])
@@ -461,7 +504,7 @@ fn pandoc_import_document(source_path: String, target_path: String) -> Result<()
 }
 
 #[tauri::command]
-fn pandoc_export_document(source: String, target_path: String, format: String, resource_path: Option<String>) -> Result<(), String> {
+fn pandoc_export_document(source: String, target_path: String, format: String, resource_path: Option<String>, css: Option<String>, reference_docx: Option<String>, chapter_depth: Option<u8>, title: Option<String>) -> Result<(), String> {
     let (writer, extension) = pandoc_export_format(&format).ok_or("不支持的 Pandoc 导出格式")?;
     let target = Path::new(&target_path);
     if target.extension().and_then(|value| value.to_str()).map(str::to_ascii_lowercase).as_deref() != Some(extension) {
@@ -469,17 +512,60 @@ fn pandoc_export_document(source: String, target_path: String, format: String, r
     }
     let parent = target.parent().filter(|path| path.is_dir()).ok_or("目标目录不存在")?;
     let working_directory = resource_path.as_deref().map(Path::new).filter(|path| path.is_dir()).unwrap_or(parent);
-    let mut child = Command::new("pandoc")
-        .current_dir(working_directory)
-        .args(["--from", "gfm+footnotes+task_lists", "--to", writer, "--wrap=none", "--output"])
-        .arg(target)
+    let temporary = tempfile::Builder::new().suffix(&format!(".{extension}")).tempfile_in(parent).map_err(|error| format!("创建导出临时文件失败：{error}"))?;
+    let mut command = pandoc_command();
+    command.current_dir(working_directory)
+        .args(["--from", "gfm+footnotes+task_lists+tex_math_dollars+raw_html", "--to", writer, "--wrap=none", "--standalone", "--fail-if-warnings", "--output"])
+        .arg(temporary.path());
+    if format == "epub" {
+        if let Some(title) = title { command.arg("--metadata").arg(format!("title={title}")); }
+    }
+    if format == "docx" {
+        if let Some(reference) = reference_docx {
+            let path = Path::new(&reference);
+            if !path.is_file() || path.extension().and_then(|ext| ext.to_str()).map(str::to_ascii_lowercase).as_deref() != Some("docx") { return Err("Word 样式模板必须是存在的 .docx 文件".into()); }
+            command.arg("--reference-doc").arg(path);
+        }
+    }
+    let mut stylesheet = None;
+    if format == "epub" {
+        command.arg("--mathml").arg("--toc").arg(format!("--toc-depth={}", chapter_depth.unwrap_or(3).clamp(1, 6)));
+        if let Some(css) = css {
+            let mut file = tempfile::Builder::new().suffix(".css").tempfile().map_err(|error| format!("创建导出样式失败：{error}"))?;
+            file.write_all(css.as_bytes()).map_err(|error| format!("写入导出样式失败：{error}"))?;
+            command.arg("--css").arg(file.path());
+            stylesheet = Some(file);
+        }
+    }
+    let mut latex_media = None;
+    if format == "latex" {
+        command.args(["--variable", "documentclass=ctexart"]);
+        let stem = target.file_stem().and_then(|value| value.to_str()).unwrap_or("document");
+        let directory = tempfile::Builder::new().prefix(&format!("{stem}-assets-")).tempdir_in(parent).map_err(|error| format!("创建 LaTeX 媒体目录失败：{error}"))?;
+        command.arg("--extract-media").arg(directory.path());
+        latex_media = Some(directory);
+    }
+    let mut child = command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .map_err(pandoc_error)?;
     child.stdin.take().ok_or("无法向 Pandoc 写入文档")?.write_all(source.as_bytes()).map_err(|error| format!("写入 Pandoc 失败：{error}"))?;
-    pandoc_failure(child.wait_with_output().map_err(|error| format!("等待 Pandoc 失败：{error}"))?)
+    pandoc_failure(child.wait_with_output().map_err(|error| format!("等待 Pandoc 失败：{error}"))?)?;
+    drop(stylesheet);
+    if let Some(directory) = &latex_media {
+        let absolute = directory.path().to_string_lossy().replace('\\', "/");
+        let relative = directory.path().file_name().and_then(|name| name.to_str()).ok_or("媒体目录名称无效")?;
+        let latex = std::fs::read_to_string(temporary.path()).map_err(|error| format!("读取 LaTeX 导出失败：{error}"))?;
+        std::fs::write(temporary.path(), latex.replace(&absolute, relative)).map_err(|error| format!("写入 LaTeX 资源引用失败：{error}"))?;
+    }
+    temporary.as_file().sync_all().map_err(|error| format!("同步导出失败：{error}"))?;
+    temporary.persist(target).map_err(|error| format!("保存导出失败，原文件未覆盖：{error}"))?;
+    if let Some(directory) = latex_media {
+        if std::fs::read_dir(directory.path()).map(|mut entries| entries.next().is_some()).unwrap_or(false) { let _ = directory.keep(); }
+    }
+    Ok(())
 }
 
 fn pdf_browser() -> Option<PathBuf> {
@@ -515,21 +601,28 @@ fn export_html_to_pdf(source: String, path: String) -> Result<(), String> {
     }
     let parent = target.parent().filter(|value| value.is_dir()).ok_or("PDF 目标目录不存在")?;
     let browser = pdf_browser().ok_or("未找到 Chrome 或 Edge，无法直接导出 PDF；可使用打印并选择“另存为 PDF”")?;
-    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(|error| format!("生成临时文件名失败：{error}"))?.as_millis();
-    let temporary = std::env::temp_dir().join(format!("moyue-pdf-{}-{stamp}.html", std::process::id()));
-    std::fs::write(&temporary, source).map_err(|error| format!("写入 PDF 临时文件失败：{error}"))?;
-    let file_url = format!("file:///{}", temporary.to_string_lossy().replace('\\', "/").replace('#', "%23"));
-    let output_path = format!("--print-to-pdf={}", target.to_string_lossy());
+    let profile = tempfile::tempdir().map_err(|error| format!("创建 PDF 引擎临时目录失败：{error}"))?;
+    let mut html = tempfile::Builder::new().suffix(".html").tempfile_in(profile.path()).map_err(|error| format!("创建 PDF 临时页面失败：{error}"))?;
+    html.write_all(source.as_bytes()).map_err(|error| format!("写入 PDF 临时页面失败：{error}"))?;
+    html.as_file().sync_all().map_err(|error| format!("同步 PDF 临时页面失败：{error}"))?;
+    // Chromium opens its output exclusively on Windows; release the handle while keeping automatic path cleanup.
+    let temporary = tempfile::Builder::new().suffix(".pdf").tempfile_in(parent).map_err(|error| format!("创建 PDF 临时文件失败：{error}"))?.into_temp_path();
+    let file_url = reqwest::Url::from_file_path(html.path()).map_err(|_| "PDF 临时页面路径无效")?;
+    let output_path = format!("--print-to-pdf={}", temporary.to_string_lossy());
+    let profile_path = format!("--user-data-dir={}", profile.path().to_string_lossy());
     let result = Command::new(browser)
-        .args(["--headless=new", "--disable-gpu", "--no-sandbox", "--no-pdf-header-footer", "--run-all-compositor-stages-before-draw", &output_path, &file_url])
+        .args(["--headless=new", "--disable-gpu", "--no-pdf-header-footer", "--run-all-compositor-stages-before-draw", "--virtual-time-budget=1000", &profile_path, &output_path, file_url.as_str()])
         .output();
-    let _ = std::fs::remove_file(&temporary);
     let output = result.map_err(|error| format!("启动浏览器 PDF 引擎失败：{error}"))?;
-    if !output.status.success() || !target.is_file() {
+    if !output.status.success() {
         let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
         return Err(if detail.is_empty() { "浏览器 PDF 导出失败".into() } else { format!("浏览器 PDF 导出失败：{detail}") });
     }
-    let _ = parent;
+    let mut signature = [0u8; 5];
+    std::fs::File::open(&temporary).and_then(|mut file| file.read_exact(&mut signature)).map_err(|error| format!("PDF 引擎没有生成完整文件，原文件未覆盖：{error}；{}", String::from_utf8_lossy(&output.stderr).trim()))?;
+    if &signature != b"%PDF-" { return Err("PDF 引擎输出无效，原文件未覆盖".into()); }
+    std::fs::OpenOptions::new().write(true).open(&temporary).and_then(|file| file.sync_all()).map_err(|error| format!("同步 PDF 失败：{error}"))?;
+    temporary.persist(target).map_err(|error| format!("保存 PDF 失败，原文件未覆盖：{error}"))?;
     Ok(())
 }
 
@@ -539,7 +632,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
-        .invoke_handler(tauri::generate_handler![allow_asset_directory, read_local_image, read_clipboard_image, read_clipboard_snapshot, read_clipboard_signature, write_clipboard_snapshot, read_remote_image, download_remote_image, upload_piclist_image, open_directory, open_external_url, pandoc_import_document, pandoc_export_document, export_html_to_pdf])
+        .invoke_handler(tauri::generate_handler![write_markdown_checked, allow_asset_directory, read_local_image, read_clipboard_image, read_clipboard_snapshot, read_clipboard_signature, write_clipboard_snapshot, read_remote_image, download_remote_image, upload_piclist_image, open_directory, open_external_url, pandoc_import_document, pandoc_export_document, export_html_to_pdf])
         .run(tauri::generate_context!())
         .expect("error while running Moyue application");
 }
@@ -548,6 +641,26 @@ pub fn run() {
 mod tests {
     use super::{is_allowed_external_url, is_image, is_safe_remote_image_url, pandoc_export_format, pandoc_import_extension, remote_image_referer};
     use std::path::Path;
+
+    #[test]
+    fn checked_save_preserves_external_changes_and_handles_unicode() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("中文文档.md");
+        std::fs::write(&path, "原文\r\n").unwrap();
+        super::write_markdown_checked(path.to_string_lossy().into(), "新内容\r\n".into(), Some("原文\r\n".into())).unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "新内容\r\n");
+        assert!(super::write_markdown_checked(path.to_string_lossy().into(), "旧草稿".into(), Some("原文\r\n".into())).is_err());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "新内容\r\n");
+        assert!(super::write_markdown_checked(path.to_string_lossy().into(), "新内容\r\n".into(), Some("原文\r\n".into())).is_ok());
+    }
+
+    #[test]
+    fn checked_save_never_recreates_a_deleted_original() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("missing.md");
+        assert!(super::write_markdown_checked(path.to_string_lossy().into(), "draft".into(), Some("base".into())).is_err());
+        assert!(!path.exists());
+    }
 
     #[test]
     fn only_reads_images() {
@@ -588,6 +701,64 @@ mod tests {
     fn pandoc_export_formats_are_fixed() {
         assert_eq!(pandoc_export_format("mediawiki"), Some(("mediawiki", "wiki")));
         assert_eq!(pandoc_export_format("odt"), Some(("odt", "odt")));
+        assert_eq!(pandoc_export_format("docx"), Some(("docx", "docx")));
+        assert_eq!(pandoc_export_format("epub"), Some(("epub3", "epub")));
+        assert_eq!(pandoc_export_format("latex"), Some(("latex", "tex")));
         assert_eq!(pandoc_export_format("html"), None);
+    }
+
+    #[test]
+    #[ignore = "requires installed Chrome or Edge; run explicitly for PDF acceptance"]
+    fn pdf_export_creates_a_valid_document_in_unicode_paths() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("草稿 中文 # 1.pdf");
+        std::fs::write(&path, "original").unwrap();
+        let html = "<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\"><style>@page{size:A4;margin:15mm}</style></head><body><h1>当前草稿</h1><p>公式、表格与图片的打印页面</p><img alt=\"验收\" src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=\"></body></html>";
+        super::export_html_to_pdf(html.into(), path.to_string_lossy().into()).unwrap();
+        let bytes = std::fs::read(&path).unwrap();
+        assert!(bytes.starts_with(b"%PDF-"));
+        assert!(bytes.len() > 1000);
+        assert!(super::export_html_to_pdf(html.into(), directory.path().join("未创建/草稿.pdf").to_string_lossy().into()).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+    }
+
+    #[test]
+    #[ignore = "requires installed Pandoc; run explicitly for export acceptance"]
+    fn pandoc_exports_preserve_equations_notes_and_links() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = "# 导出验收\n\n公式 $x^2+\\frac{a}{b}$，以及[链接](https://example.com)[^n]。\n\n[^n]: 真实脚注\n\n| A | B |\n| --- | --- |\n| **粗体** | $y^2$ |\n";
+        for format in ["docx", "epub", "latex"] {
+            let (_, extension) = pandoc_export_format(format).unwrap();
+            let path = directory.path().join(format!("中文导出.{extension}"));
+            super::pandoc_export_document(source.into(), path.to_string_lossy().into(), format.into(), None, Some("body{color:#234}".into()), None, Some(2), Some("导出验收".into())).unwrap();
+            assert!(path.metadata().unwrap().len() > 200);
+            let output = super::pandoc_command().arg(&path).args(["--to", "json"]).output().unwrap();
+            assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+            let ast = String::from_utf8(output.stdout).unwrap();
+            assert!(ast.contains("\"Math\""), "{format} lost equations");
+            assert!(ast.contains("\"Note\""), "{format} lost footnotes");
+            assert!(ast.contains("https://example.com"), "{format} lost links");
+            assert!(ast.contains("真实脚注"), "{format} lost note content");
+        }
+        let target = directory.path().join("原文件.docx");
+        std::fs::write(&target, "unchanged").unwrap();
+        assert!(super::pandoc_export_document(source.into(), target.to_string_lossy().into(), "docx".into(), None, None, Some(directory.path().join("missing.docx").to_string_lossy().into()), None, None).is_err());
+        assert_eq!(std::fs::read_to_string(target).unwrap(), "unchanged");
+        let image_source = "# 图表\n\n![图](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=)";
+        let image_docx = directory.path().join("含图片.docx");
+        let reference = directory.path().join("中文导出.docx");
+        super::pandoc_export_document(image_source.into(), image_docx.to_string_lossy().into(), "docx".into(), None, None, Some(reference.to_string_lossy().into()), None, None).unwrap();
+        let output = super::pandoc_command().arg(&image_docx).args(["--to", "json"]).output().unwrap();
+        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+        assert!(String::from_utf8_lossy(&output.stdout).contains("\"Image\""), "DOCX lost its image while using a reference template");
+        let output_directory = directory.path().join("输出 含中文");
+        std::fs::create_dir(&output_directory).unwrap();
+        let latex_path = output_directory.join("图表.tex");
+        super::pandoc_export_document(image_source.into(), latex_path.to_string_lossy().into(), "latex".into(), None, None, None, None, None).unwrap();
+        let latex = std::fs::read_to_string(&latex_path).unwrap();
+        assert!(!latex.contains("data:image"), "{latex}");
+        assert!(!latex.contains("C:/") && !latex.contains("C:\\"), "{latex}");
+        assert!(latex.contains("图表-assets-"), "{latex}");
+        assert!(std::fs::read_dir(output_directory).unwrap().count() >= 2);
     }
 }
