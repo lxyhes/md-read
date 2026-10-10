@@ -7,7 +7,7 @@ import { createDocx, createEpub } from './exportService'
 
 describe('faithful exports', () => {
   it('inherits active theme and custom typography without duplicating the title', () => {
-    const theme = builtInThemes.find(theme => theme.manifest.id === 'inkstone')!
+    const theme = builtInThemes.find(theme => theme.manifest.id === 'bamboo-shadow')!
     const css = createExportCss(theme, { fontSize: 21, lineHeight: 2, width: 940, fontFamily: 'SimSun,serif' })
     const html = createPortableHtml('验收', '# 验收\n\n正文', [], css)
     expect(html.match(/<h1/g)).toHaveLength(1)
