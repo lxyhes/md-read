@@ -1,4 +1,5 @@
 use arboard::{Clipboard, ImageData};
+mod web_preview;
 #[cfg(target_os = "macos")]
 use objc2_app_kit::NSPasteboard;
 use serde::Serialize;
@@ -182,6 +183,24 @@ fn read_clipboard_signature_inner() -> Result<Option<ClipboardSignature>, String
 #[tauri::command]
 fn read_clipboard_snapshot() -> Result<Option<ClipboardSnapshot>, String> {
     Ok(read_clipboard_snapshot_inner().ok())
+}
+
+#[derive(Serialize)]
+struct ClipboardRichText {
+    text: String,
+    html: String,
+}
+
+#[tauri::command]
+fn read_clipboard_rich_text() -> Result<ClipboardRichText, String> {
+    let before = platform_clipboard_marker();
+    let mut clipboard = Clipboard::new().map_err(|error| format!("连接系统剪贴板失败：{error}"))?;
+    let text = clipboard.get_text().unwrap_or_default();
+    let html = clipboard.get().html().unwrap_or_default();
+    if before != platform_clipboard_marker() {
+        return Err("剪贴板内容已变化，请重新粘贴".into());
+    }
+    Ok(ClipboardRichText { text, html })
 }
 
 #[tauri::command]
@@ -404,11 +423,11 @@ fn open_directory(path: String) -> Result<(), String> {
 
 fn is_allowed_external_url(url: &str) -> bool {
     let normalized = url.trim().to_ascii_lowercase();
-    normalized.starts_with("https://")
+    !normalized.contains('\0') && (normalized.starts_with("https://")
         || normalized.starts_with("http://")
         || normalized.starts_with("mailto:")
         || normalized.starts_with("tel:")
-        || normalized.starts_with("//")
+        || normalized.starts_with("//"))
 }
 
 #[tauri::command]
@@ -418,14 +437,24 @@ fn open_external_url(url: String) -> Result<(), String> {
         return Err("仅支持 http、https、mailto、tel 链接".into());
     }
 
+    let target = if value.starts_with("//") { format!("https:{value}") } else { value.to_owned() };
     #[cfg(target_os = "windows")]
-    let result = Command::new("explorer.exe").arg(value).spawn();
-    #[cfg(target_os = "macos")]
-    let result = Command::new("open").arg(value).spawn();
-    #[cfg(all(unix, not(target_os = "macos")))]
-    let result = Command::new("xdg-open").arg(value).spawn();
-
-    result.map(|_| ()).map_err(|error| format!("打开链接失败：{error}"))
+    {
+        use windows_sys::Win32::UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWNORMAL};
+        let wide: Vec<u16> = target.encode_utf16().chain(std::iter::once(0)).collect();
+        // Explorer parses URLs as file-manager arguments; use the registered protocol handler instead.
+        let status = unsafe { ShellExecuteW(std::ptr::null_mut(), std::ptr::null(), wide.as_ptr(), std::ptr::null(), std::ptr::null(), SW_SHOWNORMAL) } as isize;
+        if status <= 32 { return Err(format!("打开链接失败：系统错误 {status}")); }
+        Ok(())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        #[cfg(target_os = "macos")]
+        let result = Command::new("open").arg(&target).spawn();
+        #[cfg(all(unix, not(target_os = "macos")))]
+        let result = Command::new("xdg-open").arg(&target).spawn();
+        result.map(|_| ()).map_err(|error| format!("打开链接失败：{error}"))
+    }
 }
 
 fn pandoc_import_extension(path: &Path) -> bool {
@@ -632,7 +661,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
-        .invoke_handler(tauri::generate_handler![write_markdown_checked, allow_asset_directory, read_local_image, read_clipboard_image, read_clipboard_snapshot, read_clipboard_signature, write_clipboard_snapshot, read_remote_image, download_remote_image, upload_piclist_image, open_directory, open_external_url, pandoc_import_document, pandoc_export_document, export_html_to_pdf])
+        .invoke_handler(tauri::generate_handler![write_markdown_checked, allow_asset_directory, read_local_image, read_clipboard_image, read_clipboard_snapshot, read_clipboard_rich_text, read_clipboard_signature, write_clipboard_snapshot, read_remote_image, download_remote_image, upload_piclist_image, open_directory, open_external_url, web_preview::web_preview, pandoc_import_document, pandoc_export_document, export_html_to_pdf])
         .run(tauri::generate_context!())
         .expect("error while running Moyue application");
 }
@@ -671,9 +700,13 @@ mod tests {
     #[test]
     fn only_opens_safe_external_urls() {
         assert!(is_allowed_external_url("https://example.com/read"));
+        assert!(is_allowed_external_url("https://b.quark.cn/apps/5AZ7aRopS/routes/Gj8VNtRtS?debug=0&fid=6b6b109cff1b410399f9d99df58a7b93#?seek_t=3778"));
         assert!(is_allowed_external_url("mailto:hello@example.com"));
+        assert!(is_allowed_external_url("//example.com/read#chapter"));
         assert!(!is_allowed_external_url("javascript:alert(1)"));
         assert!(!is_allowed_external_url("C:/notes/readme.md"));
+        assert!(!is_allowed_external_url("https://example.com\0file:///C:/"));
+        assert!(!is_allowed_external_url("file:///C:/notes/readme.md"));
     }
 
     #[test]

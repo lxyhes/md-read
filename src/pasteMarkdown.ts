@@ -213,7 +213,8 @@ function renderList(list: HTMLElement, depth = 0): string {
     const prefix = ordered ? `${start + index}. ` : '- '
     const indentation = '  '.repeat(depth)
     const nestedMarkdown: string = nested.map((child) => renderList(child, depth + 1)).filter(Boolean).join('\n')
-    return `${indentation}${prefix}${content}${nestedMarkdown ? `\n${nestedMarkdown}` : ''}`
+    const indentedContent = content.replace(/\n/g, `\n${indentation}${' '.repeat(prefix.length)}`)
+    return `${indentation}${prefix}${indentedContent}${nestedMarkdown ? `\n${nestedMarkdown}` : ''}`
   }).join('\n')
 }
 
@@ -366,7 +367,7 @@ function normalizeArticleSections(value: string) {
     // spans inside them as section headings breaks nested lists and links.
     // The same applies to explicit headings: splitting `### **title**` would
     // leave an empty heading followed by a plain paragraph.
-    if (/^\s*(?:#{1,6}\s+|[-+*]\s+|\d+[.)]\s+)/.test(line)) {
+    if (/^(?:[ \t]{2,}|\s*(?:#{1,6}\s+|[-+*]\s+|\d+[.)]\s+))/.test(line)) {
       result.push(line)
       continue
     }
@@ -399,7 +400,7 @@ function normalizeTimestampedHeadings(value: string) {
       return line
     }
     if (inFence || /^\s*#{1,6}\s+/.test(trimmed)) return line
-    const match = trimmed.match(/^(.+?)\s+(\d{1,2}:\d{2})$/)
+    const match = trimmed.match(/^(.+?)\s+(\d{1,2}:\d{2}(?::\d{2})?)$/)
     const title = match?.[1]?.trim() ?? ''
     if (!match || !title || title.length > 48 || !/[\u3400-\u9fff]/.test(title) || /[。！？!?]$/.test(title)) return line
     return `**${title} ${match[2]}**`
@@ -415,10 +416,6 @@ function clipboardHtmlMatchesPlainText(html: string, text: string) {
     .replace(/&(?:nbsp|amp|lt|gt|quot|#\d+|#x[\da-f]+);/gi, ' ')
     .replace(/\s+/g, '')
   return visible.includes(plain)
-}
-
-function hasNestedMarkdownList(value: string) {
-  return /(?:^|\n)[ \t]*(?:[-+*]|\d+[.)])[ \t]+.+\n[ \t]{2,}(?:[-+*]|\d+[.)])[ \t]+/m.test(value)
 }
 
 function clipboardImagesMarkdown(html: string) {
@@ -438,6 +435,7 @@ function richClipboardListLabel(value: string) {
 
 function richClipboardInlineListItem(value: string) {
   const match = value.trim().match(/^(第[一二三四五六七八九十]+标签客群|陷阱[一二三四五六七八九十]+|第[一二三四五六七八九十]+步)([：:])(.+)$/)
+  if (match && /^第[一二三四五六七八九十]+步$/.test(match[1])) return `- **${value.trim()}**`
   return match ? `- **${match[1]}${match[2]}** ${match[3]}` : null
 }
 
@@ -465,11 +463,12 @@ function richClipboardNestedListItem(value: string, group: RichClipboardListGrou
 
 function normalizeRichClipboardText(value: string) {
   const lines = value.replace(/\r\n?/g, '\n').split('\n')
-  const timestampCount = lines.filter((line) => /^.+?\s+\d{1,2}:\d{2}$/.test(line.trim())).length
+  const timestampCount = lines.filter((line) => /^.+?\s+\d{1,2}:\d{2}(?::\d{2})?$/.test(line.trim())).length
   if (timestampCount < 2) return value
 
   const result: string[] = []
   let listOpen = false
+  let continuationIndent = '  '
   let listGroup: RichClipboardListGroup = null
   for (const line of lines) {
     const trimmed = line.trim()
@@ -477,7 +476,7 @@ function normalizeRichClipboardText(value: string) {
       result.push(line)
       continue
     }
-    const timestamp = trimmed.match(/^(.+?)\s+(\d{1,2}:\d{2})$/)
+    const timestamp = trimmed.match(/^(.+?)\s+(\d{1,2}:\d{2}(?::\d{2})?)$/)
     if (timestamp) {
       listOpen = false
       listGroup = null
@@ -486,12 +485,14 @@ function normalizeRichClipboardText(value: string) {
     }
     const nestedItem = richClipboardNestedListItem(trimmed, listGroup)
     if (nestedItem) {
+      continuationIndent = '    '
       result.push(nestedItem)
       continue
     }
     const inlineItem = richClipboardInlineListItem(trimmed)
     if (inlineItem) {
       listOpen = true
+      continuationIndent = '  '
       listGroup = richClipboardListGroup(trimmed)
       result.push(inlineItem)
       continue
@@ -499,11 +500,12 @@ function normalizeRichClipboardText(value: string) {
     const label = richClipboardListLabel(trimmed)
     if (label) {
       listOpen = true
+      continuationIndent = '  '
       listGroup = richClipboardListGroup(label)
       result.push(`- **${label}**`)
       continue
     }
-    result.push(listOpen ? `  ${trimmed}` : line)
+    result.push(listOpen ? `${continuationIndent}${trimmed}` : line)
   }
   return result.join('\n')
 }
@@ -615,11 +617,11 @@ export function htmlToMarkdown(html: string) {
 export function formatClipboardToMarkdown(html: string, text: string) {
   const promotedText = promoteClipboardImageLinks(text)
   const clipboardMarkdown = clipboardHtmlMatchesPlainText(html, promotedText) ? htmlToMarkdown(html) : ''
-  const hasStructuredClipboardList = hasNestedMarkdownList(clipboardMarkdown)
+  const hasStructuredClipboardContent = /(?:^|\n)[ \t]*(?:#{1,6}[ \t]+|[-+*][ \t]+|\d+[.)][ \t]+)/m.test(clipboardMarkdown)
   const hasExplicitMarkdownStructure = /(?:^|\n)[ \t]{0,3}#{1,6}[ \t]+|(?:^|\n)[ \t]{2,}(?:[-+*]|\d+[.)])[ \t]+/m.test(promotedText)
   let source = ''
   if (hasExplicitMarkdownStructure) source = formatPastedText(promotedText)
-  else if (hasStructuredClipboardList) source = formatPastedText(clipboardMarkdown)
+  else if (hasStructuredClipboardContent) source = formatPastedText(clipboardMarkdown)
   else if (promotedText.trim() && hasMarkdownSyntax(promotedText)) source = formatPastedText(promotedText)
   else {
     const normalizedText = normalizeRichClipboardText(promotedText)

@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, getCurrentInstance, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { invoke, isTauri as tauriIsTauri } from '@tauri-apps/api/core'
+import { readNativeClipboardRichText } from './nativeClipboard'
 import { useReaderStore } from './stores/reader'
 import RegionBlock from './components/RegionBlock.vue'
+import WebPreviewPanel from './components/WebPreviewPanel.vue'
 import MermaidBlock from './components/MermaidBlock.vue'
 import TreeDiagram from './components/TreeDiagram.vue'
 import AppIcon from './components/AppIcon.vue'
@@ -36,6 +38,7 @@ import { createPrintHtml, printPortableHtml } from './exportPrint'
 import { embedExportImages, rasterizeExportImages } from './exportImages'
 import { normalizeLatexDelimiters } from './markdown/fragment'
 import { readEditorDraft, saveEditorDraft, removeEditorDraft, hasSaveConflict } from './editorDrafts'
+import { startupStylesReady } from './startup'
 import logoAsset from './assets/moyue-logo-256.png'
 
 const FocusAmbiencePicker = defineAsyncComponent(() => import('./components/FocusAmbiencePicker.vue'))
@@ -51,6 +54,8 @@ type FileTreeEntry = { path: string; name: string; documentId?: string; isDirect
 const store = useReaderStore()
 const exportAppContext = getCurrentInstance()!.appContext
 const view = ref<View>('library')
+const webPreviewUrl = ref('')
+watch(view, (next) => { if (next !== 'reader') webPreviewUrl.value = '' })
 const libraryTab = ref<'home' | 'all'>('all')
 const librarySearchQuery = ref('')
 const navCollapsed = ref(localStorage.getItem('moyue:nav-collapsed') === 'true')
@@ -165,6 +170,9 @@ const fileContextMenu = ref<{ file: FileTreeEntry; x: number; y: number } | null
 const fileContextMenuElement = ref<HTMLElement | null>(null)
 const fileProperties = ref<FileTreeEntry | null>(null)
 const editorOpen = ref(false)
+watch([editorOpen, searchOpen, quickOpenOpen, viewer, wordCountOpen], (values) => {
+  if (values.some(Boolean)) webPreviewUrl.value = ''
+})
 const editorFindOpen = ref(false)
 const editorFindQuery = ref('')
 const editorFindReplacement = ref('')
@@ -475,6 +483,10 @@ async function openExternalLink(url: string) {
   const normalized = url.trim()
   if (!normalized) return
   if (/^(?:https?:|mailto:|tel:|\/\/)/i.test(normalized)) {
+    if (/^(?:https?:|\/\/)/i.test(normalized)) {
+      webPreviewUrl.value = normalized.startsWith('//') ? `https:${normalized}` : normalized
+      return
+    }
     if (!isTauriRuntime()) {
       window.open(normalized, '_blank', 'noopener,noreferrer')
       return
@@ -529,6 +541,10 @@ async function openExternalLink(url: string) {
   }
 }
 function normalizedPath(path: string) { return path.replace(/\\/g, '/') }
+async function openPreviewInBrowser(url: string) {
+  if (isTauriRuntime()) await invoke('open_external_url', { url }).catch(() => notify('链接打开失败，请检查链接地址'))
+  else window.open(url, '_blank', 'noopener,noreferrer')
+}
 function directoryOf(path: string) {
   const normalized = normalizedPath(path)
   const separator = normalized.lastIndexOf('/')
@@ -1167,7 +1183,23 @@ async function onEditorPaste(event: ClipboardEvent) {
   const plainText = clipboard?.getData('text/plain') ?? ''
   const hasText = Boolean(clipboard?.getData('text/html') || plainText)
   if (!imageItem && hasText) {
-    const html = clipboard?.getData('text/html') ?? ''
+    let html = clipboard?.getData('text/html') ?? ''
+    if (!html && isTauriRuntime()) {
+      event.preventDefault(); event.stopPropagation()
+      const sourceAtPaste = editorSource.value
+      const documentId = editorDocumentId.value
+      const start = element.selectionStart
+      const end = element.selectionEnd
+      const native = await readNativeClipboardRichText(plainText)
+      html = native?.html ?? ''
+      if (!editorOpen.value || editorDocumentId.value !== documentId || editorSource.value !== sourceAtPaste) {
+        notify('文档已变化，未插入内容，请重新粘贴')
+        return
+      }
+      const normalized = normalizeMixedOrderedListSource(formatClipboardToMarkdown(html, plainText))
+      insertEditorTextAt(normalized.source, start, end)
+      return
+    }
     if (html) {
       event.preventDefault(); event.stopPropagation()
       insertEditorTextAt(formatClipboardToMarkdown(html, plainText), element.selectionStart, element.selectionEnd)
@@ -1980,6 +2012,7 @@ async function readNativeClipboardImage(): Promise<Blob | null> {
 
 async function importClipboardContent(html: string, text: string, saveToFile = false, image: Blob | null = null, action: BusyAction = null) {
   if (busyAction.value) return
+  if (!html && text) html = (await readNativeClipboardRichText(text))?.html ?? ''
   let source = formatClipboardToMarkdown(html, text)
   if (!source && !image) image = await readNativeClipboardImage()
   if (!source && image) source = formatClipboardImage(await blobToDataUrl(image))
@@ -2029,6 +2062,11 @@ function onPaste(event: ClipboardEvent) {
 async function pasteFromClipboard(saveToFile = false) {
   if (busyAction.value) return
   try {
+    const native = await readNativeClipboardRichText()
+    if (native) {
+      await importClipboardContent(native.html, native.text, saveToFile)
+      return
+    }
     const clipboard = navigator.clipboard
     if (clipboard && typeof clipboard.read === 'function') {
       const items = await clipboard.read()
@@ -2688,6 +2726,7 @@ function onTabOutsideClick(event: MouseEvent) {
 async function boot() {
   try {
     await store.bootstrap()
+    await startupStylesReady
     store.clearFocus()
     if (store.currentDocument) {
       view.value = 'reader'
@@ -3991,10 +4030,10 @@ async function requestFullscreen() {
       </div>
     </aside>
 
-    <main class="main-shell">
+    <main class="main-shell" :class="{ 'with-web-preview': Boolean(webPreviewUrl) }">
       <header class="topbar" :class="{ faded: store.mode === 'focus' }">
         <div class="crumbs"><strong>{{ view === 'reader' ? displayTitle(store.currentDocument?.title) : view === 'themes' ? '主题空间' : view === 'clipboard' ? '剪贴板' : view === 'settings' ? '偏好设置' : '我的文档' }}</strong></div>
-        <button class="command-trigger" type="button" title="搜索：Ctrl/Cmd + K；快速打开：Ctrl/Cmd + P" @click="openSearch('all')"><span>搜索文档、标题、内容</span><kbd>⌘ K</kbd></button>
+        <button class="command-trigger" type="button" title="搜索：Ctrl/Cmd + K；快速打开：Ctrl/Cmd + P" @click="openSearch('all')"><AppIcon v-if="webPreviewUrl" name="search" :size="16" /><span>搜索文档、标题、内容</span><kbd>⌘ K</kbd></button>
         <div class="top-actions">
           <IconButton icon="focus" label="专注阅读" :active="store.mode === 'focus'" @click="toggleFocusMode" />
           <IconButton icon="palette" label="切换主题" @click="view = 'themes'" />
@@ -4106,7 +4145,7 @@ async function requestFullscreen() {
             </div>
           </div>
         </Teleport>
-        <div class="reader-layout" :class="{ 'focus-layout': store.mode === 'focus', 'clean-layout': store.mode === 'clean', 'split-layout': readerDisplayMode === 'split', 'context-open': contextPanelOpen, 'is-resizing-outline': outlinePanelResizing }" :style="{ '--outline-panel-width': `${outlinePanelWidth}px` }">
+        <div class="reader-layout" :class="{ 'focus-layout': store.mode === 'focus', 'clean-layout': store.mode === 'clean', 'split-layout': readerDisplayMode === 'split', 'context-open': contextPanelOpen, 'is-resizing-outline': outlinePanelResizing }" :style="{ '--outline-panel-width': `${outlinePanelWidth}px`, gridTemplateColumns: webPreviewUrl ? 'minmax(0, 1fr)' : undefined }">
           <aside v-if="store.mode !== 'focus' && store.mode !== 'clean'" class="outline-panel">
             <div class="outline-resizer" role="separator" tabindex="0" aria-orientation="vertical" aria-label="调整文档侧栏宽度" :aria-valuemin="outlinePanelMinWidth" :aria-valuemax="outlinePanelMaxWidth" :aria-valuenow="outlinePanelWidth" title="拖动调整侧栏宽度" @pointerdown="startOutlinePanelResize" @keydown="onOutlinePanelResizeKeydown" />
             <div class="panel-heading panel-switcher">
@@ -4409,6 +4448,7 @@ async function requestFullscreen() {
         <div v-show="settingsTab === 'reading'" class="settings-card"><span class="section-kicker">阅读</span><h2>阅读偏好</h2><label class="setting-row"><span>正文宽度 <b>{{ store.readerSettings.width }}px</b></span><input :value="store.readerSettings.width" type="range" min="620" max="1280" step="10" @input="changeSetting('width', Number(($event.target as HTMLInputElement).value))" /></label><label class="setting-row"><span>字号 <b>{{ store.readerSettings.fontSize }}px</b></span><input :value="store.readerSettings.fontSize" type="range" min="15" max="24" step="1" @input="changeSetting('fontSize', Number(($event.target as HTMLInputElement).value))" /></label><label class="setting-row"><span>行距 <b>{{ store.readerSettings.lineHeight }}</b></span><input :value="store.readerSettings.lineHeight" type="range" min="1.4" max="2.2" step=".05" @input="changeSetting('lineHeight', Number(($event.target as HTMLInputElement).value))" /></label><div class="setting-toggle-row"><span>显示阅读进度</span><i class="toggle-on" /></div><div class="setting-toggle-row"><span>启用专注模式</span><i class="toggle-on" /></div></div><div v-show="settingsTab === 'reading'" class="settings-card"><span class="section-kicker">辅助功能</span><h2>翻译与解释</h2><p class="muted-copy">使用适配器连接你自己的翻译或解释服务；配置后可从划词工具栏调用。</p><label class="setting-input">服务标识<input v-model="customProvider" placeholder="例如：local-llm / my-translator" /></label><button class="primary-button" type="button" @click="notify(customProvider ? '适配器标识已保存' : '保持未配置状态')"><AppIcon name="check" :size="14" />保存配置</button></div><div v-show="settingsTab === 'shortcuts'" class="settings-card shortcuts-card"><span class="section-kicker">快捷操作</span><h2>快捷键</h2><div class="shortcut-row"><span>全局搜索</span><kbd>Ctrl / Cmd + K</kbd></div><div class="shortcut-row"><span>当前文档搜索</span><kbd>Ctrl / Cmd + F</kbd></div><div class="shortcut-row"><span>阅读缩放</span><kbd>Ctrl / Cmd + + / -</kbd></div><div class="shortcut-row"><span>专注模式</span><kbd>F</kbd></div><div class="shortcut-row"><span>退出聚焦</span><kbd>Esc</kbd></div><div class="shortcut-row"><span>切换区域</span><kbd>↑ ↓</kbd></div></div><div v-show="settingsTab === 'extensions'" class="settings-card extensions-card"><div class="extensions-head"><div><span class="section-kicker">插件中心</span><h2>插件扩展</h2></div><button class="ghost-button" type="button" @click="notify('插件运行时将在后续版本启用')"><AppIcon name="plugin" :size="14" />打开插件目录</button></div><div class="extension-filter"><AppIcon name="search" :size="14" /><span>按需扩展阅读能力</span></div><div class="extension-list"><div class="extension-item"><span class="extension-icon purple"><AppIcon name="sparkle" :size="17" /></span><span><b>AI 阅读助手</b><small>总结、解释与问答适配器</small></span><button type="button" @click="notify('请先在翻译与解释中配置服务')">配置</button></div><div class="extension-item"><span class="extension-icon green"><AppIcon name="download" :size="17" /></span><span><b>导出增强</b><small>为阅读内容准备更多导出格式</small></span><button type="button" @click="notify('导出增强将在下一阶段接入')">安装</button></div><div class="extension-item"><span class="extension-icon pink"><AppIcon name="components" :size="17" /></span><span><b>思维导图</b><small>把长文转换为结构化视图</small></span><button type="button" @click="notify('插件运行时暂未启用')">安装</button></div></div></div></div></section>
       <ClipboardManager v-show="view === 'clipboard'" @notify="notify" />
     </main>
+    <WebPreviewPanel v-if="webPreviewUrl && view === 'reader'" :url="webPreviewUrl" @close="webPreviewUrl = ''" @navigate="webPreviewUrl = $event" @external="openPreviewInBrowser" />
 
     <div v-if="quickOpenOpen" class="overlay search-overlay" @click.self="quickOpenOpen = false">
       <div class="search-dialog quick-open-dialog" role="dialog" aria-modal="true" aria-label="快速打开文件">
