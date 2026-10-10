@@ -10,7 +10,7 @@
       (() => {
         try {
           const saved = localStorage.getItem('moyue:theme')
-          document.documentElement.dataset.moyueTheme = saved === 'quiet-moss' || saved === 'blue-hour' ? saved : 'paper-white'
+          document.documentElement.dataset.moyueTheme = saved === 'quiet-moss' ? saved : 'paper-white'
         } catch {
           document.documentElement.dataset.moyueTheme = 'paper-white'
         }
@@ -19,7 +19,6 @@
     <style>
       :root { --startup-bg: #eef3f2; --startup-surface: #f8fbfa; --startup-surface-raised: #fff; --startup-text: #1f2a31; --startup-muted: #65747b; --startup-accent: #277f77; --startup-accent-soft: #d8efea; --startup-border: rgba(31, 54, 58, .14); }
       :root[data-moyue-theme="quiet-moss"] { --startup-bg: #ebe8df; --startup-surface: #f4f1e8; --startup-surface-raised: #fffdf7; --startup-text: #27342e; --startup-muted: #718078; --startup-accent: #5f8b73; --startup-accent-soft: #dceadf; --startup-border: rgba(50, 72, 60, .15); }
-      :root[data-moyue-theme="blue-hour"] { --startup-bg: #0d1b25; --startup-surface: #142832; --startup-surface-raised: #1c3946; --startup-text: #e3f0f2; --startup-muted: #8faeb2; --startup-accent: #7ed8d0; --startup-accent-soft: #20545a; --startup-border: rgba(175, 220, 220, .17); }
       html, body { min-width: 1080px; min-height: 100%; margin: 0; background: var(--app-bg, var(--startup-bg)); }
       html:has(#startup-splash), body:has(#startup-splash), #app:has(#startup-splash) { background: var(--startup-bg) !important; }
       .startup-loading { position: fixed; inset: 0; z-index: 40; display: grid; place-content: center; justify-items: center; color: var(--ink, var(--startup-text)); font: 14px "Segoe UI", sans-serif; text-align: center; background: transparent; }

@@ -21,21 +21,6 @@ export const builtInThemes: MoyueTheme[] = [
   },
   {
     builtIn: true,
-    manifest: { schemaVersion: 1, id: 'blue-hour', name: '蓝调时刻', version: '1.0.0', author: 'Moyue', mode: 'dark', description: '深青蓝界面，适合夜间技术文档与代码阅读', entry: { tokens: 'tokens.json', reader: 'reader.css', markdown: 'markdown.css', components: 'components.css' } },
-    tokens: { color: { appBackground: '#0c1a21', surface: '#14272f', surfaceRaised: '#1b333c', text: '#dfeaec', textMuted: '#8fa5aa', accent: '#72bcb6', accentSoft: '#21474b', border: 'rgba(171,207,207,.18)', codeBackground: '#08161b' }, reader: { width: 1020, fontSize: 18, lineHeight: 1.8, paragraphGap: 20, fontFamily: 'Iowan Old Style, Palatino Linotype, Georgia, serif' } }
-  },
-  {
-    builtIn: true,
-    manifest: { schemaVersion: 1, id: 'xuan-paper', name: '松烟水墨', version: '1.0.0', author: 'Moyue', mode: 'light', description: '冷宣纸、松烟墨与飞白笔触，以墨分五色承托长文阅读', entry: { tokens: 'tokens.json', reader: 'reader.css', markdown: 'markdown.css', components: 'components.css' } },
-    tokens: { color: { appBackground: '#d9dbd7', surface: '#e8e9e4', surfaceRaised: '#f3f3ee', text: '#20221f', textMuted: '#676b65', accent: '#343936', accentSoft: '#d5d8d2', border: 'rgba(30,34,30,.2)', codeBackground: '#e1e3de' }, reader: { width: 1040, fontSize: 18, lineHeight: 1.94, paragraphGap: 24, fontFamily: 'Noto Serif SC, Source Han Serif SC, Songti SC, SimSun, serif' } }
-  },
-  {
-    builtIn: true,
-    manifest: { schemaVersion: 1, id: 'inkstone', name: '浓墨砚台', version: '1.0.0', author: 'Moyue', mode: 'dark', description: '墨池般的深黑、低亮砚色与微弱飞白，适合夜间慢读', entry: { tokens: 'tokens.json', reader: 'reader.css', markdown: 'markdown.css', components: 'components.css' } },
-    tokens: { color: { appBackground: '#0c0e0d', surface: '#141715', surfaceRaised: '#1b1f1c', text: '#e4e6df', textMuted: '#979c95', accent: '#b9bdb5', accentSoft: '#303530', border: 'rgba(228,230,223,.16)', codeBackground: '#090b0a' }, reader: { width: 1030, fontSize: 18, lineHeight: 1.92, paragraphGap: 23, fontFamily: 'Noto Serif SC, Source Han Serif SC, Songti SC, SimSun, serif' } }
-  },
-  {
-    builtIn: true,
     manifest: { schemaVersion: 1, id: 'bamboo-shadow', name: '烟雨竹影', version: '1.0.0', author: 'Moyue', mode: 'light', description: '冷白宣纸、淡墨竹影和湿润的灰青，适合白天阅读与笔记', entry: { tokens: 'tokens.json', reader: 'reader.css', markdown: 'markdown.css', components: 'components.css' } },
     tokens: { color: { appBackground: '#d7dbd7', surface: '#e7ebe7', surfaceRaised: '#f2f4ef', text: '#222824', textMuted: '#626b64', accent: '#465b4d', accentSoft: '#d2dad3', border: 'rgba(34,45,38,.19)', codeBackground: '#dfe5df' }, reader: { width: 1030, fontSize: 18, lineHeight: 1.92, paragraphGap: 23, fontFamily: 'FangSong, STFangsong, Noto Serif SC, SimSun, serif' } }
   },

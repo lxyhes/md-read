@@ -15,9 +15,6 @@ const emit = defineEmits<{
 const cardCopy: Record<string, { kicker: string; mark: string; title: string; caption: string }> = {
   'quiet-moss': { kicker: '苔色 · 静读', mark: '苔', title: '苔原', caption: '静默生长' },
   'paper-white': { kicker: '素纸 · 清读', mark: '白', title: '白纸', caption: '留给文字的空白' },
-  'blue-hour': { kicker: '深青 · 技术', mark: '潮', title: '蓝调', caption: '夜色里的清晰' },
-  'xuan-paper': { kicker: '松烟 · 水墨', mark: '墨', title: '水墨', caption: '墨分五色' },
-  'inkstone': { kicker: '墨池 · 夜读', mark: '砚', title: '浓墨', caption: '玄黑见字' },
   'bamboo-shadow': { kicker: '宿墨 · 竹青', mark: '竹', title: '竹影', caption: '雨落成痕' },
 }
 
