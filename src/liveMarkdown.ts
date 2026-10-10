@@ -1,4 +1,5 @@
 import { EditorState, StateField, type Range } from '@codemirror/state'
+import type { SyntaxNode } from '@lezer/common'
 import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view'
 import { syntaxTree } from '@codemirror/language'
 import { undo, redo } from '@codemirror/commands'
@@ -20,17 +21,25 @@ class PreviewWidget extends WidgetType {
     const root = document.createElement(this.block ? 'div' : 'span')
     root.className = 'live-preview-widget'
     root.innerHTML = renderMarkdownFragment(this.previewSource, this.options.resolveUrl)
+    if (!this.block && root.children.length === 1 && root.firstElementChild?.tagName === 'P') {
+      const paragraph = root.firstElementChild
+      while (paragraph.firstChild) root.append(paragraph.firstChild)
+      paragraph.remove()
+    }
     root.setAttribute('aria-label', '预览内容，双击编辑源码')
     root.addEventListener('dblclick', event => {
       event.preventDefault()
       view.dispatch({ selection: { anchor: this.from, head: this.from + this.source.length }, scrollIntoView: true })
       view.focus()
     })
-    root.querySelectorAll<HTMLAnchorElement>('a').forEach(link => link.addEventListener('click', event => {
-      event.preventDefault()
-      if (event.ctrlKey || event.metaKey) this.options.openLink(link.getAttribute('href') ?? '')
-      else { view.dispatch({ selection: { anchor: this.from, head: this.from + this.source.length } }); view.focus() }
-    }))
+    root.querySelectorAll<HTMLAnchorElement>('a').forEach(link => {
+      link.classList.add('live-link')
+      link.addEventListener('click', event => {
+        event.preventDefault()
+        if (event.ctrlKey || event.metaKey) this.options.openLink(link.getAttribute('href') ?? '')
+        else { view.dispatch({ selection: { anchor: this.from, head: this.from + this.source.length } }); view.focus() }
+      })
+    })
     return root
   }
   ignoreEvent() { return true }
@@ -73,7 +82,9 @@ class TaskWidget extends WidgetType {
 }
 
 class BulletWidget extends WidgetType {
-  toDOM() { const marker = document.createElement('span'); marker.className = 'live-list-bullet'; marker.textContent = '•'; return marker }
+  constructor(readonly depth: number) { super() }
+  eq(other: BulletWidget) { return this.depth === other.depth }
+  toDOM() { const marker = document.createElement('span'); marker.className = 'live-list-bullet'; marker.textContent = this.depth % 2 ? '•' : '◦'; return marker }
   ignoreEvent() { return false }
 }
 
@@ -274,7 +285,9 @@ export function liveMarkdown(options: LiveOptions) {
         }
       }
       if (node.name === 'Image' && !active) {
-        ranges.push(Decoration.replace({ widget: new PreviewWidget(raw, node.from, options, false, `${raw}\n\n${referenceDefinitions}`) }).range(node.from, node.to))
+        const imageLink = raw.match(/^!\[([^\]\n]*)\]\((<[^>\n]+>|[^)\n]+)\)$/)
+        const previewSource = imageLink ? `[${imageLink[1] || 'image'}](${imageLink[2]})` : raw
+        ranges.push(Decoration.replace({ widget: new PreviewWidget(raw, node.from, options, false, `${previewSource}\n\n${referenceDefinitions}`) }).range(node.from, node.to))
         return false
       }
       if (node.name === 'TaskMarker' && !active) {
@@ -283,7 +296,15 @@ export function liveMarkdown(options: LiveOptions) {
       }
       if (node.name === 'ListMark' && node.node.parent && !selectionTouches(state, node.node.parent.from, node.node.parent.to)) {
         if (node.node.parent.getChild('Task')) replace(node.from, node.to)
-        else if (/^[-+*]$/.test(raw)) ranges.push(Decoration.replace({ widget: new BulletWidget() }).range(node.from, node.to))
+        else if (/^[-+*]$/.test(raw)) {
+          let depth = 0
+          let ancestor: SyntaxNode | null = node.node.parent
+          while (ancestor) {
+            if (ancestor.name === 'List') depth += 1
+            ancestor = ancestor.parent
+          }
+          ranges.push(Decoration.replace({ widget: new BulletWidget(Math.max(depth, 1)) }).range(node.from, node.to))
+        }
       }
       if (node.name === 'FencedCode' && !active) {
         const diagram = raw.match(/^\s*(`{3,}|~{3,})mermaid[^\n]*\r?\n([\s\S]*?)\r?\n\s*\1\s*$/i)
