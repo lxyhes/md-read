@@ -11,11 +11,6 @@ export const defaultTokens: ThemeTokens = {
 export const builtInThemes: MoyueTheme[] = [
   {
     builtIn: true,
-    manifest: { schemaVersion: 1, id: 'ember-paper', name: '月影深蓝', version: '1.0.0', author: 'Moyue', mode: 'dark', description: '深靛蓝底色与低饱和紫调，适合夜间长文阅读', entry: { tokens: 'tokens.json', reader: 'reader.css', markdown: 'markdown.css', components: 'components.css' } },
-    tokens: defaultTokens
-  },
-  {
-    builtIn: true,
     manifest: { schemaVersion: 1, id: 'quiet-moss', name: '静默苔原', version: '1.0.0', author: 'Moyue', mode: 'light', description: '暖灰纸色与苔绿标记，适合白天长时间阅读', entry: { tokens: 'tokens.json', reader: 'reader.css', markdown: 'markdown.css', components: 'components.css' } },
     tokens: { color: { appBackground: '#e9e6dc', surface: '#f2efe6', surfaceRaised: '#fbfaf5', text: '#2c332e', textMuted: '#737a72', accent: '#617765', accentSoft: '#dce3d9', border: 'rgba(54,66,57,.16)', codeBackground: '#e4e3dc' }, reader: { width: 1000, fontSize: 18, lineHeight: 1.86, paragraphGap: 22, fontFamily: 'Iowan Old Style, Palatino Linotype, Georgia, serif' } }
   },
@@ -44,11 +39,6 @@ export const builtInThemes: MoyueTheme[] = [
     manifest: { schemaVersion: 1, id: 'bamboo-shadow', name: '烟雨竹影', version: '1.0.0', author: 'Moyue', mode: 'light', description: '冷白宣纸、淡墨竹影和湿润的灰青，适合白天阅读与笔记', entry: { tokens: 'tokens.json', reader: 'reader.css', markdown: 'markdown.css', components: 'components.css' } },
     tokens: { color: { appBackground: '#d7dbd7', surface: '#e7ebe7', surfaceRaised: '#f2f4ef', text: '#222824', textMuted: '#626b64', accent: '#465b4d', accentSoft: '#d2dad3', border: 'rgba(34,45,38,.19)', codeBackground: '#dfe5df' }, reader: { width: 1030, fontSize: 18, lineHeight: 1.92, paragraphGap: 23, fontFamily: 'FangSong, STFangsong, Noto Serif SC, SimSun, serif' } }
   },
-  {
-    builtIn: true,
-    manifest: { schemaVersion: 1, id: 'cinnabar-scroll', name: '朱砂小笺', version: '1.0.0', author: 'Moyue', mode: 'light', description: '旧纸、墨线与一方克制的朱砂印，适合摘录和个人笔记', entry: { tokens: 'tokens.json', reader: 'reader.css', markdown: 'markdown.css', components: 'components.css' } },
-    tokens: { color: { appBackground: '#dcdbd5', surface: '#ebeae4', surfaceRaised: '#f5f3ec', text: '#252522', textMuted: '#6a6861', accent: '#913b32', accentSoft: '#e5d4cf', border: 'rgba(42,39,35,.19)', codeBackground: '#e5e3dc' }, reader: { width: 1040, fontSize: 18, lineHeight: 1.9, paragraphGap: 23, fontFamily: 'Noto Serif SC, Source Han Serif SC, Songti SC, SimSun, serif' } }
-  }
 ]
 
 const blocked = /(<script|<iframe|javascript:|@import|url\s*\(\s*['"]?https?:|expression\s*\(|\.\.|\bwasm\b)/i
