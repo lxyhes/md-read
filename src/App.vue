@@ -3112,7 +3112,6 @@ async function importNativeDroppedPaths(paths: string[]) {
   } finally { busyAction.value = null }
 }
 async function onDrop(event: DragEvent) {
-  if (isTauriRuntime()) return
   if (busyAction.value) return
   draggingFiles.value = false
   const droppedFiles = Array.from(event.dataTransfer?.files ?? [])
@@ -3130,15 +3129,19 @@ async function onDrop(event: DragEvent) {
 
 async function bindNativeFileDrop() {
   if (!isTauriRuntime()) return
-  const { getCurrentWindow } = await import('@tauri-apps/api/window')
-  stopNativeFileDrop = await getCurrentWindow().onDragDropEvent(({ payload }) => {
-    if (payload.type === 'enter' || payload.type === 'over') draggingFiles.value = true
-    if (payload.type === 'leave') draggingFiles.value = false
-    if (payload.type === 'drop') {
-      draggingFiles.value = false
-      void importNativeDroppedPaths(payload.paths)
-    }
-  })
+  try {
+    const { getCurrentWindow } = await import('@tauri-apps/api/window')
+    stopNativeFileDrop = await getCurrentWindow().onDragDropEvent(({ payload }) => {
+      if (payload.type === 'enter' || payload.type === 'over') draggingFiles.value = true
+      if (payload.type === 'leave') draggingFiles.value = false
+      if (payload.type === 'drop') {
+        draggingFiles.value = false
+        void importNativeDroppedPaths(payload.paths)
+      }
+    })
+  } catch (error) {
+    notify(error instanceof Error ? `拖拽监听启动失败：${error.message}` : '拖拽监听启动失败')
+  }
 }
 
 function showResumePromptIfNeeded(documentId: string) {
