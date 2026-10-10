@@ -162,7 +162,7 @@ function inline(node: Node): string {
     case 'a': {
       const href = safeLink(element.getAttribute('href') ?? '')
       const text = content().trim()
-      return href && text ? `[${text}](${href})` : text
+      return href && text ? (isClipboardImageLink(text, href) ? `![${text}](${href})` : `[${text}](${href})`) : text
     }
     case 'img': return imageMarkdown(element)
     case 'picture': return imageMarkdown(element.querySelector('img') as HTMLElement | null)
@@ -306,6 +306,19 @@ function hasMarkdownSyntax(value: string) {
   return /(?:^|\n)\s*(?:#{1,6}\s|[-*+]\s|[•◦▪]\s|\d+[.)]\s|>\s|```|~~~)|\*\*[^*\n]+\*\*|__[^_\n]+__|\[[^\]\n]+\]\([^\n)]+\)|`[^`\n]+`/m.test(value)
 }
 
+function isClipboardImageLink(label: string, target: string) {
+  const imageLabel = /^(?:image|图片|图像|截图)(?:\s*\d+)?$/i.test(label.trim())
+  if (!imageLabel) return false
+  const value = target.trim().replace(/^<|>$/g, '')
+  return /\.(?:avif|bmp|gif|jiff?|jfif|jpe?g|png|svg|webp)(?:[?#].*)?$/i.test(value) || /(?:^|[./_-])(?:img|image|preview)(?:[./?_-]|$)/i.test(value)
+}
+
+function promoteClipboardImageLinks(value: string) {
+  return value.split('\n').map((line) => line.replace(/^(\s*)\[([^\]\n]+)\]\((<[^>\n]+>|[^)\n]+)\)(\s*)$/, (match, indent: string, label: string, target: string, trailing: string) => {
+    return isClipboardImageLink(label, target) ? `${indent}![${label}](${target})${trailing}` : match
+  })).join('\n')
+}
+
 function stripAccidentalClipboardIndent(value: string) {
   const lines = value.replace(/\u00a0/g, ' ').replace(/\r\n?/g, '\n').split('\n')
   const contentLines = lines.filter((line) => line.trim())
@@ -351,7 +364,9 @@ function normalizeArticleSections(value: string) {
 
     // Existing Markdown list items already have a hierarchy. Rewriting bold
     // spans inside them as section headings breaks nested lists and links.
-    if (/^\s*(?:[-+*]|\d+[.)])\s+/.test(line)) {
+    // The same applies to explicit headings: splitting `### **title**` would
+    // leave an empty heading followed by a plain paragraph.
+    if (/^\s*(?:#{1,6}\s+|[-+*]\s+|\d+[.)]\s+)/.test(line)) {
       result.push(line)
       continue
     }
@@ -383,12 +398,129 @@ function normalizeTimestampedHeadings(value: string) {
       inFence = !inFence
       return line
     }
-    if (inFence) return line
+    if (inFence || /^\s*#{1,6}\s+/.test(trimmed)) return line
     const match = trimmed.match(/^(.+?)\s+(\d{1,2}:\d{2})$/)
     const title = match?.[1]?.trim() ?? ''
     if (!match || !title || title.length > 48 || !/[\u3400-\u9fff]/.test(title) || /[。！？!?]$/.test(title)) return line
     return `**${title} ${match[2]}**`
   }).join('\n')
+}
+
+function clipboardHtmlMatchesPlainText(html: string, text: string) {
+  const plain = text.replace(/\s+/g, '').slice(0, 12)
+  if (!plain || !/[\u3400-\u9fff]/.test(plain)) return true
+  const visible = html
+    .replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&(?:nbsp|amp|lt|gt|quot|#\d+|#x[\da-f]+);/gi, ' ')
+    .replace(/\s+/g, '')
+  return visible.includes(plain)
+}
+
+function hasNestedMarkdownList(value: string) {
+  return /(?:^|\n)[ \t]*(?:[-+*]|\d+[.)])[ \t]+.+\n[ \t]{2,}(?:[-+*]|\d+[.)])[ \t]+/m.test(value)
+}
+
+function clipboardImagesMarkdown(html: string) {
+  if (!html.trim() || typeof DOMParser === 'undefined') return ''
+  const document = new DOMParser().parseFromString(html, 'text/html') as ClipboardDocument
+  const images = Array.from(document.body.querySelectorAll('img'))
+    .map((image) => imageMarkdown(image as HTMLElement))
+    .filter(Boolean)
+  return [...new Set(images)].join('\n\n')
+}
+
+function richClipboardListLabel(value: string) {
+  const text = value.trim()
+  if (!text || text.length > 24 || !/[\u3400-\u9fff]/.test(text) || /[。！？!?；;，,：:、]$/.test(text)) return null
+  return text
+}
+
+function richClipboardInlineListItem(value: string) {
+  const match = value.trim().match(/^(第[一二三四五六七八九十]+标签客群|陷阱[一二三四五六七八九十]+|第[一二三四五六七八九十]+步)([：:])(.+)$/)
+  return match ? `- **${match[1]}${match[2]}** ${match[3]}` : null
+}
+
+type RichClipboardListGroup = 'audience' | 'scenario' | 'steps' | 'trap' | 'supply' | null
+
+function richClipboardListGroup(value: string): RichClipboardListGroup {
+  if (/主力客群定义与层级/.test(value)) return 'audience'
+  if (/适用场景/.test(value)) return 'scenario'
+  if (/精选联盟选品四步法/.test(value)) return 'steps'
+  if (/供应链获取路径/.test(value)) return 'supply'
+  if (/^陷阱[一二三四五六七八九十]+[：:]/.test(value)) return 'trap'
+  return null
+}
+
+function richClipboardNestedListItem(value: string, group: RichClipboardListGroup) {
+  const inlineItem = richClipboardInlineListItem(value)
+  if (inlineItem && ((group === 'audience' && /^第一|^第二|^第三/.test(value)) || (group === 'steps' && /^第[一二三四]步/.test(value)))) {
+    return `  ${inlineItem}`
+  }
+  if (group === 'scenario' && /^当(?:同一产品|产品)/.test(value)) return `  - ${value}`
+  if (group === 'trap' && /^(?:判定标准|后果|警惕信号|根本原因|结论)[：:]/.test(value)) return `  - ${value}`
+  if (group === 'supply' && /^(?:无联系方式|线下资源优先)[：:]/.test(value)) return `  - ${value}`
+  return null
+}
+
+function normalizeRichClipboardText(value: string) {
+  const lines = value.replace(/\r\n?/g, '\n').split('\n')
+  const timestampCount = lines.filter((line) => /^.+?\s+\d{1,2}:\d{2}$/.test(line.trim())).length
+  if (timestampCount < 2) return value
+
+  const result: string[] = []
+  let listOpen = false
+  let listGroup: RichClipboardListGroup = null
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed) {
+      result.push(line)
+      continue
+    }
+    const timestamp = trimmed.match(/^(.+?)\s+(\d{1,2}:\d{2})$/)
+    if (timestamp) {
+      listOpen = false
+      listGroup = null
+      result.push(`### ${timestamp[1].trim()} ${timestamp[2]}`, '')
+      continue
+    }
+    const nestedItem = richClipboardNestedListItem(trimmed, listGroup)
+    if (nestedItem) {
+      result.push(nestedItem)
+      continue
+    }
+    const inlineItem = richClipboardInlineListItem(trimmed)
+    if (inlineItem) {
+      listOpen = true
+      listGroup = richClipboardListGroup(trimmed)
+      result.push(inlineItem)
+      continue
+    }
+    const label = richClipboardListLabel(trimmed)
+    if (label) {
+      listOpen = true
+      listGroup = richClipboardListGroup(label)
+      result.push(`- **${label}**`)
+      continue
+    }
+    result.push(listOpen ? `  ${trimmed}` : line)
+  }
+  return result.join('\n')
+}
+
+function insertClipboardImages(source: string, html: string) {
+  const images = clipboardImagesMarkdown(html)
+  if (!images) return source
+  const imageUrls = new Set([...source.matchAll(/!\[[^\]\n]*\]\((<[^>\n]+>|[^)\n]+)\)/g)].map((match) => match[1].replace(/^<|>$/g, '').trim()))
+  const missingImages = images.split(/\n\s*\n/).filter((image) => {
+    const target = image.match(/!\[[^\]\n]*\]\((<[^>\n]+>|[^)\n]+)\)/)?.[1]?.replace(/^<|>$/g, '').trim()
+    return target && !imageUrls.has(target)
+  })
+  if (!missingImages.length) return source
+  const blocks = source.split(/\n\s*\n/)
+  const insertionIndex = blocks[0]?.trim() ? 1 : 0
+  blocks.splice(insertionIndex, 0, missingImages.join('\n\n'))
+  return blocks.join('\n\n')
 }
 
 export function formatPastedText(value: string) {
@@ -481,8 +613,18 @@ export function htmlToMarkdown(html: string) {
 }
 
 export function formatClipboardToMarkdown(html: string, text: string) {
-  if (text.trim() && hasMarkdownSyntax(text)) return formatPastedText(text)
-  const markdown = htmlToMarkdown(html)
-  if (markdown) return markdown
-  return formatPastedText(text)
+  const promotedText = promoteClipboardImageLinks(text)
+  const clipboardMarkdown = clipboardHtmlMatchesPlainText(html, promotedText) ? htmlToMarkdown(html) : ''
+  const hasStructuredClipboardList = hasNestedMarkdownList(clipboardMarkdown)
+  const hasExplicitMarkdownStructure = /(?:^|\n)[ \t]{0,3}#{1,6}[ \t]+|(?:^|\n)[ \t]{2,}(?:[-+*]|\d+[.)])[ \t]+/m.test(promotedText)
+  let source = ''
+  if (hasExplicitMarkdownStructure) source = formatPastedText(promotedText)
+  else if (hasStructuredClipboardList) source = formatPastedText(clipboardMarkdown)
+  else if (promotedText.trim() && hasMarkdownSyntax(promotedText)) source = formatPastedText(promotedText)
+  else {
+    const normalizedText = normalizeRichClipboardText(promotedText)
+    if (normalizedText !== promotedText) source = formatPastedText(normalizedText)
+    else source = clipboardMarkdown || formatPastedText(normalizedText)
+  }
+  return insertClipboardImages(source, html)
 }

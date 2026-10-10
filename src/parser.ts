@@ -111,6 +111,42 @@ function restoreTimestampedLists(tree: MdastNode) {
   tree.children = restored
 }
 
+function restoreTimestampedListHeadings(tree: MdastNode) {
+  const children = tree.children ?? []
+  const chapterText = (item: MdastNode) => {
+    const first = item.type === 'listItem' ? item.children?.[0] : null
+    const text = first?.type === 'paragraph' ? nodeText(first).replace(/\s+/g, ' ').trim() : ''
+    return text.length <= 64 && /^[\u3400-\u9fff].+?\s+\d{1,2}:\d{2}(?::\d{2})?$/.test(text) ? first : null
+  }
+  if (!children.some((node) => node.type === 'heading' && /\d{1,2}:\d{2}(?::\d{2})?$/.test(nodeText(node).trim()))) return
+  if (children.flatMap((node) => node.type === 'list' ? node.children ?? [] : []).filter(chapterText).length < 2) return
+
+  const restored: MdastNode[] = []
+  for (const node of children) {
+    if (node.type !== 'list' || !node.children?.some(chapterText)) {
+      restored.push(node)
+      continue
+    }
+    let items: MdastNode[] = []
+    const flush = () => {
+      if (items.length) restored.push({ ...node, children: items, position: { start: items[0].position?.start, end: items.at(-1)?.position?.end } })
+      items = []
+    }
+    for (const item of node.children) {
+      const chapter = chapterText(item)
+      if (!chapter) {
+        items.push(item)
+        continue
+      }
+      flush()
+      restored.push({ type: 'heading', depth: 3, children: chapter.children, position: chapter.position ?? item.position })
+      restored.push(...(item.children ?? []).slice(1))
+    }
+    flush()
+  }
+  tree.children = restored
+}
+
 function offsetNodePosition(node: MdastNode, offset: number): MdastNode {
   if (!node.position) return node
   return {
@@ -144,6 +180,7 @@ export function parseMarkdown(path: string, source: string, resolveUrl: Markdown
   normalizeMixedOrderedLists(tree)
   promoteTimestampedParagraphs(tree)
   restoreTimestampedLists(tree)
+  restoreTimestampedListHeadings(tree)
   removeEmptyListItems(tree)
   normalizeArticleStrong(tree)
   const documentId = `doc_${hashText(path)}`

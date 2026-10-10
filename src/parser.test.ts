@@ -341,6 +341,96 @@ $$`)
     expect(nested).toContain('    - 销售、管理、领导力')
   })
 
+  it('promotes standalone image links from rich clipboard text into image regions', () => {
+    const source = formatClipboardToMarkdown('', '[image](https://img-view-c-sz.drive.quark.cn/assets/preview?token=abc\\&sp=100)')
+    expect(source).toBe('![image](https://img-view-c-sz.drive.quark.cn/assets/preview?token=abc\\&sp=100)')
+    expect(parseMarkdown('clipboard-image-link.md', source).regions[0]?.type).toBe('image')
+  })
+
+  it('preserves explicit headings that contain bold links', () => {
+    const source = [
+      '本视频讲述了直播电商选品的核心逻辑。',
+      '',
+      '### **课程导引与基础认知 [10:53](https://example.com#?seek_t=653)**',
+      '',
+      '- **行业核心痛点**\\',
+      '  品是直播电商贯穿全程的最关键环节。',
+    ].join('\n')
+    const pasted = formatPastedText(source)
+    const document = parseMarkdown('explicit-heading.md', pasted)
+
+    expect(pasted).not.toMatch(/^###\s*$/m)
+    expect(document.regions[0]?.type).toBe('paragraph')
+    expect(document.regions[1]?.type).toBe('heading')
+    expect(document.regions[1]?.textContent).toContain('课程导引与基础认知')
+    expect(document.regions[2]?.type).toBe('list')
+    expect(document.title).toContain('课程导引与基础认知')
+  })
+
+  it('recovers structure when rich clipboard HTML has broken Chinese encoding', () => {
+    const html = '<p>鏈棰戣杩颁簡</p><img src="https://example.com/cover.png"><h3>璇剧▼瀵煎紩涓庡熀纭€璁ょ煡 10:53</h3><ul><li><strong>琛屼笟鏍稿績鐥涚偣</strong><br>鍝佹槸鐩存挱鐢靛晢璐┛鍏ㄧ▼</li></ul>'
+    const text = [
+      '本视频讲述了直播电商选品的核心逻辑。',
+      '',
+      '课程导引与基础认知 10:53',
+      '行业核心痛点',
+      '品是直播电商贯穿全程的最关键环节。',
+      '',
+      '产品生命周期与标签建模逻辑 15:29',
+      '主力客群定义与层级',
+      '第一标签客群：需求最强烈、最可能成交。',
+    ].join('\n')
+    const source = formatClipboardToMarkdown(html, text)
+    const document = parseMarkdown('broken-rich-clipboard.md', source)
+
+    expect(source).toContain('### 课程导引与基础认知 10:53')
+    expect(source).toContain('- **行业核心痛点**')
+    expect(source).not.toContain('鏈')
+    expect(document.regions.map((region) => region.type)).toContain('heading')
+  })
+
+  it('formats rich course text when the clipboard exposes no HTML', () => {
+    const text = [
+      '本视频讲述了直播电商选品的核心逻辑。',
+      '',
+      '课程导引与基础认知 10:53',
+      '行业核心痛点',
+      '品是直播电商贯穿全程的最关键环节。',
+      '',
+      '产品生命周期与标签建模逻辑 15:29',
+      '主力客群定义与层级',
+      '第一标签客群：需求最强烈、最可能成交。',
+    ].join('\n')
+
+    const source = formatClipboardToMarkdown('', text)
+
+    expect(source).toContain('### 课程导引与基础认知 10:53')
+    expect(source).toContain('- **行业核心痛点**')
+    expect(source).toContain('### 产品生命周期与标签建模逻辑 15:29')
+    expect(source).toContain('- **第一标签客群：** 需求最强烈、最可能成交。')
+  })
+
+  it('prefers timestamped plain-text structure over flattened clipboard HTML', () => {
+    const text = [
+      '本视频讲述了直播电商选品的核心逻辑。',
+      '',
+      '课程导引与基础认知 10:53',
+      '行业核心痛点',
+      '品是直播电商贯穿全程的最关键环节。',
+      '',
+      '产品生命周期与标签建模逻辑 15:29',
+      '主力客群定义与层级',
+      '第一标签客群：需求最强烈、最可能成交。',
+    ].join('\n')
+    const html = '<div>本视频讲述了直播电商选品的核心逻辑。</div><div>课程导引与基础认知 10:53行业核心痛点品是直播电商贯穿全程的最关键环节。</div><div>产品生命周期与标签建模逻辑 15:29主力客群定义与层级</div>'
+
+    const source = formatClipboardToMarkdown(html, text)
+
+    expect(source).toContain('### 课程导引与基础认知 10:53')
+    expect(source).toContain('- **行业核心痛点**')
+    expect(source).toContain('### 产品生命周期与标签建模逻辑 15:29')
+  })
+
   it('restores timestamped section emphasis from old plain documents', () => {
     const document = parseMarkdown('plain-course.md', '课程结构与“道法术器”体系 26:19\n\n周文强负责：IP之“道”与“法”。\n\n其他讲师负责：IP之“术”与“器”。\n\n作业执行与陪跑机制 28:06\n\n落地重要性：必须完成作业才能算结业。\n\n作业示例：通过实践获得真实感受。')
     expect(document.regions[0]?.html).toContain('<strong>课程结构与“道法术器”体系 26:19</strong>')
@@ -375,6 +465,32 @@ $$`)
     const tree = markdownToTree(source, '视频')
     expect(tree?.children.map((child) => child.label)).toEqual(['课程主旨与IP四维模型 [00:02]', '下一章 [00:36]'])
     expect(tree?.children[0]?.children[0]?.detail).toContain('  - **录制艰辛**：\n    - 利用间隙录制。')
+  })
+
+  it('restores chapter boundaries from a legacy list after a timestamped heading', () => {
+    const source = [
+      '### 店铺分与产品热度权衡原则 [42:42](https://example.com/video#?seek_t=2562)',
+      '',
+      '- **热度为绝对第一选项**',
+      '  产品热度优先。',
+      '- **货带人 vs. 人带货本质区分 01:02:58**',
+      '- **货带人（新手适用）**',
+      '  产品受众宽。',
+      '- **新手执行铁律与资源建议 01:11:02**',
+      '- **供应链获取路径**',
+      '  - 无联系方式：拍一单。',
+      '  - 线下资源优先：产业带资源。',
+    ].join('\n')
+    const document = parseMarkdown('legacy-course.md', source)
+
+    expect(document.regions.map((region) => region.type)).toEqual(['heading', 'list', 'heading', 'list', 'heading', 'list'])
+    expect(document.headings.map((heading) => heading.text)).toEqual([
+      '店铺分与产品热度权衡原则 42:42',
+      '货带人 vs. 人带货本质区分 01:02:58',
+      '新手执行铁律与资源建议 01:11:02',
+    ])
+    expect(document.regions[5]?.html).toContain('无联系方式：拍一单。')
+    expect(document.regions[5]?.html).toContain('<ul>')
   })
 
   it('removes empty list rows left by trailing bullet markers', () => {

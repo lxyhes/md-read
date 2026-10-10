@@ -390,6 +390,7 @@ const readerScrollPercent = ref(0)
 const readerAtTop = computed(() => readerScrollPercent.value <= 0.01)
 const readerAtBottom = computed(() => readerScrollPercent.value >= 0.99)
 const readerDisplayMode = ref<'markdown' | 'mindmap' | 'split'>('markdown')
+const compactCourseOutline = computed(() => (store.currentDocument?.headings.filter((heading) => /\d{1,2}:\d{2}/.test(heading.text)).length ?? 0) >= 2)
 const currentMindmap = computed(() => {
   const document = store.currentDocument
   return document ? markdownToTree(document.source, document.title) : null
@@ -1172,12 +1173,17 @@ async function onEditorPaste(event: ClipboardEvent) {
       insertEditorTextAt(formatClipboardToMarkdown(html, plainText), element.selectionStart, element.selectionEnd)
       return
     }
-    const normalized = normalizeMixedOrderedListSource(plainText)
+    const formatted = formatClipboardToMarkdown('', plainText)
+    const normalized = normalizeMixedOrderedListSource(formatted)
     if (normalized.converted) {
       event.preventDefault()
       event.stopPropagation()
       insertEditorTextAt(normalized.source, element.selectionStart, element.selectionEnd)
       notify(`已修正 ${normalized.converted} 行列表编号`)
+    } else if (formatted !== plainText) {
+      event.preventDefault()
+      event.stopPropagation()
+      insertEditorTextAt(formatted, element.selectionStart, element.selectionEnd)
     }
     return
   }
@@ -4319,7 +4325,7 @@ async function requestFullscreen() {
                 </div>
               </div>
               <nav v-if="!editorOpen && store.mode === 'clean' && (store.currentDocument?.headings.length ?? 0) > 0" class="reading-progress-rail" aria-label="阅读进度导航"><span class="reading-progress-rail-caption">{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}%</span><div class="reading-progress-rail-track"><span class="reading-progress-rail-fill" :style="{ height: `${(currentProgress?.scrollPercent ?? 0) * 100}%` }" /><button v-for="(heading, index) in store.currentDocument?.headings" :key="heading.id" type="button" class="reading-progress-marker" :class="{ active: store.activeHeadingId === heading.id }" :style="{ top: headingRailPosition(index) }" :aria-label="`跳转到 ${heading.text}`" :title="heading.text" @click.stop="scrollToHeading(heading.regionId)"><i /><span>{{ heading.text }}</span></button></div></nav>
-              <div v-if="!editorOpen" class="reader-content" :class="`reader-display-${readerDisplayMode}`">
+              <div v-if="!editorOpen" class="reader-content" :class="[`reader-display-${readerDisplayMode}`, { 'is-course-outline': compactCourseOutline }]">
                 <div v-if="readerDisplayMode !== 'mindmap'" class="reader-markdown"><h1 class="reader-title">{{ displayTitle(store.currentDocument?.title) }}</h1><div class="reader-rule" />
                 <div class="regions-stack" :class="{ virtualized: virtualizedReader }">
                 <div v-if="virtualRange.before" class="virtual-spacer" :style="{ height: `${virtualRange.before}px` }" aria-hidden="true" />
