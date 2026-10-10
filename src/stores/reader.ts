@@ -167,6 +167,12 @@ export const useReaderStore = defineStore('reader', () => {
   async function bootstrap() {
     applyTheme(activeTheme.value)
     const saved = loadDocumentSnapshots()
+    const session = readSession()
+    const savedIds = new Set(saved.map((document) => document.id))
+    const sessionOpenIds = (session.openDocumentIds ?? []).filter((id) => savedIds.has(id))
+    const bootstrapId = session.currentDocumentId && sessionOpenIds.includes(session.currentDocumentId)
+      ? session.currentDocumentId
+      : sessionOpenIds[0] ?? saved[0]?.id
     if (saved.length) {
       const imagePrivacyEnabled = (() => {
         try { return JSON.parse(localStorage.getItem('moyue:advanced-settings') ?? '{}').remoteImagePrivacy === true }
@@ -179,10 +185,11 @@ export const useReaderStore = defineStore('reader', () => {
       })
       const stale = saved.filter(needsAssetRefresh)
       const loaded = stale.length
-        ? await Promise.all(saved.map((document) => stale.includes(document) ? parseOpenedFile({ path: document.path, source: document.source }) : Promise.resolve(document)))
+        ? await Promise.all(saved.map((document) => document.id === bootstrapId && stale.includes(document) ? parseOpenedFile({ path: document.path, source: document.source }) : Promise.resolve(document)))
         : saved
       const { parseMarkdown } = await import('../parser')
       const refreshed = loaded.map((document) => {
+        if (document.id !== bootstrapId) return document
         const headings = parseMarkdown(document.path, document.source).headings
         return headings.length === document.headings.length && headings.every((heading, index) => heading.text === document.headings[index]?.text && heading.depth === document.headings[index]?.depth)
           ? document
@@ -195,7 +202,6 @@ export const useReaderStore = defineStore('reader', () => {
       const { parseMarkdown } = await import('../parser')
       documents.value = [parseMarkdown('欢迎开始 · Moyue.md', sample)]
     }
-    const session = readSession()
     const availableIds = new Set(documents.value.map((document) => document.id))
     openDocumentIds.value = (session.openDocumentIds ?? []).filter((id) => availableIds.has(id))
     if (!openDocumentIds.value.length) openDocumentIds.value = [documents.value[0].id]

@@ -90,7 +90,8 @@ function hasCodeStyle(element: HTMLElement) {
   if (element.hasAttribute('data-code-block') || /(?:^|[-_\s])(code|code-block|codeblock|highlight|syntax|hljs|monaco|codemirror)(?:$|[-_\s])/i.test(signal)) return true
   const style = element.getAttribute('style') ?? ''
   const background = style.match(/background(?:-color)?\s*:\s*([^;]+)/i)?.[1] ?? ''
-  return (darkColor(background) || hasStyle(element, /font-family\s*:\s*(?:ui-)?monospace/i)) && codeText(element).split(/\r?\n/).filter((line) => line.trim()).length >= 2
+  // A dark webpage is not a code block: structured children must keep their links and lists.
+  return isSimpleCodeCandidate(element) && (darkColor(background) || hasStyle(element, /font-family\s*:\s*(?:ui-)?monospace/i)) && codeText(element).split(/\r?\n/).filter((line) => line.trim()).length >= 2
 }
 
 function looksLikeDiagram(value: string) {

@@ -10,6 +10,7 @@ interface NativeClipboardSnapshot {
   kind: ClipboardKind
   signature?: string
   text?: string | null
+  html?: string | null
   bytes?: number[] | null
   mime?: string | null
 }
@@ -24,6 +25,7 @@ interface ClipboardRecord {
   signature: string
   kind: ClipboardKind
   text?: string
+  html?: string
   imageDataUrl?: string
   mime?: string
   createdAt: number
@@ -177,6 +179,7 @@ async function checkClipboard(manual = false) {
       signature,
       kind: snapshot.kind,
       text: snapshot.kind === 'text' ? snapshot.text ?? '' : undefined,
+      html: snapshot.kind === 'text' ? snapshot.html ?? undefined : undefined,
       imageDataUrl: snapshot.kind === 'image' && snapshot.bytes ? bytesToDataUrl(snapshot.bytes, snapshot.mime ?? 'image/png') : undefined,
       mime: snapshot.mime ?? undefined,
       createdAt: Date.now(),
@@ -224,10 +227,16 @@ async function copyItem(item: ClipboardRecord) {
       await invoke('write_clipboard_snapshot', {
         kind: item.kind,
         text: item.text ?? null,
+        html: item.html ?? null,
         bytes: item.kind === 'image' && item.imageDataUrl ? dataUrlToBytes(item.imageDataUrl) : null,
       })
     } else if (item.kind === 'text') {
-      await navigator.clipboard.writeText(item.text ?? '')
+      if (item.html && navigator.clipboard.write && typeof ClipboardItem !== 'undefined') {
+        await navigator.clipboard.write([new ClipboardItem({
+          'text/plain': new Blob([item.text ?? ''], { type: 'text/plain' }),
+          'text/html': new Blob([item.html], { type: 'text/html' }),
+        })])
+      } else await navigator.clipboard.writeText(item.text ?? '')
     } else {
       throw new Error('浏览器预览不支持写入图片剪贴板')
     }

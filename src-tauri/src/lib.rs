@@ -71,6 +71,7 @@ struct ClipboardSnapshot {
     kind: String,
     signature: String,
     text: Option<String>,
+    html: Option<String>,
     bytes: Option<Vec<u8>>,
     mime: Option<String>,
 }
@@ -118,10 +119,12 @@ fn read_clipboard_snapshot_inner() -> Result<ClipboardSnapshot, String> {
     let mut clipboard = Clipboard::new().map_err(|error| format!("连接系统剪贴板失败：{error}"))?;
     if let Ok(text) = clipboard.get_text() {
         if !text.is_empty() {
+            let html = clipboard.get().html().ok();
             return Ok(ClipboardSnapshot {
-                signature: format!("text:{}", text_clipboard_signature(&text)),
+                signature: format!("text:{}", clipboard_signature(&(&text, &html))),
                 kind: "text".into(),
                 text: Some(text),
+                html,
                 bytes: None,
                 mime: None,
             });
@@ -143,6 +146,7 @@ fn read_clipboard_snapshot_inner() -> Result<ClipboardSnapshot, String> {
         signature: format!("image:{}", image_clipboard_signature(image.width, image.height, &raw)),
         kind: "image".into(),
         text: None,
+        html: None,
         bytes: Some(encoded),
         mime: Some("image/png".into()),
     })
@@ -221,10 +225,16 @@ fn read_clipboard_image() -> Result<ClipboardImage, String> {
 }
 
 #[tauri::command]
-fn write_clipboard_snapshot(kind: String, text: Option<String>, bytes: Option<Vec<u8>>) -> Result<(), String> {
+fn write_clipboard_snapshot(kind: String, text: Option<String>, html: Option<String>, bytes: Option<Vec<u8>>) -> Result<(), String> {
     let mut clipboard = Clipboard::new().map_err(|error| format!("连接系统剪贴板失败：{error}"))?;
     match kind.as_str() {
-        "text" => clipboard.set_text(text.unwrap_or_default()).map_err(|error| format!("写入系统剪贴板失败：{error}")),
+        "text" => {
+            let text = text.unwrap_or_default();
+            match html.filter(|value| !value.is_empty()) {
+                Some(html) => clipboard.set_html(html, Some(text)),
+                None => clipboard.set_text(text),
+            }.map_err(|error| format!("写入系统剪贴板失败：{error}"))
+        }
         "image" => {
             let encoded = bytes.ok_or_else(|| "剪贴板图片数据为空".to_string())?;
             let rgba = image::load_from_memory(&encoded)
