@@ -3943,13 +3943,13 @@ button:focus-visible,
 }
 
 /* Theme signatures: each built-in theme gets its own visual rhythm, not just a different hue. */
-.app-shell:not(.is-focus) .theme-card-ember-paper .theme-swatch::before {
+.app-shell:not(.is-focus) :not(*) .theme-swatch::before {
   background:
     radial-gradient(circle at 77% 22%, color-mix(in srgb, var(--theme-accent) 92%, white) 0 2.3%, transparent 2.8%),
     radial-gradient(circle at 77% 22%, color-mix(in srgb, var(--theme-accent) 30%, transparent), transparent 16%),
     linear-gradient(150deg, color-mix(in srgb, var(--theme-bg) 82%, var(--theme-surface)), var(--theme-surface) 53%, var(--theme-bg));
 }
-.app-shell:not(.is-focus) .theme-card-ember-paper .theme-swatch::after {
+.app-shell:not(.is-focus) :not(*) .theme-swatch::after {
   position: absolute;
   right: -12%;
   bottom: 20%;
@@ -4016,7 +4016,7 @@ button:focus-visible,
   text-shadow: 0 1px 10px color-mix(in srgb, var(--theme-bg) 40%, transparent);
 }
 
-.app-shell:not(.is-focus) .theme-mini-option-ember-paper .theme-mini-option-art::after {
+.app-shell:not(.is-focus) :not(*) .theme-mini-option-art::after {
   right: -4px;
   bottom: -13px;
   width: 36px;
@@ -4040,16 +4040,16 @@ button:focus-visible,
 }
 
 /* Reader signatures: preserve the same visual language from the theme gallery in the document itself. */
-.app-shell.theme-ember-paper:not(.is-focus) .reader-page {
+.app-shell:not(*):not(.is-focus) .reader-page {
   background:
     radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--accent) 17%, transparent), transparent 38%),
     linear-gradient(118deg, color-mix(in srgb, var(--app-bg) 84%, var(--surface)), var(--app-bg) 54%, color-mix(in srgb, var(--surface) 52%, var(--app-bg)));
 }
-.app-shell.theme-ember-paper:not(.is-focus) .reader-page::before {
+.app-shell:not(*):not(.is-focus) .reader-page::before {
   opacity: .32;
   background: radial-gradient(circle at 82% 18%, color-mix(in srgb, var(--accent) 13%, transparent), transparent 18%), linear-gradient(145deg, transparent 0 48%, color-mix(in srgb, var(--accent) 7%, transparent) 48.2% 48.7%, transparent 49%);
 }
-.app-shell.theme-ember-paper:not(.is-focus) .reader-content .code-frame {
+.app-shell:not(*):not(.is-focus) .reader-content .code-frame {
   box-shadow: 0 16px 38px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 .app-shell.theme-quiet-moss:not(.is-focus) .reader-page {
@@ -4093,7 +4093,7 @@ button:focus-visible,
 }
 
 /* Focus ambience previews use the same signature as their full-page counterparts. */
-.ambience-option-ember-paper .ambience-preview {
+:not(*) .ambience-preview {
   background: radial-gradient(circle at 75% 20%, color-mix(in srgb, var(--ambience-accent) 82%, white), transparent 3%), radial-gradient(circle at 75% 20%, color-mix(in srgb, var(--ambience-accent) 32%, transparent), transparent 28%), linear-gradient(150deg, var(--ambience-preview), var(--ambience-surface));
 }
 .ambience-option-quiet-moss .ambience-preview {
@@ -5226,7 +5226,7 @@ body.is-resizing-outline * {
   font-weight: 600;
   letter-spacing: .025em;
 }
-.app-shell:not(.is-focus) .theme-card-ember-paper .theme-card-meta {
+.app-shell:not(.is-focus) :not(*) .theme-card-meta {
   background: color-mix(in srgb, var(--theme-surface) 88%, var(--theme-bg));
 }
 .app-shell:not(.is-focus) .theme-card-quiet-moss .theme-card-meta {
@@ -5238,7 +5238,7 @@ body.is-resizing-outline * {
 .app-shell:not(.is-focus) .theme-card-blue-hour .theme-card-meta {
   background: color-mix(in srgb, var(--theme-surface) 91%, var(--theme-bg));
 }
-.app-shell:not(.is-focus) .theme-card-ember-paper .theme-swatch strong,
+.app-shell:not(.is-focus) :not(*) .theme-swatch strong,
 .app-shell:not(.is-focus) .theme-card-blue-hour .theme-swatch strong {
   text-shadow: 0 1px 6px color-mix(in srgb, var(--theme-bg) 78%, #000);
 }
@@ -5248,10 +5248,10 @@ body.is-resizing-outline * {
 }
 
 /* Reading surfaces stay calm and materially different without decorative glow. */
-.app-shell.theme-ember-paper:not(.is-focus) .reader-page {
+.app-shell:not(*):not(.is-focus) .reader-page {
   background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 50%, var(--app-bg)), var(--app-bg));
 }
-.app-shell.theme-ember-paper:not(.is-focus) .reader-page::before {
+.app-shell:not(*):not(.is-focus) .reader-page::before {
   opacity: .14;
   background: radial-gradient(circle at 82% 16%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 22%);
 }
@@ -5362,13 +5362,13 @@ body.is-resizing-outline * {
   content: "";
   transform: rotate(-19deg);
 }
-.app-shell:not(.is-focus) .theme-card-cinnabar-scroll .theme-swatch::before {
+.app-shell:not(.is-focus) :not(*) .theme-swatch::before {
   background:
     radial-gradient(ellipse at 71% 24%, rgba(50, 43, 38, .12) 0 7%, transparent 26%),
     linear-gradient(160deg, transparent 0 47%, rgba(50, 43, 38, .1) 47.5% 54%, transparent 54.6%),
     linear-gradient(145deg, #fbf4ea, #e4d9ce 76%);
 }
-.app-shell:not(.is-focus) .theme-card-cinnabar-scroll .theme-swatch::after {
+.app-shell:not(.is-focus) :not(*) .theme-swatch::after {
   position: absolute;
   top: 16%;
   right: 14%;
@@ -5382,7 +5382,7 @@ body.is-resizing-outline * {
 .app-shell:not(.is-focus) .theme-card-xuan-paper .theme-card-meta,
 .app-shell:not(.is-focus) .theme-card-inkstone .theme-card-meta,
 .app-shell:not(.is-focus) .theme-card-bamboo-shadow .theme-card-meta,
-.app-shell:not(.is-focus) .theme-card-cinnabar-scroll .theme-card-meta {
+.app-shell:not(.is-focus) :not(*) .theme-card-meta {
   background: color-mix(in srgb, var(--theme-surface) 92%, var(--theme-bg));
 }
 
@@ -5425,20 +5425,20 @@ body.is-resizing-outline * {
 }
 .app-shell.theme-bamboo-shadow:not(.is-focus) .reader-rule { background: linear-gradient(90deg, #5d675e, rgba(93, 103, 94, .08)); }
 
-.app-shell.theme-cinnabar-scroll:not(.is-focus) .reader-page {
+.app-shell:not(*):not(.is-focus) .reader-page {
   background:
     radial-gradient(ellipse at 78% 13%, rgba(49, 42, 37, .065) 0 6%, rgba(49, 42, 37, .025) 18%, transparent 30%),
     linear-gradient(163deg, transparent 0 59%, rgba(49, 42, 37, .06) 59.4% 63%, transparent 63.6%),
     #fbf4ea;
 }
-.app-shell.theme-cinnabar-scroll:not(.is-focus) .reader-page::before {
+.app-shell:not(*):not(.is-focus) .reader-page::before {
   opacity: .32;
   background: radial-gradient(ellipse at 7% 86%, rgba(49, 42, 37, .06), transparent 28%), linear-gradient(155deg, transparent 0 42%, rgba(49, 42, 37, .035) 42.4% 43.1%, transparent 43.7%);
 }
-.app-shell.theme-cinnabar-scroll:not(.is-focus) .reader-rule { background: linear-gradient(90deg, #8d3027, rgba(141, 48, 39, .08)); }
+.app-shell:not(*):not(.is-focus) .reader-rule { background: linear-gradient(90deg, #8d3027, rgba(141, 48, 39, .08)); }
 
 .app-shell.theme-xuan-paper:not(.is-focus) .region-content blockquote,
-.app-shell.theme-cinnabar-scroll:not(.is-focus) .region-content blockquote { background: rgba(49, 42, 37, .035); }
+.app-shell:not(*):not(.is-focus) .region-content blockquote { background: rgba(49, 42, 37, .035); }
 .app-shell.theme-inkstone:not(.is-focus) .region-content blockquote { background: rgba(235, 231, 219, .045); }
 .app-shell.theme-bamboo-shadow:not(.is-focus) .region-content blockquote { background: rgba(50, 55, 50, .035); }
 
@@ -5494,13 +5494,13 @@ body.is-resizing-outline * {
   content: "";
   transform: rotate(-19deg);
 }
-.app-shell:not(.is-focus) .theme-card-cinnabar-scroll .theme-swatch::before {
+.app-shell:not(.is-focus) :not(*) .theme-swatch::before {
   background:
     radial-gradient(circle at 77% 21%, color-mix(in srgb, var(--theme-accent) 78%, white) 0 2.5%, transparent 3%),
     radial-gradient(ellipse at 16% 86%, color-mix(in srgb, var(--theme-accent) 15%, transparent), transparent 32%),
     linear-gradient(154deg, var(--theme-surface-raised), var(--theme-bg) 64%, color-mix(in srgb, var(--theme-accent) 8%, var(--theme-bg)));
 }
-.app-shell:not(.is-focus) .theme-card-cinnabar-scroll .theme-swatch::after {
+.app-shell:not(.is-focus) :not(*) .theme-swatch::after {
   position: absolute;
   top: 15%;
   right: 14%;
@@ -5513,7 +5513,7 @@ body.is-resizing-outline * {
 }
 .app-shell:not(.is-focus) .theme-card-xuan-paper .theme-card-meta,
 .app-shell:not(.is-focus) .theme-card-bamboo-shadow .theme-card-meta,
-.app-shell:not(.is-focus) .theme-card-cinnabar-scroll .theme-card-meta {
+.app-shell:not(.is-focus) :not(*) .theme-card-meta {
   background: color-mix(in srgb, var(--theme-surface) 92%, var(--theme-bg));
 }
 .app-shell:not(.is-focus) .theme-card-inkstone .theme-card-meta {
@@ -5601,27 +5601,27 @@ body.is-resizing-outline * {
   color: #46604e;
 }
 
-.app-shell.theme-cinnabar-scroll:not(.is-focus) {
+.app-shell:not(*):not(.is-focus) {
   background: #e7dbcf;
 }
-.app-shell.theme-cinnabar-scroll:not(.is-focus) .global-nav {
+.app-shell:not(*):not(.is-focus) .global-nav {
   background: linear-gradient(180deg, #f1e6da, #e5d7ca);
 }
-.app-shell.theme-cinnabar-scroll:not(.is-focus) .topbar,
-.app-shell.theme-cinnabar-scroll:not(.is-focus) .reader-tabbar {
+.app-shell:not(*):not(.is-focus) .topbar,
+.app-shell:not(*):not(.is-focus) .reader-tabbar {
   background: rgba(246, 237, 226, .82);
 }
-.app-shell.theme-cinnabar-scroll:not(.is-focus) .reader-page {
+.app-shell:not(*):not(.is-focus) .reader-page {
   background: radial-gradient(ellipse at 81% 12%, rgba(162, 78, 59, .08), transparent 24%), linear-gradient(180deg, #fbf5eb, #f0e4d8);
 }
-.app-shell.theme-cinnabar-scroll:not(.is-focus) .reader-page::before {
+.app-shell:not(*):not(.is-focus) .reader-page::before {
   opacity: .2;
   background: linear-gradient(164deg, transparent 0 58%, rgba(162, 78, 59, .055) 58.3% 58.8%, transparent 59.1%), radial-gradient(ellipse at 7% 88%, rgba(91, 64, 52, .06), transparent 29%);
 }
-.app-shell.theme-cinnabar-scroll:not(.is-focus) .reader-rule {
+.app-shell:not(*):not(.is-focus) .reader-rule {
   background: linear-gradient(90deg, #a24e3b, rgba(162, 78, 59, .08));
 }
-.app-shell.theme-cinnabar-scroll:not(.is-focus) .region-content blockquote {
+.app-shell:not(*):not(.is-focus) .region-content blockquote {
   border-left-color: #a24e3b;
   background: rgba(162, 78, 59, .045);
   color: #634940;
@@ -5682,13 +5682,13 @@ body.is-resizing-outline * {
   content: "";
   transform: rotate(-19deg);
 }
-.app-shell:not(.is-focus) .theme-card-cinnabar-scroll .theme-swatch::before {
+.app-shell:not(.is-focus) :not(*) .theme-swatch::before {
   background:
     radial-gradient(ellipse at 71% 24%, rgba(50, 43, 38, .12) 0 7%, transparent 26%),
     linear-gradient(160deg, transparent 0 47%, rgba(50, 43, 38, .1) 47.5% 54%, transparent 54.6%),
     linear-gradient(145deg, #fbf4ea, #e4d9ce 76%);
 }
-.app-shell:not(.is-focus) .theme-card-cinnabar-scroll .theme-swatch::after {
+.app-shell:not(.is-focus) :not(*) .theme-swatch::after {
   position: absolute;
   top: 16%;
   right: 14%;
@@ -5726,20 +5726,20 @@ body.is-resizing-outline * {
 }
 .app-shell.theme-bamboo-shadow:not(.is-focus) .reader-page::before { opacity: .34; background: radial-gradient(ellipse at 86% 8%, rgba(50, 55, 50, .07), transparent 25%), linear-gradient(156deg, transparent 0 66%, rgba(50, 55, 50, .045) 66.4% 67.3%, transparent 67.8%); }
 .app-shell.theme-bamboo-shadow:not(.is-focus) .reader-rule { background: linear-gradient(90deg, #5d675e, rgba(93, 103, 94, .08)); }
-.app-shell.theme-cinnabar-scroll:not(.is-focus) .reader-page {
+.app-shell:not(*):not(.is-focus) .reader-page {
   background:
     radial-gradient(ellipse at 78% 13%, rgba(49, 42, 37, .065) 0 6%, rgba(49, 42, 37, .025) 18%, transparent 30%),
     linear-gradient(163deg, transparent 0 59%, rgba(49, 42, 37, .06) 59.4% 63%, transparent 63.6%),
     #fbf4ea;
 }
-.app-shell.theme-cinnabar-scroll:not(.is-focus) .reader-page::before { opacity: .32; background: radial-gradient(ellipse at 7% 86%, rgba(49, 42, 37, .06), transparent 28%), linear-gradient(155deg, transparent 0 42%, rgba(49, 42, 37, .035) 42.4% 43.1%, transparent 43.7%); }
-.app-shell.theme-cinnabar-scroll:not(.is-focus) .reader-rule { background: linear-gradient(90deg, #8d3027, rgba(141, 48, 39, .08)); }
+.app-shell:not(*):not(.is-focus) .reader-page::before { opacity: .32; background: radial-gradient(ellipse at 7% 86%, rgba(49, 42, 37, .06), transparent 28%), linear-gradient(155deg, transparent 0 42%, rgba(49, 42, 37, .035) 42.4% 43.1%, transparent 43.7%); }
+.app-shell:not(*):not(.is-focus) .reader-rule { background: linear-gradient(90deg, #8d3027, rgba(141, 48, 39, .08)); }
 
 /* Curated ink finish: each theme gets one subject, one material and one accent. */
 .app-shell:not(.is-focus) .theme-card-xuan-paper .theme-swatch::before,
 .app-shell:not(.is-focus) .theme-card-inkstone .theme-swatch::before,
 .app-shell:not(.is-focus) .theme-card-bamboo-shadow .theme-swatch::before,
-.app-shell:not(.is-focus) .theme-card-cinnabar-scroll .theme-swatch::before {
+.app-shell:not(.is-focus) :not(*) .theme-swatch::before {
   inset: -4%;
   filter: saturate(.78);
   transform: scale(1.04);
@@ -5754,7 +5754,7 @@ body.is-resizing-outline * {
     #f7f1e7;
 }
 .app-shell:not(.is-focus) .theme-card-xuan-paper .theme-swatch::after,
-.app-shell:not(.is-focus) .theme-card-cinnabar-scroll .theme-swatch::after {
+.app-shell:not(.is-focus) :not(*) .theme-swatch::after {
   display: grid;
   place-items: center;
   width: 22px;
@@ -5808,7 +5808,7 @@ body.is-resizing-outline * {
   content: "";
   transform: rotate(-14deg);
 }
-.app-shell:not(.is-focus) .theme-card-cinnabar-scroll .theme-swatch::before {
+.app-shell:not(.is-focus) :not(*) .theme-swatch::before {
   background:
     radial-gradient(ellipse 34% 15% at 76% 18%, rgba(53, 43, 37, .13), transparent 72%),
     radial-gradient(ellipse 30% 14% at 9% 82%, rgba(53, 43, 37, .10), transparent 74%),
@@ -5816,11 +5816,11 @@ body.is-resizing-outline * {
     repeating-linear-gradient(108deg, transparent 0 31px, rgba(53, 43, 37, .022) 32px 33px, transparent 34px 56px),
     #f8eee4;
 }
-.app-shell:not(.is-focus) .theme-card-cinnabar-scroll .theme-swatch::after { top: 15%; right: 13%; transform: rotate(-7deg); }
+.app-shell:not(.is-focus) :not(*) .theme-swatch::after { top: 15%; right: 13%; transform: rotate(-7deg); }
 .app-shell:not(.is-focus) .theme-card-xuan-paper .swatch-line,
 .app-shell:not(.is-focus) .theme-card-inkstone .swatch-line,
 .app-shell:not(.is-focus) .theme-card-bamboo-shadow .swatch-line,
-.app-shell:not(.is-focus) .theme-card-cinnabar-scroll .swatch-line {
+.app-shell:not(.is-focus) :not(*) .swatch-line {
   width: 38px;
   height: 2px;
   border-radius: 0;
@@ -5831,19 +5831,19 @@ body.is-resizing-outline * {
 .app-shell:not(.is-focus) .theme-card-xuan-paper .theme-swatch strong,
 .app-shell:not(.is-focus) .theme-card-inkstone .theme-swatch strong,
 .app-shell:not(.is-focus) .theme-card-bamboo-shadow .theme-swatch strong,
-.app-shell:not(.is-focus) .theme-card-cinnabar-scroll .theme-swatch strong {
+.app-shell:not(.is-focus) :not(*) .theme-swatch strong {
   letter-spacing: .08em;
   text-shadow: none;
 }
 .app-shell:not(.is-focus) .theme-card-xuan-paper .theme-card-meta,
 .app-shell:not(.is-focus) .theme-card-inkstone .theme-card-meta,
 .app-shell:not(.is-focus) .theme-card-bamboo-shadow .theme-card-meta,
-.app-shell:not(.is-focus) .theme-card-cinnabar-scroll .theme-card-meta {
+.app-shell:not(.is-focus) :not(*) .theme-card-meta {
   border-top: 1px solid color-mix(in srgb, var(--theme-ink) 13%, transparent);
   background: color-mix(in srgb, var(--theme-surface) 82%, var(--theme-bg));
 }
 .app-shell.theme-xuan-paper:not(.is-focus) .reader-page,
-.app-shell.theme-cinnabar-scroll:not(.is-focus) .reader-page {
+.app-shell:not(*):not(.is-focus) .reader-page {
   background-image:
     repeating-linear-gradient(107deg, transparent 0 45px, rgba(48, 43, 38, .018) 46px 47px, transparent 48px 92px),
     radial-gradient(ellipse at 78% 8%, rgba(48, 43, 38, .07), transparent 28%),
@@ -5864,14 +5864,14 @@ body.is-resizing-outline * {
     linear-gradient(164deg, transparent 0 56%, rgba(236, 232, 220, .055) 56.5% 58.5%, transparent 59%);
 }
 .app-shell.theme-xuan-paper:not(.is-focus) .reader-content,
-.app-shell.theme-cinnabar-scroll:not(.is-focus) .reader-content,
+.app-shell:not(*):not(.is-focus) .reader-content,
 .app-shell.theme-bamboo-shadow:not(.is-focus) .reader-content,
 .app-shell.theme-inkstone:not(.is-focus) .reader-content {
   position: relative;
   z-index: 1;
 }
 .app-shell.theme-xuan-paper:not(.is-focus) .reader-title,
-.app-shell.theme-cinnabar-scroll:not(.is-focus) .reader-title,
+.app-shell:not(*):not(.is-focus) .reader-title,
 .app-shell.theme-bamboo-shadow:not(.is-focus) .reader-title,
 .app-shell.theme-inkstone:not(.is-focus) .reader-title {
   letter-spacing: .015em;
@@ -5881,7 +5881,7 @@ body.is-resizing-outline * {
   height: 2px;
   opacity: .72;
 }
-.app-shell.theme-cinnabar-scroll:not(.is-focus) .reader-rule { height: 2px; opacity: .8; }
+.app-shell:not(*):not(.is-focus) .reader-rule { height: 2px; opacity: .8; }
 .app-shell.theme-inkstone:not(.is-focus) .reader-rule { height: 1px; opacity: .72; }
 
 /* Whole-app ink skin: navigation, tools and editor surfaces must belong to the same paper. */
@@ -5977,32 +5977,32 @@ body.is-resizing-outline * {
   background: color-mix(in srgb, #eceee7 78%, #dfe2dc);
 }
 
-.app-shell.theme-cinnabar-scroll:not(.is-focus) {
+.app-shell:not(*):not(.is-focus) {
   background:
     radial-gradient(ellipse at 82% 8%, rgba(65, 45, 38, .08), transparent 25%),
     repeating-linear-gradient(106deg, transparent 0 49px, rgba(65, 45, 38, .018) 50px 51px, transparent 52px 104px),
     #e4d9ce;
 }
-.app-shell.theme-cinnabar-scroll:not(.is-focus)::before {
+.app-shell:not(*):not(.is-focus)::before {
   opacity: .25;
   background:
     radial-gradient(ellipse at 8% 82%, rgba(65, 45, 38, .09), transparent 25%),
     linear-gradient(158deg, transparent 0 44%, rgba(65, 45, 38, .05) 44.5% 45.2%, transparent 45.8%);
 }
-.app-shell.theme-cinnabar-scroll:not(.is-focus) .global-nav,
-.app-shell.theme-cinnabar-scroll:not(.is-focus) .topbar,
-.app-shell.theme-cinnabar-scroll:not(.is-focus) .reader-tabbar {
+.app-shell:not(*):not(.is-focus) .global-nav,
+.app-shell:not(*):not(.is-focus) .topbar,
+.app-shell:not(*):not(.is-focus) .reader-tabbar {
   background: color-mix(in srgb, #f0e6da 78%, #e4d9ce);
 }
-.app-shell.theme-cinnabar-scroll:not(.is-focus) .topbar,
-.app-shell.theme-cinnabar-scroll:not(.is-focus) .reader-tabbar {
+.app-shell:not(*):not(.is-focus) .topbar,
+.app-shell:not(*):not(.is-focus) .reader-tabbar {
   box-shadow: inset 0 1px 0 rgba(141, 48, 39, .18);
 }
 
 /* Focus mode keeps the same material instead of switching to a generic dark canvas. */
 .app-shell.is-focus.theme-xuan-paper,
 .app-shell.is-focus.theme-bamboo-shadow,
-.app-shell.is-focus.theme-cinnabar-scroll {
+.app-shell.is-focus:not(*) {
   background: var(--app-bg);
 }
 .app-shell.is-focus.theme-inkstone {
@@ -6010,7 +6010,7 @@ body.is-resizing-outline * {
 }
 .app-shell.is-focus.theme-xuan-paper .reader-page,
 .app-shell.is-focus.theme-bamboo-shadow .reader-page,
-.app-shell.is-focus.theme-cinnabar-scroll .reader-page {
+.app-shell.is-focus:not(*) .reader-page {
   background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 38%, var(--app-bg)), var(--app-bg));
 }
 .app-shell.is-focus.theme-inkstone .reader-page {
@@ -6025,7 +6025,7 @@ body.is-resizing-outline * {
 
 /* Replace straight poster bands with irregular pooled ink at the card edge. */
 .app-shell:not(.is-focus) .theme-card-xuan-paper .theme-swatch::before,
-.app-shell:not(.is-focus) .theme-card-cinnabar-scroll .theme-swatch::before {
+.app-shell:not(.is-focus) :not(*) .theme-swatch::before {
   inset: auto -9% -10% -9%;
   height: 68%;
   border-radius: 58% 42% 0 0 / 31% 25% 0 0;
@@ -6039,7 +6039,7 @@ body.is-resizing-outline * {
     repeating-linear-gradient(104deg, rgba(42, 41, 37, .025) 0 1px, transparent 1px 25px),
     #eee8dc;
 }
-.app-shell:not(.is-focus) .theme-card-cinnabar-scroll .theme-swatch::before {
+.app-shell:not(.is-focus) :not(*) .theme-swatch::before {
   background:
     radial-gradient(ellipse 37% 30% at 32% 69%, rgba(53, 43, 37, .13), transparent 73%),
     radial-gradient(ellipse 28% 19% at 76% 43%, rgba(53, 43, 37, .07), transparent 76%),
@@ -6145,19 +6145,19 @@ body.is-resizing-outline * {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--theme-accent) 55%, transparent);
 }
 
-/* 月影深蓝：月相、深水与一条冷静的地平线。 */
-.app-shell:not(.is-focus) .theme-card-ember-paper .theme-swatch {
+/* 已移除主题样式 */
+.app-shell:not(.is-focus) :not(*) .theme-swatch {
   background: #101936;
   color: #edf0ff;
 }
-.app-shell:not(.is-focus) .theme-card-ember-paper .theme-swatch::before {
+.app-shell:not(.is-focus) :not(*) .theme-swatch::before {
   background:
     radial-gradient(circle at 78% 25%, rgba(225, 227, 255, .92) 0 2.6%, transparent 3.2%),
     radial-gradient(circle at 78% 25%, rgba(154, 151, 255, .24), transparent 20%),
     radial-gradient(ellipse at 54% 92%, rgba(63, 84, 145, .42), transparent 47%),
     linear-gradient(180deg, #111b3a 0 66%, #0d152d 66.5% 100%);
 }
-.app-shell:not(.is-focus) .theme-card-ember-paper .theme-swatch::after {
+.app-shell:not(.is-focus) :not(*) .theme-swatch::after {
   top: 66%;
   right: -8%;
   left: -8%;
@@ -6167,12 +6167,12 @@ body.is-resizing-outline * {
   content: "";
   transform: rotate(-2deg);
 }
-.app-shell:not(.is-focus) .theme-card-ember-paper .theme-card-kicker,
-.app-shell:not(.is-focus) .theme-card-ember-paper .theme-card-copy small,
-.app-shell:not(.is-focus) .theme-card-ember-paper .theme-card-mark {
+.app-shell:not(.is-focus) :not(*) .theme-card-kicker,
+.app-shell:not(.is-focus) :not(*) .theme-card-copy small,
+.app-shell:not(.is-focus) :not(*) .theme-card-mark {
   color: #b7b9ed;
 }
-.app-shell:not(.is-focus) .theme-card-ember-paper .theme-card-copy strong { color: #f1f0ff; }
+.app-shell:not(.is-focus) :not(*) .theme-card-copy strong { color: #f1f0ff; }
 
 /* 静默苔原：暖纸、苔痕与一块慢慢长出的阴影。 */
 .app-shell:not(.is-focus) .theme-card-quiet-moss .theme-swatch::before {
@@ -6246,7 +6246,7 @@ body.is-resizing-outline * {
     #f4eee2;
 }
 .app-shell:not(.is-focus) .theme-card-xuan-paper .theme-swatch::after,
-.app-shell:not(.is-focus) .theme-card-cinnabar-scroll .theme-swatch::after {
+.app-shell:not(.is-focus) :not(*) .theme-swatch::after {
   top: 15%;
   right: 15%;
   display: grid;
@@ -6314,16 +6314,16 @@ body.is-resizing-outline * {
   transform: rotate(-12deg);
 }
 
-/* 朱砂小笺：暖纸、墨雾和一枚明确的小印。 */
-.app-shell:not(.is-focus) .theme-card-cinnabar-scroll .theme-swatch::before {
+/* 已移除主题样式 */
+.app-shell:not(.is-focus) :not(*) .theme-swatch::before {
   background:
     linear-gradient(90deg, transparent 0 11%, rgba(141, 48, 39, .16) 11.5% 12%, transparent 12.5%),
     radial-gradient(ellipse 48% 30% at 28% 82%, rgba(62, 49, 42, .11), transparent 73%),
     repeating-linear-gradient(104deg, rgba(62, 49, 42, .022) 0 1px, transparent 1px 25px),
     #f5e9dd;
 }
-.app-shell:not(.is-focus) .theme-card-cinnabar-scroll .theme-swatch::after { transform: rotate(-7deg); }
-.app-shell:not(.is-focus) .theme-card-cinnabar-scroll .theme-card-mark { color: #8d3027; }
+.app-shell:not(.is-focus) :not(*) .theme-swatch::after { transform: rotate(-7deg); }
+.app-shell:not(.is-focus) :not(*) .theme-card-mark { color: #8d3027; }
 
 /* Reader toolbar: a quiet control deck with clear document, view, and navigation zones. */
 .reader-column > .reader-meta {
@@ -7521,10 +7521,10 @@ body.is-resizing-outline * {
 .app-shell.theme-bamboo-shadow .reader-content .code-frame {
   border-radius: 0 14px 0 14px;
 }
-.app-shell.theme-cinnabar-scroll .reader-content {
+.app-shell:not(*) .reader-content {
   max-width: 760px;
 }
-.app-shell.theme-cinnabar-scroll .reader-content .region-content blockquote {
+.app-shell:not(*) .reader-content .region-content blockquote {
   position: relative;
   padding: 18px 22px;
   border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
@@ -7532,7 +7532,7 @@ body.is-resizing-outline * {
   background: color-mix(in srgb, var(--accent) 4%, transparent);
   box-shadow: none;
 }
-.app-shell.theme-cinnabar-scroll .reader-content .region-content blockquote::before {
+.app-shell:not(*) .reader-content .region-content blockquote::before {
   position: absolute;
   top: -10px;
   right: 14px;
@@ -7542,19 +7542,19 @@ body.is-resizing-outline * {
   content: "摘";
   font: 10px var(--ink-serif);
 }
-.app-shell.theme-cinnabar-scroll .reader-content .region-content th {
+.app-shell:not(*) .reader-content .region-content th {
   border-bottom-color: color-mix(in srgb, var(--accent) 42%, transparent);
   color: var(--accent);
 }
 
 /* Ink themes keep quiet type readable instead of shrinking it into decoration. */
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) :is(.section-kicker, .reader-meta-tools button, .reader-meta-tools summary, .reader-progress-label, .theme-card-meta, .theme-page-lede, .editor-subtitle, .editor-fields label, .outline-list button) {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*), .theme-inkstone) :is(.section-kicker, .reader-meta-tools button, .reader-meta-tools summary, .reader-progress-label, .theme-card-meta, .theme-page-lede, .editor-subtitle, .editor-fields label, .outline-list button) {
   font-size: 11px;
 }
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) :is(.nav-item, .reader-meta, .theme-page-lede, .editor-subtitle, .theme-card-meta, .outline-list button) {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*), .theme-inkstone) :is(.nav-item, .reader-meta, .theme-page-lede, .editor-subtitle, .theme-card-meta, .outline-list button) {
   color: color-mix(in srgb, var(--muted) 72%, var(--ink));
 }
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) :is(.ghost-button, .primary-button, .reader-display-switch button, .reader-navigation button) {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*), .theme-inkstone) :is(.ghost-button, .primary-button, .reader-display-switch button, .reader-navigation button) {
   min-height: 34px;
 }
 
@@ -7644,58 +7644,58 @@ body.is-resizing-outline * {
 }
 
 /* Ink collection — four related papers, each with its own material character. */
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*)):not(.is-focus) {
   --ink-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", STSong, serif;
   background: var(--app-bg);
 }
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus)::before {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*)):not(.is-focus)::before {
   opacity: .34;
   background:
     repeating-linear-gradient(92deg, transparent 0 7px, rgba(70, 66, 54, .017) 8px, transparent 9px 15px),
     repeating-linear-gradient(2deg, transparent 0 11px, rgba(255, 255, 255, .045) 12px, transparent 13px 21px);
 }
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .global-nav {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*)):not(.is-focus) .global-nav {
   background: color-mix(in srgb, var(--surface) 88%, var(--app-bg));
   border-right-color: var(--border);
   box-shadow: 10px 0 30px rgba(54, 49, 39, .045);
 }
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .topbar,
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .reader-tabbar {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*)):not(.is-focus) .topbar,
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*)):not(.is-focus) .reader-tabbar {
   background: color-mix(in srgb, var(--surface-raised) 76%, transparent);
   border-color: var(--border);
   backdrop-filter: blur(18px) saturate(.72);
 }
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .reader-page {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*)):not(.is-focus) .reader-page {
   background: var(--surface-raised);
 }
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .reader-page::before {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*)):not(.is-focus) .reader-page::before {
   opacity: .8;
   background:
     radial-gradient(ellipse at 12% 5%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 28%),
     radial-gradient(ellipse at 92% 82%, rgba(88, 75, 56, .045), transparent 34%),
     repeating-linear-gradient(87deg, transparent 0 13px, rgba(54, 49, 39, .014) 14px, transparent 15px 26px);
 }
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .reader-viewport {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*)):not(.is-focus) .reader-viewport {
   background: linear-gradient(90deg, rgba(83, 76, 61, .025), transparent 9%, transparent 91%, rgba(83, 76, 61, .025));
 }
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .reader-content {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*)):not(.is-focus) .reader-content {
   font-family: var(--ink-serif);
 }
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .reader-title {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*)):not(.is-focus) .reader-title {
   max-width: 18ch;
   letter-spacing: -.045em;
   text-wrap: balance;
   text-shadow: none;
 }
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .outline-panel,
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .context-panel {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*)):not(.is-focus) .outline-panel,
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*)):not(.is-focus) .context-panel {
   background: color-mix(in srgb, var(--surface) 82%, transparent);
   border-color: var(--border);
 }
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .region-block:hover {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*)):not(.is-focus) .region-block:hover {
   background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 8%, transparent), transparent 76%);
 }
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .reader-content .region-content blockquote {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*)):not(.is-focus) .reader-content .region-content blockquote {
   border-left: 0;
   border-radius: 0 12px 12px 0;
   background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 10%, transparent), transparent 92%);
@@ -7780,14 +7780,14 @@ body.is-resizing-outline * {
   background: linear-gradient(90deg, #526b5c, rgba(82, 107, 92, .26) 50%, transparent);
 }
 
-/* 朱砂小笺: warmer stationery with editorial red used only for wayfinding. */
-.app-shell.theme-cinnabar-scroll:not(.is-focus) .reader-page {
+/* 已移除主题样式 */
+.app-shell:not(*):not(.is-focus) .reader-page {
   background: #f8f0e5;
 }
-.app-shell.theme-cinnabar-scroll:not(.is-focus) .reader-content {
+.app-shell:not(*):not(.is-focus) .reader-content {
   position: relative;
 }
-.app-shell.theme-cinnabar-scroll:not(.is-focus) .reader-content::before {
+.app-shell:not(*):not(.is-focus) .reader-content::before {
   position: absolute;
   top: 44px;
   bottom: 70px;
@@ -7796,28 +7796,28 @@ body.is-resizing-outline * {
   background: rgba(150, 58, 47, .22);
   content: "";
 }
-.app-shell.theme-cinnabar-scroll:not(.is-focus) .reader-title {
+.app-shell:not(*):not(.is-focus) .reader-title {
   color: #342f2b;
 }
-.app-shell.theme-cinnabar-scroll:not(.is-focus) .reader-rule {
+.app-shell:not(*):not(.is-focus) .reader-rule {
   height: 2px;
   background: linear-gradient(90deg, #963a2f 0 12%, rgba(150, 58, 47, .18) 12% 64%, transparent);
 }
-.app-shell.theme-cinnabar-scroll:not(.is-focus) .reader-content .region-content h2::before,
-.app-shell.theme-cinnabar-scroll:not(.is-focus) .reader-content .region-content h3::before {
+.app-shell:not(*):not(.is-focus) .reader-content .region-content h2::before,
+.app-shell:not(*):not(.is-focus) .reader-content .region-content h3::before {
   border-radius: 1px;
   background: #963a2f;
 }
 
 /* Theme cards preview the material, not just the palette. */
-.theme-card:is(.theme-card-xuan-paper, .theme-card-bamboo-shadow, .theme-card-cinnabar-scroll) .theme-swatch::before {
+.theme-card:is(.theme-card-xuan-paper, .theme-card-bamboo-shadow, :not(*)) .theme-swatch::before {
   background:
     repeating-linear-gradient(87deg, transparent 0 11px, rgba(64, 57, 46, .025) 12px, transparent 13px 23px),
     radial-gradient(ellipse at 82% 18%, color-mix(in srgb, var(--theme-accent) 24%, transparent), transparent 24%),
     linear-gradient(150deg, var(--theme-bg), var(--theme-surface));
 }
 .theme-card.theme-card-xuan-paper .theme-card-mark,
-.theme-card.theme-card-cinnabar-scroll .theme-card-mark {
+.theme-card:not(*) .theme-card-mark {
   border-radius: 2px;
   background: #963a2f;
   color: #f7eadc;
@@ -7916,32 +7916,32 @@ a:active > .app-icon-vector { transform: scale(.92); }
 }
 
 /* Ink collection refinement — typography and interaction share the same quiet grammar. */
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*), .theme-inkstone) {
   --ink-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", STSong, serif;
   --ink-ui: "Noto Sans SC", "Source Han Sans SC", "PingFang SC", system-ui, sans-serif;
 }
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) ::selection {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*), .theme-inkstone) ::selection {
   background: color-mix(in srgb, var(--accent) 24%, transparent);
   color: var(--ink);
 }
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) :is(button, a, input, select, textarea):focus-visible {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*), .theme-inkstone) :is(button, a, input, select, textarea):focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent) 66%, transparent);
   outline-offset: 3px;
 }
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .reader-viewport {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*), .theme-inkstone) .reader-viewport {
   scrollbar-color: color-mix(in srgb, var(--accent) 46%, transparent) transparent;
 }
 
 /* Navigation becomes a slim ink annotation instead of a generic filled pill. */
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone):not(.is-focus) .nav-item {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*), .theme-inkstone):not(.is-focus) .nav-item {
   position: relative;
   border-radius: 8px;
 }
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone):not(.is-focus) .nav-item.active {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*), .theme-inkstone):not(.is-focus) .nav-item.active {
   background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 14%, transparent), transparent 92%);
   box-shadow: none;
 }
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone):not(.is-focus) .nav-item.active::before {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*), .theme-inkstone):not(.is-focus) .nav-item.active::before {
   position: absolute;
   top: 9px;
   bottom: 9px;
@@ -7952,21 +7952,21 @@ a:active > .app-icon-vector { transform: scale(.92); }
   box-shadow: 0 0 9px color-mix(in srgb, var(--accent) 24%, transparent);
   content: "";
 }
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone):not(.is-focus) .nav-item.active .nav-icon {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*), .theme-inkstone):not(.is-focus) .nav-item.active .nav-icon {
   border-color: transparent;
   background: transparent;
   box-shadow: none;
 }
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone):not(.is-focus) .reader-tab.active {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*), .theme-inkstone):not(.is-focus) .reader-tab.active {
   background: color-mix(in srgb, var(--surface-raised) 78%, transparent);
   box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--accent) 74%, transparent);
 }
 
 /* Book typography: calm line endings, restrained links, and a more deliberate hierarchy. */
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .reader-markdown {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*), .theme-inkstone) .reader-markdown {
   font-family: var(--ink-serif);
 }
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .reader-title {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*), .theme-inkstone) .reader-title {
   position: relative;
   max-width: 17ch;
   font-weight: 600;
@@ -7974,22 +7974,22 @@ a:active > .app-icon-vector { transform: scale(.92); }
   letter-spacing: -.045em;
   text-wrap: balance;
 }
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .region-content :is(h1, h2, h3, h4) {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*), .theme-inkstone) .region-content :is(h1, h2, h3, h4) {
   font-family: var(--ink-serif);
   font-weight: 600;
   text-wrap: pretty;
 }
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .region-content :is(h1, h2, h3, h4) a {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*), .theme-inkstone) .region-content :is(h1, h2, h3, h4) a {
   color: inherit;
   text-decoration-color: color-mix(in srgb, var(--accent) 44%, transparent);
   text-decoration-thickness: 1px;
   text-underline-offset: .16em;
 }
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .region-content :is(h1, h2, h3, h4) a:hover {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*), .theme-inkstone) .region-content :is(h1, h2, h3, h4) a:hover {
   color: var(--accent);
   text-decoration-color: currentColor;
 }
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .region-content :is(h2, h3) a[href^="http"] {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*), .theme-inkstone) .region-content :is(h2, h3) a[href^="http"] {
   display: inline-block;
   max-width: min(32ch, 82%);
   padding: .08em .42em .12em;
@@ -8008,16 +8008,16 @@ a:active > .app-icon-vector { transform: scale(.92); }
   white-space: nowrap;
   vertical-align: .16em;
 }
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .region-content p {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*), .theme-inkstone) .region-content p {
   letter-spacing: .012em;
   text-align: justify;
   text-justify: inter-ideograph;
 }
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .region-content a {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*), .theme-inkstone) .region-content a {
   text-decoration-thickness: 1px;
   text-underline-offset: .18em;
 }
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .reader-footer {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*), .theme-inkstone) .reader-footer {
   opacity: .78;
   font-family: var(--ink-ui);
   letter-spacing: .08em;
@@ -8045,18 +8045,18 @@ a:active > .app-icon-vector { transform: scale(.92); }
   color: #43534a;
 }
 /* Tables and code should feel placed on the paper, not pasted on top of it. */
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .reader-content .code-frame,
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .reader-content .table-scroll {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*)):not(.is-focus) .reader-content .code-frame,
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*)):not(.is-focus) .reader-content .table-scroll {
   border-color: color-mix(in srgb, var(--ink) 12%, transparent);
   background: color-mix(in srgb, var(--code-bg) 88%, var(--surface-raised));
   box-shadow: 0 12px 30px rgba(53, 47, 37, .055);
 }
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .reader-content .code-toolbar,
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .reader-content .table-region-toolbar {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*)):not(.is-focus) .reader-content .code-toolbar,
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*)):not(.is-focus) .reader-content .table-region-toolbar {
   border-bottom-color: color-mix(in srgb, var(--ink) 10%, transparent);
   background: color-mix(in srgb, var(--surface) 72%, transparent);
 }
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) .reader-content .table-scroll tbody tr:hover td {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*)):not(.is-focus) .reader-content .table-scroll tbody tr:hover td {
   background: color-mix(in srgb, var(--accent) 7%, transparent);
 }
 .app-shell.theme-inkstone:not(.is-focus) .reader-content .code-frame,
@@ -8067,20 +8067,20 @@ a:active > .app-icon-vector { transform: scale(.92); }
 }
 
 /* Keep the reader controls closer to a quiet desk rail than a button wall. */
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone):not(.is-focus) :is(.reader-display-switch, .reader-navigation) {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*), .theme-inkstone):not(.is-focus) :is(.reader-display-switch, .reader-navigation) {
   border-color: color-mix(in srgb, var(--border) 58%, transparent);
   border-radius: 5px;
   background: transparent;
 }
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone):not(.is-focus) .reader-edit-actions button {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*), .theme-inkstone):not(.is-focus) .reader-edit-actions button {
   border-color: transparent;
   background: transparent;
 }
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone):not(.is-focus) .reader-edit-actions button:hover {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*), .theme-inkstone):not(.is-focus) .reader-edit-actions button:hover {
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   color: var(--ink);
 }
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone):not(.is-focus) .reader-display-switch button.active {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*), .theme-inkstone):not(.is-focus) .reader-display-switch button.active {
   background: color-mix(in srgb, var(--accent) 11%, transparent);
   box-shadow: inset 0 -2px 0 var(--accent);
   color: var(--ink);
@@ -8091,13 +8091,13 @@ a:active > .app-icon-vector { transform: scale(.92); }
 }
 
 /* Focus mode keeps the chosen material instead of reverting to the generic ambience. */
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll).is-focus {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*)).is-focus {
   --focus-page-bg: var(--surface-raised);
   --focus-sidebar-bg: linear-gradient(180deg, color-mix(in srgb, var(--surface) 94%, var(--surface-raised)), var(--app-bg));
   --focus-card-bg: color-mix(in srgb, var(--surface-raised) 76%, var(--surface));
   background: var(--surface-raised);
 }
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll).is-focus .reader-viewport {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*)).is-focus .reader-viewport {
   background:
     radial-gradient(ellipse at 12% 4%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 28%),
     repeating-linear-gradient(88deg, transparent 0 15px, rgba(55, 49, 39, .012) 16px, transparent 17px 27px);
@@ -8123,10 +8123,10 @@ a:active > .app-icon-vector { transform: scale(.92); }
   border-radius: 999px;
   background: #526b5c;
 }
-.app-shell.theme-cinnabar-scroll .reader-content .region-content blockquote {
+.app-shell:not(*) .reader-content .region-content blockquote {
   color: #674b43;
 }
-.app-shell.theme-cinnabar-scroll .reader-title::after {
+.app-shell:not(*) .reader-title::after {
   display: inline-block;
   margin-left: .38em;
   color: #963a2f;
@@ -8491,32 +8491,32 @@ a:active > .app-icon-vector { transform: scale(.92); }
 
 
 /* Water-ink edition — paper, ink density and dry-brush rhythm replace ornamental nostalgia. */
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*), .theme-inkstone) {
   --ink-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", STSong, serif;
   --ink-ui: "Noto Sans SC", "Source Han Sans SC", "PingFang SC", system-ui, sans-serif;
   --ink-vermilion: #913b32;
   font-family: var(--ink-ui);
 }
 
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus)::before {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*)):not(.is-focus)::before {
   opacity: .48;
   background:
     repeating-linear-gradient(91deg, transparent 0 17px, rgba(25, 28, 25, .018) 18px, transparent 19px 34px),
     repeating-linear-gradient(1deg, transparent 0 23px, rgba(255, 255, 255, .08) 24px, transparent 25px 42px);
 }
 
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll):not(.is-focus) :is(.global-nav, .topbar, .reader-tabbar) {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*)):not(.is-focus) :is(.global-nav, .topbar, .reader-tabbar) {
   background: color-mix(in srgb, var(--surface) 94%, transparent);
   border-color: color-mix(in srgb, var(--ink) 16%, transparent);
   box-shadow: none;
   backdrop-filter: blur(12px) grayscale(.45);
 }
 
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll) .reader-page {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*)) .reader-page {
   background: var(--surface-raised);
 }
 
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll) .reader-page::before {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*)) .reader-page::before {
   opacity: .78;
   background:
     radial-gradient(ellipse 29% 8% at 82% 4%, color-mix(in srgb, var(--ink) 7%, transparent), transparent 76%),
@@ -8524,13 +8524,13 @@ a:active > .app-icon-vector { transform: scale(.92); }
     repeating-linear-gradient(88deg, transparent 0 19px, color-mix(in srgb, var(--ink) 1.2%, transparent) 20px, transparent 21px 39px);
 }
 
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .reader-content {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*), .theme-inkstone) .reader-content {
   position: relative;
   isolation: isolate;
   font-family: var(--ink-serif);
 }
 
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll) .reader-content::after {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*)) .reader-content::after {
   position: absolute;
   top: -35px;
   right: -85px;
@@ -8543,7 +8543,7 @@ a:active > .app-icon-vector { transform: scale(.92); }
   pointer-events: none;
 }
 
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .reader-title {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*), .theme-inkstone) .reader-title {
   position: relative;
   max-width: 18ch;
   color: var(--ink);
@@ -8555,7 +8555,7 @@ a:active > .app-icon-vector { transform: scale(.92); }
   text-wrap: balance;
 }
 
-.app-shell.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .reader-rule {
+.app-shell.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*), .theme-inkstone) .reader-rule {
   width: min(42%, 310px);
   height: 12px;
   margin: 24px 0 39px;
@@ -8567,7 +8567,7 @@ a:active > .app-icon-vector { transform: scale(.92); }
   filter: blur(.15px);
 }
 
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .reader-content .region-content :is(h2, h3)::before {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*), .theme-inkstone) .reader-content .region-content :is(h2, h3)::before {
   width: 7px;
   height: 7px;
   border-radius: 50% 43% 56% 45%;
@@ -8577,7 +8577,7 @@ a:active > .app-icon-vector { transform: scale(.92); }
   transform: translateY(-1px) rotate(-12deg);
 }
 
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .reader-content .region-content blockquote {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*), .theme-inkstone) .reader-content .region-content blockquote {
   margin-left: 0;
   padding: 17px 22px 17px 25px;
   border: 0;
@@ -8589,26 +8589,26 @@ a:active > .app-icon-vector { transform: scale(.92); }
   color: color-mix(in srgb, var(--ink) 78%, var(--muted));
 }
 
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .reader-content .region-content blockquote::before {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*), .theme-inkstone) .reader-content .region-content blockquote::before {
   content: none;
 }
 
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone) .reader-content :is(.code-frame, .table-scroll) {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*), .theme-inkstone) .reader-content :is(.code-frame, .table-scroll) {
   border-color: color-mix(in srgb, var(--ink) 14%, transparent);
   border-radius: 2px;
   background: color-mix(in srgb, var(--code-bg) 92%, var(--surface-raised));
   box-shadow: none;
 }
 
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone):not(.is-focus) :is(.nav-item, .reader-tab, .reader-display-switch, .reader-navigation) {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*), .theme-inkstone):not(.is-focus) :is(.nav-item, .reader-tab, .reader-display-switch, .reader-navigation) {
   border-radius: 2px;
 }
 
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone):not(.is-focus) .nav-item.active {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*), .theme-inkstone):not(.is-focus) .nav-item.active {
   background: linear-gradient(90deg, color-mix(in srgb, var(--ink) 9%, transparent), transparent 88%);
 }
 
-.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll, .theme-inkstone):not(.is-focus) .nav-item.active::before {
+.app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*), .theme-inkstone):not(.is-focus) .nav-item.active::before {
   width: 3px;
   border-radius: 0;
   background: var(--ink);
@@ -8661,7 +8661,7 @@ a:active > .app-icon-vector { transform: scale(.92); }
   background: linear-gradient(90deg, rgba(34, 40, 36, .76), rgba(70, 91, 77, .32) 54%, transparent 94%);
 }
 
-.app-shell.theme-cinnabar-scroll .reader-title::after {
+.app-shell:not(*) .reader-title::after {
   display: inline-grid;
   width: 25px;
   height: 25px;
@@ -8689,7 +8689,7 @@ a:active > .app-icon-vector { transform: scale(.92); }
 }
 
 @media (max-width: 1260px) {
-  .app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll) .reader-content::after {
+  .app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*)) .reader-content::after {
     right: -30px;
     width: 300px;
     opacity: .42;
@@ -8698,7 +8698,7 @@ a:active > .app-icon-vector { transform: scale(.92); }
 
 @media (max-width: 760px) {
   .app-shell.theme-xuan-paper .reader-title::after,
-  .app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, .theme-cinnabar-scroll) .reader-content::after { display: none; }
+  .app-shell:is(.theme-xuan-paper, .theme-bamboo-shadow, :not(*)) .reader-content::after { display: none; }
 }
 .editor-main-pane { min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
 .markdown-editor { flex: 1; min-height: 0; overflow: hidden; width: 100%; }

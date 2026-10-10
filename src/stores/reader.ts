@@ -34,7 +34,9 @@ export const useReaderStore = defineStore('reader', () => {
   const annotations = ref<Annotation[]>([])
   const themes = ref<MoyueTheme[]>([...builtInThemes])
   const savedThemeId = localStorage.getItem(THEME_KEY)
-  const activeThemeId = ref(savedThemeId && builtInThemes.some((theme) => theme.manifest.id === savedThemeId) ? savedThemeId : DEFAULT_THEME_ID)
+  const savedTheme = savedThemeId ? builtInThemes.find((theme) => theme.manifest.id === savedThemeId) : null
+  const activeThemeId = ref(savedTheme?.manifest.id ?? DEFAULT_THEME_ID)
+  if (savedThemeId && !savedTheme) localStorage.setItem(THEME_KEY, DEFAULT_THEME_ID)
   const savedSettings = readSettings()
   const readerSettings = ref({ fontSize: savedSettings.fontSize, lineHeight: savedSettings.lineHeight, width: savedSettings.width, fontFamily: savedSettings.fontFamily, interfaceFontFamily: savedSettings.interfaceFontFamily })
   const currentDocument = computed(() => documents.value.find((document) => document.id === currentDocumentId.value) ?? null)
