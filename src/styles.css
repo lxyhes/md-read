@@ -8809,6 +8809,19 @@ a:active > .app-icon-vector { transform: scale(.92); }
 .app-shell:not(.is-focus) .reader-content.is-course-outline .region-content ol { margin-top: 2px; margin-bottom: 5px; padding-left: 23px; }
 .app-shell:not(.is-focus) .reader-content.is-course-outline .region-content li { padding: 0; line-height: 1.48; }
 .app-shell:not(.is-focus) .reader-content.is-course-outline .region-content li::marker { font-size: .9em; }
+
+.app-shell:not(.is-focus) .reader-content.is-course-outline .region-more {
+  top: 50%;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  transform: translateY(-50%);
+}
+.app-shell:not(.is-focus) .reader-content.is-course-outline .region-more .app-icon-vector {
+  width: 14px;
+  height: 14px;
+}
 .editor-workspace.editor-mode-rich .markdown-editor .live-preview-widget a.live-link { color: #2166c1; text-decoration: none; white-space: nowrap; }
 .editor-workspace.editor-mode-rich .markdown-editor .live-preview-widget a.live-link::before {
   content: '🌐';
