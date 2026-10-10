@@ -25,6 +25,13 @@ button { border: 0; color: inherit; cursor: pointer; }
 .profile-chip b, .profile-chip small { display: block; font-family: var(--ui-font); }
 .profile-chip b { font-size: 11px; }.profile-chip small { margin-top: 2px; color: var(--muted); font-size: 9px; }
 .main-shell { min-width: 0; flex: 1; display: flex; flex-direction: column; }
+.main-shell.with-web-preview .outline-panel, .main-shell.with-web-preview .context-panel { display: none; }
+.app-shell .main-shell.with-web-preview .reader-content { width: calc(100% - 40px); }
+.main-shell.with-web-preview .reader-meta { flex-wrap: wrap; }
+.main-shell.with-web-preview .topbar { gap: 10px; padding-left: 18px; padding-right: 18px; }
+.main-shell.with-web-preview .crumbs { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.main-shell.with-web-preview .command-trigger { min-width: 32px; width: 32px; flex: 0 0 32px; padding: 7px; }
+.main-shell.with-web-preview .command-trigger > :is(span, kbd) { display: none; }
 .topbar { height: 72px; flex: 0 0 72px; display: flex; align-items: center; gap: 24px; padding: 0 34px; border-bottom: 1px solid var(--border); transition: opacity .5s; z-index: 4; }.topbar.faded { opacity: 0; pointer-events: none; }
 .crumbs { display: flex; align-items: center; gap: 12px; min-width: 235px; font-family: var(--ui-font); }.crumbs strong { font-size: 13px; font-weight: 600; }.crumb-separator { color: var(--muted); }.eyebrow { color: var(--muted); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
 .command-trigger { display: flex; justify-content: space-between; align-items: center; max-width: 420px; min-width: 260px; flex: 1; margin-left: auto; padding: 11px 13px; border: 1px solid var(--border); border-radius: 10px; background: color-mix(in srgb, var(--surface) 70%, transparent); color: var(--muted); text-align: left; font: 12px var(--ui-font); }.command-trigger:hover { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); color: var(--ink); }.command-trigger kbd, kbd { padding: 3px 6px; border: 1px solid var(--border); border-radius: 5px; color: var(--muted); font: 10px var(--mono); }

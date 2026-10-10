@@ -65,7 +65,7 @@ export function normalizeArticleStrong(node: MdastNode) {
 export function isTimestampedParagraph(node: MdastNode) {
   if (node.type !== 'paragraph') return false
   const text = nodeText(node).trim()
-  const match = text.match(/^(.+?)\s+(\d{1,2}:\d{2})$/)
+  const match = text.match(/^(.+?)\s+(\d{1,2}:\d{2}(?::\d{2})?)$/)
   const title = match?.[1]?.trim() ?? ''
   return Boolean(match && title && title.length <= 48 && /[\u3400-\u9fff]/.test(title) && !/[。！？!?]$/.test(title))
 }
