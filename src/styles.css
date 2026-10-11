@@ -8869,3 +8869,62 @@ a:active > .app-icon-vector { transform: scale(.92); }
   .editor-workspace.editor-mode-rich { width: calc(100% - 18px); height: min(520px, calc(100vh - 220px)); }
   .editor-workspace.editor-mode-rich .markdown-editor.is-live .cm-content { padding-inline: 16px; }
 }
+
+/* Course outlines: let the hierarchy read as sections, without turning every point into a card. */
+.reader-content.is-course-outline {
+  --course-guide: color-mix(in srgb, var(--accent) 24%, var(--border));
+}
+.app-shell:not(.is-focus) .reader-content.is-course-outline .regions-stack {
+  gap: 0;
+}
+.app-shell:not(.is-focus) .reader-content.is-course-outline .region-block {
+  margin-left: 0;
+  border-left-color: transparent;
+  border-radius: 0;
+  padding-right: 34px;
+  padding-left: 20px;
+}
+.app-shell:not(.is-focus) .reader-content.is-course-outline .region-block.region-heading {
+  margin-top: 18px;
+  padding-top: 12px;
+  padding-bottom: 6px;
+  border-left: 3px solid var(--accent);
+  border-radius: 8px 8px 0 0;
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+}
+.app-shell:not(.is-focus) .reader-content.is-course-outline .region-block.region-heading:first-child {
+  margin-top: 0;
+}
+.app-shell:not(.is-focus) .reader-content.is-course-outline .region-block.region-heading + .region-block.region-list {
+  margin-left: 20px;
+  padding-top: 7px;
+  padding-bottom: 14px;
+  padding-left: 22px;
+  border-left: 1px solid var(--course-guide);
+  border-radius: 0 0 8px 8px;
+  background: color-mix(in srgb, var(--accent) 2%, transparent);
+}
+.app-shell:not(.is-focus) .reader-content.is-course-outline .region-content > ul > li > p > strong:first-child,
+.app-shell:not(.is-focus) .reader-content.is-course-outline .region-content > ol > li > p > strong:first-child {
+  color: color-mix(in srgb, var(--ink) 86%, var(--accent));
+}
+.app-shell:not(.is-focus) .reader-content.is-course-outline .region-content li::marker {
+  color: color-mix(in srgb, var(--accent) 72%, var(--muted));
+}
+.app-shell.is-region-focus .reader-content.is-course-outline .region-block.region-heading + .region-block.region-list {
+  margin-left: 20px;
+  padding-left: 22px;
+  border-left: 1px solid var(--course-guide);
+}
+
+@media (max-width: 720px) {
+  .app-shell:not(.is-focus) .reader-content.is-course-outline .region-block {
+    padding-right: 16px;
+    padding-left: 12px;
+  }
+  .app-shell:not(.is-focus) .reader-content.is-course-outline .region-block.region-heading + .region-block.region-list,
+  .app-shell.is-region-focus .reader-content.is-course-outline .region-block.region-heading + .region-block.region-list {
+    margin-left: 12px;
+    padding-left: 15px;
+  }
+}
