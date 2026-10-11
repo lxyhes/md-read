@@ -264,7 +264,6 @@ const virtualViewportHeight = ref(0)
 const virtualRegionThreshold = 240
 const virtualGap = 8
 let focusScrollTargetId: string | null = null
-let focusWheelAt = -Infinity
 let readerZoomWheelAt = -Infinity
 let stopNativeFileDrop: (() => void) | null = null
 const documentWatchers = new Map<string, () => void>()
@@ -3458,7 +3457,6 @@ function restoreViewportPercent(percent: number) {
 }
 function onReaderWheel(event: WheelEvent) {
   const viewport = readerViewport.value
-  const isFocusMode = store.mode === 'region-focus' || store.mode === 'focus'
   if (!viewport || event.deltaY === 0) return
   if ((event.ctrlKey || event.metaKey) && view.value === 'reader' && !editorOpen.value && !isTypingTarget(event.target)) {
     event.preventDefault()
@@ -3468,12 +3466,6 @@ function onReaderWheel(event: WheelEvent) {
     changeReaderZoom(event.deltaY > 0 ? -1 : 1)
     return
   }
-  if (!isFocusMode || event.ctrlKey || event.metaKey) return
-  event.preventDefault()
-  const now = performance.now()
-  if (now - focusWheelAt < 180) return
-  focusWheelAt = now
-  moveFocus(event.deltaY > 0 ? 1 : -1)
 }
 function onReaderPointerDown() { focusScrollTargetId = null }
 function onReaderScroll() {
