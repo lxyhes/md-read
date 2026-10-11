@@ -8076,6 +8076,11 @@ a:active > .app-icon-vector { transform: scale(.92); }
   border-color: transparent;
   background: transparent;
 }
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)):not(.is-focus) .reader-edit-actions button.save-pasted-button {
+  border-color: color-mix(in srgb, var(--accent) 36%, transparent);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--accent);
+}
 .app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)):not(.is-focus) .reader-edit-actions button:hover {
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   color: var(--ink);
@@ -8746,7 +8751,9 @@ a:active > .app-icon-vector { transform: scale(.92); }
 .markdown-editor.is-live .cm-scroller { font: var(--reader-size)/var(--reader-leading) var(--reader-font); }
 .markdown-editor.is-live .cm-content { max-width: min(var(--reader-width), 76ch); margin: 0 auto; width: 100%; padding: 32px clamp(18px, 4vw, 48px) 45vh; }
 .markdown-editor.is-live .cm-line { padding: 3px 0; }
-.markdown-editor .live-heading { font-family: var(--reader-font); font-weight: 650; line-height: 1.35; margin: 1.1em 0 .45em; }
+/* CodeMirror measures line boxes; vertical margins make pointer coordinates drift. */
+.markdown-editor .live-heading { font-family: var(--reader-font); font-weight: 650; line-height: 1.35; margin: 0; }
+.markdown-editor.is-live .cm-line.live-heading { padding-block: 1.1em .45em; }
 .markdown-editor .live-h1 { font-size: 1.9em; }
 .markdown-editor .live-h2 { font-size: 1.5em; }
 .markdown-editor .live-h3 { font-size: 1.25em; }
@@ -8819,7 +8826,8 @@ a:active > .app-icon-vector { transform: scale(.92); }
 }
 .editor-workspace.editor-mode-rich .markdown-editor.is-live .cm-line { padding: 1px 0; }
 .editor-workspace.editor-mode-rich .markdown-editor .live-heading {
-  margin: .68em 0 .16em;
+  margin: 0;
+  padding-block: .68em .16em;
   font-family: var(--ui-font);
   font-weight: 700;
   line-height: 1.3;

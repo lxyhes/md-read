@@ -225,6 +225,7 @@ let editorSplitResizeCleanup: (() => void) | null = null
 const editorListNormalization = computed(() => normalizeMixedOrderedListSource(restoreEditorInlineImages(editorSource.value)))
 const editorSourceForSave = computed(() => restoreEditorInlineImages(editorSource.value))
 const editorDirty = computed(() => editorOpen.value && editorSourceForSave.value !== editorOriginalSource.value)
+const savingDocument = ref(false)
 const editorSourceStats = computed(() => {
   const source = editorSource.value
   return {
@@ -1812,6 +1813,25 @@ async function exportDocument(format: 'markdown' | 'html' | 'html-clean' | 'imag
     exportError.value = String(error instanceof Error ? error.message : error)
     notify(exportError.value)
   } finally { exporting.value = false }
+}
+
+async function saveCurrentDocument() {
+  const document = store.currentDocument
+  if (!document || isRealDocumentPath(document.path) || savingDocument.value) return
+  savingDocument.value = true
+  try {
+    const source = document.source
+    const path = isTauriRuntime()
+      ? await saveMarkdownFile(source, document.title || '文档')
+      : await saveExportFile(source, document.title || '文档', 'md', 'Markdown')
+    if (!path) return
+    await store.renameDocument(document.id, path, source)
+    notify(`Markdown 已保存：${path}`)
+  } catch (error) {
+    notify(error instanceof Error ? error.message : 'Markdown 保存失败')
+  } finally {
+    savingDocument.value = false
+  }
 }
 
 function printDocument() {
@@ -4202,6 +4222,7 @@ async function requestFullscreen() {
               <div v-if="!editorOpen" class="reader-meta-tools">
                 <div class="reader-edit-actions">
                   <button type="button" :class="{ active: editorOpen }" @click="editorOpen ? closeEditor() : openEditor()">{{ editorOpen ? '阅读' : '编辑' }}</button>
+                  <button v-if="!isRealDocumentPath(store.currentDocument?.path ?? '')" class="save-pasted-button" type="button" :disabled="savingDocument" @click="saveCurrentDocument">{{ savingDocument ? '保存中…' : '保存 Markdown' }}</button>
                   <details class="reader-more-menu">
                     <summary>更多</summary>
                     <div class="reader-more-popover">
