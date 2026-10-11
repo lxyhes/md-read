@@ -118,8 +118,8 @@ function restoreTimestampedListHeadings(tree: MdastNode) {
     const text = first?.type === 'paragraph' ? nodeText(first).replace(/\s+/g, ' ').trim() : ''
     return text.length <= 64 && /^[\u3400-\u9fff].+?\s+\d{1,2}:\d{2}(?::\d{2})?$/.test(text) ? first : null
   }
-  if (!children.some((node) => node.type === 'heading' && /\d{1,2}:\d{2}(?::\d{2})?$/.test(nodeText(node).trim()))) return
-  if (children.flatMap((node) => node.type === 'list' ? node.children ?? [] : []).filter(chapterText).length < 2) return
+  const timestampedChapters = children.flatMap((node) => node.type === 'list' ? node.children ?? [] : []).filter(chapterText)
+  if (timestampedChapters.length < 2) return
 
   const restored: MdastNode[] = []
   for (const node of children) {
