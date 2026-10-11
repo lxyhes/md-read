@@ -139,6 +139,18 @@ $$`)
     expect(document.regions[0].html).toBe('<p>第一行<br />&nbsp;&nbsp;第二行<br />&nbsp;&nbsp;&nbsp;第三行</p>')
   })
 
+  it('preserves leading spaces in paragraphs nested inside list items', () => {
+    const source = '- **摘要内容由AI生成**\n\n  第一行\n  第二行\n\n- **分段总结**'
+    const document = parseMarkdown('notes/nested-indent.md', source)
+    expect(document.regions[0].html).toContain('<p>&nbsp;&nbsp;第一行<br />&nbsp;&nbsp;第二行</p>')
+  })
+
+  it('preserves full-width leading spaces in reader HTML', () => {
+    const source = '- **摘要内容由AI生成**\n\n　　第一行\n　　第二行\n\n- **分段总结**'
+    const document = parseMarkdown('notes/full-width-indent.md', source)
+    expect(document.regions[1].html).toBe('<p>&nbsp;&nbsp;第一行<br />&nbsp;&nbsp;第二行</p>')
+  })
+
   it('resolves relative assets without changing external URLs', () => {
     const document = parseMarkdown('notes/readme.md', '![local](assets/cover.png)\n\n[remote](https://example.com)', (url) => url.startsWith('assets/') ? `asset://${url}` : url)
     expect(document.regions[0].html).toContain('src="asset://assets/cover.png"')
