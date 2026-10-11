@@ -32,6 +32,7 @@ function imageReferrerPolicyAttribute(url = '') {
 
 function extendedTextHtml(value: string) {
   return escapeHtml(value)
+    .replace(/(^|\r?\n)\u3000+/g, (match) => match.replace(/\u3000/g, '&nbsp;'))
     .replace(/==([^=\n]+)==/g, '<mark>$1</mark>')
     .replace(/(^|[^~])~([^~\n]+)~(?!~)/g, '$1<sub>$2</sub>')
     .replace(/\^([^\^\n]+)\^/g, '<sup>$1</sup>')
@@ -98,14 +99,14 @@ function withoutCalloutMarker(node: MdastNode, markerLength: number): MdastNode 
   return { ...node, children }
 }
 
-function calloutHtml(node: MdastNode, resolveUrl: MarkdownUrlResolver, context: RenderContext): string | null {
+function calloutHtml(node: MdastNode, resolveUrl: MarkdownUrlResolver, context: RenderContext, source?: string): string | null {
   const marker = calloutMarker(node)
   if (!marker) return null
   const first = node.children?.[0]
   const bodyNodes = first ? [withoutCalloutMarker(first, marker.markerLength), ...(node.children ?? []).slice(1)] : (node.children ?? [])
   const bodyHtml = bodyNodes
     .filter((child) => child.type !== 'paragraph' || (child.children ?? []).length > 0)
-    .map((child) => blockHtml(child, resolveUrl, context))
+    .map((child) => blockHtml(child, resolveUrl, context, source))
     .join('')
   return `<aside class="markdown-callout callout-${marker.kind}"><div class="callout-title">${escapeHtml(marker.title)}</div><div class="callout-body">${bodyHtml}</div></aside>`
 }
@@ -152,8 +153,8 @@ export function renderVideoNode(video: MdastNode, resolveUrl: MarkdownUrlResolve
   return `<figure class="markdown-video"><video src="${safeMediaUrl(resolveUrl(video.url ?? ''))}"${poster} controls preload="metadata">${track}</video><figcaption>${escapeHtml(caption)}</figcaption></figure>`
 }
 
-function blockHtml(node: MdastNode, resolveUrl: MarkdownUrlResolver = (url) => url, context = createRenderContext()): string {
-  const children = () => (node.children ?? []).map((child) => blockHtml(child, resolveUrl, context)).join('')
+function blockHtml(node: MdastNode, resolveUrl: MarkdownUrlResolver = (url) => url, context = createRenderContext(), source?: string): string {
+  const children = () => (node.children ?? []).map((child) => blockHtml(child, resolveUrl, context, source)).join('')
   const inlineChildren = (preserveSoftBreaks = false) => (node.children ?? []).map((child) => inlineHtml(child, preserveSoftBreaks, resolveUrl, context)).join('')
   switch (node.type) {
     case 'heading': {
@@ -171,9 +172,9 @@ function blockHtml(node: MdastNode, resolveUrl: MarkdownUrlResolver = (url) => u
       if (standaloneImage) return blockHtml(standaloneImage, resolveUrl, context)
       const video = standaloneVideoNode(node)
       if (video) return renderVideoNode(video, resolveUrl)
-      return `<p>${inlineChildren(true)}</p>`
+      return source ? sourceIndentedHtml(`<p>${inlineChildren(true)}</p>`, source, node) : `<p>${inlineChildren(true)}</p>`
     }
-    case 'blockquote': return calloutHtml(node, resolveUrl, context) ?? `<blockquote>${children()}</blockquote>`
+    case 'blockquote': return calloutHtml(node, resolveUrl, context, source) ?? `<blockquote>${children()}</blockquote>`
     case 'list': return `<${node.ordered ? 'ol' : 'ul'}>${children()}</${node.ordered ? 'ol' : 'ul'}>`
     case 'listItem': {
       const isTask = typeof node.checked === 'boolean'
@@ -203,7 +204,7 @@ function blockHtml(node: MdastNode, resolveUrl: MarkdownUrlResolver = (url) => u
 }
 
 function sourceLeadingWhitespaceHtml(value: string): string {
-  const leadingWhitespace = value.match(/^[ \t\u00a0\u3000]*/)?.[0] ?? ''
+  const leadingWhitespace = value.match(/^[ \t\u00a0]*/)?.[0] ?? ''
   return leadingWhitespace
     .replace(/ /g, '&nbsp;')
     .replace(/\t/g, '&nbsp;&nbsp;&nbsp;&nbsp;')
@@ -223,16 +224,18 @@ function sourceLineIndentHtml(source: string, node: MdastNode): string[] {
     .map(sourceLeadingWhitespaceHtml)
 }
 
-export function blockHtmlWithSourceIndent(node: MdastNode, source: string, resolveUrl: MarkdownUrlResolver = (url) => url, context = createRenderContext()): string {
-  const html = blockHtml(node, resolveUrl, context)
+function sourceIndentedHtml(html: string, source: string, node: MdastNode): string {
   const lineIndents = sourceLineIndentHtml(source, node)
   if (!lineIndents.length || !lineIndents.some(Boolean)) return html
 
   let lineIndex = 0
-  const firstLine = lineIndents[0] ?? ''
   return html
-    .replace('<p>', `<p>${firstLine}`)
+    .replace('<p>', `<p>${lineIndents[0] ?? ''}`)
     .replace(/<br \/>/g, (breakTag) => `${breakTag}${lineIndents[Math.min(++lineIndex, lineIndents.length - 1)] ?? ''}`)
+}
+
+export function blockHtmlWithSourceIndent(node: MdastNode, source: string, resolveUrl: MarkdownUrlResolver = (url) => url, context = createRenderContext()): string {
+  return blockHtml(node, resolveUrl, context, source)
 }
 
 export function renderFootnotes(context: RenderContext, resolveUrl: MarkdownUrlResolver): string {
