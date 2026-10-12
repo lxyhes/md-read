@@ -8844,7 +8844,7 @@ a:active > .app-icon-vector { transform: scale(.92); }
 .app-shell:not(.is-focus) .reader-content.is-course-outline .regions-stack { gap: 2px; }
 .app-shell:not(.is-focus) .reader-content.is-course-outline .region-block,
 .app-shell:not(.is-focus) .reader-content.is-course-outline .region-block.region-heading { padding-top: 3px; padding-bottom: 3px; }
-.app-shell:not(.is-focus) .reader-content.is-course-outline .region-content { font: 400 15px/1.48 var(--ui-font); }
+.app-shell:not(.is-focus) .reader-content.is-course-outline .region-content { font: 400 var(--reader-size)/1.48 var(--ui-font); }
 .app-shell:not(.is-focus) .reader-content.is-course-outline .region-content h3 { margin: 5px 0 3px; font: 700 17px/1.35 var(--ui-font); letter-spacing: 0; }
 .app-shell:not(.is-focus) .reader-content.is-course-outline .region-content h3::before { width: 5px; margin-right: 7px; }
 .app-shell:not(.is-focus) .reader-content.is-course-outline .region-content p { margin-bottom: 3px; line-height: 1.48; }

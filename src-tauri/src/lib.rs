@@ -11,6 +11,55 @@ use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use tauri::Manager;
+#[derive(Default)]
+struct DirectoryHandles(std::sync::Mutex<std::collections::HashMap<String, std::fs::File>>);
+
+#[tauri::command]
+fn tracked_directory(path: String, stop: bool, handles: tauri::State<DirectoryHandles>) -> Result<String, String> {
+    let mut files = handles.0.lock().map_err(|error| error.to_string())?;
+    if stop { files.remove(&path); return Ok(path); }
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_BACKUP_SEMANTICS;
+        if !files.contains_key(&path) {
+            let file = std::fs::OpenOptions::new().read(true).custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+                .open(&path).map_err(|error| error.to_string())?;
+            files.insert(path.clone(), file);
+        }
+        return directory_handle_path(&files[&path]);
+    }
+    #[cfg(not(target_os = "windows"))]
+    Ok(path)
+}
+
+#[cfg(target_os = "windows")]
+fn directory_handle_path(file: &std::fs::File) -> Result<String, String> {
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::Storage::FileSystem::GetFinalPathNameByHandleW;
+        let handle = file.as_raw_handle();
+        let mut buffer = vec![0u16; 32768];
+        let length = unsafe { GetFinalPathNameByHandleW(handle, buffer.as_mut_ptr(), buffer.len() as u32, 0) } as usize;
+        if length == 0 || length >= buffer.len() { return Err(std::io::Error::last_os_error().to_string()); }
+        let resolved = String::from_utf16_lossy(&buffer[..length]);
+        let resolved = if let Some(unc) = resolved.strip_prefix(r"\\?\UNC\") { format!(r"\\{unc}") }
+            else { resolved.strip_prefix(r"\\?\").unwrap_or(&resolved).to_string() };
+        return Ok(resolved.replace('\\', "/"));
+}
+
+#[test]
+#[cfg(target_os = "windows")]
+fn directory_handle_follows_external_rename() {
+    use std::os::windows::fs::OpenOptionsExt;
+    use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_BACKUP_SEMANTICS;
+    let root = tempfile::tempdir().unwrap();
+    let old = root.path().join("旧目录");
+    let next = root.path().join("新目录");
+    std::fs::create_dir(&old).unwrap();
+    let file = std::fs::OpenOptions::new().read(true).custom_flags(FILE_FLAG_BACKUP_SEMANTICS).open(&old).unwrap();
+    std::fs::rename(&old, &next).unwrap();
+    assert_eq!(PathBuf::from(directory_handle_path(&file).unwrap()), next);
+}
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::System::DataExchange::GetClipboardSequenceNumber;
 
@@ -668,10 +717,11 @@ fn export_html_to_pdf(source: String, path: String) -> Result<(), String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(DirectoryHandles::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
-        .invoke_handler(tauri::generate_handler![write_markdown_checked, allow_asset_directory, read_local_image, read_clipboard_image, read_clipboard_snapshot, read_clipboard_rich_text, read_clipboard_signature, write_clipboard_snapshot, read_remote_image, download_remote_image, upload_piclist_image, open_directory, open_external_url, web_preview::web_preview, pandoc_import_document, pandoc_export_document, export_html_to_pdf])
+        .invoke_handler(tauri::generate_handler![tracked_directory, write_markdown_checked, allow_asset_directory, read_local_image, read_clipboard_image, read_clipboard_snapshot, read_clipboard_rich_text, read_clipboard_signature, write_clipboard_snapshot, read_remote_image, download_remote_image, upload_piclist_image, open_directory, open_external_url, web_preview::web_preview, pandoc_import_document, pandoc_export_document, export_html_to_pdf])
         .run(tauri::generate_context!())
         .expect("error while running Moyue application");
 }

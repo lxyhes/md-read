@@ -16,7 +16,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { interfaceFont } from './fonts'
 import FileSystemTree, { type FileSystemTreeNode } from './components/FileSystemTree.vue'
 import ClipboardManager from './components/ClipboardManager.vue'
-import { copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, downloadMarkdownImages, exportDocumentWithPandoc, importDocumentWithPandoc, importMarkdownAsset, importMarkdownAssetFromPath, listDirectoryFiles, listFileSystemEntries, markdownPathExists, openFileSystemDirectory, openMarkdownDirectory, openMarkdownFile, openMarkdownFolderAt, organizeMarkdownAssets, readMarkdownExportAssets, readMarkdownPath, removeMarkdownAsset, renameMarkdownAsset, renameMarkdownPath, resolveMarkdownAssetUrl, resolveMarkdownPath, saveBinaryExportFile, saveClipboardImage, saveExportFile, saveMarkdownFile, savePdfExportFile, selectDocxReference, selectFileSystemDirectory, selectMarkdownFolder, splitMarkdownLinkTarget, uploadMarkdownImage, watchMarkdownPath, writeMarkdownFile, type PandocExportFormat, type WorkspaceFile } from './fileService'
+import { copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, downloadMarkdownImages, exportDocumentWithPandoc, importDocumentWithPandoc, importMarkdownAsset, importMarkdownAssetFromPath, listDirectoryFiles, listFileSystemEntries, markdownPathExists, openFileSystemDirectory, openMarkdownDirectory, openMarkdownFile, openMarkdownFolderAt, organizeMarkdownAssets, readMarkdownExportAssets, readMarkdownPath, removeMarkdownAsset, renameMarkdownAsset, renameMarkdownPath, resolveMarkdownAssetUrl, resolveMarkdownPath, saveBinaryExportFile, saveClipboardImage, saveExportFile, saveMarkdownFile, savePdfExportFile, selectDocxReference, selectFileSystemDirectory, selectMarkdownFolder, splitMarkdownLinkTarget, uploadMarkdownImage, watchDirectoryPath, watchMarkdownPath, writeMarkdownFile, type PandocExportFormat, type WorkspaceFile } from './fileService'
 import type { Annotation, ReaderDocument, ReaderRegion, ViewerType } from './types'
 import { escapeHtml, renderMathMl } from './markdown/shared'
 import { makeImplicitMarkdownHeadingsExplicit, parseMarkdown, renderMarkdownFragment } from './parser'
@@ -29,6 +29,7 @@ import { createEditorHistory, recordEditorHistory, stepEditorHistory } from './e
 import { findEditorMatches, replaceEditorMatches } from './editorFind'
 import { parseEditableTable, serializeEditableTable, moveTableRow, moveTableColumn, deleteTableRow, deleteTableColumn, pasteTableCells, type TableAlignment } from './tableEditing'
 import { sortFileTreeEntries, type FileTreeSortMode } from './fileTreeSort'
+import { directoryFiles } from './directoryFiles'
 import { orderRecentFolders, pinRecentFolder, rememberRecentFolder, removeRecentFolder, type RecentFolder } from './recentFolders'
 import { createDocx, createEpub, createLatex } from './exportService'
 import { createExportCss, createPortableHtml } from './exportPresentation'
@@ -162,6 +163,7 @@ const filesystemTree = ref<FileSystemTreeNode | null>(null)
 const filesystemTreeTarget = ref('')
 const filesystemTreeScope = ref<'system' | 'workspace'>('workspace')
 const filesystemFiles = ref<WorkspaceFile[]>([])
+const filesystemFilesDirectory = ref<string | null>(null)
 const tabListOpen = ref(false)
 const tabSearchQuery = ref('')
 const recentlyClosedTabs = ref<string[]>([])
@@ -247,6 +249,10 @@ const exportOpen = ref(false)
 const deleteConfirmation = ref<{ files: FileTreeEntry[] } | null>(null)
 const selectedFilePaths = ref<string[]>([])
 let fileTreeRequest = 0
+let directoryWatcher: (() => void) | null = null
+let directoryWatchRequest = 0
+let directoryRefreshTimer: number | null = null
+let directoryPathTimer: number | null = null
 const focusRemaining = ref(25 * 60)
 const focusRunning = ref(false)
 let focusTimer: number | null = null
@@ -598,17 +604,11 @@ function compareWorkspaceFiles(left: FileTreeEntry, right: FileTreeEntry) {
   return left.name.localeCompare(right.name, 'zh-CN')
 }
 const currentDirectoryFiles = computed(() => {
-  const files = new Map<string, FileTreeEntry>()
-  for (const document of store.documents) {
-    if (directoryOf(document.path) !== currentDirectory.value) continue
-    files.set(normalizedPath(document.path), { path: document.path, name: fileNameOf(document.path), documentId: document.id })
-  }
-  for (const file of filesystemFiles.value) {
-    const key = normalizedPath(file.path)
-    if (!files.has(key)) files.set(key, file)
-  }
-  const result = [...files.values()].filter((file) => matchesSidebarFilter(file.name)).sort(compareWorkspaceFiles)
-  return result.length || !store.currentDocument ? result : [{ path: store.currentDocument.path, name: fileNameOf(store.currentDocument.path), documentId: store.currentDocument.id }]
+  const cached = store.documents
+    .filter(document => filePathKey(directoryOf(document.path)) === filePathKey(currentDirectory.value))
+    .map(document => ({ path: document.path, name: fileNameOf(document.path), documentId: document.id }))
+  const disk = filesystemFilesDirectory.value === currentDirectory.value ? filesystemFiles.value : null
+  return directoryFiles(cached, disk).filter(file => matchesSidebarFilter(file.name)).sort(compareWorkspaceFiles)
 })
 const batchDeletableFiles = computed(() => currentDirectoryFiles.value.filter(isBatchDeletableFile))
 const selectedFiles = computed(() => {
@@ -2794,6 +2794,11 @@ onUnmounted(() => {
   stopFocusTimer()
   stopNativeFileDrop?.()
   stopAllDocumentWatchers()
+  directoryWatchRequest++
+  if (directoryPathTimer !== null) window.clearInterval(directoryPathTimer)
+  directoryWatcher?.()
+  directoryWatcher = null
+  if (directoryRefreshTimer !== null) window.clearTimeout(directoryRefreshTimer)
   if (searchTimer !== null) window.clearTimeout(searchTimer)
   if (scrollFrame !== null) window.cancelAnimationFrame(scrollFrame)
   if (progressTimer !== null) window.clearTimeout(progressTimer)
@@ -2847,6 +2852,7 @@ watch([fileSort, fileTreeMixFolders], ([sort, mixFolders]) => {
 })
 watch(() => store.mode, (mode) => { if (mode !== 'focus') stopFocusTimer() })
 watch(() => store.currentDocument?.path, (path) => { fileSyncState.value = 'idle'; focusScrollTargetId = null; outlineQuery.value = ''; selectedFilePaths.value = []; invalidateRegionLayout(); void refreshFileTree(); if (path) { rememberFolder(directoryOf(path)); void syncFilesystemTreeTarget(path) } }, { immediate: true })
+watch(currentDirectory, () => { void syncDirectoryWatcher() }, { immediate: true })
 watch(currentDirectoryFiles, (files) => {
   const available = new Set(files.filter(isBatchDeletableFile).map((file) => filePathKey(file.path)))
   selectedFilePaths.value = selectedFilePaths.value.filter((path) => available.has(path))
@@ -3224,12 +3230,70 @@ async function chooseQuickOpenResult(file: FileTreeEntry) {
 async function refreshFileTree() {
   const path = store.currentDocument?.path
   const request = ++fileTreeRequest
-  if (!path) { filesystemFiles.value = []; return }
+  if (!path) { filesystemFiles.value = []; filesystemFilesDirectory.value = null; return }
   try {
     const files = await listDirectoryFiles(path)
-    if (request === fileTreeRequest) filesystemFiles.value = files
+    if (request === fileTreeRequest) {
+      filesystemFiles.value = files
+      filesystemFilesDirectory.value = isRealDocumentPath(path) ? directoryOf(path) : null
+    }
   } catch {
-    if (request === fileTreeRequest) filesystemFiles.value = []
+    if (request === fileTreeRequest) { filesystemFiles.value = []; filesystemFilesDirectory.value = null }
+  }
+}
+function scheduleDirectoryRefresh() {
+  if (directoryRefreshTimer !== null) window.clearTimeout(directoryRefreshTimer)
+  directoryRefreshTimer = window.setTimeout(() => {
+    directoryRefreshTimer = null
+    void refreshFileTree()
+    if (fileBrowserMode.value === 'tree') void refreshFilesystemDirectory(currentDirectory.value)
+  }, 320)
+}
+async function syncDirectoryWatcher() {
+  const request = ++directoryWatchRequest
+  directoryWatcher?.()
+  directoryWatcher = null
+  if (directoryPathTimer !== null) window.clearInterval(directoryPathTimer)
+  directoryPathTimer = null
+  const directory = currentDirectory.value
+  if (!isTauriRuntime() || directory === '当前工作区') return
+  let checkingPath = false
+  const checkPath = async () => {
+    if (checkingPath || request !== directoryWatchRequest) return
+    checkingPath = true
+    try {
+      const next = await invoke<string>('tracked_directory', { path: directory, stop: false })
+      if (request !== directoryWatchRequest || normalizedPath(next) === normalizedPath(directory)) return
+      for (const document of [...store.documents]) {
+        const path = normalizedPath(document.path)
+        if (!filePathKey(path).startsWith(filePathKey(directory) + '/')) continue
+        const editing = editorOpen.value && editorDocumentId.value === document.id
+        const renamed = await store.renameDocument(document.id, next + path.slice(directory.length))
+        if (editing && renamed) editorDocumentId.value = renamed.id
+      }
+      await refreshFileTree()
+      notify('目录已改名，文档路径已同步')
+    } catch { /* A deleted or temporarily unavailable directory can be retried. */ }
+    finally { checkingPath = false }
+  }
+  await checkPath()
+  if (request !== directoryWatchRequest) {
+    void invoke('tracked_directory', { path: directory, stop: true }).catch(() => {})
+    return
+  }
+  directoryPathTimer = window.setInterval(() => { void checkPath() }, 1500)
+  try {
+    const unwatch = await watchDirectoryPath(directory, scheduleDirectoryRefresh)
+    if (request !== directoryWatchRequest) {
+      unwatch?.()
+      void invoke('tracked_directory', { path: directory, stop: true }).catch(() => {})
+    }
+    else directoryWatcher = () => {
+      unwatch?.()
+      void invoke('tracked_directory', { path: directory, stop: true }).catch(() => {})
+    }
+  } catch {
+    // Directory watching is unavailable in browser preview or for unsupported paths.
   }
 }
 function displayTitle(title = '') { return title.replace(/\.(?:md|markdown|qmd)$/i, '') }
