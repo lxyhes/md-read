@@ -2,7 +2,7 @@ use arboard::{Clipboard, ImageData};
 mod web_preview;
 #[cfg(target_os = "macos")]
 use objc2_app_kit::NSPasteboard;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -432,6 +432,85 @@ async fn upload_piclist_image(path: String, endpoint: String, key: Option<String
         .map(str::to_string).ok_or_else(|| payload.get("message").and_then(|value| value.as_str()).unwrap_or("PicList 没有返回图片地址").to_string())
 }
 
+#[derive(Deserialize)]
+struct AiChatMessage {
+    role: String,
+    content: String,
+}
+
+#[derive(Deserialize)]
+struct AiChatRequest {
+    provider: String,
+    base_url: String,
+    model: String,
+    api_key: Option<String>,
+    messages: Vec<AiChatMessage>,
+}
+
+#[derive(Serialize)]
+struct AiChatResponse {
+    text: String,
+    model: String,
+    provider: String,
+}
+
+#[tauri::command]
+async fn ai_chat(request: AiChatRequest) -> Result<AiChatResponse, String> {
+    let provider = request.provider.trim().to_ascii_lowercase();
+    if !matches!(provider.as_str(), "ollama" | "openai-compatible") {
+        return Err("不支持的 AI 服务类型".into());
+    }
+    let model = request.model.trim().to_string();
+    if model.is_empty() || request.messages.is_empty() {
+        return Err("AI 模型和消息不能为空".into());
+    }
+    let mut url = reqwest::Url::parse(request.base_url.trim()).map_err(|error| format!("AI 服务地址无效：{error}"))?;
+    if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none() || !url.username().is_empty() {
+        return Err("AI 服务地址必须是 HTTP 或 HTTPS 地址，且不能包含用户名密码".into());
+    }
+    let base_path = url.path().trim_end_matches('/');
+    let endpoint = if provider == "ollama" {
+        if base_path.ends_with("/api/chat") { url } else { url.set_path(&format!("{base_path}/api/chat")); url }
+    } else if base_path.ends_with("/chat/completions") {
+        url
+    } else {
+        url.set_path(&format!("{base_path}/chat/completions"));
+        url
+    };
+    let messages: Vec<serde_json::Value> = request.messages.into_iter().map(|message| serde_json::json!({
+        "role": message.role,
+        "content": message.content,
+    })).collect();
+    let payload = if provider == "ollama" {
+        serde_json::json!({ "model": &model, "messages": messages, "stream": false, "options": { "temperature": 0.2 } })
+    } else {
+        serde_json::json!({ "model": &model, "messages": messages, "stream": false, "temperature": 0.2 })
+    };
+    let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(120)).build()
+        .map_err(|error| format!("创建 AI 请求失败：{error}"))?;
+    let mut builder = client.post(endpoint).json(&payload);
+    if provider == "openai-compatible" {
+        if let Some(key) = request.api_key.filter(|value| !value.trim().is_empty()) {
+            builder = builder.bearer_auth(key.trim());
+        }
+    }
+    let response = builder.send().await.map_err(|error| format!("连接 AI 服务失败：{error}"))?;
+    let status = response.status();
+    let body = response.text().await.map_err(|error| format!("读取 AI 响应失败：{error}"))?;
+    if !status.is_success() {
+        let detail = body.chars().take(600).collect::<String>();
+        return Err(if detail.is_empty() { format!("AI 服务返回 {status}") } else { format!("AI 服务返回 {status}：{detail}") });
+    }
+    let payload: serde_json::Value = serde_json::from_str(&body).map_err(|error| format!("AI 响应不是有效 JSON：{error}"))?;
+    let text = if provider == "ollama" {
+        payload.get("message").and_then(|message| message.get("content")).and_then(serde_json::Value::as_str)
+    } else {
+        payload.get("choices").and_then(serde_json::Value::as_array).and_then(|choices| choices.first()).and_then(|choice| choice.get("message")).and_then(|message| message.get("content")).and_then(serde_json::Value::as_str)
+    }.unwrap_or("").trim().to_string();
+    if text.is_empty() { return Err("AI 服务没有返回文本内容".into()); }
+    Ok(AiChatResponse { text, model, provider })
+}
+
 fn remote_image_referer(url: &reqwest::Url) -> Option<&'static str> {
     let host = url.host_str()?.to_ascii_lowercase();
     if host == "mmbiz.qpic.cn" {
@@ -752,7 +831,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
-        .invoke_handler(tauri::generate_handler![tracked_directory, write_markdown_checked, allow_asset_directory, read_local_image, read_clipboard_image, read_clipboard_snapshot, read_clipboard_rich_text, read_clipboard_signature, write_clipboard_snapshot, read_remote_image, download_remote_image, upload_piclist_image, open_directory, open_external_url, web_preview::web_preview, pandoc_import_document, pandoc_export_document, export_html_to_pdf])
+        .invoke_handler(tauri::generate_handler![tracked_directory, write_markdown_checked, allow_asset_directory, read_local_image, read_clipboard_image, read_clipboard_snapshot, read_clipboard_rich_text, read_clipboard_signature, write_clipboard_snapshot, read_remote_image, download_remote_image, upload_piclist_image, ai_chat, open_directory, open_external_url, web_preview::web_preview, pandoc_import_document, pandoc_export_document, export_html_to_pdf])
         .run(tauri::generate_context!())
         .expect("error while running Moyue application");
 }

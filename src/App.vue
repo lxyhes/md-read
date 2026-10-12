@@ -40,18 +40,21 @@ import { embedExportImages, rasterizeExportImages } from './exportImages'
 import { normalizeLatexDelimiters } from './markdown/fragment'
 import { readEditorDraft, saveEditorDraft, removeEditorDraft, hasSaveConflict } from './editorDrafts'
 import { startupStylesReady } from './startup'
+import { searchKnowledge, type KnowledgeSearchMatch } from './knowledgeSearch'
+import { aiEndpoint, aiPayload, aiResponseText, defaultAiSettings, type AiMessage, type AiSettings } from './aiProvider'
 import logoAsset from './assets/moyue-logo-256.png'
 
 const FocusAmbiencePicker = defineAsyncComponent(() => import('./components/FocusAmbiencePicker.vue'))
 const ThemeCenter = defineAsyncComponent(() => import('./components/ThemeCenter.vue'))
 const ViewerCode = defineAsyncComponent(() => import('./components/ViewerCode.vue'))
 
-type View = 'library' | 'reader' | 'clipboard' | 'themes' | 'settings'
+type View = 'library' | 'reader' | 'clipboard' | 'favorites' | 'knowledge' | 'notes' | 'themes' | 'settings'
 type BusyAction = 'file' | 'folder' | 'drop' | 'paste' | 'paste-save' | 'paste-image' | 'pandoc' | 'delete' | null
 type FileSyncState = 'idle' | 'syncing' | 'updated' | 'error'
 type FileSortMode = FileTreeSortMode
 type SearchScope = 'all' | 'current'
 type FileTreeEntry = { path: string; name: string; documentId?: string; isDirectory?: boolean; size?: number; createdAt?: number; modifiedAt?: number }
+type PersonalNote = { id: string; title: string; body: string; updatedAt: number }
 const store = useReaderStore()
 const exportAppContext = getCurrentInstance()!.appContext
 const view = ref<View>('library')
@@ -109,6 +112,10 @@ type AdvancedSettings = {
   relativeImagePathPrefix: boolean
 }
 const RECENT_FOLDERS_KEY = 'moyue:recent-folders'
+const FAVORITES_KEY = 'moyue:favorites'
+const KNOWLEDGE_DOCUMENTS_KEY = 'moyue:knowledge-documents'
+const PERSONAL_NOTES_KEY = 'moyue:personal-notes'
+const AI_SETTINGS_KEY = 'moyue:ai-settings'
 const advancedDefaults: AdvancedSettings = { defaultExtension: 'md', defaultCodeLanguage: 'text', rememberCodeLanguage: true, emojiAutocomplete: true, autoLink: true, rememberRecent: true, dropBehavior: 'insert', picListEndpoint: 'http://127.0.0.1:36677/upload', picListKey: '', epubChapterDepth: 3, referenceDocx: '', printPageSize: 'A4', printMargin: 18, printHeader: '', printFooter: '', printBackground: true, spellcheck: true, typewriterMode: false, editorAutoSave: false, remoteImagePrivacy: false, relativeImagePathPrefix: false }
 function readAdvancedSettings(): AdvancedSettings {
   try { return { ...advancedDefaults, ...JSON.parse(localStorage.getItem('moyue:advanced-settings') ?? '{}') } }
@@ -127,8 +134,54 @@ function readRecentFolders(): RecentFolder[] {
     }).slice(0, 12)
   } catch { return [] }
 }
+function readStoredIds(key: string) {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(key) ?? '[]')
+    return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+  } catch { return [] }
+}
+function readPersonalNotes(): PersonalNote[] {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(PERSONAL_NOTES_KEY) ?? '[]')
+    if (!Array.isArray(value)) return []
+    return value.flatMap((item) => {
+      if (!item || typeof item !== 'object') return []
+      const note = item as Partial<PersonalNote>
+      return typeof note.id === 'string' && typeof note.title === 'string' && typeof note.body === 'string' && typeof note.updatedAt === 'number'
+        ? [{ id: note.id, title: note.title, body: note.body, updatedAt: note.updatedAt }]
+        : []
+    })
+  } catch { return [] }
+}
+function saveStoredIds(key: string, ids: string[]) { localStorage.setItem(key, JSON.stringify([...new Set(ids)])) }
+function readAiSettings(): AiSettings {
+  try {
+    const saved = JSON.parse(localStorage.getItem(AI_SETTINGS_KEY) ?? '{}') as Partial<AiSettings>
+    return { ...defaultAiSettings, ...saved, apiKey: '' }
+  } catch { return { ...defaultAiSettings } }
+}
+function persistAiSettings(settings: AiSettings) {
+  const { apiKey: _apiKey, ...safeSettings } = settings
+  localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(safeSettings))
+}
 const advancedSettings = ref(readAdvancedSettings())
 const recentFolders = ref<RecentFolder[]>(advancedSettings.value.rememberRecent ? readRecentFolders() : [])
+const favoriteDocumentIds = ref(readStoredIds(FAVORITES_KEY))
+const knowledgeDocumentIds = ref(readStoredIds(KNOWLEDGE_DOCUMENTS_KEY))
+const personalNotes = ref<PersonalNote[]>(readPersonalNotes())
+const selectedNoteId = ref<string | null>(null)
+const noteDraftTitle = ref('')
+const noteDraftBody = ref('')
+const knowledgeQuery = ref('')
+const knowledgeQuestion = ref('')
+const knowledgeAnswer = ref('')
+const knowledgeGeneratedAnswer = ref('')
+const knowledgeMatches = ref<KnowledgeSearchMatch[]>([])
+const knowledgeSourceFilter = ref<'all' | 'included'>('all')
+const aiSettings = ref(readAiSettings())
+const aiBusy = ref(false)
+const aiStatus = ref<'idle' | 'checking' | 'connected' | 'error'>('idle')
+const aiError = ref('')
 const orderedRecentFolders = computed(() => orderRecentFolders(recentFolders.value))
 const viewer = ref<{ type: ViewerType; region: ReaderRegion } | null>(null)
 const viewerTab = ref<'preview' | 'source' | 'data'>('preview')
@@ -365,6 +418,20 @@ const filteredLibraryDocuments = computed(() => {
   if (!needle) return store.documents
   return store.documents.filter((document) => document.title.toLowerCase().includes(needle))
 })
+const favoriteDocuments = computed(() => store.documents.filter((document) => favoriteDocumentIds.value.includes(document.id)))
+const knowledgeDocuments = computed(() => store.documents.filter((document) => knowledgeDocumentIds.value.includes(document.id)))
+const filteredKnowledgeDocuments = computed(() => {
+  const needle = knowledgeQuery.value.trim().toLowerCase()
+  const sources = knowledgeSourceFilter.value === 'included' ? knowledgeDocuments.value : store.documents
+  if (!needle) return sources
+  return sources.filter((document) => `${document.title} ${document.path}`.toLowerCase().includes(needle))
+})
+const knowledgePromptSuggestions = computed(() => {
+  const suggestions = knowledgeDocuments.value.flatMap((document) => document.headings.slice(0, 3).map((heading) => `「${heading.text}」讲了什么？`))
+  return ([...new Set(suggestions)].length ? [...new Set(suggestions)] : ['这篇资料的核心观点是什么？', '有哪些关键概念？', '有哪些可执行步骤？']).slice(0, 3)
+})
+const sortedPersonalNotes = computed(() => personalNotes.value.slice().sort((a, b) => b.updatedAt - a.updatedAt))
+const activePersonalNote = computed(() => personalNotes.value.find((note) => note.id === selectedNoteId.value) ?? null)
 const currentHeading = computed(() => store.currentDocument?.headings.find((heading) => heading.id === store.activeHeadingId))
 const headingIdByRegion = computed(() => {
   const result = new Map<string, string | null>()
@@ -1892,6 +1959,157 @@ async function toggleTask(region: ReaderRegion) {
 }
 
 function openLibrary(tab: 'home' | 'all') { libraryTab.value = tab; view.value = 'library' }
+function toggleFavorite(documentId: string) {
+  favoriteDocumentIds.value = favoriteDocumentIds.value.includes(documentId)
+    ? favoriteDocumentIds.value.filter((id) => id !== documentId)
+    : [...favoriteDocumentIds.value, documentId]
+  saveStoredIds(FAVORITES_KEY, favoriteDocumentIds.value)
+}
+function openFavorites() { view.value = 'favorites' }
+function toggleKnowledgeDocument(documentId: string) {
+  knowledgeDocumentIds.value = knowledgeDocumentIds.value.includes(documentId)
+    ? knowledgeDocumentIds.value.filter((id) => id !== documentId)
+    : [...knowledgeDocumentIds.value, documentId]
+  saveStoredIds(KNOWLEDGE_DOCUMENTS_KEY, knowledgeDocumentIds.value)
+}
+function openKnowledge() { view.value = 'knowledge' }
+function addAllKnowledgeSources() {
+  knowledgeDocumentIds.value = store.documents.map((document) => document.id)
+  saveStoredIds(KNOWLEDGE_DOCUMENTS_KEY, knowledgeDocumentIds.value)
+  notify(`已加入 ${knowledgeDocumentIds.value.length} 个知识源`)
+}
+async function requestAi(messages: AiMessage[]) {
+  const settings = aiSettings.value
+  if (!settings.baseUrl.trim() || !settings.model.trim()) throw new Error('请先填写 AI 服务地址和模型名')
+  const payload = aiPayload(settings, messages)
+  if (isTauriRuntime()) {
+    return invoke<{ text: string; model: string; provider: string }>('ai_chat', {
+      request: { provider: settings.provider, base_url: settings.baseUrl, model: settings.model, api_key: settings.apiKey || null, messages },
+    })
+  }
+  const headers: HeadersInit = { 'Content-Type': 'application/json' }
+  if (settings.provider === 'openai-compatible' && settings.apiKey.trim()) headers.Authorization = `Bearer ${settings.apiKey.trim()}`
+  const response = await fetch(aiEndpoint(settings), { method: 'POST', headers, body: JSON.stringify(payload) })
+  const body = await response.text()
+  let parsed: unknown = null
+  try { parsed = JSON.parse(body) } catch { /* the status below explains plain-text server errors */ }
+  if (!response.ok) throw new Error(typeof parsed === 'object' && parsed && 'error' in parsed ? String((parsed as { error?: unknown }).error) : body.slice(0, 500) || `服务返回 ${response.status}`)
+  const text = aiResponseText(settings.provider, parsed)
+  if (!text) throw new Error('AI 服务没有返回文本内容')
+  return { text, model: settings.model, provider: settings.provider }
+}
+async function testAiConnection() {
+  if (aiBusy.value) return
+  aiBusy.value = true
+  aiStatus.value = 'checking'
+  aiError.value = ''
+  try {
+    await requestAi([{ role: 'user', content: '请只回复：连接成功' }])
+    aiStatus.value = 'connected'
+    notify('AI 服务连接成功')
+  } catch (error) {
+    aiStatus.value = 'error'
+    aiError.value = error instanceof Error ? error.message : 'AI 服务连接失败'
+    notify(aiError.value)
+  } finally { aiBusy.value = false }
+}
+function saveAiSettings() {
+  persistAiSettings(aiSettings.value)
+  aiStatus.value = 'idle'
+  aiError.value = ''
+  notify('AI 服务配置已保存')
+}
+async function askKnowledge() {
+  const question = knowledgeQuestion.value.trim()
+  if (!question) { notify('先输入一个问题'); return }
+  knowledgeGeneratedAnswer.value = ''
+  aiError.value = ''
+  if (!knowledgeDocuments.value.length) {
+    knowledgeAnswer.value = '还没有知识源。先把文档加入知识库，再来问我。'
+    knowledgeMatches.value = []
+    return
+  }
+  knowledgeMatches.value = searchKnowledge(knowledgeDocuments.value, question)
+  if (!knowledgeMatches.value.length) {
+    knowledgeAnswer.value = '没有找到相关原文。试试更短的关键词，或先加入其他文档。'
+    return
+  }
+  const context = knowledgeMatches.value.map((match, index) => `[${index + 1}] ${displayTitle(match.document.title)}\n${match.snippet}`).join('\n\n')
+  if (!aiSettings.value.enabled) {
+    knowledgeAnswer.value = `已找到 ${knowledgeMatches.value.length} 条相关原文。开启 AI 回答后，我会基于这些内容整理答案。`
+    return
+  }
+  aiBusy.value = true
+  aiStatus.value = 'checking'
+  try {
+    const result = await requestAi([
+      { role: 'system', content: '你是墨阅的本地知识库助手。只能依据用户提供的资料回答，不要编造资料外的信息。回答简洁、分点，并在相关句末使用 [1]、[2] 标出来源。资料不足时明确说不知道。' },
+      { role: 'user', content: `问题：${question}\n\n资料：\n${context}` },
+    ])
+    knowledgeGeneratedAnswer.value = result.text
+    knowledgeAnswer.value = `AI 已根据 ${knowledgeMatches.value.length} 条本地原文生成回答。`
+    aiStatus.value = 'connected'
+  } catch (error) {
+    aiStatus.value = 'error'
+    aiError.value = error instanceof Error ? error.message : 'AI 回答失败'
+    knowledgeAnswer.value = `AI 回答失败，仍保留 ${knowledgeMatches.value.length} 条原文结果。`
+  } finally { aiBusy.value = false }
+}
+function useKnowledgePrompt(prompt: string) {
+  knowledgeQuestion.value = prompt
+  void askKnowledge()
+}
+async function copyKnowledgeMatch(match: KnowledgeSearchMatch) {
+  try {
+    await navigator.clipboard.writeText(`> ${match.snippet}\n> —— ${displayTitle(match.document.title)}`)
+    notify('引用已复制')
+  } catch { notify('当前环境不允许访问剪贴板') }
+}
+async function openKnowledgeMatch(match: KnowledgeSearchMatch) {
+  await chooseDocument(match.document.id, { skipResumePrompt: true })
+  store.activeRegionId = match.region.id
+  await nextTick()
+  scrollToHeading(match.region.id)
+}
+function syncPersonalNoteDraft() {
+  const note = activePersonalNote.value
+  noteDraftTitle.value = note?.title ?? ''
+  noteDraftBody.value = note?.body ?? ''
+}
+function openNotes() {
+  view.value = 'notes'
+  if (!selectedNoteId.value) selectedNoteId.value = sortedPersonalNotes.value[0]?.id ?? null
+  syncPersonalNoteDraft()
+}
+function selectPersonalNote(note: PersonalNote) {
+  selectedNoteId.value = note.id
+  syncPersonalNoteDraft()
+}
+function createPersonalNote() {
+  const note: PersonalNote = { id: `note-${Date.now()}`, title: '未命名笔记', body: '', updatedAt: Date.now() }
+  personalNotes.value = [note, ...personalNotes.value]
+  localStorage.setItem(PERSONAL_NOTES_KEY, JSON.stringify(personalNotes.value))
+  selectedNoteId.value = note.id
+  syncPersonalNoteDraft()
+}
+function savePersonalNote() {
+  const note = activePersonalNote.value
+  if (!note) return
+  const updated = { ...note, title: noteDraftTitle.value.trim() || '未命名笔记', body: noteDraftBody.value, updatedAt: Date.now() }
+  personalNotes.value = personalNotes.value.map((item) => item.id === note.id ? updated : item)
+  localStorage.setItem(PERSONAL_NOTES_KEY, JSON.stringify(personalNotes.value))
+  syncPersonalNoteDraft()
+  notify('笔记已保存')
+}
+function deletePersonalNote() {
+  const note = activePersonalNote.value
+  if (!note || !window.confirm(`删除「${note.title}」？`)) return
+  personalNotes.value = personalNotes.value.filter((item) => item.id !== note.id)
+  localStorage.setItem(PERSONAL_NOTES_KEY, JSON.stringify(personalNotes.value))
+  selectedNoteId.value = sortedPersonalNotes.value[0]?.id ?? null
+  syncPersonalNoteDraft()
+  notify('笔记已删除')
+}
 function toggleNavCollapsed() {
   navCollapsed.value = !navCollapsed.value
   localStorage.setItem('moyue:nav-collapsed', String(navCollapsed.value))
@@ -2830,6 +3048,7 @@ watch(query, () => {
   if (searchTimer !== null) window.clearTimeout(searchTimer)
   searchTimer = window.setTimeout(() => { searchNeedle.value = query.value.trim(); searchTimer = null }, 90)
 })
+watch(aiSettings, (settings) => { persistAiSettings(settings) }, { deep: true })
 watch(advancedSettings, (settings) => {
   localStorage.setItem('moyue:advanced-settings', JSON.stringify(settings))
   if (!settings.rememberRecent) {
@@ -4073,7 +4292,35 @@ function jumpToAnnotation(annotation: Annotation) {
   store.clearFocus()
   scrollToHeading(annotation.regionId)
 }
-function assist(kind: 'translate' | 'explain') { notify(customProvider.value ? `${kind === 'translate' ? '翻译' : '解释'}适配器已预留：${customProvider.value}` : '尚未配置翻译 / AI 服务'); selectionToolbar.value = null }
+async function assist(kind: 'translate' | 'explain') {
+  const selected = selectionToolbar.value
+  if (!selected) return
+  if (!aiSettings.value.enabled) {
+    notify('请先在设置 → 阅读偏好中启用 AI')
+    return
+  }
+  selectionToolbar.value = null
+  aiBusy.value = true
+  aiStatus.value = 'checking'
+  aiError.value = ''
+  try {
+    const instruction = kind === 'translate' ? '请把下面的文字翻译成简体中文，只输出译文。' : '请解释下面文字的含义，先给出一句话结论，再补充关键点。'
+    const result = await requestAi([
+      { role: 'system', content: '你是墨阅的阅读助手。请准确处理用户选中的原文，不要编造原文没有的信息。' },
+      { role: 'user', content: `${instruction}\n\n原文：\n${selected.text}` },
+    ])
+    knowledgeQuestion.value = `${kind === 'translate' ? '翻译' : '解释'}：${selected.text.slice(0, 80)}`
+    knowledgeAnswer.value = kind === 'translate' ? 'AI 翻译结果' : 'AI 解释结果'
+    knowledgeGeneratedAnswer.value = result.text
+    knowledgeMatches.value = []
+    aiStatus.value = 'connected'
+    view.value = 'knowledge'
+  } catch (error) {
+    aiStatus.value = 'error'
+    aiError.value = error instanceof Error ? error.message : 'AI 请求失败'
+    notify(aiError.value)
+  } finally { aiBusy.value = false }
+}
 function beginAnnotation() { if (!selectionToolbar.value) return; annotationEditor.value = { text: selectionToolbar.value.text, regionId: selectionToolbar.value.regionId }; annotationNote.value = ''; selectionToolbar.value = null }
 async function saveCurrentAnnotation() {
   if (!annotationEditor.value || !store.currentDocument) return
@@ -4113,9 +4360,9 @@ async function requestFullscreen() {
         <button class="nav-item" :class="{ active: view === 'library' && libraryTab === 'all' }" type="button" title="全部文档" aria-label="全部文档" @click="openLibrary('all')"><span class="nav-icon"><AppIcon name="library" /></span><span>全部文档</span></button>
         <button class="nav-item" :class="{ active: view === 'reader' }" type="button" title="最近阅读" aria-label="最近阅读" @click="view = 'reader'"><span class="nav-icon"><AppIcon name="history" /></span><span>最近阅读</span></button>
         <button class="nav-item" :class="{ active: view === 'clipboard' }" type="button" title="剪贴板" aria-label="剪贴板" @click="view = 'clipboard'"><span class="nav-icon"><AppIcon name="clipboard" /></span><span>剪贴板</span></button>
-        <button class="nav-item" type="button" title="收藏夹" aria-label="收藏夹" @click="notify('收藏夹将在下一阶段接入')"><span class="nav-icon"><AppIcon name="star" /></span><span>收藏夹</span></button>
-        <button class="nav-item" type="button" title="AI 知识库" aria-label="AI 知识库" @click="notify('AI 知识库将在适配器完成后接入')"><span class="nav-icon"><AppIcon name="sparkle" /></span><span>AI 知识库</span></button>
-        <button class="nav-item" type="button" title="个人笔记" aria-label="个人笔记" @click="notify('个人笔记将在下一阶段接入')"><span class="nav-icon"><AppIcon name="note" /></span><span>个人笔记</span></button>
+        <button class="nav-item" :class="{ active: view === 'favorites' }" type="button" title="收藏夹" aria-label="收藏夹" @click="openFavorites"><span class="nav-icon"><AppIcon name="star" /></span><span>收藏夹</span></button>
+        <button class="nav-item" :class="{ active: view === 'knowledge' }" type="button" title="AI 知识库" aria-label="AI 知识库" @click="openKnowledge"><span class="nav-icon"><AppIcon name="sparkle" /></span><span>AI 知识库</span></button>
+        <button class="nav-item" :class="{ active: view === 'notes' }" type="button" title="个人笔记" aria-label="个人笔记" @click="openNotes"><span class="nav-icon"><AppIcon name="note" /></span><span>个人笔记</span></button>
         <span class="nav-section-label nav-section-gap">探索</span>
         <button class="nav-item nav-explore-item" :class="{ active: view === 'themes' }" type="button" title="主题中心" aria-label="主题中心" @click="view = 'themes'"><span class="nav-icon"><AppIcon name="palette" /></span><span>主题中心</span></button>
         <button class="nav-item nav-explore-item" type="button" title="插件中心" aria-label="插件中心" @click="notify('插件市场将在下一阶段接入')"><span class="nav-icon"><AppIcon name="plugin" /></span><span>插件中心</span></button>
@@ -4129,7 +4376,7 @@ async function requestFullscreen() {
 
     <main class="main-shell" :class="{ 'with-web-preview': Boolean(webPreviewUrl) }">
       <header class="topbar" :class="{ faded: store.mode === 'focus' }">
-        <div class="crumbs"><strong>{{ view === 'reader' ? displayTitle(store.currentDocument?.title) : view === 'themes' ? '主题空间' : view === 'clipboard' ? '剪贴板' : view === 'settings' ? '偏好设置' : '我的文档' }}</strong></div>
+        <div class="crumbs"><strong>{{ view === 'reader' ? displayTitle(store.currentDocument?.title) : view === 'themes' ? '主题空间' : view === 'clipboard' ? '剪贴板' : view === 'favorites' ? '收藏夹' : view === 'knowledge' ? 'AI 知识库' : view === 'notes' ? '个人笔记' : view === 'settings' ? '偏好设置' : '我的文档' }}</strong></div>
         <button class="command-trigger" type="button" title="搜索：Ctrl/Cmd + K；快速打开：Ctrl/Cmd + P" @click="openSearch('all')"><AppIcon v-if="webPreviewUrl" name="search" :size="16" /><span>搜索文档、标题、内容</span><kbd>⌘ K</kbd></button>
         <div class="top-actions">
           <IconButton icon="focus" label="专注阅读" :active="store.mode === 'focus'" @click="toggleFocusMode" />
@@ -4149,11 +4396,31 @@ async function requestFullscreen() {
           <button class="ghost-button" type="button" :disabled="busyAction !== null" @click="openFolder"><AppIcon name="folder" :size="14" />{{ busyAction === 'folder' ? '扫描中…' : '打开文件夹' }}</button><button class="primary-button" type="button" :disabled="busyAction !== null" @click="openFile"><AppIcon name="plus" :size="14" />{{ busyAction === 'file' ? '打开中…' : '导入 Markdown' }}</button></div></div>
         <div class="document-grid reveal-3">
           <div v-if="librarySearchQuery.trim() && !filteredLibraryDocuments.length" class="library-empty"><AppIcon name="search" :size="20" /><strong>没有找到匹配的文档</strong><span>试试搜索其他 Markdown 名称</span></div>
-          <button v-for="document in filteredLibraryDocuments" :key="document.id" class="document-card" type="button" @click="chooseDocument(document.id)"><div class="card-topline"><span class="file-badge">MD</span><span>{{ document.id === store.documents[0]?.id ? '刚刚' : '本地文档' }}</span></div><h3>{{ displayTitle(document.title) }}</h3><p>{{ document.regions.length }} 个阅读区域 · {{ document.estimatedReadMinutes }} 分钟</p><div class="card-footer"><span>{{ document.path }}</span><span class="arrow"><AppIcon name="external" :size="14" /></span></div></button>
+          <article v-for="document in filteredLibraryDocuments" :key="document.id" class="document-card"><button class="document-card-main" type="button" @click="chooseDocument(document.id)"><div class="card-topline"><span class="file-badge">MD</span><span>{{ document.id === store.documents[0]?.id ? '刚刚' : '本地文档' }}</span></div><h3>{{ displayTitle(document.title) }}</h3><p>{{ document.regions.length }} 个阅读区域 · {{ document.estimatedReadMinutes }} 分钟</p><div class="card-footer"><span>{{ document.path }}</span><span class="arrow"><AppIcon name="external" :size="14" /></span></div></button><button class="card-star" :class="{ active: favoriteDocumentIds.includes(document.id) }" type="button" :aria-label="favoriteDocumentIds.includes(document.id) ? '取消收藏' : '加入收藏夹'" :title="favoriteDocumentIds.includes(document.id) ? '取消收藏' : '加入收藏夹'" @click="toggleFavorite(document.id)"><AppIcon name="star" :size="15" /></button></article>
           <button class="import-card" type="button" :disabled="busyAction !== null" @click="openFile"><span class="import-plus"><AppIcon name="plus" :size="22" /></span><span>{{ busyAction === 'file' ? '正在打开…' : '拖入 Markdown' }}<br /><small>或从本地打开</small></span></button>
           <button class="import-card" type="button" :disabled="busyAction !== null" @click="() => pasteFromClipboard()"><span class="import-plus"><AppIcon name="copy" :size="22" /></span><span>{{ busyAction === 'paste' ? '正在格式化…' : '粘贴内容' }}<br /><small>自动整理成 Markdown</small></span></button>
         </div>
         <div class="library-note reveal-4"><span class="note-line" /> <span>当前工作区完全离线运行 · 阅读位置会自动保存</span></div>
+      </section>
+
+      <section v-else-if="view === 'favorites'" class="page collection-page favorites-page">
+        <div class="page-heading"><div><p class="section-kicker">我的空间</p><h1>把重要的内容，<br /><em>留在手边。</em></h1><p class="collection-intro">收藏常用文档，下一次打开时不用重新寻找。</p></div><span class="collection-count"><AppIcon name="star" :size="16" />{{ favoriteDocuments.length }} 个收藏</span></div>
+        <div v-if="!favoriteDocuments.length" class="collection-empty"><AppIcon name="star" :size="24" /><strong>收藏夹还是空的</strong><span>在“我的文档”的卡片上点一下星标，就能收藏文档。</span><button class="primary-button" type="button" @click="openLibrary('all')">去看看文档</button></div>
+        <div v-else class="collection-grid"><article v-for="document in favoriteDocuments" :key="document.id" class="collection-card"><button class="collection-card-main" type="button" @click="chooseDocument(document.id)"><span class="file-badge">MD</span><h3>{{ displayTitle(document.title) }}</h3><p>{{ document.regions.length }} 个阅读区域 · {{ document.estimatedReadMinutes }} 分钟</p><small>{{ document.path }}</small></button><button class="collection-card-action" type="button" @click="toggleFavorite(document.id)"><AppIcon name="star" :size="13" />取消收藏</button></article></div>
+      </section>
+
+      <section v-else-if="view === 'knowledge'" class="page collection-page knowledge-page">
+        <div class="page-heading"><div><p class="section-kicker">本地 AI 阅读</p><h1>直接问你的<br /><em>资料库。</em></h1><p class="collection-intro">先把文档加入知识库，再输入关键词；答案会引用本机 Markdown 原文。</p></div><span class="collection-count"><AppIcon name="sparkle" :size="16" />{{ knowledgeDocuments.length }} 个知识源</span></div>
+        <section class="knowledge-ask" aria-label="询问知识库"><div class="knowledge-ask-heading"><div><span class="section-kicker">问一问</span><h2>从本地资料里找答案</h2><small class="knowledge-ai-status">{{ aiSettings.enabled ? aiStatus === 'connected' ? 'AI 已连接' : aiBusy ? 'AI 正在整理' : 'AI 已启用' : '当前为离线检索' }}</small></div><button v-if="store.documents.length && knowledgeDocuments.length !== store.documents.length" class="text-button" type="button" @click="addAllKnowledgeSources">加入全部文档</button></div><form class="knowledge-ask-form" @submit.prevent="askKnowledge"><input v-model="knowledgeQuestion" type="search" placeholder="例如：这篇文档的核心观点是什么？" aria-label="询问知识库" /><button class="primary-button" type="submit" :disabled="aiBusy"><AppIcon name="search" :size="14" />{{ aiBusy ? '整理中…' : '查找答案' }}</button></form><div v-if="knowledgePromptSuggestions.length" class="knowledge-prompts"><span>可以这样问</span><button v-for="prompt in knowledgePromptSuggestions" :key="prompt" type="button" @click="useKnowledgePrompt(prompt)">{{ prompt }}</button></div><p class="knowledge-ask-hint">{{ aiSettings.enabled ? 'AI 只会参考下方命中的本地原文，并返回来源编号。' : '当前使用离线检索，不会上传你的文档；开启 AI 后可生成整理后的回答。' }}</p><div v-if="knowledgeAnswer" class="knowledge-answer" role="status"><span class="knowledge-answer-mark"><AppIcon name="sparkle" :size="15" /></span><div><strong>{{ knowledgeAnswer }}</strong><p v-if="aiError" class="knowledge-ai-error">{{ aiError }}</p><div v-if="knowledgeGeneratedAnswer" class="knowledge-generated-answer" v-text="knowledgeGeneratedAnswer" /><div v-if="knowledgeMatches.length" class="knowledge-match-list"><article v-for="match in knowledgeMatches" :key="`${match.document.id}-${match.region.id}`" class="knowledge-match"><button class="knowledge-match-main" type="button" @click="openKnowledgeMatch(match)"><span><b>{{ displayTitle(match.document.title) }}</b><small>{{ match.snippet }}</small></span><AppIcon name="external" :size="13" /></button><button class="knowledge-match-copy" type="button" title="复制引用" aria-label="复制引用" @click="copyKnowledgeMatch(match)"><AppIcon name="copy" :size="13" /></button></article></div></div></div></section>
+        <div class="collection-toolbar"><div><h2>知识源 <span>{{ filteredKnowledgeDocuments.length }}</span></h2><p>只有已加入的文档会参与上面的检索。</p></div><div class="knowledge-source-tools"><div class="segmented-tabs"><button :class="{ active: knowledgeSourceFilter === 'all' }" type="button" @click="knowledgeSourceFilter = 'all'">全部文档</button><button :class="{ active: knowledgeSourceFilter === 'included' }" type="button" @click="knowledgeSourceFilter = 'included'">已收录 {{ knowledgeDocuments.length }}</button></div><div class="library-search"><AppIcon name="search" :size="14" /><input v-model="knowledgeQuery" type="search" placeholder="搜索文档名称或路径…" aria-label="搜索知识源" /><button v-if="knowledgeQuery" type="button" aria-label="清空搜索" @click="knowledgeQuery = ''"><AppIcon name="close" :size="12" /></button></div></div></div>
+        <div v-if="!store.documents.length" class="collection-empty"><AppIcon name="sparkle" :size="24" /><strong>还没有可加入的文档</strong><span>先导入一篇 Markdown，再把它加入知识库。</span><button class="primary-button" type="button" @click="openLibrary('all')">导入文档</button></div>
+        <div v-else-if="!filteredKnowledgeDocuments.length" class="collection-empty"><AppIcon name="search" :size="24" /><strong>{{ knowledgeSourceFilter === 'included' ? '还没有已收录的文档' : '没有找到匹配的文档' }}</strong><span>{{ knowledgeSourceFilter === 'included' ? '切换到全部文档，选择要加入的资料。' : '试试搜索其他名称或路径。' }}</span><button v-if="knowledgeSourceFilter === 'included'" class="primary-button" type="button" @click="knowledgeSourceFilter = 'all'">显示全部文档</button></div>
+        <div v-else class="knowledge-list"><article v-for="document in filteredKnowledgeDocuments" :key="document.id" class="knowledge-row"><span class="knowledge-icon"><AppIcon :name="knowledgeDocumentIds.includes(document.id) ? 'check' : 'file'" :size="16" /></span><span class="knowledge-copy"><strong>{{ displayTitle(document.title) }}</strong><small>{{ document.path }} · {{ document.wordCount }} 字</small></span><button class="ghost-button" type="button" @click="toggleKnowledgeDocument(document.id)">{{ knowledgeDocumentIds.includes(document.id) ? '移出知识库' : '加入知识库' }}</button><button class="text-button" type="button" @click="chooseDocument(document.id)">打开 <AppIcon name="external" :size="12" /></button></article></div>
+      </section>
+
+      <section v-else-if="view === 'notes'" class="page notes-page">
+        <div class="page-heading"><div><p class="section-kicker">我的空间</p><h1>记下此刻，<br /><em>留给以后。</em></h1><p class="collection-intro">个人笔记独立于 Markdown 文件，适合放下灵感、摘录和下一步。</p></div><button class="primary-button" type="button" @click="createPersonalNote"><AppIcon name="plus" :size="14" />新建笔记</button></div>
+        <div class="notes-layout"><aside class="notes-list"><div class="notes-list-heading"><strong>全部笔记</strong><span>{{ personalNotes.length }}</span></div><button v-for="note in sortedPersonalNotes" :key="note.id" class="note-list-item" :class="{ active: note.id === selectedNoteId }" type="button" @click="selectPersonalNote(note)"><strong>{{ note.title }}</strong><small>{{ note.body.trim() || '还没有内容' }}</small><time>{{ new Date(note.updatedAt).toLocaleDateString('zh-CN') }}</time></button><div v-if="!personalNotes.length" class="notes-list-empty">点击右上角新建第一条笔记。</div></aside><section v-if="activePersonalNote" class="note-editor"><div class="note-editor-heading"><span class="section-kicker">正在编辑</span><button class="text-button" type="button" @click="deletePersonalNote"><AppIcon name="trash" :size="13" />删除</button></div><input v-model="noteDraftTitle" class="note-title-input" aria-label="笔记标题" placeholder="笔记标题" /><textarea v-model="noteDraftBody" class="note-body-input" aria-label="笔记内容" placeholder="写下你的想法…" /><div class="note-editor-footer"><span>只保存在本机</span><button class="primary-button" type="button" @click="savePersonalNote"><AppIcon name="check" :size="14" />保存笔记</button></div></section><div v-else class="collection-empty note-empty"><AppIcon name="note" :size="24" /><strong>还没有笔记</strong><span>新建一条，把脑中的想法先放下来。</span><button class="primary-button" type="button" @click="createPersonalNote">新建笔记</button></div></div>
       </section>
 
       <section v-else-if="view === 'reader'" class="reader-page">
@@ -4529,6 +4796,7 @@ async function requestFullscreen() {
       <ThemeCenter v-else-if="view === 'themes'" :themes="store.themes" :active-theme-id="store.activeThemeId" :active-theme="store.activeTheme" @apply="applyReaderTheme" @install="store.installTheme" @notify="notify" />
 
         <section v-else-if="view === 'settings'" class="page settings-page"><div class="page-heading"><div><p class="section-kicker">偏好设置</p><h1>把阅读，调成<br /><em>自己的样子。</em></h1></div><button class="ghost-button" type="button" @click="notify('设置已保存在本地')"><AppIcon name="check" :size="14" />保存设置</button></div><div class="settings-tabs"><button :class="{ active: settingsTab === 'reading' }" type="button" @click="settingsTab = 'reading'">阅读偏好</button><button :class="{ active: settingsTab === 'editing' }" type="button" @click="settingsTab = 'editing'">编辑与导出</button><button :class="{ active: settingsTab === 'shortcuts' }" type="button" @click="settingsTab = 'shortcuts'">快捷键</button><button :class="{ active: settingsTab === 'extensions' }" type="button" @click="settingsTab = 'extensions'">插件扩展</button><button type="button" @click="notify('文件关联设置将在桌面端接入')">文件关联</button><button type="button" @click="notify('同步与备份暂不启用')">同步与备份</button></div><div class="settings-grid">
+        <div v-show="settingsTab === 'reading'" class="settings-card ai-settings-card"><span class="section-kicker">AI 能力</span><h2>连接 AI 服务</h2><p class="muted-copy">支持本地 Ollama，也支持 OpenAI-compatible 接口。API Key 只保留在当前会话，不写入本地配置。</p><label class="setting-input">服务类型<select v-model="aiSettings.provider"><option value="ollama">Ollama（本地）</option><option value="openai-compatible">OpenAI-compatible</option></select></label><label class="setting-input">服务地址<input v-model="aiSettings.baseUrl" spellcheck="false" placeholder="http://127.0.0.1:11434" /></label><label class="setting-input">模型名称<input v-model="aiSettings.model" spellcheck="false" placeholder="qwen2.5:7b" /></label><label v-if="aiSettings.provider === 'openai-compatible'" class="setting-input">API Key（可选）<input v-model="aiSettings.apiKey" type="password" autocomplete="off" placeholder="仅当前会话使用" /></label><label class="setting-check"><input v-model="aiSettings.enabled" type="checkbox" />在知识库问答中启用 AI 生成</label><div class="ai-settings-actions"><button class="ghost-button" type="button" @click="saveAiSettings"><AppIcon name="check" :size="14" />保存配置</button><button class="primary-button" type="button" :disabled="aiBusy" @click="testAiConnection">{{ aiBusy ? '连接中…' : '测试连接' }}</button></div><p v-if="aiStatus === 'connected'" class="ai-status-success">AI 服务已连接</p><p v-if="aiError" class="ai-status-error" role="alert">{{ aiError }}</p></div>
         <div v-show="settingsTab === 'reading'" class="settings-card font-settings-card">
           <div class="font-settings-heading"><div><span class="section-kicker">阅读偏好</span><h2>字体与排版</h2></div><span>自动保存</span></div>
           <FontPicker label="正文字体" :model-value="store.readerSettings.fontFamily" :fallback-family="store.activeTheme.tokens.reader.fontFamily" @update:model-value="store.updateSettings({ fontFamily: $event })" />
