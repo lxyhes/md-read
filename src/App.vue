@@ -3257,28 +3257,46 @@ async function syncDirectoryWatcher() {
   directoryPathTimer = null
   const directory = currentDirectory.value
   if (!isTauriRuntime() || directory === '当前工作区') return
+  const markerPaths = store.documents.map(document => document.path).filter(path => filePathKey(directoryOf(path)) === filePathKey(directory))
   let checkingPath = false
+  let reportedError = false
   const checkPath = async () => {
     if (checkingPath || request !== directoryWatchRequest) return
     checkingPath = true
     try {
-      const next = await invoke<string>('tracked_directory', { path: directory, stop: false })
+      const next = await invoke<string>('tracked_directory', { path: directory, markerPaths, stop: false })
       if (request !== directoryWatchRequest || normalizedPath(next) === normalizedPath(directory)) return
+      const updates: Promise<unknown>[] = []
       for (const document of [...store.documents]) {
         const path = normalizedPath(document.path)
         if (!filePathKey(path).startsWith(filePathKey(directory) + '/')) continue
         const editing = editorOpen.value && editorDocumentId.value === document.id
-        const renamed = await store.renameDocument(document.id, next + path.slice(directory.length))
-        if (editing && renamed) editorDocumentId.value = renamed.id
+        const nextPath = next + path.slice(directory.length)
+        updates.push(store.renameDocument(document.id, nextPath))
+        if (editing) editorDocumentId.value = store.documents.find(item => item.path === nextPath)?.id ?? document.id
       }
+      const pending = Promise.allSettled(updates)
       await refreshFileTree()
+      const results = await pending
+      const failed = results.find(result => result.status === 'rejected')
+      if (failed?.status === 'rejected') {
+        console.error('目录已同步，但阅读记录保存失败', failed.reason)
+        notify('目录已同步，但阅读记录保存失败')
+        return
+      }
       notify('目录已改名，文档路径已同步')
-    } catch { /* A deleted or temporarily unavailable directory can be retried. */ }
+    } catch (error) {
+      if (!reportedError && request === directoryWatchRequest) {
+        reportedError = true
+        console.error('目录路径同步失败', directory, error)
+        notify('目录同步失败，请检查文件夹是否存在或可访问')
+      }
+    }
     finally { checkingPath = false }
   }
   await checkPath()
   if (request !== directoryWatchRequest) {
-    void invoke('tracked_directory', { path: directory, stop: true }).catch(() => {})
+    void invoke('tracked_directory', { path: directory, markerPaths, stop: true }).catch(() => {})
     return
   }
   directoryPathTimer = window.setInterval(() => { void checkPath() }, 1500)
@@ -3286,11 +3304,11 @@ async function syncDirectoryWatcher() {
     const unwatch = await watchDirectoryPath(directory, scheduleDirectoryRefresh)
     if (request !== directoryWatchRequest) {
       unwatch?.()
-      void invoke('tracked_directory', { path: directory, stop: true }).catch(() => {})
+      void invoke('tracked_directory', { path: directory, markerPaths, stop: true }).catch(() => {})
     }
     else directoryWatcher = () => {
       unwatch?.()
-      void invoke('tracked_directory', { path: directory, stop: true }).catch(() => {})
+      void invoke('tracked_directory', { path: directory, markerPaths, stop: true }).catch(() => {})
     }
   } catch {
     // Directory watching is unavailable in browser preview or for unsupported paths.

@@ -15,26 +15,44 @@ use tauri::Manager;
 struct DirectoryHandles(std::sync::Mutex<std::collections::HashMap<String, std::fs::File>>);
 
 #[tauri::command]
-fn tracked_directory(path: String, stop: bool, handles: tauri::State<DirectoryHandles>) -> Result<String, String> {
+fn tracked_directory(path: String, marker_paths: Option<Vec<String>>, stop: bool, handles: tauri::State<DirectoryHandles>) -> Result<String, String> {
     let mut files = handles.0.lock().map_err(|error| error.to_string())?;
     if stop { files.remove(&path); return Ok(path); }
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::fs::OpenOptionsExt;
-        use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_BACKUP_SEMANTICS;
+        use windows_sys::Win32::Storage::FileSystem::{FILE_FLAG_BACKUP_SEMANTICS, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE};
         if !files.contains_key(&path) {
-            let file = std::fs::OpenOptions::new().read(true).custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
-                .open(&path).map_err(|error| error.to_string())?;
-            files.insert(path.clone(), file);
+            let tracked_path = if Path::new(&path).is_dir() { path.clone() } else { find_renamed_directory(&path, marker_paths.as_deref().unwrap_or(&[]))? };
+            let directory = std::fs::OpenOptions::new().read(true)
+                .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE).custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+                .open(&tracked_path).map_err(|error| error.to_string())?;
+            files.insert(path.clone(), directory);
         }
-        return directory_handle_path(&files[&path]);
+        return handle_path(&files[&path]);
     }
     #[cfg(not(target_os = "windows"))]
     Ok(path)
 }
 
 #[cfg(target_os = "windows")]
-fn directory_handle_path(file: &std::fs::File) -> Result<String, String> {
+fn find_renamed_directory(path: &str, marker_paths: &[String]) -> Result<String, String> {
+    let parent = Path::new(path).parent().ok_or("无法确定原目录的父目录")?;
+    let markers: Vec<_> = marker_paths.iter().filter_map(|marker| Path::new(marker).file_name()).collect();
+    let mut candidates: Vec<(usize, PathBuf)> = std::fs::read_dir(parent).map_err(|error| error.to_string())?
+        .filter_map(Result::ok).map(|entry| entry.path()).filter(|candidate| candidate.is_dir())
+        .map(|candidate| (markers.iter().filter(|name| candidate.join(name).is_file()).count(), candidate))
+        .filter(|(matches, _)| *matches > 0).collect();
+    candidates.sort_by(|left, right| right.0.cmp(&left.0));
+    match candidates.as_slice() {
+        [(matches, candidate), ..] if candidates.get(1).is_none_or(|next| next.0 < *matches) => Ok(candidate.to_string_lossy().replace('\\', "/")),
+        [] => Err("没有找到改名后的目录".into()),
+        _ => Err("无法唯一识别改名后的目录".into()),
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn handle_path(file: &std::fs::File) -> Result<String, String> {
         use std::os::windows::io::AsRawHandle;
         use windows_sys::Win32::Storage::FileSystem::GetFinalPathNameByHandleW;
         let handle = file.as_raw_handle();
@@ -58,7 +76,20 @@ fn directory_handle_follows_external_rename() {
     std::fs::create_dir(&old).unwrap();
     let file = std::fs::OpenOptions::new().read(true).custom_flags(FILE_FLAG_BACKUP_SEMANTICS).open(&old).unwrap();
     std::fs::rename(&old, &next).unwrap();
-    assert_eq!(PathBuf::from(directory_handle_path(&file).unwrap()), next);
+    assert_eq!(PathBuf::from(handle_path(&file).unwrap()), next);
+}
+
+#[test]
+#[cfg(target_os = "windows")]
+fn finds_renamed_directory_from_open_document_paths() {
+    let root = tempfile::tempdir().unwrap();
+    let old = root.path().join("旧目录");
+    let next = root.path().join("新目录");
+    std::fs::create_dir(&old).unwrap();
+    let document = old.join("保留打开.md");
+    std::fs::write(&document, "# 文档").unwrap();
+    std::fs::rename(&old, &next).unwrap();
+    assert_eq!(PathBuf::from(find_renamed_directory(old.to_str().unwrap(), &[document.to_string_lossy().to_string()]).unwrap()), next);
 }
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::System::DataExchange::GetClipboardSequenceNumber;
