@@ -4,6 +4,7 @@ import { deleteAnnotation, deleteDocument, getLocalProgress, getProgress, loadAn
 import { authorizeMarkdownAssets, createRemoteAssetMap, createTauriAssetMap, openMarkdownFile, openMarkdownFolder, resolveMarkdownAssetUrl, type OpenedFile } from '../fileService'
 import { builtInThemes, cssVariables, defaultTokens, themeCss } from '../themes'
 import { interfaceFont } from '../fonts'
+import { parseMarkdown } from '../parser'
 const SESSION_KEY = 'moyue:reader-session'
 const THEME_KEY = 'moyue:theme'
 const THEME_STYLE_ID = 'moyue-active-theme'
@@ -142,26 +143,54 @@ export const useReaderStore = defineStore('reader', () => {
   async function renameDocument(id: string, nextPath: string, nextSource?: string) {
     const existing = documents.value.find((item) => item.id === id)
     if (!existing) return null
-    const document = await parseOpenedFile({ path: nextPath, source: nextSource ?? existing.source })
-    const previousProgress = progress.value[id] ?? await getProgress(id)
-    const previousAnnotations = loadAnnotations(id)
+    // A path-only change must not wait for image downloads or a database read.
+    const document = nextSource === undefined
+      ? parseMarkdown(nextPath, existing.source, url => resolveMarkdownAssetUrl(nextPath, url))
+      : await parseOpenedFile({ path: nextPath, source: nextSource })
+    const previousProgress = progress.value[id] ?? (nextSource === undefined ? getLocalProgress(id) : await getProgress(id))
+    const regionIds = new Map(existing.regions.map((region, index) => [region.id, document.regions[index]?.id]))
+    const headingIds = new Map(existing.headings.map((heading, index) => [heading.id, document.headings[index]?.id]))
+    const previousAnnotations = loadAnnotations(id).map(annotation => ({
+      ...annotation, regionId: regionIds.get(annotation.regionId) ?? annotation.regionId,
+    }))
+    if (nextSource === undefined) {
+      // Keep already loaded image blobs while rebasing local assets to the new directory.
+      document.regions.forEach((region, index) => {
+        const previous = existing.regions[index]
+        if (region.type === 'image' && previous && String(previous.metadata?.url).startsWith('blob:')) {
+          region.html = previous.html
+          region.metadata = previous.metadata
+        }
+      })
+    }
     const wasCurrent = currentDocumentId.value === id
     documents.value = [...documents.value.filter((item) => item.id !== id && item.id !== document.id), document]
     openDocumentIds.value = openDocumentIds.value.map((item) => item === id ? document.id : item)
     if (wasCurrent) {
       currentDocumentId.value = document.id
       annotations.value = previousAnnotations.map((item) => ({ ...item, documentId: document.id }))
+      activeRegionId.value = regionIds.get(activeRegionId.value ?? '') ?? null
+      focusedRegionId.value = regionIds.get(focusedRegionId.value ?? '') ?? null
+      activeHeadingId.value = headingIds.get(activeHeadingId.value ?? '') ?? null
+    }
+    persistSession()
+    await saveDocumentSnapshot(document)
+    if (nextSource === undefined) {
+      try { await authorizeMarkdownAssets(nextPath) } catch { /* Keep the path update even if asset authorization fails. */ }
     }
     if (previousProgress) {
-      const nextProgress = { ...previousProgress, documentId: document.id }
+      const nextProgress = {
+        ...previousProgress, documentId: document.id,
+        regionId: regionIds.get(previousProgress.regionId ?? '') ?? null,
+        headingId: headingIds.get(previousProgress.headingId ?? '') ?? null,
+      }
       delete progress.value[id]
       progress.value[document.id] = nextProgress
       await saveProgress(nextProgress)
     }
     for (const annotation of previousAnnotations) await saveAnnotation({ ...annotation, documentId: document.id })
-    await saveDocumentSnapshot(document)
     await saveDocument({ id: document.id, path: document.path, title: document.title, sourceHash: document.sourceHash, updatedAt: document.updatedAt, source: document.source })
-    await deleteDocument(id)
+    if (id !== document.id) await deleteDocument(id)
     persistSession()
     return document
   }
