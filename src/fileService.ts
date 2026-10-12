@@ -13,6 +13,18 @@ export interface MarkdownExportAsset { url: string; name: string; mime: string; 
 export type PandocExportFormat = 'docx' | 'epub' | 'latex' | 'odt' | 'rtf' | 'mediawiki'
 export interface PandocExportOptions { css?: string; referenceDocx?: string; chapterDepth?: number; title?: string }
 
+export async function watchDirectoryPath(path: string, onChange: () => void): Promise<(() => void) | null> {
+  if (!isTauri()) return null
+  let stopped = false
+  let stopNative = () => {}
+  const notify = () => { if (!stopped) onChange() }
+  const timer = globalThis.setInterval(notify, 1500)
+  try {
+    stopNative = await watch(path, notify, { delayMs: 700 })
+  } catch { /* Polling remains active when native watching is unavailable. */ }
+  return () => { stopped = true; globalThis.clearInterval(timer); stopNative() }
+}
+
 export async function watchMarkdownPath(path: string, onChange: () => void): Promise<(() => void) | null> {
   if (!isTauri()) return null
   const directory = dirnameOf(path)
