@@ -218,6 +218,5 @@ function handleContentClick(event: MouseEvent) {
       </div>
     </div>
     <IconButton v-if="region.type === 'image'" class="region-more image-region-more" icon="expand" size="sm" label="放大查看原图" @click.stop="emit('openViewer')" />
-    <IconButton v-else-if="!focused" class="region-more" icon="focus" size="sm" label="聚焦此区域" @click.stop="emit('focus')" />
   </article>
 </template>

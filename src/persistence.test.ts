@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { deleteDocument, loadDocumentSnapshots, saveDocumentSnapshot } from './persistence'
+import { deleteDocument, deleteKnowledgeConversation, loadDocumentSnapshots, loadKnowledgeActivity, loadKnowledgeConversations, recordKnowledgeAnswer, saveDocumentSnapshot, saveKnowledgeConversation } from './persistence'
+import type { KnowledgeConversation } from './knowledgeConversations'
 import type { ReaderDocument } from './types'
 
 const values = new Map<string, string>()
@@ -27,6 +28,13 @@ function documentOf(id: string, title = id): ReaderDocument {
   }
 }
 
+function conversationOf(id: string, updatedAt = 1): KnowledgeConversation {
+  return { id, title: id, sourceIds: ['doc-1'], createdAt: 1, updatedAt, messages: [{
+    id: `message-${id}`, role: 'assistant', content: '回答', createdAt: updatedAt,
+    citations: [{ index: 1, documentId: 'doc-1', documentTitle: '资料', documentPath: 'doc-1.md', regionId: 'region-1', excerpt: '原文摘录', sourceHash: 'hash-1' }],
+  }] }
+}
+
 describe('document snapshot persistence', () => {
   beforeEach(() => memoryStorage.clear())
 
@@ -48,5 +56,26 @@ describe('document snapshot persistence', () => {
     await deleteDocument('first')
 
     expect(loadDocumentSnapshots().map((document) => document.id)).toEqual(['second'])
+  })
+})
+
+describe('knowledge workspace persistence', () => {
+  beforeEach(() => memoryStorage.clear())
+
+  it('restores whole conversations and deleting one leaves the others intact', async () => {
+    await saveKnowledgeConversation(conversationOf('first'))
+    await saveKnowledgeConversation(conversationOf('second', 2))
+    expect((await loadKnowledgeConversations()).map((conversation) => conversation.id)).toEqual(['second', 'first'])
+
+    await deleteKnowledgeConversation('first')
+    expect((await loadKnowledgeConversations()).map((conversation) => conversation.id)).toEqual(['second'])
+    expect((await loadKnowledgeConversations())[0].messages[0].citations[0].excerpt).toBe('原文摘录')
+  })
+
+  it('increments only the requested local day for successful answers', async () => {
+    expect(await recordKnowledgeAnswer('2026-10-13')).toEqual({ '2026-10-13': 1 })
+    expect(await recordKnowledgeAnswer('2026-10-13')).toEqual({ '2026-10-13': 2 })
+    expect(await recordKnowledgeAnswer('2026-10-12')).toEqual({ '2026-10-13': 2, '2026-10-12': 1 })
+    expect(await loadKnowledgeActivity()).toEqual({ '2026-10-13': 2, '2026-10-12': 1 })
   })
 })
