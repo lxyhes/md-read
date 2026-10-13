@@ -45,6 +45,11 @@ export function titleForKnowledgeQuestion(question: string) {
   return title.length > 42 ? `${title.slice(0, 41)}…` : title || '新对话'
 }
 
+export function availableKnowledgeSourceIds(sourceIds: string[], availableIds: string[]) {
+  const available = new Set(availableIds)
+  return [...new Set(sourceIds.filter((id) => available.has(id)))]
+}
+
 export function citationsForMatches(matches: KnowledgeSearchMatch[]): KnowledgeCitation[] {
   return matches.map((match, index) => ({
     index: index + 1,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { citationState, localDayKey, recentKnowledgeContext, summarizeKnowledgeActivity, type KnowledgeCitation, type KnowledgeMessage } from './knowledgeConversations'
+import { availableKnowledgeSourceIds, citationState, localDayKey, recentKnowledgeContext, summarizeKnowledgeActivity, type KnowledgeCitation, type KnowledgeMessage } from './knowledgeConversations'
 import { parseMarkdown } from './parser'
 
 describe('knowledge conversation helpers', () => {
@@ -24,6 +24,10 @@ describe('knowledge conversation helpers', () => {
     expect(context.some((message) => message.content.includes('token endpoint'))).toBe(false)
     expect(context.at(-1)?.content).toBe('最新追问')
     expect(context.reduce((size, message) => size + message.content.length, 0)).toBeLessThanOrEqual(8000)
+  })
+
+  it('keeps only available unique sources for a new conversation', () => {
+    expect(availableKnowledgeSourceIds(['a', 'missing', 'a', 'b'], ['a', 'b', 'c'])).toEqual(['a', 'b'])
   })
 
   it('counts successful answers and active days across the local last seven days', () => {

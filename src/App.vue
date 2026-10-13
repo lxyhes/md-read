@@ -42,7 +42,7 @@ import { readEditorDraft, saveEditorDraft, removeEditorDraft, hasSaveConflict } 
 import { startupStylesReady } from './startup'
 import { searchKnowledge } from './knowledgeSearch'
 import { aiEndpoint, aiPayload, aiResponseText, defaultAiSettings, type AiMessage, type AiSettings } from './aiProvider'
-import { citationState, citationsForMatches, createKnowledgeId, createKnowledgeMessage, localDayKey, recentKnowledgeContext, summarizeKnowledgeActivity, titleForKnowledgeQuestion, type KnowledgeActivity, type KnowledgeCitation, type KnowledgeConversation } from './knowledgeConversations'
+import { availableKnowledgeSourceIds, citationState, citationsForMatches, createKnowledgeId, createKnowledgeMessage, localDayKey, recentKnowledgeContext, summarizeKnowledgeActivity, titleForKnowledgeQuestion, type KnowledgeActivity, type KnowledgeCitation, type KnowledgeConversation } from './knowledgeConversations'
 import { deleteKnowledgeConversation, loadKnowledgeActivity, loadKnowledgeConversations, recordKnowledgeAnswer, saveKnowledgeConversation } from './persistence'
 import logoAsset from './assets/moyue-logo-256.png'
 
@@ -171,6 +171,7 @@ const advancedSettings = ref(readAdvancedSettings())
 const recentFolders = ref<RecentFolder[]>(advancedSettings.value.rememberRecent ? readRecentFolders() : [])
 const favoriteDocumentIds = ref(readStoredIds(FAVORITES_KEY))
 const knowledgeDocumentIds = ref(readStoredIds(KNOWLEDGE_DOCUMENTS_KEY))
+const knowledgeManagerDialogRef = ref<HTMLDialogElement | null>(null)
 const personalNotes = ref<PersonalNote[]>(readPersonalNotes())
 const selectedNoteId = ref<string | null>(null)
 const noteDraftTitle = ref('')
@@ -183,6 +184,7 @@ const knowledgeActivity = ref<KnowledgeActivity>({})
 const knowledgeLoaded = ref(false)
 let knowledgeLoadPromise: Promise<void> | null = null
 const knowledgeSourceFilter = ref<'all' | 'included'>('all')
+const selectedKnowledgeSourceIds = ref<string[]>([])
 const aiSettings = ref(readAiSettings())
 const aiBusy = ref(false)
 const aiStatus = ref<'idle' | 'checking' | 'connected' | 'error'>('idle')
@@ -329,6 +331,7 @@ const virtualViewportHeight = ref(0)
 const virtualRegionThreshold = 240
 const virtualGap = 8
 let focusScrollTargetId: string | null = null
+let focusWheelAt = -Infinity
 let readerZoomWheelAt = -Infinity
 let stopNativeFileDrop: (() => void) | null = null
 const documentWatchers = new Map<string, () => void>()
@@ -425,6 +428,7 @@ const filteredLibraryDocuments = computed(() => {
 })
 const favoriteDocuments = computed(() => store.documents.filter((document) => favoriteDocumentIds.value.includes(document.id)))
 const knowledgeDocuments = computed(() => store.documents.filter((document) => knowledgeDocumentIds.value.includes(document.id)))
+const selectedKnowledgeSourceCount = computed(() => knowledgeDocuments.value.filter((document) => selectedKnowledgeSourceIds.value.includes(document.id)).length)
 const activeKnowledgeConversation = computed(() => knowledgeConversations.value.find((conversation) => conversation.id === activeKnowledgeConversationId.value) ?? null)
 const sortedKnowledgeConversations = computed(() => knowledgeConversations.value.slice().sort((a, b) => b.updatedAt - a.updatedAt))
 const activeKnowledgeSources = computed(() => {
@@ -1987,10 +1991,39 @@ function toggleFavorite(documentId: string) {
 }
 function openFavorites() { view.value = 'favorites' }
 function toggleKnowledgeDocument(documentId: string) {
-  knowledgeDocumentIds.value = knowledgeDocumentIds.value.includes(documentId)
+  const isIncluded = knowledgeDocumentIds.value.includes(documentId)
+  knowledgeDocumentIds.value = isIncluded
     ? knowledgeDocumentIds.value.filter((id) => id !== documentId)
     : [...knowledgeDocumentIds.value, documentId]
+  if (isIncluded) selectedKnowledgeSourceIds.value = selectedKnowledgeSourceIds.value.filter((id) => id !== documentId)
   saveStoredIds(KNOWLEDGE_DOCUMENTS_KEY, knowledgeDocumentIds.value)
+}
+function toggleKnowledgeSourceSelection(documentId: string) {
+  if (!knowledgeDocumentIds.value.includes(documentId)) return
+  selectedKnowledgeSourceIds.value = selectedKnowledgeSourceIds.value.includes(documentId)
+    ? selectedKnowledgeSourceIds.value.filter((id) => id !== documentId)
+    : [...selectedKnowledgeSourceIds.value, documentId]
+}
+function selectAllIncludedKnowledgeSources() {
+  knowledgeSourceFilter.value = 'included'
+  knowledgeQuery.value = ''
+  selectedKnowledgeSourceIds.value = knowledgeDocuments.value.map((document) => document.id)
+}
+function removeSelectedKnowledgeSources() {
+  const selectedIds = new Set(selectedKnowledgeSourceIds.value.filter((id) => knowledgeDocumentIds.value.includes(id)))
+  if (!selectedIds.size) return
+  knowledgeDocumentIds.value = knowledgeDocumentIds.value.filter((id) => !selectedIds.has(id))
+  selectedKnowledgeSourceIds.value = selectedKnowledgeSourceIds.value.filter((id) => !selectedIds.has(id))
+  saveStoredIds(KNOWLEDGE_DOCUMENTS_KEY, knowledgeDocumentIds.value)
+  notify(`已移出 ${selectedIds.size} 篇默认知识源；本地文档和已有对话范围不变`)
+}
+function removeAllKnowledgeSources() {
+  const removedCount = knowledgeDocumentIds.value.length
+  if (!removedCount) return
+  knowledgeDocumentIds.value = []
+  selectedKnowledgeSourceIds.value = []
+  saveStoredIds(KNOWLEDGE_DOCUMENTS_KEY, knowledgeDocumentIds.value)
+  notify(`已清空默认知识库（${removedCount} 条收录记录）；本地文档和已有对话范围不变`)
 }
 function openKnowledge() { view.value = 'knowledge' }
 async function addAllKnowledgeSources() {
@@ -2001,6 +2034,13 @@ async function addAllKnowledgeSources() {
   else await createKnowledgeConversation(knowledgeDocumentIds.value)
   notify(`已加入 ${knowledgeDocumentIds.value.length} 个知识源`)
 }
+function openKnowledgeManager() {
+  knowledgeSourceFilter.value = 'all'
+  knowledgeQuery.value = ''
+  selectedKnowledgeSourceIds.value = []
+  if (!knowledgeManagerDialogRef.value?.open) knowledgeManagerDialogRef.value?.showModal()
+}
+function closeKnowledgeManager() { knowledgeManagerDialogRef.value?.close() }
 watch(activeKnowledgeConversationId, (id) => {
   if (knowledgeLoaded.value) {
     if (id) localStorage.setItem(ACTIVE_KNOWLEDGE_CONVERSATION_KEY, id)
@@ -2036,7 +2076,7 @@ async function createKnowledgeConversation(sourceIds = knowledgeDocumentIds.valu
   if (!knowledgeLoaded.value) await loadKnowledgeWorkspace()
   const now = Date.now()
   const conversation: KnowledgeConversation = {
-    id: createKnowledgeId(), title: '新对话', sourceIds: [...new Set(sourceIds)], createdAt: now, updatedAt: now, messages: [],
+    id: createKnowledgeId(), title: '新对话', sourceIds: availableKnowledgeSourceIds(sourceIds, store.documents.map((document) => document.id)), createdAt: now, updatedAt: now, messages: [],
   }
   activeKnowledgeConversationId.value = conversation.id
   knowledgeQuestion.value = ''
@@ -2069,6 +2109,21 @@ async function toggleConversationSource(documentId: string) {
     ? conversation.sourceIds.filter((id) => id !== documentId)
     : [...conversation.sourceIds, documentId]
   await persistKnowledgeConversation({ ...conversation, sourceIds, updatedAt: Date.now() })
+}
+async function removeUnavailableKnowledgeSources() {
+  if (aiBusy.value) return
+  const conversation = activeKnowledgeConversation.value
+  const sourceIds = conversation?.sourceIds ?? knowledgeDocumentIds.value
+  const validIds = new Set(store.documents.map((document) => document.id))
+  const available = sourceIds.filter((id) => validIds.has(id))
+  const removed = sourceIds.length - available.length
+  if (!removed) return
+  if (conversation) await persistKnowledgeConversation({ ...conversation, sourceIds: available, updatedAt: Date.now() })
+  else {
+    knowledgeDocumentIds.value = available
+    saveStoredIds(KNOWLEDGE_DOCUMENTS_KEY, available)
+  }
+  notify(`已移除 ${removed} 个不可用来源；历史引用和摘录仍保留`)
 }
 async function requestAi(messages: AiMessage[]) {
   const settings = aiSettings.value
@@ -3904,6 +3959,7 @@ function restoreViewportPercent(percent: number) {
 }
 function onReaderWheel(event: WheelEvent) {
   const viewport = readerViewport.value
+  const isFocusMode = store.mode === 'region-focus' || store.mode === 'focus'
   if (!viewport || event.deltaY === 0) return
   if ((event.ctrlKey || event.metaKey) && view.value === 'reader' && !editorOpen.value && !isTypingTarget(event.target)) {
     event.preventDefault()
@@ -3913,6 +3969,12 @@ function onReaderWheel(event: WheelEvent) {
     changeReaderZoom(event.deltaY > 0 ? -1 : 1)
     return
   }
+  if (!isFocusMode || event.ctrlKey || event.metaKey) return
+  event.preventDefault()
+  const now = performance.now()
+  if (now - focusWheelAt < 180) return
+  focusWheelAt = now
+  moveFocus(event.deltaY > 0 ? 1 : -1)
 }
 function onReaderPointerDown() { focusScrollTargetId = null }
 function onReaderScroll() {
@@ -4545,28 +4607,68 @@ async function requestFullscreen() {
       </section>
 
       <section v-else-if="view === 'knowledge'" class="page collection-page knowledge-page">
-        <div class="page-heading"><div><p class="section-kicker">本地 AI 阅读</p><h1>直接问你的<br /><em>资料库。</em></h1><p class="collection-intro">跨文档提问，引用回到原文；对话与使用记录只保存在本机。</p></div><div class="knowledge-page-actions"><span class="collection-count"><AppIcon name="sparkle" :size="16" />{{ knowledgeDocuments.length }} 个默认知识源</span><button class="primary-button" type="button" :disabled="aiBusy || !knowledgeLoaded" @click="createKnowledgeConversation()"><AppIcon name="plus" :size="14" />新建对话</button></div></div>
+        <div class="page-heading"><div><p class="section-kicker">本地 AI 阅读</p><h1>直接问你的 <em>资料库。</em></h1><p class="collection-intro">跨文档提问，引用回到原文；对话与使用记录只保存在本机。</p></div><div class="knowledge-page-actions"><span class="collection-count"><AppIcon name="sparkle" :size="16" />默认收录 {{ knowledgeDocuments.length }} 篇</span><button class="primary-button" type="button" :disabled="aiBusy || !knowledgeLoaded" @click="createKnowledgeConversation()"><AppIcon name="plus" :size="14" />新建对话</button></div></div>
         <div class="knowledge-workspace">
           <section class="knowledge-ask" aria-label="询问知识库">
             <div class="knowledge-ask-heading"><div><span class="section-kicker">问一问</span><h2>{{ activeKnowledgeConversation?.title ?? '从本地资料里找答案' }}</h2><small class="knowledge-ai-status">{{ aiSettings.enabled ? aiStatus === 'connected' ? 'AI 已连接' : aiBusy ? 'AI 正在整理' : 'AI 已启用' : '离线检索 · 资料不会上传' }}</small></div><button class="text-button" type="button" :disabled="aiBusy || !knowledgeLoaded" @click="createKnowledgeConversation()"><AppIcon name="plus" :size="13" />新对话</button></div>
-            <details class="knowledge-source-scope" :open="!activeKnowledgeSources.length"><summary>本次资料 <span>{{ activeKnowledgeSources.length }} 篇</span><small v-if="missingKnowledgeSourceCount"> · {{ missingKnowledgeSourceCount }} 篇来源已不可用</small></summary><div v-if="store.documents.length" class="knowledge-scope-list"><label v-for="document in store.documents" :key="document.id"><input type="checkbox" :checked="activeKnowledgeConversation ? activeKnowledgeConversation.sourceIds.includes(document.id) : knowledgeDocumentIds.includes(document.id)" :disabled="aiBusy || !knowledgeLoaded" @change="toggleConversationSource(document.id)" /><span>{{ displayTitle(document.title) }}</span></label><button v-if="store.documents.some(document => !(activeKnowledgeConversation?.sourceIds ?? knowledgeDocumentIds).includes(document.id))" class="text-button" type="button" :disabled="aiBusy || !knowledgeLoaded" @click="addAllKnowledgeSources">一键收录现有文档</button></div><p v-else class="knowledge-scope-empty">先导入 Markdown 文档，之后可在这里选择本次要检索的资料。</p></details>
+            <details class="knowledge-source-scope" :open="!activeKnowledgeSources.length"><summary>本次资料 <span>{{ activeKnowledgeSources.length }} 篇</span><small v-if="missingKnowledgeSourceCount"> · {{ missingKnowledgeSourceCount }} 篇来源已不可用</small></summary><div class="knowledge-scope-body"><div v-if="missingKnowledgeSourceCount" class="knowledge-source-warning"><span>{{ missingKnowledgeSourceCount }} 篇来源已不可用，历史引用不会受影响。</span><button class="text-button" type="button" :disabled="aiBusy || !knowledgeLoaded" @click="removeUnavailableKnowledgeSources">移除失效来源</button></div><div v-if="store.documents.length" class="knowledge-scope-list"><label v-for="document in store.documents" :key="document.id"><input type="checkbox" :checked="activeKnowledgeConversation ? activeKnowledgeConversation.sourceIds.includes(document.id) : knowledgeDocumentIds.includes(document.id)" :disabled="aiBusy || !knowledgeLoaded" @change="toggleConversationSource(document.id)" /><span>{{ displayTitle(document.title) }}</span></label><button v-if="store.documents.some(document => !(activeKnowledgeConversation?.sourceIds ?? knowledgeDocumentIds).includes(document.id)) && (activeKnowledgeConversation || knowledgeDocuments.length)" class="text-button" type="button" :disabled="aiBusy || !knowledgeLoaded" @click="addAllKnowledgeSources">一键收录现有文档</button></div><p v-else class="knowledge-scope-empty">先导入 Markdown 文档，之后可在这里选择本次要检索的资料。</p></div></details>
             <div class="knowledge-transcript" aria-live="polite">
-              <div v-if="!activeKnowledgeConversation" class="knowledge-transcript-empty"><AppIcon name="sparkle" :size="20" /><strong>从一段新对话开始</strong><span>选择资料后提问，答案会保留引用，之后可以继续聊。</span><button v-if="store.documents.length && !knowledgeDocuments.length" class="primary-button" type="button" :disabled="!knowledgeLoaded" @click="addAllKnowledgeSources">一键收录 {{ store.documents.length }} 篇现有文档</button></div>
-              <div v-else-if="!activeKnowledgeMessages.length" class="knowledge-transcript-empty"><AppIcon name="sparkle" :size="20" /><strong>这段对话还没有问题</strong><span>{{ activeKnowledgeSources.length ? '试试按文档标题或章节生成的提问建议。' : '先展开“本次资料”并选择一篇文档。' }}</span></div>
-              <article v-for="message in activeKnowledgeMessages" :key="message.id" class="knowledge-message" :class="`is-${message.role}`"><div class="knowledge-message-label">{{ message.role === 'user' ? '你' : '墨阅' }}<time>{{ new Date(message.createdAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) }}</time></div><div class="knowledge-message-body" v-text="message.content" /><div v-if="message.citations.length" class="knowledge-citations"><div class="knowledge-citations-heading">引用原文</div><article v-for="citation in message.citations" :key="`${message.id}-${citation.index}`" class="knowledge-citation"><div class="knowledge-citation-top"><strong>[{{ citation.index }}] {{ displayTitle(citation.documentTitle) }}</strong><small>{{ citationStatusLabel(citation) }}</small></div><p>{{ citation.excerpt }}</p><div class="knowledge-citation-actions"><button class="text-button" type="button" :disabled="['removed', 'position-missing'].includes(citationState(citation, store.documents))" @click="openKnowledgeCitation(citation)"><AppIcon name="external" :size="12" />定位原文</button><button class="text-button" type="button" @click="copyKnowledgeCitation(citation)"><AppIcon name="copy" :size="12" />复制摘录</button></div></article></div></article>
+              <div v-if="!activeKnowledgeConversation" class="knowledge-transcript-empty"><AppIcon name="sparkle" :size="20" /><strong>{{ activeKnowledgeSources.length ? '资料已经准备好' : '从一段新对话开始' }}</strong><span>{{ activeKnowledgeSources.length ? `本次可检索 ${activeKnowledgeSources.length} 篇资料。点一个建议，或直接输入问题。` : '选择资料后提问，答案会保留引用，之后可以继续聊。' }}</span><div v-if="knowledgePromptSuggestions.length" class="knowledge-prompts knowledge-empty-prompts"><span>可以这样问</span><button v-for="prompt in knowledgePromptSuggestions" :key="prompt" type="button" :disabled="aiBusy" @click="useKnowledgePrompt(prompt)">{{ prompt }}</button></div><button v-if="store.documents.length && !knowledgeDocuments.length" class="primary-button" type="button" :disabled="!knowledgeLoaded" @click="addAllKnowledgeSources">一键收录 {{ store.documents.length }} 篇现有文档</button><button v-else-if="!store.documents.length" class="primary-button" type="button" @click="openLibrary('all')">导入 Markdown 文档</button></div>
+              <div v-else-if="!activeKnowledgeMessages.length" class="knowledge-transcript-empty"><AppIcon name="sparkle" :size="20" /><strong>{{ activeKnowledgeSources.length ? '资料已经准备好' : '还缺少本次资料' }}</strong><span>{{ activeKnowledgeSources.length ? `本次可检索 ${activeKnowledgeSources.length} 篇资料。点一个建议，或直接输入问题。` : '展开上方“本次资料”，选择文档后就可以开始问。' }}</span><div v-if="knowledgePromptSuggestions.length" class="knowledge-prompts knowledge-empty-prompts"><span>可以这样问</span><button v-for="prompt in knowledgePromptSuggestions" :key="prompt" type="button" :disabled="aiBusy" @click="useKnowledgePrompt(prompt)">{{ prompt }}</button></div></div>
+              <article v-for="message in activeKnowledgeMessages" :key="message.id" class="knowledge-message" :class="`is-${message.role}`">
+                <div class="knowledge-message-label">{{ message.role === 'user' ? '你' : '墨阅' }}<time>{{ new Date(message.createdAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) }}</time></div>
+                <div class="knowledge-message-body" v-text="message.content" />
+                <details v-if="message.citations.length" class="knowledge-citations">
+                  <summary class="knowledge-citations-summary"><span>引用原文</span><small>{{ message.citations.length }} 条 · {{ new Set(message.citations.map(citation => citation.documentId)).size }} 篇资料</small><span class="knowledge-citations-toggle" /></summary>
+                  <div class="knowledge-citations-list">
+                    <details v-for="citation in message.citations" :key="`${message.id}-${citation.index}`" class="knowledge-citation">
+                      <summary class="knowledge-citation-summary"><div class="knowledge-citation-top"><strong>[{{ citation.index }}] {{ displayTitle(citation.documentTitle) }}</strong><small>{{ citationStatusLabel(citation) }}</small></div><p class="knowledge-citation-preview">{{ citation.excerpt }}</p></summary>
+                      <p class="knowledge-citation-full">{{ citation.excerpt }}</p>
+                      <div class="knowledge-citation-actions"><button class="text-button" type="button" :disabled="['removed', 'position-missing'].includes(citationState(citation, store.documents))" @click="openKnowledgeCitation(citation)"><AppIcon name="external" :size="12" />定位原文</button><button class="text-button" type="button" @click="copyKnowledgeCitation(citation)"><AppIcon name="copy" :size="12" />复制摘录</button></div>
+                    </details>
+                  </div>
+                </details>
+              </article>
               <p v-if="aiBusy" class="knowledge-working"><span class="knowledge-working-dot" />正在检索本次资料并整理答案…</p>
             </div>
-            <div v-if="knowledgePromptSuggestions.length" class="knowledge-prompts"><span>可以这样问</span><button v-for="prompt in knowledgePromptSuggestions" :key="prompt" type="button" :disabled="aiBusy" @click="useKnowledgePrompt(prompt)">{{ prompt }}</button></div>
+            <div v-if="activeKnowledgeMessages.length && knowledgePromptSuggestions.length" class="knowledge-prompts"><span>继续问</span><button v-for="prompt in knowledgePromptSuggestions" :key="prompt" type="button" :disabled="aiBusy" @click="useKnowledgePrompt(prompt)">{{ prompt }}</button></div>
             <p v-if="aiError" class="knowledge-ai-error" role="alert">{{ aiError }} · 问题仍保留在输入框，可检查配置后重试。</p>
             <form class="knowledge-ask-form" @submit.prevent="askKnowledge"><input v-model="knowledgeQuestion" type="search" placeholder="基于本次资料提问，或继续追问…" aria-label="询问知识库" :disabled="aiBusy || !knowledgeLoaded" /><button class="primary-button" type="submit" :disabled="aiBusy || !knowledgeLoaded"><AppIcon name="search" :size="14" />{{ aiBusy ? '整理中…' : '提问' }}</button></form>
             <p class="knowledge-ask-hint">{{ aiSettings.enabled ? '本轮问题、最近两轮对话和命中的原文片段会发送给所选模型。' : '当前只做本地检索；启用 AI 后可根据命中原文整理回答。' }}</p>
           </section>
-          <aside class="knowledge-history" aria-label="最近对话"><div class="knowledge-history-heading"><div><span class="section-kicker">回到这里</span><h2>最近对话</h2></div><button class="icon-button" type="button" aria-label="新建对话" title="新建对话" :disabled="aiBusy || !knowledgeLoaded" @click="createKnowledgeConversation()"><AppIcon name="plus" :size="15" /></button></div><p class="knowledge-activity"><AppIcon name="sparkle" :size="13" />近 7 天 {{ knowledgeActivitySummary.activeDays }} 天提问 · {{ knowledgeActivitySummary.answers }} 次 AI 回答</p><div v-if="sortedKnowledgeConversations.length" class="knowledge-history-list"><article v-for="conversation in sortedKnowledgeConversations.slice(0, 12)" :key="conversation.id" class="knowledge-history-item" :class="{ active: conversation.id === activeKnowledgeConversationId }"><button class="knowledge-history-select" type="button" :disabled="aiBusy" @click="selectKnowledgeConversation(conversation.id)"><strong>{{ conversation.title }}</strong><small>{{ conversation.messages.filter(message => message.role === 'user').length }} 个问题 · {{ conversation.sourceIds.length }} 个知识源</small><time>{{ new Date(conversation.updatedAt).toLocaleDateString('zh-CN') }}</time></button><button class="knowledge-history-delete" type="button" :disabled="aiBusy" :aria-label="`删除对话：${conversation.title}`" title="删除对话" @click="deleteKnowledgeConversationById(conversation.id)"><AppIcon name="trash" :size="13" /></button></article></div><p v-else class="knowledge-history-empty">提问后，对话会保存在这里，方便下次接着聊。</p></aside>
+          <aside class="knowledge-history" aria-label="最近对话与当前资料">
+            <div class="knowledge-history-heading"><div><span class="section-kicker">回到这里</span><h2>最近对话</h2></div><button class="icon-button" type="button" aria-label="新建对话" title="新建对话" :disabled="aiBusy || !knowledgeLoaded" @click="createKnowledgeConversation()"><AppIcon name="plus" :size="15" /></button></div>
+            <p class="knowledge-activity"><AppIcon name="sparkle" :size="13" />近 7 天 {{ knowledgeActivitySummary.activeDays }} 天提问 · {{ knowledgeActivitySummary.answers }} 次 AI 回答</p>
+            <div v-if="sortedKnowledgeConversations.length" class="knowledge-history-list"><article v-for="conversation in sortedKnowledgeConversations.slice(0, 12)" :key="conversation.id" class="knowledge-history-item" :class="{ active: conversation.id === activeKnowledgeConversationId }"><button class="knowledge-history-select" type="button" :disabled="aiBusy" @click="selectKnowledgeConversation(conversation.id)"><strong>{{ conversation.title }}</strong><small>{{ conversation.messages.filter(message => message.role === 'user').length }} 个问题 · {{ conversation.sourceIds.length }} 个知识源</small><time>{{ new Date(conversation.updatedAt).toLocaleDateString('zh-CN') }}</time></button><button class="knowledge-history-delete" type="button" :disabled="aiBusy" :aria-label="`删除对话：${conversation.title}`" title="删除对话" @click="deleteKnowledgeConversationById(conversation.id)"><AppIcon name="trash" :size="13" /></button></article></div>
+            <p v-else class="knowledge-history-empty">提问后，对话会保存在这里，方便下次接着聊。</p>
+            <section class="knowledge-source-preview" aria-label="本次资料">
+              <div class="knowledge-source-preview-heading"><div><span class="section-kicker">本次资料</span><strong>{{ activeKnowledgeSources.length }} 篇可检索</strong></div><button class="text-button" type="button" @click="openKnowledgeManager">管理全部 {{ store.documents.length }} 篇</button></div>
+              <p v-if="missingKnowledgeSourceCount" class="knowledge-preview-warning">另有 {{ missingKnowledgeSourceCount }} 篇来源已不可用，历史引用仍保留。</p>
+              <div v-if="activeKnowledgeSources.length" class="knowledge-source-preview-list">
+                <div v-for="document in activeKnowledgeSources.slice(0, 4)" :key="document.id" class="knowledge-source-preview-row"><AppIcon name="file" :size="13" /><span :title="displayTitle(document.title)">{{ displayTitle(document.title) }}</span></div>
+                <details v-if="activeKnowledgeSources.length > 4" class="knowledge-source-overflow"><summary>查看其余 {{ activeKnowledgeSources.length - 4 }} 篇</summary><div v-for="document in activeKnowledgeSources.slice(4)" :key="document.id" class="knowledge-source-preview-row"><AppIcon name="file" :size="13" /><span :title="displayTitle(document.title)">{{ displayTitle(document.title) }}</span></div></details>
+              </div>
+              <div v-else class="knowledge-source-preview-empty"><p>{{ store.documents.length ? '本段对话还没有选择资料。可在上方“本次资料”中勾选。' : '先导入 Markdown 文档，再加入知识库。' }}</p><button v-if="!store.documents.length" class="text-button" type="button" @click="openLibrary('all')">导入 Markdown</button></div>
+            </section>
+          </aside>
         </div>
-        <div class="collection-toolbar"><div><h2>知识源 <span>{{ filteredKnowledgeDocuments.length }}</span></h2><p>只有已加入的文档会参与上面的检索。</p></div><div class="knowledge-source-tools"><div class="segmented-tabs"><button :class="{ active: knowledgeSourceFilter === 'all' }" type="button" @click="knowledgeSourceFilter = 'all'">全部文档</button><button :class="{ active: knowledgeSourceFilter === 'included' }" type="button" @click="knowledgeSourceFilter = 'included'">已收录 {{ knowledgeDocuments.length }}</button></div><div class="library-search"><AppIcon name="search" :size="14" /><input v-model="knowledgeQuery" type="search" placeholder="搜索文档名称或路径…" aria-label="搜索知识源" /><button v-if="knowledgeQuery" type="button" aria-label="清空搜索" @click="knowledgeQuery = ''"><AppIcon name="close" :size="12" /></button></div></div></div>
-        <div v-if="!store.documents.length" class="collection-empty"><AppIcon name="sparkle" :size="24" /><strong>还没有可加入的文档</strong><span>先导入一篇 Markdown，再把它加入知识库。</span><button class="primary-button" type="button" @click="openLibrary('all')">导入文档</button></div>
-        <div v-else-if="!filteredKnowledgeDocuments.length" class="collection-empty"><AppIcon name="search" :size="24" /><strong>{{ knowledgeSourceFilter === 'included' ? '还没有已收录的文档' : '没有找到匹配的文档' }}</strong><span>{{ knowledgeSourceFilter === 'included' ? '切换到全部文档，选择要加入的资料。' : '试试搜索其他名称或路径。' }}</span><button v-if="knowledgeSourceFilter === 'included'" class="primary-button" type="button" @click="knowledgeSourceFilter = 'all'">显示全部文档</button></div>
-        <div v-else class="knowledge-list"><article v-for="document in filteredKnowledgeDocuments" :key="document.id" class="knowledge-row"><span class="knowledge-icon"><AppIcon :name="knowledgeDocumentIds.includes(document.id) ? 'check' : 'file'" :size="16" /></span><span class="knowledge-copy"><strong>{{ displayTitle(document.title) }}</strong><small>{{ document.path }} · {{ document.wordCount }} 字</small></span><button class="ghost-button" type="button" @click="toggleKnowledgeDocument(document.id)">{{ knowledgeDocumentIds.includes(document.id) ? '移出知识库' : '加入知识库' }}</button><button class="text-button" type="button" @click="chooseDocument(document.id)">打开 <AppIcon name="external" :size="12" /></button></article></div>
+        <dialog ref="knowledgeManagerDialogRef" class="knowledge-manager-dialog" aria-labelledby="knowledge-manager-title" @click.self="closeKnowledgeManager" @close="selectedKnowledgeSourceIds = []">
+          <header class="knowledge-manager-header">
+            <div><span class="section-kicker">管理资料库</span><h2 id="knowledge-manager-title">知识源</h2><p>{{ store.documents.length }} 篇本地文档 · 默认收录 {{ knowledgeDocuments.length }} 篇</p></div>
+            <button class="icon-button" type="button" aria-label="关闭知识源管理" @click="closeKnowledgeManager"><AppIcon name="close" :size="16" /></button>
+          </header>
+          <div class="knowledge-manager-toolbar">
+            <div class="segmented-tabs" aria-label="筛选知识源"><button :class="{ active: knowledgeSourceFilter === 'all' }" type="button" @click="knowledgeSourceFilter = 'all'">全部文档</button><button :class="{ active: knowledgeSourceFilter === 'included' }" type="button" @click="knowledgeSourceFilter = 'included'">已收录 {{ knowledgeDocuments.length }}</button></div>
+            <div class="library-search"><AppIcon name="search" :size="14" /><input v-model="knowledgeQuery" type="search" autofocus placeholder="搜索文档名称或路径…" aria-label="搜索知识源" /><button v-if="knowledgeQuery" type="button" aria-label="清空搜索" @click="knowledgeQuery = ''"><AppIcon name="close" :size="12" /></button></div>
+          </div>
+          <div class="knowledge-manager-bulk"><p>勾选已收录资料后可批量移出；单篇对话的资料范围不会改变。</p><button class="text-button" type="button" :disabled="!knowledgeDocuments.length" @click="selectAllIncludedKnowledgeSources">全选已收录</button></div>
+          <section class="knowledge-manager-list" aria-label="知识源列表">
+            <div v-if="!store.documents.length" class="knowledge-manager-empty"><AppIcon name="sparkle" :size="22" /><strong>还没有可加入的文档</strong><span>先导入 Markdown 文档，再把它加入知识库。</span><button class="primary-button" type="button" @click="closeKnowledgeManager(); openLibrary('all')">导入文档</button></div>
+            <div v-else-if="!filteredKnowledgeDocuments.length" class="knowledge-manager-empty"><AppIcon name="search" :size="22" /><strong>{{ knowledgeSourceFilter === 'included' ? '还没有已收录的文档' : '没有找到匹配的文档' }}</strong><span>{{ knowledgeSourceFilter === 'included' ? '切换到全部文档，选择要加入的资料。' : '试试搜索其他名称或路径。' }}</span><button v-if="knowledgeSourceFilter === 'included'" class="ghost-button" type="button" @click="knowledgeSourceFilter = 'all'">显示全部文档</button></div>
+            <div v-else class="knowledge-manager-rows"><article v-for="document in filteredKnowledgeDocuments" :key="document.id" class="knowledge-manager-row"><label class="knowledge-manager-select"><input type="checkbox" :checked="selectedKnowledgeSourceIds.includes(document.id)" :disabled="!knowledgeDocumentIds.includes(document.id)" :aria-label="`选择移出：${displayTitle(document.title)}`" @change="toggleKnowledgeSourceSelection(document.id)" /><span class="knowledge-icon"><AppIcon :name="knowledgeDocumentIds.includes(document.id) ? 'check' : 'file'" :size="15" /></span><span class="knowledge-copy"><strong>{{ displayTitle(document.title) }}</strong><small :title="document.path">{{ document.path }} · {{ document.wordCount }} 字</small></span></label><span class="knowledge-manager-status" :class="{ included: knowledgeDocumentIds.includes(document.id) }">{{ knowledgeDocumentIds.includes(document.id) ? '已收录' : '未收录' }}</span><button class="ghost-button" type="button" @click="toggleKnowledgeDocument(document.id)">{{ knowledgeDocumentIds.includes(document.id) ? '移出' : '加入' }}</button><button class="text-button" type="button" @click="closeKnowledgeManager(); chooseDocument(document.id)">打开 <AppIcon name="external" :size="12" /></button></article></div>
+          </section>
+          <footer class="knowledge-manager-footer"><p>移出仅影响默认知识库，不删除本地文档；已有对话的资料范围保持不变。</p><div class="knowledge-manager-actions"><span>已选 {{ selectedKnowledgeSourceCount }} 篇</span><button class="ghost-button" type="button" :disabled="!selectedKnowledgeSourceCount" @click="removeSelectedKnowledgeSources">移出所选</button><button class="danger-button" type="button" :disabled="!knowledgeDocumentIds.length" @click="removeAllKnowledgeSources">全部移出 {{ knowledgeDocumentIds.length }}</button><button class="primary-button" type="button" @click="closeKnowledgeManager">完成</button></div></footer>
+        </dialog>
       </section>
 
       <section v-else-if="view === 'notes'" class="page notes-page">
