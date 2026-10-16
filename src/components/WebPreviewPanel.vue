@@ -105,7 +105,7 @@ onUnmounted(() => {
 .web-preview-header { flex: none; border-bottom: 1px solid var(--border); }
 .web-preview-heading { height: 44px; display: flex; align-items: center; gap: 9px; padding: 0 12px; }
 .web-preview-heading > strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
-.web-preview-panel button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 30px; min-width: 30px; padding: 5px 7px; border-radius: 6px; background: transparent; color: var(--muted); font: 12px var(--ui-font); }
+.web-preview-panel button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 34px; min-width: 34px; padding: 5px 7px; border-radius: 6px; background: transparent; color: var(--muted); font: 12px var(--ui-font); }
 .web-preview-panel button:hover { background: var(--accent-soft); color: var(--ink); }
 .web-preview-panel button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .web-preview-toolbar { display: flex; align-items: center; gap: 4px; padding: 0 10px 9px; }
