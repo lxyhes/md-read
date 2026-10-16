@@ -204,30 +204,17 @@ export const useReaderStore = defineStore('reader', () => {
     const bootstrapId = session.currentDocumentId && sessionOpenIds.includes(session.currentDocumentId)
       ? session.currentDocumentId
       : sessionOpenIds[0] ?? saved[0]?.id
+    const imagePrivacyEnabled = (() => {
+      try { return JSON.parse(localStorage.getItem('moyue:advanced-settings') ?? '{}').remoteImagePrivacy === true }
+      catch { return false }
+    })()
+    const needsAssetRefresh = (document: ReaderDocument) => document.regions.some((region) => {
+      if (region.type !== 'image') return false
+      const url = String(region.metadata?.url ?? '')
+      return (!imagePrivacyEnabled && /referrerpolicy=["']no-referrer["']/i.test(region.html)) || url.startsWith('blob:') || /asset\.localhost/i.test(url) || !/^(?:https?:|data:|blob:)/i.test(url)
+    })
     if (saved.length) {
-      const imagePrivacyEnabled = (() => {
-        try { return JSON.parse(localStorage.getItem('moyue:advanced-settings') ?? '{}').remoteImagePrivacy === true }
-        catch { return false }
-      })()
-      const needsAssetRefresh = (document: ReaderDocument) => document.regions.some((region) => {
-        if (region.type !== 'image') return false
-        const url = String(region.metadata?.url ?? '')
-        return /loading=["']lazy["']/i.test(region.html) || (!imagePrivacyEnabled && /referrerpolicy=["']no-referrer["']/i.test(region.html)) || url.startsWith('blob:') || /asset\.localhost/i.test(url) || !/^(?:https?:|data:|blob:)/i.test(url)
-      })
-      const stale = saved.filter(needsAssetRefresh)
-      const loaded = stale.length
-        ? await Promise.all(saved.map((document) => document.id === bootstrapId && stale.includes(document) ? parseOpenedFile({ path: document.path, source: document.source }) : Promise.resolve(document)))
-        : saved
-      const { parseMarkdown } = await import('../parser')
-      const refreshed = loaded.map((document) => {
-        if (document.id !== bootstrapId) return document
-        const headings = parseMarkdown(document.path, document.source).headings
-        return headings.length === document.headings.length && headings.every((heading, index) => heading.text === document.headings[index]?.text && heading.depth === document.headings[index]?.depth)
-          ? document
-          : { ...document, headings }
-      })
-      documents.value = refreshed
-      for (const document of refreshed) if (document !== saved.find((item) => item.id === document.id)) await saveDocumentSnapshot(document)
+      documents.value = saved
     }
     else {
       const { parseMarkdown } = await import('../parser')
@@ -238,6 +225,23 @@ export const useReaderStore = defineStore('reader', () => {
     if (!openDocumentIds.value.length) openDocumentIds.value = [documents.value[0].id]
     const initialId = session.currentDocumentId && openDocumentIds.value.includes(session.currentDocumentId) ? session.currentDocumentId : openDocumentIds.value[0]
     await openDocument(initialId, { deferProgress: true })
+    const initialDocument = documents.value.find((document) => document.id === initialId)
+    if (!initialDocument) return
+    window.requestAnimationFrame(() => window.setTimeout(() => {
+      void (async () => {
+        const refreshed = needsAssetRefresh(initialDocument)
+          ? await parseOpenedFile({ path: initialDocument.path, source: initialDocument.source })
+          : (() => {
+              const headings = parseMarkdown(initialDocument.path, initialDocument.source).headings
+              return headings.length === initialDocument.headings.length && headings.every((heading, index) => heading.text === initialDocument.headings[index]?.text && heading.depth === initialDocument.headings[index]?.depth)
+                ? initialDocument
+                : { ...initialDocument, headings }
+            })()
+        if (refreshed === initialDocument || !documents.value.some((document) => document.id === initialId && document.sourceHash === initialDocument.sourceHash)) return
+        documents.value = [...documents.value.filter((document) => document.id !== initialId), refreshed]
+        await saveDocumentSnapshot(refreshed)
+      })().catch(() => {})
+    }, 0))
   }
 
   async function importFiles() { return addOpenedFiles(await openMarkdownFile()) }

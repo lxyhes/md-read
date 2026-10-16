@@ -10,11 +10,11 @@ import TreeDiagram from './components/TreeDiagram.vue'
 import AppIcon from './components/AppIcon.vue'
 import IconButton from './components/IconButton.vue'
 import FontPicker from './components/FontPicker.vue'
-import MarkdownEditor from './components/MarkdownEditor.vue'
+import type MarkdownEditorComponent from './components/MarkdownEditor.vue'
 import EditorExportMenu from './components/EditorExportMenu.vue'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { interfaceFont } from './fonts'
-import FileSystemTree, { type FileSystemTreeNode } from './components/FileSystemTree.vue'
+import type { FileSystemTreeNode } from './components/FileSystemTree.vue'
 import ClipboardManager from './components/ClipboardManager.vue'
 import { copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, downloadMarkdownImages, exportDocumentWithPandoc, importDocumentWithPandoc, importMarkdownAsset, importMarkdownAssetFromPath, listDirectoryFiles, listFileSystemEntries, markdownPathExists, openFileSystemDirectory, openMarkdownDirectory, openMarkdownFile, openMarkdownFolderAt, organizeMarkdownAssets, readMarkdownExportAssets, readMarkdownPath, removeMarkdownAsset, renameMarkdownAsset, renameMarkdownPath, resolveMarkdownAssetUrl, resolveMarkdownPath, saveBinaryExportFile, saveClipboardImage, saveExportFile, saveMarkdownFile, savePdfExportFile, selectDocxReference, selectFileSystemDirectory, selectMarkdownFolder, splitMarkdownLinkTarget, uploadMarkdownImage, watchDirectoryPath, watchMarkdownPath, writeMarkdownFile, type PandocExportFormat, type WorkspaceFile } from './fileService'
 import type { Annotation, ReaderDocument, ReaderRegion, ViewerType } from './types'
@@ -31,10 +31,7 @@ import { parseEditableTable, serializeEditableTable, moveTableRow, moveTableColu
 import { sortFileTreeEntries, type FileTreeSortMode } from './fileTreeSort'
 import { directoryFiles } from './directoryFiles'
 import { orderRecentFolders, pinRecentFolder, rememberRecentFolder, removeRecentFolder, type RecentFolder } from './recentFolders'
-import { createDocx, createEpub, createLatex } from './exportService'
 import { createExportCss, createPortableHtml } from './exportPresentation'
-import { prepareExportDiagrams } from './exportDiagrams'
-import { createDocumentPng } from './exportPng'
 import { createPrintHtml, printPortableHtml } from './exportPrint'
 import { embedExportImages, rasterizeExportImages } from './exportImages'
 import { normalizeLatexDelimiters } from './markdown/fragment'
@@ -49,6 +46,8 @@ import logoAsset from './assets/moyue-logo-256.png'
 const FocusAmbiencePicker = defineAsyncComponent(() => import('./components/FocusAmbiencePicker.vue'))
 const ThemeCenter = defineAsyncComponent(() => import('./components/ThemeCenter.vue'))
 const ViewerCode = defineAsyncComponent(() => import('./components/ViewerCode.vue'))
+const MarkdownEditor = defineAsyncComponent(() => import('./components/MarkdownEditor.vue'))
+const FileSystemTree = defineAsyncComponent(() => import('./components/FileSystemTree.vue'))
 
 type View = 'library' | 'reader' | 'clipboard' | 'favorites' | 'knowledge' | 'notes' | 'themes' | 'settings'
 type BusyAction = 'file' | 'folder' | 'drop' | 'paste' | 'paste-save' | 'paste-image' | 'pandoc' | 'delete' | null
@@ -203,7 +202,6 @@ const viewerPan = ref({ x: 0, y: 0 })
 const viewerImageNaturalSize = ref({ width: 0, height: 0 })
 const viewerDragging = ref(false)
 const viewerStage = ref<HTMLElement | null>(null)
-const resumePrompt = ref<{ documentId: string; percent: number } | null>(null)
 let viewerPointer = { x: 0, y: 0 }
 const customProvider = ref('')
 const busyAction = ref<BusyAction>(null)
@@ -245,7 +243,7 @@ const editorFindScope = ref<{ start: number; end: number } | undefined>()
 let editorFindReplacing = false
 const editorFindResult = computed(() => findEditorMatches(editorSource.value, editorFindQuery.value, { ...editorFindOptions.value, scope: editorFindScope.value }))
 const editorSource = ref('')
-const editorTextarea = ref<InstanceType<typeof MarkdownEditor> | null>(null)
+const editorTextarea = ref<InstanceType<typeof MarkdownEditorComponent> | null>(null)
 const editorUndoAvailable = ref(false)
 const editorRedoAvailable = ref(false)
 const editorFocusMode = ref(localStorage.getItem('moyue:editor-focus') === 'true')
@@ -613,7 +611,7 @@ async function openExternalLink(url: string) {
   }
   try {
     const existing = store.documents.find((document) => filePathKey(document.path) === filePathKey(targetPath))
-    if (existing) await chooseDocument(existing.id, { skipResumePrompt: true })
+    if (existing) await chooseDocument(existing.id)
     else {
       let source: string
       try { source = await readMarkdownPath(targetPath) }
@@ -1865,12 +1863,14 @@ async function chooseDocxReference() {
 }
 
 async function exportHtmlSource(document: ReaderDocument, styled = true) {
+  const { prepareExportDiagrams } = await import('./exportDiagrams')
   const source = await prepareExportDiagrams(document.source, exportAppContext)
   const assets = await rasterizeExportImages(await readMarkdownExportAssets(document.path, source))
   return createPortableHtml(document.title, source, assets, styled ? createExportCss(store.activeTheme, store.readerSettings) : '')
 }
 
 async function renderDocumentPng(document: ReaderDocument) {
+  const { createDocumentPng } = await import('./exportPng')
   return createDocumentPng(await exportHtmlSource(document), Math.min(1400, Math.max(720, store.readerSettings.width + 96)))
 }
 
@@ -1882,12 +1882,15 @@ async function exportDocument(format: 'markdown' | 'html' | 'html-clean' | 'imag
   try {
     let path: string | null = null
     if (isTauriRuntime() && ['docx', 'latex', 'odt', 'rtf', 'mediawiki'].includes(format)) {
+      const { prepareExportDiagrams } = await import('./exportDiagrams')
       let source = await prepareExportDiagrams(normalizeLatexDelimiters(document.source), exportAppContext)
       if (format === 'docx' || format === 'latex') source = embedExportImages(source, await rasterizeExportImages(await readMarkdownExportAssets(document.path, source), true))
       path = await exportDocumentWithPandoc(source, document.title || '文档', format as PandocExportFormat, document.path, { css: createExportCss(store.activeTheme, store.readerSettings), referenceDocx: advancedSettings.value.referenceDocx, chapterDepth: advancedSettings.value.epubChapterDepth, title: document.title })
     } else if (format === 'docx' || format === 'epub') {
+      const { prepareExportDiagrams } = await import('./exportDiagrams')
       const source = await prepareExportDiagrams(document.source, exportAppContext)
       const assets = await readMarkdownExportAssets(document.path, source)
+      const { createDocx, createEpub } = await import('./exportService')
       const bytes = format === 'docx' ? createDocx(document.title, source, assets) : createEpub(document.title, source, assets, { chapterDepth: advancedSettings.value.epubChapterDepth, css: createExportCss(store.activeTheme, store.readerSettings) })
       path = await saveBinaryExportFile(bytes, document.title || '文档', format, format === 'docx' ? 'Word 文档' : 'EPUB 电子书', format === 'docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'application/epub+zip')
     } else if (format === 'image') {
@@ -1896,7 +1899,7 @@ async function exportDocument(format: 'markdown' | 'html' | 'html-clean' | 'imag
       throw new Error('此格式需要桌面端和 Pandoc')
     } else {
       const extension = format === 'html' || format === 'html-clean' ? 'html' : format === 'latex' ? 'tex' : 'md'
-      const source = format === 'html' || format === 'html-clean' ? await exportHtmlSource(document, format === 'html') : format === 'latex' ? createLatex(document.title, document.source) : document.source
+      const source = format === 'html' || format === 'html-clean' ? await exportHtmlSource(document, format === 'html') : format === 'latex' ? (await import('./exportService')).createLatex(document.title, document.source) : document.source
       path = await saveExportFile(source, document.title || '文档', extension, format === 'latex' ? 'LaTeX' : extension.toUpperCase())
     }
     if (path) notify(`已导出：${path}`)
@@ -2246,7 +2249,7 @@ function citationStatusLabel(citation: KnowledgeCitation) {
 }
 async function openKnowledgeCitation(citation: KnowledgeCitation) {
   if (citationState(citation, store.documents) === 'removed' || citationState(citation, store.documents) === 'position-missing') return
-  await chooseDocument(citation.documentId, { skipResumePrompt: true })
+  await chooseDocument(citation.documentId)
   store.activeRegionId = citation.regionId
   await nextTick()
   scrollToHeading(citation.regionId)
@@ -3130,7 +3133,7 @@ async function reopenLastClosedTab() {
     notify('没有可重新打开的标签')
     return
   }
-  await chooseDocument(documentId, { skipResumePrompt: true })
+  await chooseDocument(documentId)
   notify('已重新打开上一个标签')
 }
 
@@ -3151,7 +3154,7 @@ async function boot() {
       invalidateRegionLayout()
       syncVirtualViewport()
       observeReaderLayout()
-      if (!showResumePromptIfNeeded(store.currentDocument.id)) restoreScroll()
+      restoreScroll()
     }
   } catch (error) {
     notify(error instanceof Error ? error.message : '阅读空间初始化失败')
@@ -3569,42 +3572,12 @@ async function bindNativeFileDrop() {
   }
 }
 
-function showResumePromptIfNeeded(documentId: string) {
-  const saved = store.progress[documentId]
-  const percent = saved?.scrollPercent ?? 0
-  if (percent > 0.02 && percent < 0.995) {
-    resumePrompt.value = { documentId, percent }
-    return true
-  }
-  resumePrompt.value = null
-  return false
-}
-function resumeReading() {
-  if (!resumePrompt.value || resumePrompt.value.documentId !== store.currentDocumentId) {
-    resumePrompt.value = null
-    return
-  }
-  resumePrompt.value = null
-  restoreScroll()
-}
-async function startReadingOver() {
-  if (!resumePrompt.value || resumePrompt.value.documentId !== store.currentDocumentId) {
-    resumePrompt.value = null
-    return
-  }
-  resumePrompt.value = null
-  readerViewport.value?.scrollTo({ top: 0, behavior: 'smooth' })
-  store.activeRegionId = null
-  store.activeHeadingId = null
-  await store.setProgress(0, null, null)
-}
-async function chooseDocument(id: string, options: { skipResumePrompt?: boolean } = {}) {
+async function chooseDocument(id: string) {
   const continueEditing = editorOpen.value && id !== editorDocumentId.value
   if (continueEditing) {
     if (!persistEditorDraft()) { notify(editorBackupError.value); return }
     editorOpen.value = false
   }
-  const wasCurrent = store.currentDocumentId === id
   const keepFocusMode = store.mode === 'focus'
   await store.openDocument(id)
   if (keepFocusMode) store.setMode('focus')
@@ -3612,11 +3585,11 @@ async function chooseDocument(id: string, options: { skipResumePrompt?: boolean 
   await nextTick()
   invalidateRegionLayout()
   observeReaderLayout()
-  if (options.skipResumePrompt || wasCurrent || !showResumePromptIfNeeded(id)) restoreScroll()
+  restoreScroll()
   if (continueEditing) await openEditor()
 }
 async function chooseSearchResult(documentId: string, regionId: string) {
-  await chooseDocument(documentId, { skipResumePrompt: true })
+  await chooseDocument(documentId)
   searchOpen.value = false
   leftPanelTab.value = 'outline'
   store.activeRegionId = regionId
@@ -3850,7 +3823,7 @@ async function closeDocument(id: string) {
   await store.closeDocument(id)
   if (!store.currentDocument) { view.value = 'library'; return }
   await nextTick()
-  if (!showResumePromptIfNeeded(store.currentDocument.id)) restoreScroll()
+  restoreScroll()
 }
 function invalidateRegionLayout() {
   regionLayoutDocumentId = null
@@ -4529,11 +4502,11 @@ async function saveCurrentAnnotation() {
 function applyReaderTheme(theme: Parameters<typeof store.applyTheme>[0]) { store.applyTheme(theme, true); notify(`已切换到「${theme.manifest.name}」`) }
 
 function changeSetting(key: 'fontSize' | 'lineHeight' | 'width', value: number) { store.updateSettings({ [key]: value }) }
-function changeReaderZoom(delta: number) {
+function changeReaderZoom(delta: number, announce = true) {
   const nextSize = Math.min(24, Math.max(15, store.readerSettings.fontSize + delta))
   if (nextSize !== store.readerSettings.fontSize) {
     changeSetting('fontSize', nextSize)
-    notify(`阅读字号 ${nextSize}px`)
+    if (announce) notify(`阅读字号 ${nextSize}px`)
   }
 }
 async function requestFullscreen() {
@@ -4856,6 +4829,8 @@ async function requestFullscreen() {
                 </div>
                 <div class="reader-navigation" aria-label="阅读位置与跳转">
                   <span class="reader-progress-label" aria-live="polite">阅读到 {{ Math.round(readerScrollPercent * 100) }}%</span>
+                  <button class="reader-zoom-button" type="button" :disabled="store.readerSettings.fontSize <= 15" aria-label="缩小正文字号" title="缩小正文字号" @click="changeReaderZoom(-1, false)">A−</button>
+                  <button class="reader-zoom-button" type="button" :disabled="store.readerSettings.fontSize >= 24" aria-label="放大正文字号" title="放大正文字号" @click="changeReaderZoom(1, false)">A+</button>
                   <button v-if="store.mode === 'clean' && currentHeading" type="button" @click="jumpToCurrentHeading">本章开头</button>
                   <button type="button" :disabled="readerAtTop" @click="scrollToTop">回到顶部</button>
                   <button type="button" :disabled="readerAtBottom" @click="scrollToBottom">到文末</button>
@@ -4867,6 +4842,7 @@ async function requestFullscreen() {
                 <span>{{ editorDirty ? '未保存更改' : '已保存' }}</span>
                 <button type="button" @click="closeEditor">退出编辑</button>
               </div>
+              <div v-if="!editorOpen && store.currentDocument" class="reader-progress-track" role="progressbar" aria-label="文档阅读进度" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="Math.round(readerScrollPercent * 100)"><span :style="{ transform: `scaleX(${readerScrollPercent})` }" /></div>
             </div>
             <div ref="readerViewport" class="reader-viewport" @scroll="onReaderScroll" @wheel="onReaderWheel" @pointerdown="onReaderPointerDown" @mouseup="captureSelection">
               <div v-if="exportError || exporting" class="editor-safety-notice" :role="exportError ? 'alert' : 'status'"><span>{{ exportError || '正在生成完整导出文件…' }}</span><button v-if="exportError" type="button" @click="exportError = ''">关闭</button></div>
@@ -5028,17 +5004,6 @@ async function requestFullscreen() {
           <div v-if="currentAnnotations.length" class="annotation-panel"><div class="annotation-heading"><span class="section-kicker">批注</span><span>{{ currentAnnotations.length }}</span></div><button v-for="annotation in currentAnnotations.slice(0, 4)" :key="annotation.id" class="annotation-item" type="button" @click="jumpToAnnotation(annotation)"><span class="annotation-dot" :style="{ background: annotation.color }" /><span><b>{{ annotation.note || '高亮标记' }}</b><small>{{ annotation.selectedText }}</small></span></button></div>
         </aside>
          <aside v-if="store.mode === 'focus'" class="focus-sidebar"><div class="focus-sidebar-head"><div><span class="section-kicker">阅读模式</span><strong>专注阅读</strong><small class="focus-document-label">{{ displayTitle(store.currentDocument?.title) || '当前文档' }}</small></div><button class="ghost-button" type="button" @click="exitFocusMode"><AppIcon name="close" :size="13" />退出</button></div><div class="focus-session-meta"><span><i />{{ focusRunning ? '专注进行中' : '准备开始' }}</span><span>{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}% 已读</span></div><div class="focus-timer-card"><div class="focus-timer-ring" :style="{ '--focus-progress': `${focusProgress * 360}deg` }"><strong>{{ focusTimeLabel }}</strong><span>{{ focusRunning ? '专注中' : focusRemaining === 0 ? '已完成' : '准备开始' }}</span></div><div class="focus-timer-actions"><button type="button" @click="resetFocusTimer">重置</button><button class="primary-button" type="button" @click="toggleFocusTimer">{{ focusRunning ? '暂停' : '开始' }}</button></div></div><FocusAmbiencePicker :themes="focusThemes" :selected-theme-id="store.activeThemeId" @select="applyReaderTheme" /><div class="focus-card focus-outline"><div class="focus-card-heading"><span>内容导航</span><small>{{ store.currentDocument?.headings.length ?? 0 }} 章 · {{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}%</small></div><nav v-if="store.currentDocument?.headings.length"><button v-for="heading in store.currentDocument.headings" :key="heading.id" :data-focus-outline-id="heading.id" type="button" :class="{ active: store.activeHeadingId === heading.id }" @click="focusHeading(heading.regionId)"><i />{{ heading.text }}</button></nav><p v-else class="focus-outline-empty">这篇文档还没有章节标题</p></div></aside>
-        </div>
-        <div v-if="resumePrompt?.documentId === store.currentDocumentId" class="resume-prompt" role="dialog" aria-label="继续阅读">
-          <div class="resume-prompt-copy">
-            <span class="section-kicker">继续阅读</span>
-            <strong>继续阅读到 <span class="resume-percent">{{ Math.round((resumePrompt?.percent ?? 0) * 100) }}%</span></strong>
-            <small>{{ displayTitle(store.currentDocument?.title) }}</small>
-          </div>
-          <div class="resume-prompt-actions">
-            <button class="ghost-button" type="button" @click="startReadingOver">从头开始</button>
-            <button class="primary-button" type="button" @click="resumeReading">继续阅读</button>
-          </div>
         </div>
         <div v-if="store.mode === 'region-focus'" class="focus-hud" role="status"><span v-if="focusPosition" class="focus-hud-position">{{ focusPosition }}</span><span class="focus-hud-shortcut"><kbd>↑</kbd><kbd>↓</kbd>切换</span><button type="button" @click="clearRegionFocus"><kbd>Esc</kbd>退出聚焦</button></div>
         <div v-if="store.mode === 'clean'" class="clean-mode-hud"><span><AppIcon name="eye" :size="13" />纯净阅读</span><button type="button" @click="toggleCleanMode">退出 <kbd>Esc</kbd></button></div>
