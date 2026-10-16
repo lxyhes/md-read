@@ -16,6 +16,7 @@ const cardCopy: Record<string, { kicker: string; mark: string; title: string; ca
   'quiet-moss': { kicker: '苔色 · 静读', mark: '苔', title: '苔原', caption: '静默生长' },
   'paper-white': { kicker: '素纸 · 清读', mark: '白', title: '白纸', caption: '留给文字的空白' },
   'bamboo-shadow': { kicker: '宿墨 · 竹青', mark: '竹', title: '竹影', caption: '雨落成痕' },
+  'clear-margin': { kicker: '冷白 · 留界', mark: '简', title: '清白', caption: '只留一线分隔' },
 }
 
 function selectTheme(theme: MoyueTheme) {

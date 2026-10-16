@@ -24,6 +24,11 @@ export const builtInThemes: MoyueTheme[] = [
     manifest: { schemaVersion: 1, id: 'bamboo-shadow', name: '烟雨竹影', version: '1.0.0', author: 'Moyue', mode: 'light', description: '冷白宣纸、淡墨竹影和湿润的灰青，适合白天阅读与笔记', entry: { tokens: 'tokens.json', reader: 'reader.css', markdown: 'markdown.css', components: 'components.css' } },
     tokens: { color: { appBackground: '#d7dbd7', surface: '#e7ebe7', surfaceRaised: '#f2f4ef', text: '#222824', textMuted: '#626b64', accent: '#465b4d', accentSoft: '#d2dad3', border: 'rgba(34,45,38,.19)', codeBackground: '#dfe5df' }, reader: { width: 1030, fontSize: 18, lineHeight: 1.92, paragraphGap: 23, fontFamily: 'FangSong, STFangsong, Noto Serif SC, SimSun, serif' } }
   },
+  {
+    builtIn: true,
+    manifest: { schemaVersion: 1, id: 'clear-margin', name: '清白留界', version: '1.0.0', author: 'Moyue', mode: 'light', description: '冷白页面、浅灰侧栏与细分隔线，适合专注写作与校对', entry: { tokens: 'tokens.json', reader: 'reader.css', markdown: 'markdown.css', components: 'components.css' } },
+    tokens: { color: { appBackground: '#fafafa', surface: '#fafafa', surfaceRaised: '#ffffff', text: '#333333', textMuted: '#767676', accent: '#333333', accentSoft: '#eeeeee', border: '#e8e8e8', codeBackground: '#f6f6f6' }, reader: { width: 820, fontSize: 17, lineHeight: 1.76, paragraphGap: 18, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif' } }
+  },
 ]
 
 const blocked = /(<script|<iframe|javascript:|@import|url\s*\(\s*['"]?https?:|expression\s*\(|\.\.|\bwasm\b)/i

@@ -20,6 +20,12 @@ function customTheme(): MoyueTheme {
 }
 
 describe('theme assets', () => {
+  it('includes the minimal split-pane theme', () => {
+    const theme = builtInThemes.find(({ manifest }) => manifest.id === 'clear-margin')
+    expect(theme?.manifest.mode).toBe('light')
+    expect(theme?.tokens.color).toMatchObject({ appBackground: '#fafafa', surfaceRaised: '#ffffff', text: '#333333', border: '#e8e8e8' })
+  })
+
   it('collects every theme stylesheet in entry order', () => {
     expect(themeCss(customTheme())).toBe([
       '.reader { color: red; }',
