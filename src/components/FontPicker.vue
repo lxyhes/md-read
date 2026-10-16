@@ -56,15 +56,15 @@ const custom = computed(() => props.modelValue && !fontPresets.some((font) => fo
 .font-sample[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, var(--surface-raised)); }
 .font-sample-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; font: 12px var(--ui-font); }
 .font-sample-heading strong { font-weight: 500; }
-.font-sample-heading > span { color: var(--accent); font-size: 10px; }
+.font-sample-heading > span { color: var(--accent); font-size: 11px; }
 .font-sample-text { font-size: 18px; line-height: 1.6; overflow-wrap: anywhere; }
-.font-sample > small { color: var(--muted); font: 10px/1.5 var(--ui-font); }
+.font-sample > small { color: var(--muted); font: 11px/1.5 var(--ui-font); }
 .font-reading-preview { margin-top: 20px; padding: 18px 22px; border-left: 2px solid var(--accent); background: var(--app-bg); color: var(--ink); }
-.font-preview-label { color: var(--muted); font: 10px var(--ui-font); }
+.font-preview-label { color: var(--muted); font: 11px var(--ui-font); }
 .font-reading-preview p { margin: 12px 0 0; font-size: var(--reader-size, 18px); line-height: var(--reader-leading, 1.8); }
 .font-reading-preview p[lang="en"] { margin-top: 7px; font-size: 16px; }
 .font-picker-compact { flex-shrink: 0; }
-.font-picker-compact .font-select-label { min-width: 0; gap: 7px; font-size: 11px; }
+.font-picker-compact .font-select-label { min-width: 0; gap: 7px; font-size: 12px; }
 .font-picker-compact select { width: 118px; min-width: 118px; flex: 0 1 154px; padding: 5px 8px; }
 @media (max-width: 1180px) { .font-samples { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>

@@ -23,7 +23,7 @@ button { border: 0; color: inherit; cursor: pointer; }
 .profile-chip { display: flex; align-items: center; gap: 10px; margin: 18px 2px 0; padding: 8px; border-top: 1px solid var(--border); white-space: nowrap; overflow: hidden; }
 .profile-avatar { display: grid; place-items: center; width: 31px; height: 31px; flex: 0 0 31px; border-radius: 50%; background: var(--accent); color: #201b16; font: 700 13px var(--ui-font); }
 .profile-chip b, .profile-chip small { display: block; font-family: var(--ui-font); }
-.profile-chip b { font-size: 11px; }.profile-chip small { margin-top: 2px; color: var(--muted); font-size: 9px; }
+.profile-chip b { font-size: 11px; }.profile-chip small { margin-top: 2px; color: var(--muted); font-size: 11px; }
 .main-shell { min-width: 0; flex: 1; display: flex; flex-direction: column; }
 .main-shell.with-web-preview .outline-panel, .main-shell.with-web-preview .context-panel { display: none; }
 .app-shell .main-shell.with-web-preview .reader-content { width: calc(100% - 40px); }
@@ -36,7 +36,7 @@ button { border: 0; color: inherit; cursor: pointer; }
 .crumbs { display: flex; align-items: center; gap: 12px; min-width: 235px; font-family: var(--ui-font); }.crumbs strong { font-size: 13px; font-weight: 600; }.crumb-separator { color: var(--muted); }.eyebrow { color: var(--muted); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
 .command-trigger { display: flex; justify-content: space-between; align-items: center; max-width: 420px; min-width: 260px; flex: 1; margin-left: auto; padding: 11px 13px; border: 1px solid var(--border); border-radius: 10px; background: color-mix(in srgb, var(--surface) 70%, transparent); color: var(--muted); text-align: left; font: 12px var(--ui-font); }.command-trigger:hover { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); color: var(--ink); }.command-trigger kbd, kbd { padding: 3px 6px; border: 1px solid var(--border); border-radius: 5px; color: var(--muted); font: 10px var(--mono); }
 .top-actions, .toolbar-actions, .viewer-actions { display: flex; align-items: center; gap: 8px; }.icon-button { width: 34px; height: 34px; border-radius: 9px; background: transparent; color: var(--muted); font-family: var(--ui-font); }.icon-button:hover { background: var(--surface-raised); color: var(--ink); }.icon-button.small { width: 28px; height: 28px; }
-.page { flex: 1; overflow: auto; padding: 62px clamp(36px, 6vw, 100px) 48px; scrollbar-width: thin; scrollbar-color: var(--accent-soft) transparent; }.section-kicker { color: var(--accent); font: 700 10px var(--ui-font); letter-spacing: .19em; }.library-hero { display: flex; justify-content: space-between; align-items: center; max-width: 1120px; min-height: 300px; }.library-hero h1, .page-heading h1 { margin: 16px 0; font-size: clamp(42px, 5vw, 72px); font-weight: 400; letter-spacing: -.045em; line-height: .98; }.library-hero h1 em, .page-heading h1 em { color: var(--accent); font-style: italic; }.hero-copy { color: var(--muted); font-size: 16px; line-height: 1.8; }.hero-orbit { position: relative; width: 270px; height: 270px; margin-right: 8%; border: 1px dashed color-mix(in srgb, var(--accent) 42%, transparent); border-radius: 50%; transform: rotate(-10deg); }.hero-orbit::before, .hero-orbit::after { position: absolute; inset: 19px; border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent); border-radius: 50%; content: ""; }.hero-orbit::after { inset: 68px; background: color-mix(in srgb, var(--accent) 10%, transparent); }.orbit-core { position: absolute; inset: 104px; z-index: 1; display: grid; place-items: center; border: 1px solid var(--accent); border-radius: 50%; background: var(--accent); color: #2a2118; font-size: 28px; transform: rotate(10deg); }.orbit-label { position: absolute; z-index: 2; padding: 7px 10px; border: 1px solid var(--border); border-radius: 20px; background: var(--surface); color: var(--muted); font: 10px var(--ui-font); white-space: nowrap; transform: rotate(10deg); }.label-one { top: 10px; right: 22px; }.label-two { bottom: 25px; left: -34px; }.label-three { right: -18px; bottom: 80px; }
+.page { flex: 1; overflow: auto; padding: 62px clamp(36px, 6vw, 100px) 48px; scrollbar-width: thin; scrollbar-color: var(--accent-soft) transparent; }.section-kicker { color: var(--accent); font: 700 11px var(--ui-font); letter-spacing: .04em; }.library-hero { display: flex; justify-content: space-between; align-items: center; max-width: 1120px; min-height: 300px; }.library-hero h1, .page-heading h1 { margin: 16px 0; font-size: clamp(42px, 5vw, 72px); font-weight: 400; letter-spacing: -.045em; line-height: .98; }.library-hero h1 em, .page-heading h1 em { color: var(--accent); font-style: italic; }.hero-copy { color: var(--muted); font-size: 16px; line-height: 1.8; }.hero-orbit { position: relative; width: 270px; height: 270px; margin-right: 8%; border: 1px dashed color-mix(in srgb, var(--accent) 42%, transparent); border-radius: 50%; transform: rotate(-10deg); }.hero-orbit::before, .hero-orbit::after { position: absolute; inset: 19px; border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent); border-radius: 50%; content: ""; }.hero-orbit::after { inset: 68px; background: color-mix(in srgb, var(--accent) 10%, transparent); }.orbit-core { position: absolute; inset: 104px; z-index: 1; display: grid; place-items: center; border: 1px solid var(--accent); border-radius: 50%; background: var(--accent); color: #2a2118; font-size: 28px; transform: rotate(10deg); }.orbit-label { position: absolute; z-index: 2; padding: 7px 10px; border: 1px solid var(--border); border-radius: 20px; background: var(--surface); color: var(--muted); font: 10px var(--ui-font); white-space: nowrap; transform: rotate(10deg); }.label-one { top: 10px; right: 22px; }.label-two { bottom: 25px; left: -34px; }.label-three { right: -18px; bottom: 80px; }
 .page-toolbar, .page-heading { display: flex; justify-content: space-between; align-items: end; max-width: 1120px; margin: 34px auto 20px; }.page-toolbar h2 { margin: 8px 0; font-size: 25px; font-weight: 400; }.page-toolbar h2 span { margin-left: 6px; color: var(--accent); font: 12px var(--mono); }.ghost-button, .primary-button { padding: 10px 14px; border-radius: 8px; font: 600 11px var(--ui-font); transition: transform .2s, background .2s; }.ghost-button { border: 1px solid var(--border); background: transparent; color: var(--muted); }.primary-button { background: var(--accent); color: #231c16; }.ghost-button:hover, .primary-button:hover { transform: translateY(-2px); }.ghost-button:hover { background: var(--surface-raised); color: var(--ink); }
 .document-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(235px, 1fr)); gap: 13px; max-width: 1120px; margin: 0 auto; }.document-card, .import-card { min-height: 190px; padding: 19px; border: 1px solid var(--border); border-radius: 14px; background: linear-gradient(145deg, color-mix(in srgb, var(--surface-raised) 85%, transparent), var(--surface)); text-align: left; transition: transform .25s, border-color .25s, box-shadow .25s; }.document-card:hover { transform: translateY(-5px) rotate(-.4deg); border-color: color-mix(in srgb, var(--accent) 52%, var(--border)); box-shadow: 0 16px 40px rgba(0,0,0,.15); }.card-topline, .card-footer, .theme-card-meta { display: flex; justify-content: space-between; align-items: center; color: var(--muted); font: 10px var(--ui-font); }.file-badge { padding: 4px 6px; border-radius: 4px; background: var(--accent-soft); color: var(--accent); font: 700 9px var(--mono); }.document-card h3 { margin: 37px 0 9px; overflow: hidden; font-size: 20px; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }.document-card p { margin: 0 0 28px; color: var(--muted); font: 11px var(--ui-font); }.card-footer { padding-top: 11px; border-top: 1px solid var(--border); }.card-footer span:first-child { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.arrow { color: var(--accent); font-size: 17px; }.import-card { display: flex; align-items: center; gap: 14px; justify-content: center; border-style: dashed; background: transparent; color: var(--muted); font: 12px var(--ui-font); }.import-card:hover { border-color: var(--accent); color: var(--ink); }.import-plus { color: var(--accent); font-size: 30px; }.import-card small { display: inline-block; margin-top: 5px; color: var(--muted); font-size: 10px; }.library-note { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 38px; color: var(--muted); font: 10px var(--ui-font); }.note-line { display: block; width: 36px; height: 1px; background: var(--accent); }
 .reader-page { min-height: 0; flex: 1; display: flex; flex-direction: column; position: relative; overflow: hidden; }.reader-layout { display: grid; grid-template-columns: 235px minmax(500px, 1fr) 215px; height: 100%; }.outline-panel, .context-panel { padding: 32px 19px; border-right: 1px solid var(--border); background: color-mix(in srgb, var(--surface) 35%, transparent); transition: opacity .3s, transform .3s; }.context-panel { border-right: 0; border-left: 1px solid var(--border); }.outline-panel.hidden, .context-panel.hidden { opacity: 0; pointer-events: none; transform: translateX(-15px); }.context-panel.hidden { transform: translateX(15px); }.panel-heading, .context-top { display: flex; justify-content: space-between; align-items: center; }.text-button { background: transparent; color: var(--muted); font: 10px var(--ui-font); }.text-button:hover { color: var(--accent); }.outline-list { display: flex; flex-direction: column; gap: 3px; margin-top: 27px; }.outline-list button { padding-top: 8px; padding-bottom: 8px; background: transparent; color: var(--muted); text-align: left; font: 12px var(--ui-font); line-height: 1.4; }.outline-list button:hover, .outline-list button.active { color: var(--accent); }.outline-list button.active::before { content: "·"; margin-left: -8px; margin-right: 3px; color: var(--accent); }.outline-footer { display: flex; align-items: center; gap: 9px; margin-top: 35px; padding-top: 15px; border-top: 1px solid var(--border); color: var(--muted); font: 10px var(--ui-font); }.progress-ring { width: 25px; height: 25px; border: 2px solid var(--accent-soft); border-top-color: var(--accent); border-radius: 50%; transform: rotate(var(--progress)); }.reader-viewport { overflow: auto; scroll-behavior: smooth; scrollbar-width: thin; scrollbar-color: var(--accent-soft) transparent; }.reader-content { width: min(var(--reader-width), calc(100% - 70px)); margin: 0 auto; padding: 62px 0 90px; }.reader-meta { display: flex; justify-content: space-between; gap: 16px; color: var(--muted); font: 10px var(--ui-font); }.reader-title { margin: 26px 0 13px; font-size: clamp(37px, 4vw, 58px); font-weight: 400; letter-spacing: -.05em; line-height: 1.03; }.reader-deck { max-width: 540px; margin: 0; color: var(--muted); font-size: 17px; line-height: 1.7; }.reader-rule { width: 100%; height: 1px; margin: 36px 0 37px; background: linear-gradient(90deg, var(--accent), transparent); }.regions-stack { display: flex; flex-direction: column; gap: 8px; }.region-block { position: relative; margin-left: -17px; padding: 12px 42px 12px 17px; border-left: 2px solid transparent; border-radius: 3px 12px 12px 3px; outline: none; transition: opacity .35s, filter .35s, background .35s, transform .35s, border-color .35s; }.region-block:hover { background: color-mix(in srgb, var(--accent) 7%, transparent); border-left-color: color-mix(in srgb, var(--accent) 55%, transparent); }.region-block.active { background: color-mix(in srgb, var(--accent) 10%, transparent); border-left-color: var(--accent); }.is-region-focus .region-block:not(.focused) { opacity: .13; filter: blur(1.1px); }.is-region-focus .region-block.focused { opacity: 1; transform: scale(1.012); background: color-mix(in srgb, var(--accent) 13%, transparent); }.region-content { font-size: var(--reader-size); line-height: var(--reader-leading); }.region-content h1, .region-content h2, .region-content h3, .region-content h4 { margin: 18px 0 8px; font-weight: 500; letter-spacing: -.025em; line-height: 1.18; }.region-content h1 { font-size: 32px; }.region-content h2 { font-size: 27px; }.region-content h3 { font-size: 23px; }.region-content p { margin: 0 0 var(--reader-gap); }.region-content blockquote { margin: 7px 0; padding: 13px 18px; border-left: 3px solid var(--accent); color: color-mix(in srgb, var(--ink) 77%, var(--accent)); font-size: 1.05em; }.region-content ul, .region-content ol { margin: 6px 0 var(--reader-gap); padding-left: 25px; }.region-content li { padding: 3px 0; }.region-content a { color: var(--accent); }.region-content img { display: block; max-width: 100%; margin: 13px 0; border-radius: 8px; }.region-content hr { border: 0; border-top: 1px solid var(--border); }.region-content pre { overflow: auto; margin: 6px 0; padding: 17px 19px; border: 1px solid var(--border); border-radius: 10px; background: var(--code-bg); font: 13px/1.7 var(--mono); }.region-content pre code { font-family: inherit; }.region-content > code, .region-content p code { padding: 2px 5px; border-radius: 4px; background: var(--code-bg); color: var(--accent); font: .83em var(--mono); }.region-content table { width: 100%; border-collapse: collapse; font-size: .88em; }.table-scroll { overflow-x: auto; }.region-content th, .region-content td { padding: 9px 12px; border-bottom: 1px solid var(--border); text-align: left; }.region-content th { color: var(--accent); font-family: var(--ui-font); }.region-more { position: absolute; top: 12px; right: 9px; opacity: 0; background: transparent; color: var(--muted); letter-spacing: 2px; transition: opacity .2s; }.region-block:hover .region-more, .region-block.active .region-more { opacity: 1; }.mermaid-block { position: relative; display: block; width: 100%; min-height: 165px; padding: 22px 30px 30px; overflow: hidden; border: 1px solid var(--border); border-radius: 13px; background: color-mix(in srgb, var(--surface-raised) 65%, transparent); text-align: center; }.mermaid-block:hover { border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); }.mermaid-svg { max-width: 100%; max-height: 370px; overflow: auto; }.mermaid-svg :deep(svg) { max-width: 100%; height: auto; }.diagram-action { position: absolute; right: 12px; bottom: 9px; color: var(--accent); font: 10px var(--ui-font); }.mermaid-loading { padding: 42px; color: var(--muted); font: 11px var(--ui-font); }.pulse-dot { display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; background: var(--accent); animation: pulse 1s ease-in-out infinite; }.region-footer { margin-top: 55px; }.reader-footer { display: flex; justify-content: space-between; margin-top: 70px; padding-top: 18px; border-top: 1px solid var(--border); color: var(--muted); font: 10px var(--ui-font); }.context-quote { margin: 34px 0; color: var(--muted); font-size: 16px; font-style: italic; line-height: 1.6; }.context-divider { height: 1px; background: var(--border); }.context-stat { display: flex; justify-content: space-between; margin-top: 19px; color: var(--muted); font-weight: 500; }.focus-tip { display: flex; gap: 10px; margin-top: 45px; padding: 13px; border: 1px solid var(--border); border-radius: 10px; background: color-mix(in srgb, var(--accent) 7%, transparent); }.tip-mark { color: var(--accent); }.focus-tip p { margin: 0; color: var(--muted); font: 11px/1.5 var(--ui-font); }.focus-tip b { color: var(--ink); font-weight: 600; }.focus-hud { position: absolute; left: 50%; bottom: 28px; display: flex; gap: 16px; padding: 9px 13px; border: 1px solid var(--border); border-radius: 9px; background: color-mix(in srgb, var(--surface-raised) 93%, transparent); box-shadow: 0 10px 30px rgba(0,0,0,.23); transform: translateX(-50%); color: var(--muted); font: 10px var(--ui-font); }.focus-hud button { background: transparent; color: var(--accent); font: inherit; }
@@ -7572,6 +7572,12 @@ body.is-resizing-outline * {
   border-block: 1px solid var(--border);
   border-radius: 0;
   background: transparent;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.app-shell:not(.is-focus) .extension-filter .app-icon {
+  width: 15px;
+  height: 15px;
 }
 .app-shell:not(.is-focus) .extension-list {
   grid-template-columns: 1fr;
@@ -7579,17 +7585,43 @@ body.is-resizing-outline * {
   margin-top: 8px;
 }
 .app-shell:not(.is-focus) .extension-item {
-  padding: 13px 0;
+  min-height: 70px;
+  gap: 14px;
+  padding: 14px 4px;
   border: 0;
   border-bottom: 1px solid var(--border);
   border-radius: 0;
   background: transparent;
 }
+.app-shell:not(.is-focus) .extension-item b {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: -.01em;
+}
+.app-shell:not(.is-focus) .extension-item small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.app-shell:not(.is-focus) .extension-icon {
+  width: 36px;
+  height: 36px;
+  flex-basis: 36px;
+  border-radius: 9px;
+}
 .app-shell:not(.is-focus) .extension-item button {
-  min-width: 58px;
-  padding: 7px 10px;
-  border-radius: 5px;
-  font-size: 11px;
+  min-width: 64px;
+  min-height: 34px;
+  padding: 7px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.app-shell:not(.is-focus) .extension-item button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
 }
 
 @media (max-width: 760px) {
@@ -9320,4 +9352,255 @@ a:active > .app-icon-vector { transform: scale(.92); }
   border-radius: 2px;
   background: #fff;
   color: #333;
+}
+
+/* Keep system navigation and menus readable at the same scale. */
+.app-shell .nav-item > span:last-child {
+  font-size: 13px;
+  letter-spacing: 0;
+}
+.app-shell .reader-tab {
+  font-size: 12px;
+}
+.app-shell .reader-tab small,
+.app-shell .reader-tab-status {
+  font-size: 11px;
+}
+.app-shell .reader-meta-document .reader-path-value {
+  font-size: 12px;
+  letter-spacing: 0;
+}
+.app-shell .reader-meta-document .reader-stat {
+  font: 12px/1.35 var(--ui-font);
+}
+.app-shell .reader-meta-tools .font-select-label,
+.app-shell .reader-meta-tools .font-picker-compact select {
+  font-size: 12px;
+}
+.app-shell .reader-edit-actions button,
+.app-shell .reader-more-menu summary,
+.app-shell .reader-display-switch button,
+.app-shell .reader-navigation button {
+  font: 12px/1.35 var(--ui-font);
+}
+.app-shell .reader-more-menu summary {
+  display: flex;
+  min-height: 32px;
+  align-items: center;
+}
+.app-shell .reader-display-switch button,
+.app-shell .reader-navigation button {
+  min-height: 34px;
+}
+.app-shell .reader-progress-label {
+  font: 12px/1.2 var(--ui-font);
+}
+.app-shell:not(.is-focus) .settings-tabs button,
+.app-shell .ghost-button,
+.app-shell .primary-button {
+  font-size: 12px;
+}
+.app-shell :is(.reader-more-popover, .library-more-popover, .tab-context-menu, .file-context-menu, .editor-context-menu, .editor-emoji-menu, .editor-export-menu) button {
+  min-height: 34px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  color: var(--ink);
+  font: 12px/1.45 var(--ui-font);
+}
+.app-shell :is(.reader-more-popover, .library-more-popover, .tab-context-menu, .file-context-menu, .editor-context-menu, .editor-emoji-menu, .editor-export-menu) button:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+.app-shell .reader-more-popover .font-select-label,
+.app-shell .reader-more-popover .font-picker-compact select {
+  font-size: 12px;
+}
+.app-shell .tab-list-heading,
+.app-shell .tab-context-title,
+.app-shell .file-context-title {
+  font: 12px/1.4 var(--ui-font);
+  letter-spacing: 0;
+}
+.app-shell .tab-list-item {
+  min-height: 40px;
+  color: var(--ink);
+  font-size: 12px;
+}
+.app-shell .tab-list-copy strong {
+  font-size: 13px;
+}
+.app-shell .tab-list-copy small,
+.app-shell .recent-folder-open small,
+.app-shell .recent-folder-action {
+  font-size: 11px;
+}
+.app-shell .recent-folder-open strong {
+  font-size: 12px;
+}
+
+/* Apply the same readable control scale across every app menu and picker. */
+.app-shell :is([role="menu"], [role="listbox"]) {
+  font-family: var(--ui-font);
+  font-size: 12px;
+}
+.app-shell [role="menuitem"] {
+  min-height: 34px;
+  font: 12px/1.45 var(--ui-font);
+}
+.app-shell select {
+  font-family: var(--ui-font);
+  font-size: 12px;
+}
+.app-shell :is(.segmented-tabs, .search-scope-tabs) button {
+  min-height: 34px;
+  font: 12px/1.35 var(--ui-font);
+}
+.app-shell:not(.is-focus) .themes-page .segmented-tabs button {
+  min-height: 34px;
+  font-size: 12px;
+}
+.app-shell .panel-tabs button {
+  min-height: 34px;
+  font-size: 12px;
+}
+.app-shell .panel-tabs button span {
+  font-size: 10px;
+}
+.app-shell .editor-mode-switch button,
+.app-shell .editor-section-nav button {
+  min-height: 32px;
+  font-size: 12px;
+}
+.app-shell .search-scope-row {
+  font-size: 12px;
+}
+.app-shell .search-results b {
+  font-size: 13px;
+}
+.app-shell .search-results small {
+  font-size: 12px;
+}
+.app-shell .result-kind {
+  font-size: 10px;
+}
+.app-shell .quick-open-meta strong {
+  font-size: 12px;
+}
+.app-shell .quick-open-results .quick-open-path {
+  font-size: 11px;
+}
+.app-shell .selection-toolbar button,
+.app-shell .selection-label {
+  font-size: 12px;
+}
+.app-shell [role="tablist"] button {
+  min-height: 34px;
+  font: 12px/1.35 var(--ui-font);
+}
+.app-shell .settings-tabs button,
+.app-shell :is(.reader-more-menu, .library-more-menu, .editor-export-menu) > summary {
+  min-height: 34px;
+}
+.app-shell .theme-search input {
+  font-size: 12px;
+}
+.app-shell .tab-list-heading small {
+  font-size: 11px;
+}
+.app-shell .recent-folder-action {
+  font-size: 12px;
+}
+.app-shell .knowledge-source-scope summary,
+.app-shell .knowledge-source-warning,
+.app-shell .knowledge-source-warning .text-button,
+.app-shell .knowledge-scope-list label,
+.app-shell .knowledge-source-overflow > summary {
+  font-size: 12px;
+}
+.app-shell .knowledge-citations-summary > span:first-child,
+.app-shell .knowledge-citation-top strong,
+.app-shell .knowledge-citation-preview,
+.app-shell .knowledge-source-preview-row {
+  font-size: 12px;
+}
+.app-shell .knowledge-citations-summary small,
+.app-shell .knowledge-citations-toggle,
+.app-shell .knowledge-citation-top small,
+.app-shell .knowledge-source-preview-list > small,
+.app-shell .knowledge-source-preview-empty {
+  font-size: 11px;
+}
+.app-shell .theme-mini-option-copy strong,
+.app-shell .ambience-copy b {
+  font-size: 12px;
+}
+.app-shell .theme-mini-option-copy small,
+.app-shell .ambience-copy small {
+  font-size: 11px;
+}
+.app-shell .tree-summary-popover-heading {
+  font-size: 12px;
+}
+
+/* Secondary controls also need the same legible scale as primary menus. */
+.app-shell :is(.text-button, .context-actions button, .reader-edit-actions button, .reader-editing-meta button, .file-batch-delete, .replace-row label, .replace-row button, .viewer-tabs button, .viewer-source-toolbar button, .editor-toolbar button, .editor-calm-toggle, .editor-calm-exit, .editor-pane-heading-actions button, .editor-outline button, .focus-hud button) {
+  font-size: 12px;
+}
+.app-shell :is(.setting-row, .setting-toggle-row, .setting-input, .shortcut-row, .file-filter-toolbar input, .file-tree-mix, .table-alignment-actions, .table-column-selection) {
+  font-size: 12px;
+}
+.app-shell .shortcut-row kbd,
+.app-shell .reader-editing-meta > span:not(.section-kicker),
+.app-shell .file-item-copy small,
+.app-shell .file-location small,
+.app-shell .file-browser-note,
+.app-shell .table-column-selection small {
+  font-size: 11px;
+}
+.app-shell .library-search input {
+  font-size: 12px;
+}
+.app-shell .editor-outline-label {
+  font-size: 11px;
+}
+.app-shell :is(.diagram-action, .inline-view-action, .focus-timer-actions button, .focus-outline nav button, .collection-card-action, .knowledge-prompts button, .viewer-fit-button, .viewer-footer-actions button, .viewer-shell footer button, .code-copy, .code-viewer-toolbar button, .tab-reopen-button, .outline-actions button, .side-card-heading button, .translation-card button) {
+  font-size: 12px;
+}
+.app-shell :is(.editor-fields label, .theme-editor .editor-fields input, .theme-editor .editor-fields textarea, .tab-list-search input, .outline-search input) {
+  font-size: 12px;
+}
+.app-shell .knowledge-history-select strong {
+  font-size: 12px;
+}
+.app-shell .knowledge-history-select small,
+.app-shell .knowledge-history-select time {
+  font-size: 11px;
+}
+.app-shell .knowledge-source-preview-heading .text-button {
+  font-size: 12px;
+}
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)) :is(.reader-meta-tools button, .reader-meta-tools summary, .reader-progress-label, .editor-fields label, .outline-list button) {
+  font-size: 12px;
+}
+.app-shell.is-focus .focus-outline nav button {
+  font-size: 12px;
+}
+.app-shell .reader-navigation .reader-zoom-button {
+  font-size: 12px;
+}
+.app-shell .section-kicker {
+  font-size: 11px;
+  letter-spacing: .04em;
+}
+.app-shell .nav-section-label {
+  font-size: 11px;
+  letter-spacing: 0;
+}
+.app-shell .result-kind,
+.app-shell .file-selection-count,
+.app-shell .panel-tabs button span,
+.app-shell .profile-chip small,
+.app-shell .knowledge-message-label,
+.app-shell .knowledge-message-label time {
+  font-size: 11px;
 }

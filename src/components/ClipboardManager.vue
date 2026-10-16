@@ -408,4 +408,9 @@ onUnmounted(() => {
 @media (max-width: 920px) { .clipboard-hero { min-height: 230px; }.clipboard-principles { width: min(280px, 36vw); }.clipboard-workspace { grid-template-columns: minmax(0, 1fr); }.clipboard-detail { padding: 18px 0 0; border-top: 1px solid var(--border); border-left: 0; } }
 @media (max-width: 680px) { .clipboard-page { padding: 30px 18px; }.clipboard-hero { align-items: start; flex-direction: column; gap: 24px; }.clipboard-principles { width: 100%; }.clipboard-toolbar, .clipboard-filter-row { align-items: start; flex-direction: column; }.clipboard-toolbar-actions { flex-wrap: wrap; }.clipboard-search { width: 100%; }.clipboard-item-actions { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .clipboard-item, .clipboard-item-actions, .clipboard-copy-button { transition: none; } }
+.clipboard-quiet-action, .clipboard-clear-action, .clipboard-copy-button, .clipboard-filters button { min-height: 34px; font-size: 12px; }
+.clipboard-toolbar-status small { font-size: 11px; }
+.clipboard-filters b { font-size: 11px; }
+.clipboard-search input { font-size: 12px; }
+.clipboard-item-body > small, .clipboard-empty p, .clipboard-detail-type small { font-size: 11px; }
 </style>
