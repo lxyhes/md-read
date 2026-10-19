@@ -223,6 +223,8 @@ const filesystemTreeScope = ref<'system' | 'workspace'>('workspace')
 const filesystemFiles = ref<WorkspaceFile[]>([])
 const filesystemFilesDirectory = ref<string | null>(null)
 const tabListOpen = ref(false)
+const tabListTrigger = ref<HTMLElement | null>(null)
+const tabListPopoverStyle = ref<Record<string, string>>({})
 const tabSearchQuery = ref('')
 const recentlyClosedTabs = ref<string[]>([])
 const tabContextMenu = ref<{ documentId: string; x: number; y: number } | null>(null)
@@ -418,6 +420,16 @@ const filteredOpenDocuments = computed(() => {
   const needle = tabSearchQuery.value.trim().toLowerCase()
   if (!needle) return store.openDocuments
   return store.openDocuments.filter((document) => `${document.title} ${document.path}`.toLowerCase().includes(needle))
+})
+const groupedOpenDocuments = computed(() => {
+  const groups = new Map<string, ReaderDocument[]>()
+  for (const document of filteredOpenDocuments.value) {
+    const directory = directoryOf(document.path)
+    const group = groups.get(directory)
+    if (group) group.push(document)
+    else groups.set(directory, [document])
+  }
+  return [...groups].map(([directory, documents]) => ({ directory, documents }))
 })
 const filteredLibraryDocuments = computed(() => {
   const needle = librarySearchQuery.value.trim().toLowerCase()
@@ -2543,7 +2555,22 @@ function closeTabMenus() {
 
 function toggleTabList() {
   tabListOpen.value = !tabListOpen.value
-  if (!tabListOpen.value) tabSearchQuery.value = ''
+  if (tabListOpen.value) {
+    void nextTick(() => {
+      const triggerElement = tabListTrigger.value
+      const shell = triggerElement?.closest('.app-shell')
+      if (!triggerElement || !shell) return
+      const trigger = triggerElement.getBoundingClientRect()
+      const bounds = shell.getBoundingClientRect()
+      const width = Math.min(330, bounds.width - 24)
+      tabListPopoverStyle.value = {
+        top: `${trigger.bottom - bounds.top + 8}px`,
+        left: `${Math.max(12, Math.min(trigger.right - bounds.left - width, bounds.width - width - 12))}px`,
+        width: `${width}px`,
+        maxHeight: `${Math.max(80, bounds.bottom - trigger.bottom - 24)}px`,
+      }
+    })
+  } else tabSearchQuery.value = ''
   tabContextMenu.value = null
 }
 
@@ -3139,7 +3166,7 @@ async function reopenLastClosedTab() {
 
 function onTabOutsideClick(event: MouseEvent) {
   const target = event.target as HTMLElement | null
-  if (!target?.closest('.reader-tab-actions, .tab-context-menu, .file-context-menu')) closeTabMenus()
+  if (!target?.closest('.reader-tab-actions, .tab-list-popover, .tab-context-menu, .file-context-menu')) closeTabMenus()
   if (!target?.closest('.editor-context-menu, .editor-toolbar, .editor-surface')) closeEditorContextMenu()
 }
 
@@ -4660,23 +4687,28 @@ async function requestFullscreen() {
           </div>
           <div class="reader-tab-actions">
             <IconButton class="reader-new-tab" icon="plus" size="sm" label="打开新文档" :disabled="busyAction !== null" @click="openFile" />
-            <div class="reader-tab-list-wrap">
+            <div ref="tabListTrigger" class="reader-tab-list-wrap">
               <IconButton class="reader-tab-list-trigger" icon="chevron-down" size="sm" :active="tabListOpen" :label="`查看全部标签（${store.openDocuments.length}）`" :aria-expanded="tabListOpen" @click.stop="toggleTabList" />
-              <div v-if="tabListOpen" class="tab-list-popover" role="menu" @click.stop>
-                <div class="tab-list-heading"><span>已打开文档</span><small>{{ store.openDocuments.length }}</small></div>
-                <label v-if="store.openDocuments.length > 3" class="tab-list-search"><AppIcon name="search" :size="13" /><input v-model="tabSearchQuery" type="search" placeholder="搜索已打开标签…" aria-label="搜索已打开标签" /></label>
-                <button v-for="document in filteredOpenDocuments" :key="document.id" class="tab-list-item" :class="{ active: store.currentDocumentId === document.id }" type="button" role="menuitem" @click="chooseDocument(document.id); closeTabMenus()">
-                  <AppIcon name="reader" :size="14" />
-                  <span class="tab-list-copy"><strong>{{ tabLabel(document) }}</strong><small :title="document.path">{{ document.path }}</small></span>
-                  <AppIcon v-if="store.currentDocumentId === document.id" name="check" :size="13" />
-                </button>
-                <div v-if="!filteredOpenDocuments.length" class="tab-list-empty">没有匹配的标签</div>
-                <button class="tab-reopen-button" type="button" role="menuitem" :disabled="!recentlyClosedTabs.length" @click="reopenLastClosedTab"><AppIcon name="history" :size="13" />重新打开上一个标签</button>
-              </div>
             </div>
           </div>
           <div class="reader-tab-status" :class="{ 'is-error': saveFailed || fileSyncState === 'error', 'is-syncing': fileSyncState === 'syncing' }"><span><AppIcon :name="saveFailed || fileSyncState === 'error' ? 'info' : fileSyncState === 'updated' ? 'check' : 'sync'" :size="13" /></span><span>{{ store.currentDocument?.wordCount }} 字</span><span><AppIcon name="history" :size="13" /> {{ fileSyncState === 'syncing' ? '正在同步' : fileSyncState === 'updated' ? '已自动更新' : saveFailed ? '保存失败' : '自动保存' }}</span></div>
         </div>
+        <Teleport to=".app-shell">
+          <div v-if="tabListOpen" class="tab-list-popover" :style="tabListPopoverStyle" role="menu" @click.stop>
+            <div class="tab-list-heading"><span>已打开文档</span><small>{{ store.openDocuments.length }}</small></div>
+            <label v-if="store.openDocuments.length > 3" class="tab-list-search"><AppIcon name="search" :size="13" /><input v-model="tabSearchQuery" type="search" placeholder="搜索已打开标签…" aria-label="搜索已打开标签" /></label>
+            <div v-for="group in groupedOpenDocuments" :key="group.directory" class="tab-list-group" role="group" :aria-label="group.directory">
+              <div class="tab-list-group-heading" :title="group.directory"><AppIcon name="folder" :size="13" /><span class="tab-list-group-copy"><strong>{{ folderNameOf(group.directory) }}</strong><small v-if="group.directory !== '当前工作区'">{{ group.directory }}</small></span><small class="tab-list-group-count">{{ group.documents.length }}</small></div>
+              <button v-for="document in group.documents" :key="document.id" class="tab-list-item" :class="{ active: store.currentDocumentId === document.id }" type="button" role="menuitem" @click="chooseDocument(document.id); closeTabMenus()">
+                <AppIcon name="reader" :size="14" />
+                <span class="tab-list-copy"><strong>{{ tabLabel(document) }}</strong><small :title="document.path">{{ fileNameOf(document.path) }}</small></span>
+                <AppIcon v-if="store.currentDocumentId === document.id" name="check" :size="13" />
+              </button>
+            </div>
+            <div v-if="!filteredOpenDocuments.length" class="tab-list-empty">没有匹配的标签</div>
+            <button class="tab-reopen-button" type="button" role="menuitem" :disabled="!recentlyClosedTabs.length" @click="reopenLastClosedTab"><AppIcon name="history" :size="13" />重新打开上一个标签</button>
+          </div>
+        </Teleport>
         <Teleport to="body">
           <div v-if="tabContextMenu" class="tab-context-menu" :style="{ top: `${tabContextMenu.y}px`, left: `${tabContextMenu.x}px` }" role="menu" @click.stop>
             <div class="tab-context-title">{{ tabLabel(store.documents.find((document) => document.id === tabContextMenu?.documentId) ?? { title: '文档', path: '' }) }}</div>
@@ -5125,7 +5157,7 @@ async function requestFullscreen() {
             <div class="viewer-source-toolbar"><span>图表结构</span></div>
             <pre class="viewer-source">{{ JSON.stringify(viewer.region.metadata ?? {}, null, 2) }}</pre>
           </div>
-          <div v-else-if="viewer.type === 'image'" class="image-viewer"><img :src="String(viewer.region.metadata?.url ?? '')" :alt="viewer.region.textContent" :style="viewerImageStyle" decoding="async" :referrerpolicy="advancedSettings.remoteImagePrivacy ? 'no-referrer' : undefined" @load="fitViewer" /></div>
+          <div v-else-if="viewer.type === 'image'" class="image-viewer"><img :src="String(viewer.region.metadata?.url ?? '')" :alt="viewer.region.textContent" :style="viewerImageStyle" draggable="false" decoding="async" :referrerpolicy="advancedSettings.remoteImagePrivacy ? 'no-referrer' : undefined" @load="fitViewer" /></div>
           <ViewerCode v-else-if="viewer.type === 'code'" :region="viewer.region" :theme-mode="store.activeTheme?.manifest.mode" @copied="notify('代码已复制')" />
           <div v-else class="code-viewer table-viewer" v-html="viewer.region.html" />
         </div>
