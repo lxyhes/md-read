@@ -336,6 +336,12 @@ html, body, #app { background: var(--app-bg, #070d22); }
 .editor-dialog-overlay { z-index: 80; }
 .editor-dialog { width: min(620px, calc(100vw - 32px)); max-height: min(760px, calc(100vh - 48px)); overflow: auto; padding: 24px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-raised); color: var(--ink); box-shadow: 0 28px 80px rgba(15, 28, 25, .24); }
 .editor-dialog h2 { margin: 5px 0 20px; font: 600 23px/1.2 var(--ui-font); }
+.app-dialog { width: min(520px, calc(100vw - 32px)); }
+.app-dialog h2 { margin-bottom: 14px; }
+.app-dialog-description { margin: 0; color: var(--muted); font: 12px/1.6 var(--ui-font); }
+.app-dialog .setting-input { margin: 16px 0 0; }
+.app-dialog .note-actions { margin-top: 22px; }
+.app-shell .app-dialog .app-dialog-danger { background: #b95e5e; color: #fff7f4; }
 .setting-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .setting-input select { width: 100%; min-height: 38px; margin-top: 7px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--ink); }
 .setting-check { display: flex; gap: 9px; align-items: center; margin-top: 13px; color: var(--ink); font-size: 13px; }
