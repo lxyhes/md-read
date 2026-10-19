@@ -8,6 +8,7 @@ import WebPreviewPanel from './components/WebPreviewPanel.vue'
 import MermaidBlock from './components/MermaidBlock.vue'
 import TreeDiagram from './components/TreeDiagram.vue'
 import AppIcon from './components/AppIcon.vue'
+import AppDialog from './components/AppDialog.vue'
 import IconButton from './components/IconButton.vue'
 import FontPicker from './components/FontPicker.vue'
 import type MarkdownEditorComponent from './components/MarkdownEditor.vue'
@@ -37,6 +38,7 @@ import { embedExportImages, rasterizeExportImages } from './exportImages'
 import { normalizeLatexDelimiters } from './markdown/fragment'
 import { readEditorDraft, saveEditorDraft, removeEditorDraft, hasSaveConflict } from './editorDrafts'
 import { startupStylesReady } from './startup'
+import { confirmAppAction, promptAppText } from './appDialog'
 import { searchKnowledge } from './knowledgeSearch'
 import { aiEndpoint, aiPayload, aiResponseText, defaultAiSettings, type AiMessage, type AiSettings } from './aiProvider'
 import { availableKnowledgeSourceIds, citationState, citationsForMatches, createKnowledgeId, createKnowledgeMessage, localDayKey, recentKnowledgeContext, summarizeKnowledgeActivity, titleForKnowledgeQuestion, type KnowledgeActivity, type KnowledgeCitation, type KnowledgeConversation } from './knowledgeConversations'
@@ -406,6 +408,7 @@ const viewerImageStyle = computed<Record<string, string>>((): Record<string, str
   }
 })
 const currentProgress = computed(() => store.currentDocument ? store.progress[store.currentDocument.id] : undefined)
+const currentDocumentFileName = computed(() => store.currentDocument ? fileNameOf(store.currentDocument.path) : '')
 const currentAnnotations = computed(() => store.annotations.slice().sort((a, b) => b.createdAt - a.createdAt))
 const currentAnnotationsByRegion = computed(() => {
   const grouped = new Map<string, Annotation[]>()
@@ -630,7 +633,7 @@ async function openExternalLink(url: string) {
       catch (error) {
         if (await markdownPathExists(targetPath)) throw error
         const name = targetPath.replace(/[\\/]/g, '/').split('/').pop() ?? '未命名文档.md'
-        if (!window.confirm(`未找到「${name}」，是否创建空 Markdown 文件？`)) return
+        if (!(await confirmAppAction({ title: '创建空 Markdown 文件？', description: `未找到「${name}」。是否创建空 Markdown 文件？`, confirmLabel: '创建' }))) return
         source = `# ${name.replace(/\.(md|markdown|qmd)$/i, '')}\n\n`
         await createMarkdownFile(targetPath, source)
         notify(`已创建 ${name}`)
@@ -1396,9 +1399,10 @@ async function importEditorMedia(kind: 'image' | 'video') {
     const url = await importMarkdownAsset(document.path, kind, kind === 'image' && advancedSettings.value.relativeImagePathPrefix)
     if (!url) return
     lastMediaAction.value = { source: editorSource.value, path: url }
-    const videoTitle = kind === 'video'
-      ? (window.prompt('视频封面/字幕（可选）', 'poster=封面.jpg;track=字幕.vtt;lang=zh-CN') ?? '').trim().replace(/["\r\n]/g, '')
+    const videoOptions = kind === 'video'
+      ? await promptAppText({ title: '视频封面/字幕（可选）', description: '可填写 poster、track 和 lang 参数；留空也可继续。', inputLabel: '参数', defaultValue: 'poster=封面.jpg;track=字幕.vtt;lang=zh-CN', confirmLabel: '插入' })
       : ''
+    const videoTitle = (videoOptions ?? '').trim().replace(/["\r\n]/g, '')
     insertEditorMedia(kind, url, videoTitle)
     notify(kind === 'image' ? '图片已导入并插入' : '视频已导入并插入')
   } catch (error) {
@@ -1463,7 +1467,7 @@ async function renameEditorImage(url: string) {
   const document = store.currentDocument
   if (!document) return
   const currentName = url.split('/').pop() ?? 'image.png'
-  const nextName = window.prompt('图片新文件名', currentName)?.trim()
+  const nextName = (await promptAppText({ title: '重命名图片', inputLabel: '图片新文件名', defaultValue: currentName, confirmLabel: '重命名' }))?.trim()
   if (!nextName) return
   try {
     const nextUrl = await renameMarkdownAsset(document.path, url, nextName, advancedSettings.value.relativeImagePathPrefix)
@@ -1474,7 +1478,7 @@ async function renameEditorImage(url: string) {
 
 async function deleteEditorImage(url: string) {
   const document = store.currentDocument
-  if (!document || !window.confirm('删除图片文件并移除文档中的引用？')) return
+  if (!document || !(await confirmAppAction({ title: '删除图片并移除引用？', description: '图片文件和文档中的引用都会被删除。', confirmLabel: '删除', destructive: true }))) return
   try {
     await removeMarkdownAsset(document.path, url)
     editorSource.value = editorSource.value.replace(new RegExp(`!\\[[^\\]\\n]*\\]\\(${escapeRegExp(url)}\\)\\s*`, 'g'), '')
@@ -2106,7 +2110,7 @@ function selectKnowledgeConversation(id: string) {
   aiError.value = ''
 }
 async function deleteKnowledgeConversationById(id: string) {
-  if (aiBusy.value || !window.confirm('删除这段对话？删除后无法恢复。')) return
+  if (aiBusy.value || !(await confirmAppAction({ title: '删除这段对话？', description: '删除后无法恢复。', confirmLabel: '删除', destructive: true }))) return
   knowledgeConversations.value = knowledgeConversations.value.filter((conversation) => conversation.id !== id)
   try { await deleteKnowledgeConversation(id) }
   catch (error) {
@@ -2296,9 +2300,9 @@ function savePersonalNote() {
   syncPersonalNoteDraft()
   notify('笔记已保存')
 }
-function deletePersonalNote() {
+async function deletePersonalNote() {
   const note = activePersonalNote.value
-  if (!note || !window.confirm(`删除「${note.title}」？`)) return
+  if (!note || !(await confirmAppAction({ title: `删除「${note.title}」？`, confirmLabel: '删除', destructive: true }))) return
   personalNotes.value = personalNotes.value.filter((item) => item.id !== note.id)
   localStorage.setItem(PERSONAL_NOTES_KEY, JSON.stringify(personalNotes.value))
   selectedNoteId.value = sortedPersonalNotes.value[0]?.id ?? null
@@ -2821,7 +2825,7 @@ async function createFileContextFile() {
   fileContextMenu.value = null
   if (!file) return
   const directory = contextDirectoryPath(file)
-  const value = window.prompt('新建 Markdown 文件', '新建文本文档.md')
+  const value = await promptAppText({ title: '新建 Markdown 文件', inputLabel: '文件名', defaultValue: '新建文本文档.md', confirmLabel: '新建' })
   if (value === null) return
   const name = markdownName(value)
   if (!validEntryName(name)) { notify('文件名不能为空，且不能包含路径分隔符'); return }
@@ -2844,7 +2848,7 @@ async function createFileContextFolder() {
   fileContextMenu.value = null
   if (!file) return
   const directory = contextDirectoryPath(file)
-  const name = window.prompt('新建文件夹', '新建文件夹')
+  const name = await promptAppText({ title: '新建文件夹', inputLabel: '文件夹名称', defaultValue: '新建文件夹', confirmLabel: '新建' })
   if (name === null) return
   if (!validEntryName(name)) { notify('文件夹名称不能为空，且不能包含路径分隔符'); return }
   if (!directory) { notify('当前工作区没有可用的实际目录路径'); return }
@@ -3004,15 +3008,14 @@ async function openFilesystemTreeNode(node: FileSystemTreeNode) {
 async function renameFileContextEntry() {
   const file = fileContextMenu.value?.file
   fileContextMenu.value = null
-  if (!file || !canManageMarkdownEntry(file)) return
-  const value = window.prompt('重命名 Markdown 文件', file.name)
-  if (value === null) return
+  if (!file || !canManageMarkdownEntry(file) || busyAction.value) return
+  const value = await promptAppText({ title: '重命名 Markdown 文件', inputLabel: '文件名', defaultValue: file.name, confirmLabel: '重命名' })
+  if (value === null || busyAction.value) return
   const name = markdownName(value)
   if (!validEntryName(name)) { notify('文件名不能为空，且不能包含路径分隔符'); return }
   const nextPath = joinFilePath(fileDirectoryPath(file.path), name)
   if (normalizedPath(nextPath).toLowerCase() === normalizedPath(file.path).toLowerCase()) return
   if (hasCurrentFile(nextPath)) { notify('同名文件已存在'); return }
-  if (busyAction.value) return
   busyAction.value = 'file'
   try {
     const renamedSource = await renameMarkdownPath(file.path, nextPath)
@@ -3052,7 +3055,7 @@ async function duplicateFileContextEntry() {
   if (!file || !canManageMarkdownEntry(file)) return
   const base = file.name.replace(/\.(md|markdown|qmd)$/i, '')
   const extension = file.name.match(/\.(md|markdown|qmd)$/i)?.[0] ?? '.md'
-  const value = window.prompt('创建文件副本', `${base} - 副本${extension}`)
+  const value = await promptAppText({ title: '创建文件副本', inputLabel: '副本文件名', defaultValue: `${base} - 副本${extension}`, confirmLabel: '创建副本' })
   if (value === null) return
   const name = markdownName(value)
   if (!validEntryName(name)) { notify('文件名不能为空，且不能包含路径分隔符'); return }
@@ -4279,7 +4282,7 @@ async function copyRegionAsImage(region: ReaderRegion) {
 async function deleteViewerDiagram() {
   const document = store.currentDocument
   const region = viewer.value?.region
-  if (!document || !region || viewer.value?.type !== 'mermaid' || !window.confirm('从文档中删除这张 Mermaid 图表？')) return
+  if (!document || !region || viewer.value?.type !== 'mermaid' || !(await confirmAppAction({ title: '删除 Mermaid 图表？', description: '这张图表将从当前文档中移除。', confirmLabel: '删除', destructive: true }))) return
   const nextSource = `${document.source.slice(0, region.sourceStart)}${document.source.slice(region.sourceEnd)}`.replace(/\n{3,}/g, '\n\n')
   try {
     if (isRealDocumentPath(document.path)) await writeMarkdownFile(document.path, nextSource, document.source)
@@ -4548,6 +4551,7 @@ async function requestFullscreen() {
 
 <template>
   <div class="app-shell" :aria-busy="booting || busyAction !== null" :class="{ 'is-focus': store.mode === 'focus', 'is-clean': store.mode === 'clean', 'is-editor-studio': editorOpen, 'is-region-focus': store.mode === 'region-focus', 'has-focus-region': Boolean(store.focusedRegionId), 'is-dragging': draggingFiles, 'nav-collapsed': navCollapsed, [`theme-${store.activeThemeId}`]: true }" :style="store.mode === 'focus' ? focusThemeStyles : undefined" @dragover.prevent @dragenter.prevent="onDragEnter" @dragleave.prevent="onDragLeave" @drop.prevent="onDrop">
+    <AppDialog />
     <aside class="global-nav">
       <div class="brand-mark"><img class="brand-mark-logo" :src="logoAsset" alt="墨阅 Moyue" /></div>
       <button class="nav-collapse-toggle" type="button" :aria-label="navCollapsed ? '展开侧栏' : '收起侧栏'" :title="navCollapsed ? '展开侧栏' : '收起侧栏'" @click="toggleNavCollapsed"><AppIcon name="chevron-right" :size="15" /></button>
@@ -4573,7 +4577,7 @@ async function requestFullscreen() {
 
     <main class="main-shell" :class="{ 'with-web-preview': Boolean(webPreviewUrl) }">
       <header class="topbar" :class="{ faded: store.mode === 'focus' }">
-        <div class="crumbs"><strong>{{ view === 'reader' ? displayTitle(store.currentDocument?.title) : view === 'themes' ? '主题空间' : view === 'clipboard' ? '剪贴板' : view === 'favorites' ? '收藏夹' : view === 'knowledge' ? 'AI 知识库' : view === 'notes' ? '个人笔记' : view === 'settings' ? '偏好设置' : '我的文档' }}</strong></div>
+        <div class="crumbs"><strong>{{ view === 'reader' ? currentDocumentFileName : view === 'themes' ? '主题空间' : view === 'clipboard' ? '剪贴板' : view === 'favorites' ? '收藏夹' : view === 'knowledge' ? 'AI 知识库' : view === 'notes' ? '个人笔记' : view === 'settings' ? '偏好设置' : '我的文档' }}</strong></div>
         <button class="command-trigger" type="button" title="搜索：Ctrl/Cmd + K；快速打开：Ctrl/Cmd + P" @click="openSearch('all')"><AppIcon v-if="webPreviewUrl" name="search" :size="16" /><span>搜索文档、标题、内容</span><kbd>⌘ K</kbd></button>
         <div class="top-actions">
           <IconButton icon="focus" label="专注阅读" :active="store.mode === 'focus'" @click="toggleFocusMode" />
@@ -4701,7 +4705,7 @@ async function requestFullscreen() {
               <div class="tab-list-group-heading" :title="group.directory"><AppIcon name="folder" :size="13" /><span class="tab-list-group-copy"><strong>{{ folderNameOf(group.directory) }}</strong><small v-if="group.directory !== '当前工作区'">{{ group.directory }}</small></span><small class="tab-list-group-count">{{ group.documents.length }}</small></div>
               <button v-for="document in group.documents" :key="document.id" class="tab-list-item" :class="{ active: store.currentDocumentId === document.id }" type="button" role="menuitem" @click="chooseDocument(document.id); closeTabMenus()">
                 <AppIcon name="reader" :size="14" />
-                <span class="tab-list-copy"><strong>{{ tabLabel(document) }}</strong><small :title="document.path">{{ fileNameOf(document.path) }}</small></span>
+                <span class="tab-list-copy"><strong :title="document.path">{{ fileNameOf(document.path) }}</strong><small :title="document.title">{{ displayTitle(document.title) }}</small></span>
                 <AppIcon v-if="store.currentDocumentId === document.id" name="check" :size="13" />
               </button>
             </div>
@@ -4823,7 +4827,7 @@ async function requestFullscreen() {
           <div class="reader-column">
             <div class="reader-meta">
               <div class="reader-meta-document">
-                <span class="section-kicker reader-path" :title="store.currentDocument?.path"><AppIcon name="file" :size="13" /><span class="reader-path-value">{{ displayTitle(store.currentDocument?.title) }}</span></span>
+                <span class="section-kicker reader-path" :title="store.currentDocument?.path"><AppIcon name="file" :size="13" /><span class="reader-path-value">{{ currentDocumentFileName }}</span></span>
                 <span class="reader-stat">{{ (editorOpen ? editorPreviewDocument : store.currentDocument)?.wordCount ?? 0 }} 字 · 约 {{ (editorOpen ? editorPreviewDocument : store.currentDocument)?.estimatedReadMinutes ?? 0 }} 分钟</span>
               </div>
               <div v-if="!editorOpen" class="reader-meta-tools">
@@ -4991,7 +4995,7 @@ async function requestFullscreen() {
               </div>
               <nav v-if="!editorOpen && store.mode === 'clean' && (store.currentDocument?.headings.length ?? 0) > 0" class="reading-progress-rail" aria-label="阅读进度导航"><span class="reading-progress-rail-caption">{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}%</span><div class="reading-progress-rail-track"><span class="reading-progress-rail-fill" :style="{ height: `${(currentProgress?.scrollPercent ?? 0) * 100}%` }" /><button v-for="(heading, index) in store.currentDocument?.headings" :key="heading.id" type="button" class="reading-progress-marker" :class="{ active: store.activeHeadingId === heading.id }" :style="{ top: headingRailPosition(index) }" :aria-label="`跳转到 ${heading.text}`" :title="heading.text" @click.stop="scrollToHeading(heading.regionId)"><i /><span>{{ heading.text }}</span></button></div></nav>
               <div v-if="!editorOpen" class="reader-content" :class="[`reader-display-${readerDisplayMode}`, { 'is-course-outline': compactCourseOutline }]">
-                <div v-if="readerDisplayMode !== 'mindmap'" class="reader-markdown"><h1 class="reader-title">{{ displayTitle(store.currentDocument?.title) }}</h1><div class="reader-rule" />
+                <div v-if="readerDisplayMode !== 'mindmap'" class="reader-markdown"><h1 class="reader-title">{{ currentDocumentFileName }}</h1><div class="reader-rule" />
                 <div class="regions-stack" :class="{ virtualized: virtualizedReader }">
                 <div v-if="virtualRange.before" class="virtual-spacer" :style="{ height: `${virtualRange.before}px` }" aria-hidden="true" />
                 <div class="virtual-regions">

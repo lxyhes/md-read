@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import AppIcon from './AppIcon.vue'
+import { confirmAppAction } from '../appDialog'
 
 type ClipboardKind = 'text' | 'image'
 type ClipboardFilter = 'all' | ClipboardKind
@@ -262,8 +263,8 @@ function removeItem(item: ClipboardRecord) {
   flash('已删除这条剪贴板')
 }
 
-function clearHistory() {
-  if (!items.value.length || !window.confirm('清空未置顶的剪贴板历史？置顶内容会保留。')) return
+async function clearHistory() {
+  if (!items.value.length || !(await confirmAppAction({ title: '清空剪贴板历史？', description: '未置顶的历史记录会被清空，置顶内容会保留。', confirmLabel: '清空历史', destructive: true }))) return
   items.value = items.value.filter((item) => item.pinned)
   selectedId.value = items.value[0]?.id ?? null
   persist()
