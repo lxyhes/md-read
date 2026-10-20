@@ -1,12 +1,12 @@
 import { liteAdaptor } from '@mathjax/src/js/adaptors/liteAdaptor.js'
 import { renderMarkdownFragment } from './parser'
 import { escapeHtml, type MdastNode } from './markdown/shared'
-import { cssVariables, themeCss } from './themes'
+import { cssVariables, defaultTokens } from './themes'
 import type { MoyueTheme } from './types'
 import type { MarkdownExportAsset } from './fileService'
 
 export function createExportCss(theme: MoyueTheme, settings: { fontSize: number; lineHeight: number; width: number; fontFamily: string }) {
-  const variables = { ...cssVariables(theme), '--reader-size': `${settings.fontSize}px`, '--reader-leading': String(settings.lineHeight), '--reader-width': `${settings.width}px`, '--reader-font': settings.fontFamily || theme.tokens.reader.fontFamily }
+  const variables = { ...cssVariables(theme), '--reader-size': `${settings.fontSize}px`, '--reader-leading': String(settings.lineHeight), '--reader-gap': `${defaultTokens.reader.paragraphGap}px`, '--reader-width': `${settings.width}px`, '--reader-font': settings.fontFamily || defaultTokens.reader.fontFamily }
   return `:root{${Object.entries(variables).map(([name, value]) => `${name}:${value}`).join(';')}}
 *{box-sizing:border-box}body{margin:0;padding:40px 24px;background:var(--surface-raised);color:var(--ink);font:var(--reader-size)/var(--reader-leading) var(--reader-font)}
 main{max-width:var(--reader-width);margin:auto}h1,h2,h3,h4,h5,h6{line-height:1.35;margin:1.5em 0 .65em;break-after:avoid}p,ul,ol,blockquote,pre,table{margin:0 0 var(--reader-gap)}
@@ -14,7 +14,7 @@ a{color:var(--accent);text-underline-offset:.2em}img,video,svg{max-width:100%;he
 blockquote{margin-left:0;border-left:3px solid var(--accent);padding:12px 20px;background:var(--surface);color:var(--muted)}table{width:100%;border-collapse:collapse}th,td{padding:8px 12px;border:1px solid var(--border);text-align:left}th{background:var(--surface)}
 .table-scroll{overflow:auto}.math-block{overflow:auto;text-align:center;margin:1.5em 0}.markdown-footnotes{border-top:1px solid var(--border);margin-top:2em;padding-top:1em;font-size:.9em}.task-item{list-style:none}.task-checkbox{display:inline-block;width:1.15em;height:1.15em;border:1px solid var(--accent);margin-right:.5em;text-align:center;line-height:1.1em}mark{background:var(--accent-soft);color:var(--ink)}
 @media(max-width:600px){body{padding:24px 16px}}@media print{body{padding:0}pre,figure{break-inside:avoid}}
-${themeCss(theme)}`
+`
 }
 
 export function assetDataUrl(asset: MarkdownExportAsset) {

@@ -181,7 +181,6 @@ function handleContentClick(event: MouseEvent) {
     </div>
     <div v-else-if="region.type === 'image'" class="region-content image-region" @click.stop="emit('openViewer')">
       <div v-html="highlighted" />
-      <button class="inline-view-action image-zoom-action" type="button" aria-label="放大查看原图" @click.stop="emit('openViewer')">放大查看 <AppIcon name="expand" :size="12" /></button>
     </div>
     <div v-else-if="region.type === 'video'" class="region-content video-region" @click.stop v-html="renderedHtml" />
       <div v-else-if="region.type === 'code' && asciiTree" class="region-content auto-tree-region" @click.stop>
