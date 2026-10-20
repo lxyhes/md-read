@@ -15,6 +15,7 @@ import type MarkdownEditorComponent from './components/MarkdownEditor.vue'
 import EditorExportMenu from './components/EditorExportMenu.vue'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { interfaceFont } from './fonts'
+import { defaultTokens } from './themes'
 import type { FileSystemTreeNode } from './components/FileSystemTree.vue'
 import ClipboardManager from './components/ClipboardManager.vue'
 import { copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, downloadMarkdownImages, exportDocumentWithPandoc, importDocumentWithPandoc, importMarkdownAsset, importMarkdownAssetFromPath, listDirectoryFiles, listFileSystemEntries, markdownPathExists, openFileSystemDirectory, openMarkdownDirectory, openMarkdownFile, openMarkdownFolderAt, organizeMarkdownAssets, readMarkdownExportAssets, readMarkdownPath, removeMarkdownAsset, renameMarkdownAsset, renameMarkdownPath, resolveMarkdownAssetUrl, resolveMarkdownPath, saveBinaryExportFile, saveClipboardImage, saveExportFile, saveMarkdownFile, savePdfExportFile, selectDocxReference, selectFileSystemDirectory, selectMarkdownFolder, splitMarkdownLinkTarget, uploadMarkdownImage, watchDirectoryPath, watchMarkdownPath, writeMarkdownFile, type PandocExportFormat, type WorkspaceFile } from './fileService'
@@ -4529,7 +4530,7 @@ async function saveCurrentAnnotation() {
   annotationEditor.value = null
   notify('批注已保存')
 }
-function applyReaderTheme(theme: Parameters<typeof store.applyTheme>[0]) { store.applyTheme(theme, true); notify(`已切换到「${theme.manifest.name}」`) }
+function applyReaderTheme(theme: Parameters<typeof store.applyTheme>[0]) { store.applyTheme(theme); notify(`已切换到「${theme.manifest.name}」`) }
 
 function changeSetting(key: 'fontSize' | 'lineHeight' | 'width', value: number) { store.updateSettings({ [key]: value }) }
 function changeReaderZoom(delta: number, announce = true) {
@@ -4837,7 +4838,7 @@ async function requestFullscreen() {
                   <details class="reader-more-menu">
                     <summary>更多</summary>
                     <div class="reader-more-popover">
-                      <FontPicker compact label="正文字体" :model-value="store.readerSettings.fontFamily" :fallback-family="store.activeTheme.tokens.reader.fontFamily" @update:model-value="store.updateSettings({ fontFamily: $event })" />
+                      <FontPicker compact label="正文字体" :model-value="store.readerSettings.fontFamily" :fallback-family="defaultTokens.reader.fontFamily" @update:model-value="store.updateSettings({ fontFamily: $event })" />
                       <button type="button" @click="toggleCleanMode">纯净阅读</button>
                       <button type="button" :class="{ active: contextPanelOpen }" @click="contextPanelOpen = !contextPanelOpen">{{ contextPanelOpen ? '收起阅读信息' : '查看阅读信息' }}</button>
                       <button type="button" @click="wordCountOpen = true">字数统计</button>
@@ -5053,7 +5054,7 @@ async function requestFullscreen() {
         <div v-show="settingsTab === 'reading'" class="settings-card ai-settings-card"><span class="section-kicker">AI 能力</span><h2>连接 AI 服务</h2><p class="muted-copy">支持本地 Ollama，也支持 OpenAI-compatible 接口。API Key 只保留在当前会话，不写入本地配置。</p><label class="setting-input">服务类型<select v-model="aiSettings.provider"><option value="ollama">Ollama（本地）</option><option value="openai-compatible">OpenAI-compatible</option></select></label><label class="setting-input">服务地址<input v-model="aiSettings.baseUrl" spellcheck="false" placeholder="http://127.0.0.1:11434" /></label><label class="setting-input">模型名称<input v-model="aiSettings.model" spellcheck="false" placeholder="qwen2.5:7b" /></label><label v-if="aiSettings.provider === 'openai-compatible'" class="setting-input">API Key（可选）<input v-model="aiSettings.apiKey" type="password" autocomplete="off" placeholder="仅当前会话使用" /></label><label class="setting-check"><input v-model="aiSettings.enabled" type="checkbox" />在知识库问答中启用 AI 生成</label><div class="ai-settings-actions"><button class="ghost-button" type="button" @click="saveAiSettings"><AppIcon name="check" :size="14" />保存配置</button><button class="primary-button" type="button" :disabled="aiBusy" @click="testAiConnection">{{ aiBusy ? '连接中…' : '测试连接' }}</button></div><p v-if="aiStatus === 'connected'" class="ai-status-success">AI 服务已连接</p><p v-if="aiError" class="ai-status-error" role="alert">{{ aiError }}</p></div>
         <div v-show="settingsTab === 'reading'" class="settings-card font-settings-card">
           <div class="font-settings-heading"><div><span class="section-kicker">阅读偏好</span><h2>字体与排版</h2></div><span>自动保存</span></div>
-          <FontPicker label="正文字体" :model-value="store.readerSettings.fontFamily" :fallback-family="store.activeTheme.tokens.reader.fontFamily" @update:model-value="store.updateSettings({ fontFamily: $event })" />
+          <FontPicker label="正文字体" :model-value="store.readerSettings.fontFamily" :fallback-family="defaultTokens.reader.fontFamily" @update:model-value="store.updateSettings({ fontFamily: $event })" />
           <div class="interface-font-setting">
             <FontPicker compact label="界面字体" default-label="系统默认" :model-value="store.readerSettings.interfaceFontFamily" :fallback-family="interfaceFont" @update:model-value="store.updateSettings({ interfaceFontFamily: $event })" />
             <p>用于菜单、侧栏与按钮。正文单独设置，代码保持等宽。</p>

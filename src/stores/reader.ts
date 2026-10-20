@@ -1,8 +1,8 @@
 import { computed, ref, shallowRef } from 'vue'
 import { defineStore } from 'pinia'
 import { deleteAnnotation, deleteDocument, getLocalProgress, getProgress, loadAnnotations, loadDocumentSnapshots, saveAnnotation, saveDocument, saveDocumentSnapshot, saveProgress } from '../persistence'
-import { authorizeMarkdownAssets, createRemoteAssetMap, createTauriAssetMap, openMarkdownFile, openMarkdownFolder, resolveMarkdownAssetUrl, type OpenedFile } from '../fileService'
-import { builtInThemes, cssVariables, defaultTokens, themeCss } from '../themes'
+import { authorizeMarkdownAssets, createRemoteAssetMap, createTauriAssetMap, downloadMarkdownImages, openMarkdownFile, openMarkdownFolder, resolveMarkdownAssetUrl, writeMarkdownFile, type OpenedFile } from '../fileService'
+import { builtInThemes, cssVariables, defaultTokens } from '../themes'
 import { interfaceFont } from '../fonts'
 import { parseMarkdown } from '../parser'
 const SESSION_KEY = 'moyue:reader-session'
@@ -67,7 +67,8 @@ export const useReaderStore = defineStore('reader', () => {
     variables['--reader-width'] = `${readerSettings.value.width}px`
     variables['--reader-size'] = `${readerSettings.value.fontSize}px`
     variables['--reader-leading'] = String(readerSettings.value.lineHeight)
-    variables['--reader-font'] = readerSettings.value.fontFamily || theme.tokens.reader.fontFamily || defaultTokens.reader.fontFamily
+    variables['--reader-gap'] = `${defaultTokens.reader.paragraphGap}px`
+    variables['--reader-font'] = readerSettings.value.fontFamily || defaultTokens.reader.fontFamily
     variables['--ui-font'] = readerSettings.value.interfaceFontFamily || interfaceFont
     variables['--shell-font'] = readerSettings.value.interfaceFontFamily || interfaceFont
     for (const [name, value] of Object.entries(variables)) document.documentElement.style.setProperty(name, value)
@@ -77,7 +78,7 @@ export const useReaderStore = defineStore('reader', () => {
       style.id = THEME_STYLE_ID
       document.head.append(style)
     }
-    style.textContent = themeCss(theme)
+    style.textContent = [theme.componentsCss, theme.codeCss, theme.mermaidCss].filter(Boolean).join('\n')
   }
 
   async function parseOpenedFile(file: OpenedFile) {
@@ -99,7 +100,25 @@ export const useReaderStore = defineStore('reader', () => {
   async function addOpenedFiles(files: OpenedFile[], options: { persist?: boolean } = {}) {
     if (!files.length) return 0
     const openedIds: string[] = []
-    for (const file of files) {
+    for (const originalFile of files) {
+      let file = originalFile
+      const normalizedPath = file.path.replace(/\\/g, '/')
+      const hasSavedDirectory = normalizedPath.startsWith('/') || /^[A-Za-z]:\//.test(normalizedPath)
+      if (hasSavedDirectory) {
+        try {
+          const relativePathPrefix = (() => {
+            try { return JSON.parse(localStorage.getItem('moyue:advanced-settings') ?? '{}').relativeImagePathPrefix === true }
+            catch { return false }
+          })()
+          const localized = await downloadMarkdownImages(file.path, file.source, relativePathPrefix)
+          if (localized.count) {
+            await writeMarkdownFile(file.path, localized.source, file.source)
+            file = { ...file, source: localized.source }
+          }
+        } catch (error) {
+          console.warn(`导入时无法将远程图片保存到 Markdown 同目录：${file.path}`, error)
+        }
+      }
       const document = await parseOpenedFile(file)
       documents.value = [...documents.value.filter((item) => item.id !== document.id), document]
       openedIds.push(document.id)

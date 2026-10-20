@@ -8,7 +8,7 @@ const props = withDefaults(defineProps<{
   label: string
   defaultLabel?: string
   compact?: boolean
-}>(), { defaultLabel: '跟随主题', compact: false })
+}>(), { defaultLabel: '默认字体', compact: false })
 const emit = defineEmits<{ 'update:modelValue': [family: string] }>()
 const custom = computed(() => props.modelValue && !fontPresets.some((font) => font.family === props.modelValue))
 </script>

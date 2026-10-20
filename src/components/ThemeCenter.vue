@@ -72,7 +72,7 @@ async function onThemeFile(event: Event) {
 <template>
   <section class="page themes-page">
     <div class="page-heading">
-      <div><h1>主题中心</h1><p class="theme-page-lede">先选一种纸，再调整它的颜色与排版。</p></div>
+      <div><h1>主题中心</h1><p class="theme-page-lede">先选一种主题，再调整颜色与组件样式。</p></div>
       <div class="toolbar-actions">
         <input ref="themeInput" type="file" accept=".moyue-theme,.zip" hidden @change="onThemeFile" />
         <button class="ghost-button" type="button" @click="themeInput?.click()"><AppIcon name="upload" :size="14" />导入主题包</button>
