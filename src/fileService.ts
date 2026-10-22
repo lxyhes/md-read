@@ -45,14 +45,12 @@ export async function watchMarkdownPath(path: string, onChange: () => void): Pro
     }
   }
   await check()
-  let timer: number | null = null
+  const timer = globalThis.setInterval(() => { void check() }, 1500)
   let stopNative = () => {}
   try {
     stopNative = await watch(directory || path, () => { void check() }, { delayMs: 700 })
-  } catch {
-    timer = window.setInterval(() => { void check() }, 1500)
-  }
-  return () => { stopped = true; if (timer !== null) window.clearInterval(timer); stopNative() }
+  } catch { /* Polling remains active when native watching is unavailable. */ }
+  return () => { stopped = true; globalThis.clearInterval(timer); stopNative() }
 }
 
 export function resolveMarkdownAssetUrl(markdownPath: string, url: string, browserAssets?: BrowserAssetMap): string {
