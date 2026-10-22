@@ -10,15 +10,21 @@ const KNOWLEDGE_CONVERSATIONS_KEY = 'moyue:knowledge-conversations'
 const KNOWLEDGE_ACTIVITY_KEY = 'moyue:knowledge-activity'
 type DatabaseConnection = Awaited<ReturnType<typeof import('@tauri-apps/plugin-sql')['default']['load']>>
 let database: DatabaseConnection | null = null
+let databasePromise: Promise<DatabaseConnection | null> | null = null
 
 async function getDatabase() {
   if (!isTauri()) return null
-  if (!database) {
+  if (database) return database
+  return databasePromise ??= (async () => {
     const { default: Database } = await import('@tauri-apps/plugin-sql')
-    database = await Database.load('sqlite:moyue.db')
-    await database.execute(`CREATE TABLE IF NOT EXISTS documents (id TEXT PRIMARY KEY, path TEXT NOT NULL, title TEXT NOT NULL, source_hash TEXT NOT NULL, source TEXT, updated_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS progress (document_id TEXT PRIMARY KEY, region_id TEXT, heading_id TEXT, scroll_percent REAL NOT NULL, reading_time INTEGER NOT NULL, updated_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS annotations (id TEXT PRIMARY KEY, document_id TEXT NOT NULL, region_id TEXT NOT NULL, selected_text TEXT NOT NULL, color TEXT NOT NULL, note TEXT NOT NULL, created_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS knowledge_conversations (id TEXT PRIMARY KEY, title TEXT NOT NULL, source_ids TEXT NOT NULL, messages TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS knowledge_activity (day TEXT PRIMARY KEY, answer_count INTEGER NOT NULL);`)
-  }
-  return database
+    const connection = await Database.load('sqlite:moyue.db')
+    await connection.execute(`CREATE TABLE IF NOT EXISTS documents (id TEXT PRIMARY KEY, path TEXT NOT NULL, title TEXT NOT NULL, source_hash TEXT NOT NULL, source TEXT, updated_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS progress (document_id TEXT PRIMARY KEY, region_id TEXT, heading_id TEXT, scroll_percent REAL NOT NULL, reading_time INTEGER NOT NULL, updated_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS annotations (id TEXT PRIMARY KEY, document_id TEXT NOT NULL, region_id TEXT NOT NULL, selected_text TEXT NOT NULL, color TEXT NOT NULL, note TEXT NOT NULL, created_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS knowledge_conversations (id TEXT PRIMARY KEY, title TEXT NOT NULL, source_ids TEXT NOT NULL, messages TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS knowledge_activity (day TEXT PRIMARY KEY, answer_count INTEGER NOT NULL);`)
+    database = connection
+    return connection
+  })().catch((error: unknown) => {
+    databasePromise = null
+    throw error
+  })
 }
 
 function readJson<T>(key: string, fallback: T): T {

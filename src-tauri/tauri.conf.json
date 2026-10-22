@@ -20,6 +20,7 @@
         "resizable": true,
         "decorations": true,
         "transparent": false,
+        "backgroundColor": "#eef3f2",
         "dragDropEnabled": true
       }
     ],
