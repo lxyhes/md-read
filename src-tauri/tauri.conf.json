@@ -32,7 +32,11 @@
   },
   "bundle": {
     "active": true,
-    "icon": ["icons/moyue-simple/icon.ico", "icons/moyue-simple/icon.png"],
+    "icon": [
+      "icons/moyue-simple/icon.ico",
+      "icons/moyue-simple/icon.icns",
+      "icons/moyue-simple/icon.png"
+    ],
     "targets": "all",
     "resources": [],
     "windows": { "nsis": { "installMode": "currentUser" } }
