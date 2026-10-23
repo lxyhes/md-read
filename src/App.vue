@@ -882,6 +882,7 @@ function persistEditorDraft() {
 }
 
 function protectUnsavedEditor(event: BeforeUnloadEvent) {
+  if (isTauriRuntime()) return
   if (editorDirty.value && !persistEditorDraft()) { event.preventDefault(); event.returnValue = '' }
 }
 
@@ -3251,11 +3252,8 @@ onMounted(() => {
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('paste', onPaste)
   window.addEventListener('beforeunload', protectUnsavedEditor)
-  if (isTauriRuntime()) void getCurrentWindow().onCloseRequested(event => {
-    if (editorDirty.value && !persistEditorDraft()) {
-      event.preventDefault()
-      notify('草稿备份失败，请保存或另存副本后关闭窗口')
-    }
+  if (isTauriRuntime()) void getCurrentWindow().onCloseRequested(() => {
+    if (editorDirty.value) persistEditorDraft()
   }).then(stop => { if (editorAppDisposed) stop(); else stopEditorCloseGuard = stop }).catch(() => notify('关闭窗口保护未能注册，请先保存草稿再退出'))
   editorAutoSaveTimer = window.setInterval(() => {
     if (advancedSettings.value.editorAutoSave && editorOpen.value && editorDirty.value && !editorConflict.value && !tableEditor.value) void saveEditor()
@@ -5055,7 +5053,7 @@ async function requestFullscreen() {
               </div>
               <nav v-if="!editorOpen && store.mode === 'clean' && (store.currentDocument?.headings.length ?? 0) > 0" class="reading-progress-rail" aria-label="阅读进度导航"><span class="reading-progress-rail-caption">{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}%</span><div class="reading-progress-rail-track"><span class="reading-progress-rail-fill" :style="{ height: `${(currentProgress?.scrollPercent ?? 0) * 100}%` }" /><button v-for="(heading, index) in store.currentDocument?.headings" :key="heading.id" type="button" class="reading-progress-marker" :class="{ active: store.activeHeadingId === heading.id }" :style="{ top: headingRailPosition(index) }" :aria-label="`跳转到 ${heading.text}`" :title="heading.text" @click.stop="scrollToHeading(heading.regionId)"><i /><span>{{ heading.text }}</span></button></div></nav>
               <div v-if="!editorOpen" class="reader-content" :class="[`reader-display-${readerDisplayMode}`, { 'is-course-outline': compactCourseOutline }]">
-                <div v-if="readerDisplayMode !== 'mindmap'" class="reader-markdown"><h1 class="reader-title">{{ currentDocumentFileName }}</h1><div class="reader-rule" />
+                <div v-if="readerDisplayMode !== 'mindmap'" class="reader-markdown">
                 <div class="regions-stack" :class="{ virtualized: virtualizedReader }">
                 <div v-if="virtualRange.before" class="virtual-spacer" :style="{ height: `${virtualRange.before}px` }" aria-hidden="true" />
                 <div class="virtual-regions">

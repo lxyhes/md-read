@@ -110,8 +110,6 @@ function onKeydown(event: KeyboardEvent) {
     </details>
     <div :key="document.id" ref="viewport" class="reader-viewport second-document-viewport" tabindex="0" :aria-label="`阅读 ${document.title}`" @scroll="rememberScroll">
       <div class="reader-content">
-        <h1 class="reader-title" :title="document.path">{{ documentLabel(document) }}</h1>
-        <div class="reader-rule" />
         <div class="regions-stack">
           <RegionBlock v-for="region in document.regions" :key="region.id" :region="region" :focused="false" :active="activeRegionId === region.id" :theme-mode="themeMode" :theme-key="themeKey" @focus="activeRegionId = region.id" @open-link="openLink" @open-viewer="emit('open-viewer', region)" @copy-image="emit('copy-image', region)" @code-copied="emit('notify', '代码已复制')" @math-copied="emit('notify', 'MathML 已复制')" @math-copy-failed="emit('notify', '复制 MathML 失败，请检查剪贴板权限')" @toggle-task="emit('notify', '请先在左侧打开文档，再修改任务')" />
         </div>
@@ -159,7 +157,6 @@ function onKeydown(event: KeyboardEvent) {
 .second-document-outline :focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .second-document-outline p { margin: 0; padding: 0 16px 12px; color: var(--muted); font: 12px/1.5 var(--ui-font); }
 .second-document-pane .reader-content { width: min(var(--reader-width), calc(100% - 56px)); padding: 28px 0 80px; }
-.second-document-pane .reader-title { overflow-wrap: anywhere; font-size: 28px; }
 .second-document-pane :deep(.region-block) { opacity: 1 !important; filter: none !important; }
 .second-document-pane :deep(.region-block) { scroll-margin-top: 20px; }
 @container document-panes (max-width: 760px) {
