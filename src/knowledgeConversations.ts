@@ -50,6 +50,26 @@ export function availableKnowledgeSourceIds(sourceIds: string[], availableIds: s
   return [...new Set(sourceIds.filter((id) => available.has(id)))]
 }
 
+export function knowledgeRetrievalQuery(question: string, messages: KnowledgeMessage[]) {
+  const followUp = /^(?:请)?(?:继续|再解释|展开|详细说明|举例|举个例子|总结一下|它|这个|这些|这段|上面|上述|前面|为什么[？?]?$|怎么做[？?]?$|如何做[？?]?$)|\b(?:it|that|those|these|continue|elaborate)\b/i
+  if (!followUp.test(question.trim())) return question
+  const previous = messages.filter((message) => message.role === 'user' && message.content !== question).slice(-4)
+  const context: string[] = []
+  for (const message of previous.reverse()) {
+    context.unshift(message.content.slice(0, 500))
+    if (!followUp.test(message.content.trim())) break
+  }
+  return [...context, question].join(' ')
+}
+
+export function filterKnowledgeConversations(conversations: KnowledgeConversation[], query: string) {
+  const terms = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean)
+  return conversations.filter((conversation) => {
+    const content = `${conversation.title}\n${conversation.messages.map((message) => message.content).join('\n')}`.toLocaleLowerCase()
+    return terms.every((term) => content.includes(term))
+  }).slice().sort((a, b) => b.updatedAt - a.updatedAt)
+}
+
 export function citationsForMatches(matches: KnowledgeSearchMatch[]): KnowledgeCitation[] {
   return matches.map((match, index) => ({
     index: index + 1,

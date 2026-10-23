@@ -19,8 +19,8 @@ function excerpt(text: string, query: string, terms: string[]) {
   const normalized = text.replace(/\s+/g, ' ').trim()
   const lower = normalized.toLowerCase()
   const startAt = Math.max(0, [query, ...terms].map((term) => lower.indexOf(term)).filter((index) => index >= 0).sort((a, b) => a - b)[0] ?? 0)
-  const start = Math.max(0, startAt - 46)
-  const end = Math.min(normalized.length, start + 150)
+  const start = Math.max(0, startAt - 200)
+  const end = Math.min(normalized.length, start + 1200)
   return `${start > 0 ? '…' : ''}${normalized.slice(start, end)}${end < normalized.length ? '…' : ''}`
 }
 
@@ -46,7 +46,8 @@ export function searchKnowledge(documents: ReaderDocument[], query: string, limi
     })
   }).sort((a, b) => b.score - a.score)
 
-  const perDocumentLimit = Math.max(1, Math.ceil(limit / 3))
+  const documentCount = new Set(ranked.map((match) => match.document.id)).size
+  const perDocumentLimit = documentCount <= 1 ? limit : Math.max(1, Math.ceil(limit / 3))
   const counts = new Map<string, number>()
   const signatures = new Map<string, Set<Set<string>>>()
   const matches: KnowledgeSearchMatch[] = []
