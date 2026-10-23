@@ -5409,6 +5409,7 @@ button:focus-visible,
   background: transparent;
   cursor: col-resize;
   touch-action: none;
+  user-select: none;
 }
 .outline-resizer::after {
   position: absolute;
@@ -10068,4 +10069,104 @@ a:active > .app-icon-vector { transform: scale(.92); }
 }
 @media (prefers-reduced-motion: reduce) {
   .rail-item { transition: none; }
+}
+
+.reader-document-panes { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); container: document-panes / inline-size; min-width: 0; min-height: 0; overflow: hidden; }
+.reader-document-panes.has-second-document { grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); grid-template-rows: none; grid-auto-rows: minmax(0, 1fr); }
+.reader-document-panes > .reader-column { min-width: 0; }
+.reader-document-panes.has-second-document > .reader-column { height: auto; }
+.reader-document-panes.has-second-document .reader-column .reader-content { width: min(var(--reader-width), calc(100% - 56px)); }
+.reader-document-panes.has-second-document .reader-column .reader-title { font-size: 28px; overflow-wrap: anywhere; }
+html:has(.reader-page), body:has(.reader-page), #app:has(.reader-page) { min-width: 0; }
+.app-shell .reader-document-panes.has-second-document .reader-content { width: min(var(--reader-width), calc(100% - 56px)) !important; padding: 28px 0 80px !important; }
+.app-shell .reader-document-panes.has-second-document .reader-content:not(.is-course-outline) .reader-title { margin-top: 12px !important; font-size: 28px !important; line-height: 1.25 !important; }
+.dual-document-toggle { white-space: nowrap; padding: 6px 8px; }
+.dual-document-toggle[aria-pressed="true"] { color: var(--accent); }
+.dual-document-toggle:disabled { opacity: .45; cursor: default; }
+.app-shell:not(.is-focus) .reader-layout.outline-panel-collapsed:not(.focus-layout):not(.clean-layout) {
+  grid-template-columns: 42px minmax(0, 1fr);
+}
+.app-shell:not(.is-focus) .reader-layout:not(.is-resizing-outline) {
+  transition: grid-template-columns .22s cubic-bezier(.2, .8, .2, 1);
+}
+.app-shell:not(.is-focus) .reader-layout.outline-panel-collapsed.context-open:not(.focus-layout):not(.clean-layout) {
+  grid-template-columns: 42px minmax(0, 1fr) 220px;
+}
+.reader-layout > .outline-panel.is-collapsed {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+}
+.outline-panel-expand {
+  display: flex;
+  width: 100%;
+  min-height: 100%;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 0;
+  background: transparent;
+  color: var(--muted);
+  transition: background .18s ease, color .18s ease;
+}
+.outline-panel-expand:hover,
+.outline-panel-expand:focus-visible {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+}
+.outline-panel-expand:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -3px;
+}
+.outline-panel-expand span {
+  writing-mode: vertical-rl;
+  color: inherit;
+  font: 10px var(--ui-font);
+  letter-spacing: .08em;
+}
+.outline-panel-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 6px;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+.outline-panel-toggle:hover,
+.outline-panel-toggle:focus-visible {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+.outline-panel-toggle .app-icon {
+  transform: rotate(180deg);
+  transition: transform .18s ease;
+}
+.outline-panel-toggle:hover .app-icon {
+  transform: rotate(180deg) translateX(-2px);
+}
+@media (max-width: 1080px) {
+  .app-shell:not(.is-focus) .reader-layout.outline-panel-collapsed.context-open:not(.focus-layout):not(.clean-layout) {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+}
+@media (max-width: 720px) {
+  .app-shell:not(.is-focus) .reader-layout.outline-panel-collapsed:not(.focus-layout):not(.clean-layout) {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+  .app-shell:not(.is-focus) .reader-layout.outline-panel-collapsed > .outline-panel.is-collapsed {
+    display: flex;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-shell:not(.is-focus) .reader-layout:not(.is-resizing-outline),
+  .outline-panel-expand,
+  .outline-panel-toggle .app-icon {
+    transition: none;
+  }
+}
+@media print {
+  .reader-document-panes { display: block; height: auto; overflow: visible; }
+  .second-document-pane { display: none; }
 }
