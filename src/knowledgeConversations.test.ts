@@ -1,8 +1,28 @@
 import { describe, expect, it } from 'vitest'
-import { availableKnowledgeSourceIds, citationState, localDayKey, recentKnowledgeContext, summarizeKnowledgeActivity, type KnowledgeCitation, type KnowledgeMessage } from './knowledgeConversations'
+import { availableKnowledgeSourceIds, citationState, createKnowledgeMessage, filterKnowledgeConversations, knowledgeRetrievalQuery, localDayKey, recentKnowledgeContext, summarizeKnowledgeActivity, type KnowledgeCitation, type KnowledgeMessage, type KnowledgeConversation } from './knowledgeConversations'
 import { parseMarkdown } from './parser'
 
 describe('knowledge conversation helpers', () => {
+  it('resolves consecutive follow-ups without carrying context into a new topic', () => {
+    const messages = [createKnowledgeMessage('user', '向量数据库如何部署？'), createKnowledgeMessage('assistant', '先配置数据库'), createKnowledgeMessage('user', '继续解释')]
+    expect(knowledgeRetrievalQuery('举个例子', messages)).toContain('向量数据库如何部署')
+    expect(knowledgeRetrievalQuery('请总结缓存策略', messages)).toBe('请总结缓存策略')
+    expect(knowledgeRetrievalQuery('继续解释', [])).toBe('继续解释')
+    const longHistory = Array.from({ length: 20 }, () => createKnowledgeMessage('user', `继续${'解释'.repeat(1000)}`))
+    expect(knowledgeRetrievalQuery('举例', longHistory).length).toBeLessThanOrEqual(2006)
+  })
+
+  it('searches all conversation bodies and titles, newest first, without mutation', () => {
+    const conversations: KnowledgeConversation[] = Array.from({ length: 15 }, (_, index) => ({
+      id: String(index), title: `对话 ${index}`, sourceIds: [], createdAt: index, updatedAt: index,
+      messages: [createKnowledgeMessage('assistant', index === 0 ? 'Ollama 模型部署' : '一般内容')],
+    }))
+    expect(filterKnowledgeConversations(conversations, '')).toHaveLength(15)
+    expect(filterKnowledgeConversations(conversations, '')[0].id).toBe('14')
+    expect(filterKnowledgeConversations(conversations, 'ollama 部署').map((item) => item.id)).toEqual(['0'])
+    expect(filterKnowledgeConversations(conversations, '不存在')).toEqual([])
+    expect(conversations[0].id).toBe('0')
+  })
   it('keeps only the two most recent turns for model context', () => {
     const messages = ['问题一', '回答一', '问题二', '回答二', '问题三', '回答三'].map((content, index) => ({
       id: String(index), role: index % 2 === 0 ? 'user' : 'assistant', content, createdAt: index, citations: [],
