@@ -4598,19 +4598,19 @@ async function requestFullscreen() {
     <AppDialog />
     <aside class="global-nav">
       <div class="workspace-rail" aria-label="阅读工具栏">
-        <button class="rail-item" :class="{ active: view === 'library' }" type="button" title="阅读空间" aria-label="阅读空间" @click="openLibrary('all')"><AppIcon name="home" :size="17" /></button>
-        <button class="rail-item" :class="{ active: view === 'reader' }" type="button" title="最近阅读" aria-label="最近阅读" @click="view = 'reader'"><AppIcon name="history" :size="17" /></button>
-        <button class="rail-item" type="button" title="搜索文档" aria-label="搜索文档" @click="openSearch('all')"><AppIcon name="search" :size="17" /></button>
+        <button class="rail-item" :class="{ active: view === 'library' }" type="button" title="阅读空间" aria-label="阅读空间" @click="openLibrary('all')"><AppIcon name="home" :size="20" /><span>文档</span></button>
+        <button class="rail-item" :class="{ active: view === 'reader' }" type="button" title="当前阅读" aria-label="当前阅读" @click="view = 'reader'"><AppIcon name="reader" :size="20" /><span>阅读</span></button>
+        <button class="rail-item" type="button" title="搜索文档" aria-label="搜索文档" @click="openSearch('all')"><AppIcon name="search" :size="20" /><span>搜索</span></button>
         <div class="rail-divider" />
-        <button class="rail-item" :class="{ active: view === 'clipboard' }" type="button" title="剪贴板" aria-label="剪贴板" @click="view = 'clipboard'"><AppIcon name="clipboard" :size="17" /></button>
-        <button class="rail-item" :class="{ active: view === 'favorites' }" type="button" title="收藏夹" aria-label="收藏夹" @click="openFavorites"><AppIcon name="star" :size="17" /></button>
-        <button class="rail-item" :class="{ active: view === 'knowledge' }" type="button" title="AI 知识库" aria-label="AI 知识库" @click="openKnowledge"><AppIcon name="sparkle" :size="17" /></button>
-        <button class="rail-item" :class="{ active: view === 'notes' }" type="button" title="个人笔记" aria-label="个人笔记" @click="openNotes"><AppIcon name="note" :size="17" /></button>
+        <button class="rail-item" :class="{ active: view === 'clipboard' }" type="button" title="剪贴板" aria-label="剪贴板" @click="view = 'clipboard'"><AppIcon name="clipboard" :size="20" /><span>剪贴板</span></button>
+        <button class="rail-item" :class="{ active: view === 'favorites' }" type="button" title="收藏夹" aria-label="收藏夹" @click="openFavorites"><AppIcon name="star" :size="20" /><span>收藏</span></button>
+        <button class="rail-item" :class="{ active: view === 'knowledge' }" type="button" title="AI 知识库" aria-label="AI 知识库" @click="openKnowledge"><AppIcon name="library" :size="20" /><span>AI 知识库</span></button>
+        <button class="rail-item" :class="{ active: view === 'notes' }" type="button" title="个人笔记" aria-label="个人笔记" @click="openNotes"><AppIcon name="edit" :size="20" /><span>笔记</span></button>
         <div class="rail-divider rail-divider-secondary" />
-        <button class="rail-item" :class="{ active: view === 'themes' }" type="button" title="主题中心" aria-label="主题中心" @click="view = 'themes'"><AppIcon name="palette" :size="17" /></button>
-        <button class="rail-item" type="button" title="插件中心" aria-label="插件中心" @click="notify('插件市场将在下一阶段接入')"><AppIcon name="plugin" :size="17" /></button>
+        <button class="rail-item" :class="{ active: view === 'themes' }" type="button" title="主题中心" aria-label="主题中心" @click="view = 'themes'"><AppIcon name="palette" :size="20" /><span>主题</span></button>
+        <button class="rail-item" type="button" title="插件中心（即将上线）" aria-label="插件中心（即将上线）" @click="notify('插件市场将在下一阶段接入')"><AppIcon name="plugin" :size="20" /><span>插件</span></button>
         <div class="rail-spacer" />
-        <button class="rail-item" :class="{ active: view === 'settings' }" type="button" title="设置" aria-label="设置" @click="view = 'settings'"><AppIcon name="settings" :size="17" /></button>
+        <button class="rail-item" :class="{ active: view === 'settings' }" type="button" title="设置" aria-label="设置" @click="view = 'settings'"><AppIcon name="settings" :size="20" /><span>设置</span></button>
       </div>
     </aside>
 

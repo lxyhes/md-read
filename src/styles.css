@@ -9798,8 +9798,8 @@ a:active > .app-icon-vector { transform: scale(.92); }
 
 /* Moyue reading workspace: a slim tool rail beside a calm document drawer. */
 .app-shell:not(.is-focus) .global-nav {
-  width: 52px !important;
-  flex: 0 0 52px !important;
+  width: 68px !important;
+  flex: 0 0 68px !important;
   flex-direction: row;
   align-items: stretch;
   gap: 0;
@@ -9811,26 +9811,32 @@ a:active > .app-icon-vector { transform: scale(.92); }
 }
 .workspace-rail {
   display: flex;
-  width: 52px;
-  flex: 0 0 52px;
+  width: 68px;
+  min-height: 0;
+  flex: 0 0 68px;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 22px 5px 10px;
+  gap: 4px;
+  padding: 14px 5px 10px;
+  overflow-y: auto;
   background: transparent;
 }
 .rail-item {
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  flex: 0 0 36px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 56px;
+  height: 52px;
+  flex: 0 0 52px;
   border: 1px solid transparent;
   border-radius: 12px;
 }
 .rail-divider {
   width: 24px;
   height: 1px;
+  flex-shrink: 0;
   margin: 5px 0 4px;
   background: color-mix(in srgb, var(--border) 78%, transparent);
 }
@@ -9842,10 +9848,18 @@ a:active > .app-icon-vector { transform: scale(.92); }
   transition: background-color .18s ease, border-color .18s ease, color .18s ease, box-shadow .18s ease, transform .18s ease;
 }
 .rail-item .app-icon-vector {
-  width: 18px;
-  height: 18px;
-  stroke-width: 2.05;
+  width: 20px;
+  height: 20px;
+  stroke-width: 1.75;
   shape-rendering: geometricPrecision;
+}
+.rail-item > span {
+  font: 500 11px/1 var(--ui-font);
+  white-space: nowrap;
+}
+.rail-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 .rail-item:hover,
 .rail-item.active {
@@ -10061,8 +10075,8 @@ a:active > .app-icon-vector { transform: scale(.92); }
 .workspace-drawer .nav-motto { display: none; }
 .app-shell.nav-collapsed:not(.is-focus) .global-nav,
 .app-shell.nav-collapsed:not(.is-focus) .global-nav:hover {
-  width: 52px !important;
-  flex-basis: 52px !important;
+  width: 68px !important;
+  flex-basis: 68px !important;
 }
 .app-shell.nav-collapsed .workspace-drawer { display: none; }
 .app-shell.nav-collapsed .rail-collapse { transform: none; }
