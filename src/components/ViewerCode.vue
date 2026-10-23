@@ -6,11 +6,10 @@ import AppIcon from './AppIcon.vue'
 const props = defineProps<{ region: ReaderRegion; themeMode?: ThemeManifest['mode'] }>()
 const emit = defineEmits<{ copied: [] }>()
 const language = computed(() => String(props.region.metadata?.language ?? 'text'))
-const proseCodeLanguage = computed(() => /^(?:text|plaintext|markdown|md)$/i.test(language.value))
 
 const highlighted = ref(props.region.html)
 const copied = ref(false)
-const wrapped = ref(proseCodeLanguage.value)
+const wrapped = ref(true)
 const selectedCodeText = ref('')
 const activeCodeLine = ref('')
 let copyTimer: number | null = null

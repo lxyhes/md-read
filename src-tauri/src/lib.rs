@@ -581,7 +581,7 @@ fn open_directory(path: String) -> Result<(), String> {
     }
 
     #[cfg(target_os = "windows")]
-    let result = Command::new("explorer.exe").arg(directory).spawn();
+    let result = Command::new("explorer.exe").arg(path.replace('/', "\\")).spawn();
     #[cfg(target_os = "macos")]
     let result = Command::new("open").arg(directory).spawn();
     #[cfg(all(unix, not(target_os = "macos")))]

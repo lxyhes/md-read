@@ -15,7 +15,7 @@ const proseCodeLanguage = computed(() => /^(?:text|plaintext|markdown|md)$/i.tes
 const asciiDiagramCandidate = computed(() => props.region.type === 'code' && proseCodeLanguage.value)
 const highlighted = ref(props.region.html)
 const copied = ref(false)
-const wrapped = ref(proseCodeLanguage.value)
+const wrapped = ref(true)
 const selectedCodeText = ref('')
 const activeCodeLine = ref('')
 let copyTimer: number | null = null

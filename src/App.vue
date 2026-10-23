@@ -35,6 +35,8 @@ import { findEditorMatches, replaceEditorMatches } from './editorFind'
 import { parseEditableTable, serializeEditableTable, moveTableRow, moveTableColumn, deleteTableRow, deleteTableColumn, pasteTableCells, type TableAlignment } from './tableEditing'
 import { sortFileTreeEntries, type FileTreeSortMode } from './fileTreeSort'
 import { directoryFiles } from './directoryFiles'
+import { reconcileFilesystemEntries } from './filesystemTreeRefresh'
+import { relativeDocumentTreePath } from './filesystemTreeScope'
 import { orderRecentFolders, pinRecentFolder, rememberRecentFolder, removeRecentFolder, type RecentFolder } from './recentFolders'
 import { createExportCss, createPortableHtml } from './exportPresentation'
 import { createPrintHtml, printPortableHtml } from './exportPrint'
@@ -220,7 +222,7 @@ const draggingFiles = ref(false)
 const leftPanelTab = ref<'files' | 'outline'>('files')
 const contextPanelOpen = ref(false)
 const outlineQuery = ref('')
-const fileBrowserMode = ref<'list' | 'tree'>('list')
+const fileBrowserMode = ref<'list' | 'tree'>('tree')
 const sidebarFilter = ref<'markdown' | 'all' | 'hidden' | 'glob'>('markdown')
 const sidebarGlob = ref('*.md')
 const savedFileSort = localStorage.getItem('moyue:file-sort') as FileSortMode | null
@@ -2636,7 +2638,7 @@ function openFilesystemContextMenu(event: MouseEvent, node: FileSystemTreeNode) 
   openFileContextMenu(event, {
     path: node.path,
     name: node.name,
-    documentId: node.documentId,
+    documentId: node.documentId ?? store.documents.find((document) => filePathKey(document.path) === filePathKey(node.path))?.id,
     isDirectory: node.isDirectory,
   })
 }
@@ -2669,8 +2671,7 @@ function filesystemPathKey(path: string) {
 }
 
 function filesystemDocumentRoot(path: string) {
-  const directory = directoryOf(path)
-  return directory !== '当前工作区' && filesystemRoot(path) ? directory : ''
+  return filesystemRoot(path) ? fileDirectoryPath(path) : ''
 }
 
 function createFilesystemNode(path: string, name: string, isDirectory: boolean, metadata: Pick<FileSystemTreeNode, 'size' | 'createdAt' | 'modifiedAt'> = {}): FileSystemTreeNode {
@@ -2683,13 +2684,15 @@ function sortFilesystemTree(node: FileSystemTreeNode) {
   for (const child of node.children) sortFilesystemTree(child)
 }
 
-function createWorkspaceTree(): FileSystemTreeNode {
-  const root = createFilesystemNode('当前工作区', '当前工作区', true)
+function createWorkspaceTree(targetPath = store.currentDocument?.path ?? ''): FileSystemTreeNode {
+  const directory = fileDirectoryPath(targetPath)
+  const root = createFilesystemNode(directory || '@current-document', directory ? folderNameOf(directory) : '当前文档', true)
   root.expanded = true
   root.children = []
   const directories = new Map<string, FileSystemTreeNode>([['', root]])
   for (const document of store.documents) {
-    const path = normalizedPath(document.path).replace(/^\/+/, '')
+    const path = relativeDocumentTreePath(document.path, targetPath)
+    if (path === null) continue
     const parts = path.split('/').filter(Boolean)
     if (!parts.length) continue
     let parent = root
@@ -2698,7 +2701,7 @@ function createWorkspaceTree(): FileSystemTreeNode {
       directoryPath = directoryPath ? `${directoryPath}/${part}` : part
       let directory = directories.get(directoryPath)
       if (!directory) {
-        directory = { ...createFilesystemNode(`@workspace/${directoryPath}`, part, true), children: [] }
+        directory = { ...createFilesystemNode(joinFilePath(root.path, directoryPath), part, true), children: [] }
         parent.children?.push(directory)
         directories.set(directoryPath, directory)
       }
@@ -2707,7 +2710,7 @@ function createWorkspaceTree(): FileSystemTreeNode {
     parent.children?.push({ ...createFilesystemNode(document.path, fileNameOf(path), false), documentId: document.id })
   }
   function sortAndReveal(node: FileSystemTreeNode) {
-    node.expanded = true
+    node.expanded = node === root
     node.children = sortFileTreeEntries(node.children ?? [], fileSort.value, fileTreeMixFolders.value)
     for (const child of node.children ?? []) {
       sortAndReveal(child)
@@ -2751,18 +2754,24 @@ async function revealFilesystemTarget(node: FileSystemTreeNode, targetPath: stri
 async function expandFilesystemTree(node: FileSystemTreeNode) {
   await loadFilesystemNode(node)
   node.expanded = true
-  for (const child of node.children ?? []) {
-    if (child.isDirectory) await expandFilesystemTree(child)
-  }
 }
 
+const filesystemDirectoryRefreshes = new Set<string>()
 async function refreshFilesystemDirectory(path: string) {
   if (fileBrowserMode.value !== 'tree') return
   const node = filesystemNodeAt(path)
-  if (!node?.isDirectory) return
-  node.children = null
-  await loadFilesystemNode(node)
-  node.expanded = true
+  if (!node?.isDirectory || node.loading || filesystemDirectoryRefreshes.has(path)) return
+  filesystemDirectoryRefreshes.add(path)
+  try {
+    const entries = (await listFileSystemEntries(path))
+      .filter(entry => entry.isDirectory || matchesSidebarFilter(entry.name))
+    node.children = reconcileFilesystemEntries(node.children ?? [], sortFileTreeEntries(entries, fileSort.value, fileTreeMixFolders.value))
+    node.error = ''
+  } catch (error) {
+    node.error = error instanceof Error ? error.message : '无法读取此目录'
+  } finally {
+    filesystemDirectoryRefreshes.delete(path)
+  }
 }
 
 function fileDirectoryPath(path: string) {
@@ -2943,7 +2952,7 @@ async function toggleFileContextDirectory(file: FileTreeEntry) {
       filesystemTreeScope.value = 'workspace'
       filesystemTreeTarget.value = file.path
       filesystemTree.value = createWorkspaceTree()
-      notify('已打开已授权工作区的文件树')
+      notify('已显示当前目录中已载入的文档')
       return
     }
     filesystemTreeScope.value = 'system'
@@ -2969,7 +2978,7 @@ async function showDocumentTreeForEntry(file: FileTreeEntry) {
     filesystemTreeScope.value = 'workspace'
     filesystemTreeTarget.value = file.path
     filesystemTree.value = createWorkspaceTree()
-    notify('已打开已授权工作区的文件树')
+    notify('已显示当前目录中已载入的文档')
     return
   }
   if (file.isDirectory && isTauriRuntime() && hasRealFilesystemPath(file.path)) {
@@ -2995,7 +3004,8 @@ async function showDocumentTreeForEntry(file: FileTreeEntry) {
 }
 
 async function showDocumentTree() {
-  const file = fileContextMenu.value?.file
+  const document = store.currentDocument
+  const file = fileContextMenu.value?.file ?? (document ? { path: document.path, name: fileNameOf(document.path) } : null)
   if (!file) return
   await showDocumentTreeForEntry(file)
 }
@@ -3004,17 +3014,18 @@ async function syncFilesystemTreeTarget(path: string) {
   if (fileBrowserMode.value !== 'tree' || !path) return
   filesystemTreeTarget.value = path
   const rootPath = filesystemDocumentRoot(path)
-  if (filesystemTreeScope.value === 'workspace' || !rootPath) {
+  if (!isTauriRuntime() || !rootPath) {
     filesystemTreeScope.value = 'workspace'
-    filesystemTree.value = createWorkspaceTree()
+    filesystemTree.value = createWorkspaceTree(path)
     return
   }
-  if (!filesystemTree.value || filesystemPathKey(filesystemTree.value.path) !== filesystemPathKey(rootPath)) {
+  const root = filesystemTree.value
+  const rootKey = root ? filesystemPathKey(root.path) : ''
+  if (filesystemTreeScope.value !== 'system' || !root || rootKey !== filesystemPathKey(rootPath)) {
     filesystemTree.value = createFilesystemNode(rootPath, fileNameOf(rootPath) || rootPath, true)
-    await expandFilesystemTree(filesystemTree.value)
-  } else {
-    await revealFilesystemTarget(filesystemTree.value, path)
   }
+  filesystemTreeScope.value = 'system'
+  await revealFilesystemTarget(filesystemTree.value!, path)
 }
 
 async function openFilesystemTreeNode(node: FileSystemTreeNode) {
@@ -3137,8 +3148,10 @@ async function openFileContextDirectory() {
       await openFileSystemDirectory(file.path)
       notify('已打开文件夹')
     } else {
-      await openMarkdownDirectory(file.path)
-      notify('已打开文件所在目录')
+      const path = store.currentDocument?.path
+      if (!path || !hasRealFilesystemPath(path)) throw new Error('当前 MD 没有本地文件路径')
+      await openMarkdownDirectory(path)
+      notify('已打开当前 MD 所在目录')
     }
   } catch (error) {
     notify(error instanceof Error ? error.message : '打开目录失败')
@@ -3306,6 +3319,12 @@ watch([fileSort, fileTreeMixFolders], ([sort, mixFolders]) => {
   localStorage.setItem('moyue:file-sort', sort)
   localStorage.setItem('moyue:file-tree-mix-folders', String(mixFolders))
   if (filesystemTree.value) sortFilesystemTree(filesystemTree.value)
+})
+watch([sidebarFilter, sidebarGlob], async () => {
+  const root = filesystemTree.value
+  if (fileBrowserMode.value !== 'tree' || filesystemTreeScope.value !== 'system' || !root) return
+  root.children = null
+  await revealFilesystemTarget(root, filesystemTreeTarget.value)
 })
 watch(() => store.mode, (mode) => { if (mode !== 'focus') stopFocusTimer() })
 watch(() => store.currentDocument?.path, (path) => { fileSyncState.value = 'idle'; focusScrollTargetId = null; outlineQuery.value = ''; selectedFilePaths.value = []; invalidateRegionLayout(); void refreshFileTree(); if (path) { rememberFolder(directoryOf(path)); void syncFilesystemTreeTarget(path) } }, { immediate: true })
@@ -3812,7 +3831,8 @@ function fileStatus(file: { documentId?: string }) {
 }
 async function openFileTreeEntry(file: { path: string; name: string; documentId?: string }) {
   if (fileBrowserMode.value === 'tree') filesystemTreeTarget.value = file.path
-  if (file.documentId) { await chooseDocument(file.documentId); return }
+  const documentId = file.documentId ?? store.documents.find((document) => filePathKey(document.path) === filePathKey(file.path))?.id
+  if (documentId) { await chooseDocument(documentId); return }
   if (!/\.(md|markdown|qmd)$/i.test(file.name)) { notify('当前只支持打开 Markdown / Quarto 文件'); return }
   if (busyAction.value) return
   busyAction.value = 'file'
@@ -4804,7 +4824,7 @@ async function requestFullscreen() {
               <button ref="outlinePanelToggleButton" class="text-button outline-panel-toggle" type="button" title="收起阅读侧栏" aria-label="收起阅读侧栏" :aria-expanded="!outlinePanelCollapsed" aria-controls="reader-sidebar" @click="toggleOutlinePanel"><AppIcon name="chevron-right" :size="12" />收起</button>
             </div>
             <div v-if="leftPanelTab === 'files'" class="file-browser-panel">
-              <div class="file-location" :title="fileBrowserMode === 'tree' ? filesystemTree?.path : currentDirectory"><AppIcon :name="fileBrowserMode === 'tree' ? 'library' : 'folder'" :size="13" /><span>{{ fileBrowserMode === 'tree' ? filesystemTreeScope === 'system' ? '文档树' : '工作区文档树' : currentDirectoryLabel }}</span><small>{{ fileBrowserMode === 'tree' ? filesystemTreeScope === 'system' ? '当前目录' : '已授权文件' : '所在目录' }}</small><button v-if="fileBrowserMode === 'tree'" type="button" class="file-tree-back" aria-label="返回当前目录文件列表" @click="showDocumentList">返回</button></div>
+              <div class="file-location" :title="fileBrowserMode === 'tree' ? filesystemTree?.path : currentDirectory"><AppIcon name="folder" :size="13" /><span>{{ fileBrowserMode === 'tree' ? '目录树' : currentDirectoryLabel }}</span><button class="file-tree-back" type="button" :aria-label="fileBrowserMode === 'tree' ? '切换到文档列表' : '切换到目录树'" @click="fileBrowserMode === 'tree' ? showDocumentList() : showDocumentTree()">{{ fileBrowserMode === 'tree' ? '列表' : '目录树' }}</button></div>
               <div class="file-filter-toolbar" aria-label="文件侧栏筛选">
                 <select v-model="sidebarFilter" aria-label="文件筛选方式"><option value="markdown">Markdown 文件</option><option value="hidden">包含隐藏文件</option><option value="all">全部文件</option><option value="glob">自定义 glob</option></select>
                 <input v-if="sidebarFilter === 'glob'" v-model="sidebarGlob" aria-label="自定义 glob" placeholder="例如 *.md" />
@@ -4812,8 +4832,8 @@ async function requestFullscreen() {
                 <label v-if="fileBrowserMode === 'tree'" class="file-tree-mix"><input v-model="fileTreeMixFolders" type="checkbox" />混排</label>
               </div>
               <div v-if="fileBrowserMode === 'tree'" class="filesystem-tree-panel">
-                <div v-if="filesystemTree" class="filesystem-tree" :aria-label="filesystemTreeScope === 'system' ? '当前目录文档树' : '工作区文档树'"><FileSystemTree :node="filesystemTree" :selected-path="filesystemTreeTarget" @toggle="toggleFilesystemNode" @open="openFilesystemTreeNode" @contextmenu="openFilesystemContextMenu" /></div>
-                <p v-else class="file-browser-note"><AppIcon name="info" :size="13" />右键文件选择“文档树”以打开文件层级</p>
+                <div v-if="filesystemTree" class="filesystem-tree" :aria-label="filesystemTreeScope === 'system' ? '当前目录文档树' : '当前目录已载入文档'"><FileSystemTree :node="filesystemTree" :selected-path="filesystemTreeTarget" @toggle="toggleFilesystemNode" @open="openFilesystemTreeNode" @contextmenu="openFilesystemContextMenu" /></div>
+                <p v-else class="file-browser-note"><AppIcon name="info" :size="13" />打开 Markdown 文件后显示所在目录</p>
               </div>
               <div v-else class="file-list-shell">
                 <div v-if="batchDeletableFiles.length" class="file-list-toolbar">
@@ -5022,7 +5042,7 @@ async function requestFullscreen() {
                 <div class="regions-stack" :class="{ virtualized: virtualizedReader }">
                 <div v-if="virtualRange.before" class="virtual-spacer" :style="{ height: `${virtualRange.before}px` }" aria-hidden="true" />
                 <div class="virtual-regions">
-                  <RegionBlock v-for="region in virtualRange.regions" v-memo="[region.id, store.currentDocument?.sourceHash, store.activeRegionId === region.id, store.focusedRegionId === region.id, focusDistanceByRegion.get(region.id), store.mode, store.activeThemeId, currentAnnotationsByRegion.get(region.id)]" :key="region.id" :region="region" :annotations="currentAnnotationsByRegion.get(region.id)" :focused="store.focusedRegionId === region.id" :active="store.activeRegionId === region.id" :focus-distance="focusDistanceByRegion.get(region.id)" :theme-mode="store.activeTheme?.manifest.mode" :theme-key="`${store.mode}-${store.activeThemeId}`" @focus="focusRegion(region)" @open-viewer="openViewer(region)" @open-link="openExternalLink" @code-copied="notify('代码已复制')" @math-copied="notify('MathML 已复制')" @math-copy-failed="notify('复制 MathML 失败，请检查剪贴板权限')" @copy-image="copyRegionAsImage(region)" @toggle-task="toggleTask(region)" />
+                  <RegionBlock v-for="region in virtualRange.regions" v-memo="[region, store.currentDocument?.sourceHash, store.activeRegionId === region.id, store.focusedRegionId === region.id, focusDistanceByRegion.get(region.id), store.mode, store.activeThemeId, currentAnnotationsByRegion.get(region.id)]" :key="region.id" :region="region" :annotations="currentAnnotationsByRegion.get(region.id)" :focused="store.focusedRegionId === region.id" :active="store.activeRegionId === region.id" :focus-distance="focusDistanceByRegion.get(region.id)" :theme-mode="store.activeTheme?.manifest.mode" :theme-key="`${store.mode}-${store.activeThemeId}`" @focus="focusRegion(region)" @open-viewer="openViewer(region)" @open-link="openExternalLink" @code-copied="notify('代码已复制')" @math-copied="notify('MathML 已复制')" @math-copy-failed="notify('复制 MathML 失败，请检查剪贴板权限')" @copy-image="copyRegionAsImage(region)" @toggle-task="toggleTask(region)" />
                 </div>
                 <div v-if="virtualRange.after" class="virtual-spacer" :style="{ height: `${virtualRange.after}px` }" aria-hidden="true" />
                 </div></div>
