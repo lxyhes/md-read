@@ -4,6 +4,8 @@ import { invoke, isTauri as tauriIsTauri } from '@tauri-apps/api/core'
 import { readNativeClipboardRichText } from './nativeClipboard'
 import { useReaderStore } from './stores/reader'
 import RegionBlock from './components/RegionBlock.vue'
+import SecondDocumentPane from './components/SecondDocumentPane.vue'
+import { decodeLinkPart, findDocumentHeading } from './documentLinks'
 import WebPreviewPanel from './components/WebPreviewPanel.vue'
 import MermaidBlock from './components/MermaidBlock.vue'
 import TreeDiagram from './components/TreeDiagram.vue'
@@ -72,6 +74,9 @@ const outlinePanelMaxWidth = 380
 const outlinePanelDefaultWidth = typeof window !== 'undefined' && window.innerWidth < 1181 ? 195 : 204
 const savedOutlinePanelWidth = Number(localStorage.getItem('moyue:outline-panel-width'))
 const outlinePanelWidth = ref(Number.isFinite(savedOutlinePanelWidth) ? Math.min(outlinePanelMaxWidth, Math.max(outlinePanelMinWidth, savedOutlinePanelWidth)) : outlinePanelDefaultWidth)
+const outlinePanelCollapsed = ref(localStorage.getItem('moyue:outline-panel-collapsed') === 'true')
+const outlinePanelExpandButton = ref<HTMLButtonElement | null>(null)
+const outlinePanelToggleButton = ref<HTMLButtonElement | null>(null)
 const outlinePanelResizing = ref(false)
 let outlineResizeStart: { x: number; width: number; handle: HTMLElement } | null = null
 const readerViewport = ref<HTMLElement | null>(null)
@@ -226,6 +231,9 @@ const filesystemTreeScope = ref<'system' | 'workspace'>('workspace')
 const filesystemFiles = ref<WorkspaceFile[]>([])
 const filesystemFilesDirectory = ref<string | null>(null)
 const tabListOpen = ref(false)
+const dualDocumentMode = ref(false)
+const showSecondDocument = computed(() => dualDocumentMode.value && store.openDocuments.length > 1)
+watch(() => store.openDocuments.length, count => { if (count < 2) dualDocumentMode.value = false })
 const tabListTrigger = ref<HTMLElement | null>(null)
 const tabListPopoverStyle = ref<Record<string, string>>({})
 const tabSearchQuery = ref('')
@@ -576,21 +584,7 @@ const focusPosition = computed(() => {
   return index < 0 ? '' : `${index + 1} / ${readerRegions.value.length}`
 })
 function isTauriRuntime() { return tauriIsTauri() }
-function linkHeadingSlug(value: string) {
-  return value.trim().toLowerCase().replace(/[^\w\u3400-\u9fff -]/g, '').replace(/\s+/g, '-')
-}
-
-function decodeLinkPart(value: string) {
-  try { return decodeURIComponent(value) } catch { return value }
-}
-
-function findDocumentHeading(document: ReaderDocument | null, fragment: string) {
-  const needle = decodeLinkPart(fragment.replace(/^#/, '')).trim().toLowerCase()
-  if (!document || !needle) return null
-  return document.headings.find((heading) => heading.id.toLowerCase() === needle || linkHeadingSlug(heading.text) === needle || heading.text.trim().toLowerCase() === needle) ?? null
-}
-
-async function openExternalLink(url: string) {
+async function openExternalLink(url: string, sourceDocument = store.currentDocument) {
   const normalized = url.trim()
   if (!normalized) return
   if (/^(?:https?:|mailto:|tel:|\/\/)/i.test(normalized)) {
@@ -606,7 +600,7 @@ async function openExternalLink(url: string) {
     return
   }
 
-  const current = store.currentDocument
+  const current = sourceDocument
   if (!current) return
   if (normalized.startsWith('#')) {
     const heading = findDocumentHeading(current, normalized)
@@ -2318,6 +2312,11 @@ function setOutlinePanelWidth(width: number) {
   outlinePanelWidth.value = Math.round(Math.min(outlinePanelMaxWidth, Math.max(outlinePanelMinWidth, width)))
   localStorage.setItem('moyue:outline-panel-width', String(outlinePanelWidth.value))
 }
+function toggleOutlinePanel() {
+  outlinePanelCollapsed.value = !outlinePanelCollapsed.value
+  localStorage.setItem('moyue:outline-panel-collapsed', String(outlinePanelCollapsed.value))
+  void nextTick(() => (outlinePanelCollapsed.value ? outlinePanelExpandButton : outlinePanelToggleButton).value?.focus())
+}
 function startOutlinePanelResize(event: PointerEvent) {
   if (event.button !== 0) return
   const handle = event.currentTarget as HTMLElement
@@ -2328,11 +2327,21 @@ function startOutlinePanelResize(event: PointerEvent) {
   window.addEventListener('pointermove', onOutlinePanelResize)
   window.addEventListener('pointerup', stopOutlinePanelResize)
   window.addEventListener('pointercancel', stopOutlinePanelResize)
-  event.preventDefault()
 }
 function onOutlinePanelResize(event: PointerEvent) {
   if (!outlineResizeStart) return
-  setOutlinePanelWidth(outlineResizeStart.width + event.clientX - outlineResizeStart.x)
+  const width = outlineResizeStart.width + event.clientX - outlineResizeStart.x
+  if (width < 120) {
+    outlinePanelCollapsed.value = true
+    localStorage.setItem('moyue:outline-panel-collapsed', 'true')
+    stopOutlinePanelResize(event)
+    void nextTick(() => outlinePanelExpandButton.value?.focus())
+    return
+  }
+  setOutlinePanelWidth(width)
+}
+function resetOutlinePanelWidth() {
+  setOutlinePanelWidth(outlinePanelDefaultWidth)
 }
 function stopOutlinePanelResize(event?: PointerEvent) {
   if (!outlineResizeStart) return
@@ -2353,6 +2362,9 @@ function onOutlinePanelResizeKeydown(event: KeyboardEvent) {
     event.preventDefault()
   } else if (event.key === 'End') {
     setOutlinePanelWidth(outlinePanelMaxWidth)
+    event.preventDefault()
+  } else if (event.key === 'Enter') {
+    toggleOutlinePanel()
     event.preventDefault()
   }
 }
@@ -4686,6 +4698,7 @@ async function requestFullscreen() {
             </div>
           </div>
           <div class="reader-tab-actions">
+            <button class="text-button dual-document-toggle" type="button" :aria-pressed="dualDocumentMode" :disabled="store.openDocuments.length < 2" :title="store.openDocuments.length < 2 ? '先打开两篇 Markdown 文档' : '并排阅读两篇 Markdown 文档'" @click="dualDocumentMode = !dualDocumentMode">{{ dualDocumentMode ? '单文档' : '双文档' }}</button>
             <IconButton class="reader-new-tab" icon="plus" size="sm" label="打开新文档" :disabled="busyAction !== null" @click="openFile" />
             <div ref="tabListTrigger" class="reader-tab-list-wrap">
               <IconButton class="reader-tab-list-trigger" icon="chevron-down" size="sm" :active="tabListOpen" :label="`查看全部标签（${store.openDocuments.length}）`" :aria-expanded="tabListOpen" @click.stop="toggleTabList" />
@@ -4767,15 +4780,17 @@ async function requestFullscreen() {
             </div>
           </div>
         </Teleport>
-        <div class="reader-layout" :class="{ 'focus-layout': store.mode === 'focus', 'clean-layout': store.mode === 'clean', 'split-layout': readerDisplayMode === 'split', 'context-open': contextPanelOpen, 'is-resizing-outline': outlinePanelResizing }" :style="{ '--outline-panel-width': `${outlinePanelWidth}px`, gridTemplateColumns: webPreviewUrl ? 'minmax(0, 1fr)' : undefined }">
-          <aside v-if="store.mode !== 'focus' && store.mode !== 'clean'" class="outline-panel">
-            <div class="outline-resizer" role="separator" tabindex="0" aria-orientation="vertical" aria-label="调整文档侧栏宽度" :aria-valuemin="outlinePanelMinWidth" :aria-valuemax="outlinePanelMaxWidth" :aria-valuenow="outlinePanelWidth" title="拖动调整侧栏宽度" @pointerdown="startOutlinePanelResize" @keydown="onOutlinePanelResizeKeydown" />
+        <div class="reader-layout" :class="{ 'focus-layout': store.mode === 'focus', 'clean-layout': store.mode === 'clean', 'split-layout': readerDisplayMode === 'split', 'context-open': contextPanelOpen, 'outline-panel-collapsed': outlinePanelCollapsed, 'is-resizing-outline': outlinePanelResizing }" :style="{ '--outline-panel-width': `${outlinePanelWidth}px`, gridTemplateColumns: webPreviewUrl ? 'minmax(0, 1fr)' : undefined }">
+          <aside v-if="store.mode !== 'focus' && store.mode !== 'clean'" id="reader-sidebar" class="outline-panel" :class="{ 'is-collapsed': outlinePanelCollapsed }">
+            <button v-if="outlinePanelCollapsed" ref="outlinePanelExpandButton" class="outline-panel-expand" type="button" title="展开阅读侧栏" aria-label="展开阅读侧栏" :aria-expanded="!outlinePanelCollapsed" aria-controls="reader-sidebar" @click="toggleOutlinePanel"><AppIcon name="chevron-right" :size="13" /><span>展开</span></button>
+            <template v-else>
+            <div class="outline-resizer" role="separator" tabindex="0" aria-orientation="vertical" aria-label="调整阅读侧栏宽度；拖窄可收起，双击恢复默认宽度，按 Enter 收起" :aria-valuemin="outlinePanelMinWidth" :aria-valuemax="outlinePanelMaxWidth" :aria-valuenow="outlinePanelWidth" :aria-valuetext="`${outlinePanelWidth}px`" title="拖动调整宽度；拖窄可收起；双击恢复默认宽度" @pointerdown="startOutlinePanelResize" @dblclick="resetOutlinePanelWidth" @keydown="onOutlinePanelResizeKeydown" />
             <div class="panel-heading panel-switcher">
               <div class="panel-tabs" role="tablist" aria-label="阅读侧栏">
             <button type="button" :class="{ active: leftPanelTab === 'files' }" @click="leftPanelTab = 'files'">文件 <span>{{ currentDirectoryFiles.length }}</span></button>
                 <button type="button" :class="{ active: leftPanelTab === 'outline' }" @click="leftPanelTab = 'outline'">大纲</button>
               </div>
-              <button class="text-button" type="button" @click="toggleCleanMode">收起</button>
+              <button ref="outlinePanelToggleButton" class="text-button outline-panel-toggle" type="button" title="收起阅读侧栏" aria-label="收起阅读侧栏" :aria-expanded="!outlinePanelCollapsed" aria-controls="reader-sidebar" @click="toggleOutlinePanel"><AppIcon name="chevron-right" :size="12" />收起</button>
             </div>
             <div v-if="leftPanelTab === 'files'" class="file-browser-panel">
               <div class="file-location" :title="fileBrowserMode === 'tree' ? filesystemTree?.path : currentDirectory"><AppIcon :name="fileBrowserMode === 'tree' ? 'library' : 'folder'" :size="13" /><span>{{ fileBrowserMode === 'tree' ? filesystemTreeScope === 'system' ? '文档树' : '工作区文档树' : currentDirectoryLabel }}</span><small>{{ fileBrowserMode === 'tree' ? filesystemTreeScope === 'system' ? '当前目录' : '已授权文件' : '所在目录' }}</small><button v-if="fileBrowserMode === 'tree'" type="button" class="file-tree-back" aria-label="返回当前目录文件列表" @click="showDocumentList">返回</button></div>
@@ -4819,7 +4834,9 @@ async function requestFullscreen() {
                 <p v-if="!outlineRows.length" class="outline-empty">没有匹配的章节</p>
               </nav>
             </div>
+            </template>
           </aside>
+          <div class="reader-document-panes" :class="{ 'has-second-document': showSecondDocument }">
           <div class="reader-column">
             <div class="reader-meta">
               <div class="reader-meta-document">
@@ -5006,6 +5023,10 @@ async function requestFullscreen() {
                 </div>
               </div>
             </div>
+          </div>
+          <KeepAlive>
+            <SecondDocumentPane v-if="showSecondDocument" :documents="store.openDocuments" :current-document-id="store.currentDocumentId" :theme-mode="store.activeTheme?.manifest.mode" :theme-key="store.activeThemeId" @close="dualDocumentMode = false" @activate="chooseDocument" @notify="notify" @open-link="openExternalLink" @open-viewer="openViewer" @copy-image="copyRegionAsImage" />
+          </KeepAlive>
           </div>
           <Teleport to="body">
             <div v-if="editorContextMenu" class="editor-context-menu" :style="{ top: `${editorContextMenu.y}px`, left: `${editorContextMenu.x}px` }" role="menu">

@@ -827,6 +827,13 @@ fn export_html_to_pdf(source: String, path: String) -> Result<(), String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .on_page_load(|webview, payload| {
+            if webview.label() == "main" && payload.event() == tauri::webview::PageLoadEvent::Finished {
+                if let Err(error) = webview.window().show() {
+                    eprintln!("无法显示墨阅主窗口：{error}");
+                }
+            }
+        })
         .manage(DirectoryHandles::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
