@@ -24,6 +24,8 @@ const sample = `# 一次安静的阅读\n\n墨阅把 Markdown 变成一个可以
 
 export const useReaderStore = defineStore('reader', () => {
   const documents = shallowRef<ReaderDocument[]>([])
+  const restoredDocumentIds = new Set<string>()
+  let openDocumentRequest = 0
   const openDocumentIds = ref<string[]>([])
   const currentDocumentId = ref<string | null>(null)
   const mode = ref<ReaderMode>('normal')
@@ -218,22 +220,9 @@ export const useReaderStore = defineStore('reader', () => {
     applyTheme(activeTheme.value)
     const saved = loadDocumentSnapshots()
     const session = readSession()
-    const savedIds = new Set(saved.map((document) => document.id))
-    const sessionOpenIds = (session.openDocumentIds ?? []).filter((id) => savedIds.has(id))
-    const bootstrapId = session.currentDocumentId && sessionOpenIds.includes(session.currentDocumentId)
-      ? session.currentDocumentId
-      : sessionOpenIds[0] ?? saved[0]?.id
-    const imagePrivacyEnabled = (() => {
-      try { return JSON.parse(localStorage.getItem('moyue:advanced-settings') ?? '{}').remoteImagePrivacy === true }
-      catch { return false }
-    })()
-    const needsAssetRefresh = (document: ReaderDocument) => document.regions.some((region) => {
-      if (region.type !== 'image') return false
-      const url = String(region.metadata?.url ?? '')
-      return (!imagePrivacyEnabled && /referrerpolicy=["']no-referrer["']/i.test(region.html)) || url.startsWith('blob:') || /asset\.localhost/i.test(url) || !/^(?:https?:|data:|blob:)/i.test(url)
-    })
     if (saved.length) {
       documents.value = saved
+      saved.forEach((document) => restoredDocumentIds.add(document.id))
     }
     else {
       const { parseMarkdown } = await import('../parser')
@@ -244,23 +233,6 @@ export const useReaderStore = defineStore('reader', () => {
     if (!openDocumentIds.value.length) openDocumentIds.value = [documents.value[0].id]
     const initialId = session.currentDocumentId && openDocumentIds.value.includes(session.currentDocumentId) ? session.currentDocumentId : openDocumentIds.value[0]
     await openDocument(initialId, { deferProgress: true })
-    const initialDocument = documents.value.find((document) => document.id === initialId)
-    if (!initialDocument) return
-    window.requestAnimationFrame(() => window.setTimeout(() => {
-      void (async () => {
-        const refreshed = needsAssetRefresh(initialDocument)
-          ? await parseOpenedFile({ path: initialDocument.path, source: initialDocument.source })
-          : (() => {
-              const headings = parseMarkdown(initialDocument.path, initialDocument.source).headings
-              return headings.length === initialDocument.headings.length && headings.every((heading, index) => heading.text === initialDocument.headings[index]?.text && heading.depth === initialDocument.headings[index]?.depth)
-                ? initialDocument
-                : { ...initialDocument, headings }
-            })()
-        if (refreshed === initialDocument || !documents.value.some((document) => document.id === initialId && document.sourceHash === initialDocument.sourceHash)) return
-        documents.value = [...documents.value.filter((document) => document.id !== initialId), refreshed]
-        await saveDocumentSnapshot(refreshed)
-      })().catch(() => {})
-    }, 0))
   }
 
   async function importFiles() { return addOpenedFiles(await openMarkdownFile()) }
@@ -269,6 +241,16 @@ export const useReaderStore = defineStore('reader', () => {
   async function openDocument(id: string, options: { deferProgress?: boolean } = {}) {
     const document = documents.value.find((item) => item.id === id)
     if (!document) return
+    const request = ++openDocumentRequest
+    if (restoredDocumentIds.has(id)) {
+      const refreshed = await parseOpenedFile({ path: document.path, source: document.source })
+      if (documents.value.includes(document)) {
+        documents.value = documents.value.map((item) => item.id === id ? refreshed : item)
+        restoredDocumentIds.delete(id)
+        await saveDocumentSnapshot(refreshed)
+      }
+      if (request !== openDocumentRequest) return
+    }
     const keepCleanMode = mode.value === 'clean'
     if (!openDocumentIds.value.includes(id)) openDocumentIds.value.push(id)
     currentDocumentId.value = id

@@ -1503,16 +1503,6 @@ html, body, #app { background: var(--app-bg, #070d22); }
   border: 0;
   background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--border) 25%, transparent), transparent);
 }
-.reader-content .region-content .unsafe-html,
-.reader-content .region-content .unsafe-inline {
-  display: block;
-  padding: 10px 12px;
-  border: 1px dashed var(--border);
-  border-radius: 8px;
-  color: var(--muted);
-  background: color-mix(in srgb, var(--surface) 68%, transparent);
-  font: 11px var(--ui-font);
-}
 .reader-content .region-content .math-block {
   max-width: 100%;
   margin: 22px 0;
@@ -3333,36 +3323,43 @@ button:focus-visible,
   scrollbar-color: var(--accent-soft) transparent;
 }
 .filesystem-tree-node {
-  min-width: max-content;
+  min-width: 0;
 }
 .filesystem-tree-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   width: 100%;
-  min-width: 190px;
+  min-width: 0;
   min-height: 28px;
-  padding-top: 5px;
-  padding-right: 10px;
-  padding-bottom: 5px;
+  padding-top: 4px;
+  padding-right: 8px;
+  padding-bottom: 4px;
   border-left: 2px solid transparent;
+  border-radius: 0;
   background: transparent;
   color: var(--muted);
   text-align: left;
-  font: 10px var(--ui-font);
-  transition: background .16s ease, color .16s ease, border-color .16s ease;
+  font: 12px/20px var(--ui-font);
 }
-.filesystem-tree-row:hover,
+.filesystem-tree-row:hover {
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  color: var(--ink);
+}
 .filesystem-tree-row.selected {
   border-left-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--ink);
 }
-.filesystem-tree-row.directory {
-  color: var(--ink);
+.filesystem-tree-row:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
 }
 .filesystem-tree-row > .app-icon {
   flex: 0 0 auto;
+  color: var(--muted);
+}
+.filesystem-tree-row.selected > .app-icon {
   color: var(--accent);
 }
 .filesystem-tree-chevron {
@@ -3372,14 +3369,9 @@ button:focus-visible,
   flex: 0 0 12px;
   color: var(--muted);
 }
-.filesystem-tree-chevron i {
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: var(--muted);
-}
 .filesystem-tree-name {
-  max-width: 190px;
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -7142,9 +7134,9 @@ body.is-resizing-outline * {
   }
 }
 .reader-edit-actions { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
-.file-filter-toolbar { display: flex; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.file-filter-toolbar { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
 .file-filter-toolbar select, .file-filter-toolbar input { min-width: 0; width: 100%; padding: 6px 7px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-raised); color: var(--ink); font: 10px var(--ui-font); }
-.file-filter-toolbar select { flex: 1 1 92px; }
+.file-filter-toolbar select { flex: 1 1 92px; min-width: 78px; }
 .file-filter-toolbar select:last-child { flex-basis: 78px; }
 .file-filter-toolbar input { flex: 1 1 76px; }
 .file-tree-mix { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 4px; padding: 0 2px; color: var(--muted); font: 9px var(--ui-font); white-space: nowrap; }
@@ -9742,6 +9734,28 @@ a:active > .app-icon-vector { transform: scale(.92); }
 .app-shell .reader-content :is(.code-toolbar, .table-region-toolbar) {
   border-bottom-color: var(--border) !important;
   background: var(--surface) !important;
+}
+
+/* Keep dense technical prose readable without turning every code span into a pill. */
+.app-shell:not(.is-focus) .reader-content:not(.is-course-outline) .region-content :is(p, li, td) code {
+  display: inline;
+  max-width: none;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  padding: .05em .2em;
+  border: 0;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent-soft) 62%, transparent);
+  color: color-mix(in srgb, var(--ink) 94%, var(--accent));
+  font-size: .88em;
+  line-height: inherit;
+  vertical-align: baseline;
+  white-space: break-spaces;
+}
+
+.app-shell:not(.is-focus) .reader-content:not(.is-course-outline) .region-content p:has(br) {
+  line-height: max(var(--reader-leading), 2.15);
+  text-align: start;
 }
 
 @media (min-width: 1181px) {

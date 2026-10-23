@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { parseMarkdown } from '../parser'
 import { useReaderStore } from './reader'
-import { saveDocument, deleteDocument, loadAnnotations } from '../persistence'
+import { saveDocument, deleteDocument, loadAnnotations, loadDocumentSnapshots, saveDocumentSnapshot, getProgress } from '../persistence'
 import { createRemoteAssetMap } from '../fileService'
 
 vi.mock('../persistence', () => ({
@@ -12,7 +12,7 @@ vi.mock('../persistence', () => ({
 }))
 vi.mock('../fileService', () => ({
   authorizeMarkdownAssets: vi.fn(), createRemoteAssetMap: vi.fn(), createTauriAssetMap: vi.fn(),
-  openMarkdownFile: vi.fn(), openMarkdownFolder: vi.fn(), resolveMarkdownAssetUrl: (_path: string, url: string) => url,
+  openMarkdownFile: vi.fn(), openMarkdownFolder: vi.fn(), resolveMarkdownAssetUrl: (_path: string, url: string, assets?: Record<string, string>) => assets?.[url] ?? url,
 }))
 
 beforeEach(() => {
@@ -23,6 +23,7 @@ beforeEach(() => {
     setItem: (key: string, value: string) => values.set(key, value),
     removeItem: (key: string) => values.delete(key),
   })
+  vi.mocked(getProgress).mockResolvedValue(null)
   vi.mocked(saveDocument).mockResolvedValue()
   vi.mocked(loadAnnotations).mockReturnValue([])
   setActivePinia(createPinia())
@@ -82,5 +83,38 @@ describe('path-only document rename', () => {
     expect(store.progress[renamed!.id]?.scrollPercent).toBe(42)
     expect(store.annotations[0]?.regionId).toBe(renamed!.regions[0]!.id)
     expect(renamed!.regions[1]!.metadata?.url).toBe('blob:cached-image')
+  })
+})
+
+
+describe('restoring saved reader documents', () => {
+  it('rebuilds stale HTML and image URLs before displaying each restored tab', async () => {
+    vi.stubGlobal('document', {
+      documentElement: { style: { setProperty: vi.fn() } },
+      getElementById: () => ({ textContent: '' }),
+    })
+    const first = parseMarkdown('first.md', '# First\n\n| Label | Value |\n| --- | --- |\n| Direction | **Software** |')
+    first.regions[1]!.html = '<table>HTML 已隐藏</table>'
+    const imageUrl = 'https://example.com/image.png'
+    const second = parseMarkdown('second.md', `# Second\n\n![image](${imageUrl})`, () => 'blob:expired-session')
+    vi.mocked(loadDocumentSnapshots).mockReturnValue([first, second])
+    vi.mocked(createRemoteAssetMap).mockResolvedValue({ [imageUrl]: 'blob:current-session' })
+    const store = useReaderStore()
+
+    await store.bootstrap()
+    expect(store.currentDocument?.regions[1]?.html).toContain('<strong>Software</strong>')
+    expect(store.currentDocument?.regions[1]?.html).not.toContain('HTML 已隐藏')
+    expect(createRemoteAssetMap).not.toHaveBeenCalled()
+
+    const opening = store.openDocument(second.id)
+    expect(store.currentDocument?.id).toBe(first.id)
+    await opening
+    expect(store.currentDocument?.id).toBe(second.id)
+    expect(store.currentDocument?.regions[1]?.html).toContain('blob:current-session')
+    expect(store.currentDocument?.regions[1]?.html).not.toContain('blob:expired-session')
+    expect(saveDocumentSnapshot).toHaveBeenCalledTimes(2)
+    await store.openDocument(second.id)
+    expect(createRemoteAssetMap).toHaveBeenCalledTimes(1)
+    vi.unstubAllGlobals()
   })
 })

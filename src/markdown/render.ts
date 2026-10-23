@@ -1,3 +1,4 @@
+import DOMPurify from 'dompurify'
 import {
   createRenderContext,
   escapeHtml,
@@ -10,6 +11,15 @@ import {
   type MdastNode,
   type RenderContext,
 } from './shared'
+
+function sanitizeRawHtml(value: string) {
+  if (typeof window === 'undefined') return escapeHtml(value)
+  return DOMPurify.sanitize(value, {
+    USE_PROFILES: { html: true },
+    FORBID_TAGS: ['style', 'iframe', 'object', 'embed', 'form', 'input', 'button', 'textarea', 'select', 'option'],
+    FORBID_ATTR: ['target'],
+  })
+}
 
 function autoLinkEnabled() {
   if (typeof localStorage === 'undefined') return true
@@ -54,7 +64,7 @@ function inlineHtml(node: MdastNode, preserveSoftBreaks = false, resolveUrl: Mar
       context.footnoteReferences.set(identifier, occurrence)
       return `<sup class="footnote-ref"><a href="#footnote-${index + 1}" id="footnote-ref-${index + 1}${occurrence > 1 ? `-${occurrence}` : ''}">[${index + 1}]</a></sup>`
     }
-    case 'html': return '<span class="unsafe-inline">HTML 已隐藏</span>'
+    case 'html': return sanitizeRawHtml(node.value ?? '')
     default: return children()
   }
 }
@@ -188,7 +198,7 @@ function blockHtml(node: MdastNode, resolveUrl: MarkdownUrlResolver = (url) => u
       const [header, ...body] = rows
       return `<div class="table-scroll"><table>${header ? `<thead>${renderRow(header, 'th')}</thead>` : ''}${body.length ? `<tbody>${body.map((row) => renderRow(row, 'td')).join('')}</tbody>` : ''}</table></div>`
     }
-    case 'html': return '<div class="unsafe-html">HTML 内容已隐藏，确保阅读安全。</div>'
+    case 'html': return sanitizeRawHtml(node.value ?? '')
     case 'footnoteDefinition': return ''
     case 'yaml':
     case 'toml': return ''
