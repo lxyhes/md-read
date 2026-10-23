@@ -20,14 +20,29 @@ function documentLabel(document: ReaderDocument) {
 }
 const viewport = ref<HTMLElement | null>(null)
 const activeRegionId = ref<string | null>(null)
+const activeHeadingRegionId = ref<string | null>(null)
+const outlineDepth = computed(() => Math.min(6, ...document.value?.headings.map(heading => heading.depth) ?? []))
 const scrollPositions = new Map<string, number>()
 let paneActive = true
 
 function rememberScroll() {
-  if (paneActive && document.value && viewport.value) scrollPositions.set(document.value.id, viewport.value.scrollTop)
+  if (!paneActive || !document.value || !viewport.value) return
+  scrollPositions.set(document.value.id, viewport.value.scrollTop)
+  const scrollPadding = Number.parseFloat(getComputedStyle(viewport.value).scrollPaddingTop) || 0
+  const top = viewport.value.getBoundingClientRect().top + scrollPadding + 24
+  const regions = new Map([...viewport.value.querySelectorAll<HTMLElement>('[data-region-id]')].map(element => [element.dataset.regionId, element]))
+  let activeHeading = document.value.headings[0]
+  for (const heading of document.value.headings) {
+    const region = regions.get(heading.regionId)
+    if (region && region.getBoundingClientRect().top <= top) activeHeading = heading
+  }
+  activeHeadingRegionId.value = activeHeading?.regionId ?? null
 }
 function restoreScroll() {
-  if (viewport.value && document.value) viewport.value.scrollTop = scrollPositions.get(document.value.id) ?? 0
+  if (viewport.value && document.value) {
+    viewport.value.scrollTop = scrollPositions.get(document.value.id) ?? 0
+    rememberScroll()
+  }
 }
 onActivated(() => { paneActive = true; void nextTick(restoreScroll) })
 onDeactivated(() => { paneActive = false })
@@ -39,19 +54,26 @@ watch(() => document.value?.id, async (id, previous) => {
   if (previous && viewport.value && paneActive) scrollPositions.set(previous, viewport.value.scrollTop)
   if (id) selectedId.value = id
   activeRegionId.value = null
+  activeHeadingRegionId.value = null
   await nextTick()
   if (viewport.value) viewport.value.scrollTop = id ? scrollPositions.get(id) ?? 0 : 0
 })
+
+function scrollToRegion(regionId: string) {
+  const target = [...viewport.value?.querySelectorAll<HTMLElement>('[data-region-id]') ?? []].find(element => element.dataset.regionId === regionId)
+  if (target) {
+    target.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    activeRegionId.value = regionId
+    activeHeadingRegionId.value = regionId
+  } else emit('notify', '未找到对应章节')
+}
 
 function openLink(url: string) {
   if (!document.value) return
   if (!url.startsWith('#')) { emit('open-link', url, document.value); return }
   const heading = findDocumentHeading(document.value, url)
-  const target = heading && [...viewport.value?.querySelectorAll<HTMLElement>('[data-region-id]') ?? []].find(element => element.dataset.regionId === heading.regionId)
-  if (target) {
-    target.scrollIntoView({ block: 'start', behavior: 'smooth' })
-    activeRegionId.value = heading.regionId
-  } else emit('notify', '未找到对应章节')
+  if (heading) scrollToRegion(heading.regionId)
+  else emit('notify', '未找到对应章节')
 }
 
 function onKeydown(event: KeyboardEvent) {
@@ -78,6 +100,14 @@ function onKeydown(event: KeyboardEvent) {
         <button class="second-document-close" type="button" aria-label="退出对照阅读" title="退出对照阅读，保留所有文档标签" @click="emit('close')"><AppIcon name="close" :size="15" /><span>退出对照</span></button>
       </div>
     </header>
+    <div class="second-document-body">
+    <details class="second-document-outline" open>
+      <summary><AppIcon name="reader" :size="14" /><span>大纲</span><small>{{ document.headings.length }} 个章节</small><AppIcon name="chevron-down" :size="13" /></summary>
+      <nav v-if="document.headings.length" aria-label="对照文档大纲">
+        <button v-for="heading in document.headings" :key="heading.id" type="button" :style="{ paddingInlineStart: `${12 + (heading.depth - outlineDepth) * 12}px` }" :aria-current="(activeHeadingRegionId ?? document.headings[0]?.regionId) === heading.regionId ? 'location' : undefined" @click="scrollToRegion(heading.regionId)">{{ heading.text }}</button>
+      </nav>
+      <p v-else>这篇文档还没有标题。</p>
+    </details>
     <div :key="document.id" ref="viewport" class="reader-viewport second-document-viewport" tabindex="0" :aria-label="`阅读 ${document.title}`" @scroll="rememberScroll">
       <div class="reader-content">
         <h1 class="reader-title" :title="document.path">{{ documentLabel(document) }}</h1>
@@ -86,6 +116,7 @@ function onKeydown(event: KeyboardEvent) {
           <RegionBlock v-for="region in document.regions" :key="region.id" :region="region" :focused="false" :active="activeRegionId === region.id" :theme-mode="themeMode" :theme-key="themeKey" @focus="activeRegionId = region.id" @open-link="openLink" @open-viewer="emit('open-viewer', region)" @copy-image="emit('copy-image', region)" @code-copied="emit('notify', '代码已复制')" @math-copied="emit('notify', 'MathML 已复制')" @math-copy-failed="emit('notify', '复制 MathML 失败，请检查剪贴板权限')" @toggle-task="emit('notify', '请先在左侧打开文档，再修改任务')" />
         </div>
       </div>
+    </div>
     </div>
   </section>
 </template>
@@ -109,6 +140,24 @@ function onKeydown(event: KeyboardEvent) {
 .second-document-actions button:hover { color: var(--ink); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .second-document-toolbar :focus-visible, .second-document-viewport:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .second-document-viewport { flex: 1; min-height: 0; scroll-behavior: auto; }
+.second-document-body { display: grid; flex: 1 1 0; grid-template-columns: minmax(0, 1fr) clamp(140px, 28%, 200px); grid-template-rows: minmax(0, 1fr); min-height: 0; overflow: hidden; }
+.second-document-body:has(.second-document-outline:not([open])) { grid-template-columns: minmax(0, 1fr) 36px; }
+.second-document-body > .second-document-viewport { grid-column: 1; grid-row: 1; min-width: 0; }
+.second-document-outline { grid-column: 2; grid-row: 1; height: 100%; min-width: 0; min-height: 0; overflow: hidden; border-left: 1px solid var(--border); background: var(--surface); }
+.second-document-outline summary { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 6px 16px; color: var(--ink); font: 12px/1.5 var(--ui-font); cursor: pointer; list-style: none; }
+.second-document-outline summary::-webkit-details-marker { display: none; }
+.second-document-outline summary small { color: var(--muted); font-size: 11px; }
+.second-document-outline summary > .app-icon:last-child { margin-left: auto; transform: rotate(-90deg); }
+.second-document-outline[open] summary > .app-icon:last-child { transform: none; }
+.second-document-outline nav { display: flex; flex-direction: column; height: calc(100% - 56px); overflow: auto; padding: 0 8px 8px; scrollbar-width: thin; }
+.second-document-outline summary { min-height: 56px; flex-wrap: wrap; padding-inline: 10px; }
+.second-document-outline summary small { order: 1; flex-basis: 100%; }
+.second-document-outline:not([open]) summary { flex-direction: column; padding: 8px 0; }
+.second-document-outline:not([open]) summary small { display: none; }
+.second-document-outline nav button { flex: 0 0 auto; padding: 7px 12px; border-radius: 4px; background: transparent; color: var(--muted); font: 12px/1.5 var(--ui-font); text-align: left; overflow-wrap: anywhere; }
+.second-document-outline nav button:hover, .second-document-outline nav button[aria-current="location"] { color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.second-document-outline :focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.second-document-outline p { margin: 0; padding: 0 16px 12px; color: var(--muted); font: 12px/1.5 var(--ui-font); }
 .second-document-pane .reader-content { width: min(var(--reader-width), calc(100% - 56px)); padding: 28px 0 80px; }
 .second-document-pane .reader-title { overflow-wrap: anywhere; font-size: 28px; }
 .second-document-pane :deep(.region-block) { opacity: 1 !important; filter: none !important; }

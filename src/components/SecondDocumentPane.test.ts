@@ -12,6 +12,43 @@ let unmount = () => {}
 afterEach(() => { unmount(); document.body.innerHTML = '' })
 
 describe('second document pane', () => {
+  it('navigates only the right outline, tracks its position, and updates when switching documents', async () => {
+    const documents = [parseMarkdown('left.md', '# Left'), parseMarkdown('right.md', '# Right\n\n## Part\n\n### Deep'), parseMarkdown('plain.md', 'No headings')]
+    const state = reactive({ documents, currentDocumentId: documents[0].id, themeKey: 'paper-white' })
+    const host = document.createElement('div')
+    document.body.append(host)
+    const app = createApp({ render: () => h(SecondDocumentPane, state) })
+    app.mount(host)
+    unmount = () => app.unmount()
+    const buttons = host.querySelectorAll<HTMLButtonElement>('nav[aria-label="对照文档大纲"] button')
+    expect([...buttons].map(button => button.textContent)).toEqual(['Right', 'Part', 'Deep'])
+    expect(buttons[1].style.paddingInlineStart).toBe('24px')
+    const regions = host.querySelectorAll<HTMLElement>('.reader-viewport [data-region-id]')
+    const scrollIntoView = vi.fn()
+    regions[2].scrollIntoView = scrollIntoView
+    const leftRegion = document.createElement('article')
+    leftRegion.dataset.regionId = regions[2].dataset.regionId
+    leftRegion.scrollIntoView = vi.fn()
+    host.prepend(leftRegion)
+    buttons[2].click()
+    await nextTick()
+    expect(scrollIntoView).toHaveBeenCalledOnce()
+    expect(leftRegion.scrollIntoView).not.toHaveBeenCalled()
+    expect(buttons[2].getAttribute('aria-current')).toBe('location')
+    regions.forEach((region, index) => { region.getBoundingClientRect = () => ({ top: [-200, 54, 500][index] } as DOMRect) })
+    const viewport = host.querySelector<HTMLElement>('.reader-viewport')!
+    viewport.style.scrollPaddingTop = '34px'
+    viewport.dispatchEvent(new Event('scroll'))
+    await nextTick()
+    expect(buttons[1].getAttribute('aria-current')).toBe('location')
+    const select = host.querySelector('select')!
+    select.value = documents[2].id
+    select.dispatchEvent(new Event('change'))
+    await nextTick()
+    expect(host.querySelector('nav[aria-label="对照文档大纲"]')).toBeNull()
+    expect(host.textContent).toContain('这篇文档还没有标题。')
+  })
+
   it('renders a different document, switches it, and falls back when tabs change', async () => {
     const documents = ['First', 'Second', 'Third'].map(name => parseMarkdown(name === 'Second' ? 'Second [00 07](https b.quark.md' : `${name}.md`, `# ${name}\n\n${name} content`))
     const state = reactive({ documents, currentDocumentId: documents[0].id, themeKey: 'paper-white' })
