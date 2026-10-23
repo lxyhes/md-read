@@ -83,7 +83,8 @@ withDefaults(defineProps<{ name: AppIconName; size?: number; strokeWidth?: numbe
     </template>
     <template v-else-if="name === 'clipboard'">
       <rect x="5" y="4.5" width="14" height="17" rx="2" />
-      <path d="M9 4.5v-1h6v1M8.5 9h7M8.5 13h7M8.5 17h4" />
+      <rect x="9" y="2.5" width="6" height="4" rx="1" fill="var(--app-bg)" />
+      <path d="M8.5 11h7M8.5 15h5" />
     </template>
     <template v-else-if="name === 'history'">
       <path d="M4.5 11a7.5 7.5 0 1 0 2.2-5.3" />
@@ -108,7 +109,7 @@ withDefaults(defineProps<{ name: AppIconName; size?: number; strokeWidth?: numbe
       <circle cx="15" cy="8" r=".8" fill="currentColor" stroke="none" />
     </template>
     <template v-else-if="name === 'plugin'">
-      <path d="M9 3v4H7a2 2 0 0 0-2 2v2h4v4H5v2a2 2 0 0 0 2 2h2v-4h4v4h2a2 2 0 0 0 2-2v-2h-4v-4h4V9a2 2 0 0 0-2-2h-2V3H9Z" />
+      <path d="M9 5V4a2 2 0 0 1 4 0v1h5a1 1 0 0 1 1 1v4h1a2 2 0 0 1 0 4h-1v5a1 1 0 0 1-1 1h-4v-1a2 2 0 0 0-4 0v1H5a1 1 0 0 1-1-1v-5h1a2 2 0 0 0 0-4H4V6a1 1 0 0 1 1-1h4Z" />
     </template>
     <template v-else-if="name === 'settings'">
       <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z" />
