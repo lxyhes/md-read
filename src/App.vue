@@ -5,6 +5,7 @@ import { readNativeClipboardRichText } from './nativeClipboard'
 import { useReaderStore } from './stores/reader'
 import RegionBlock from './components/RegionBlock.vue'
 import SecondDocumentPane from './components/SecondDocumentPane.vue'
+import EditorOutline from './components/EditorOutline.vue'
 import { decodeLinkPart, findDocumentHeading } from './documentLinks'
 import WebPreviewPanel from './components/WebPreviewPanel.vue'
 import MermaidBlock from './components/MermaidBlock.vue'
@@ -290,6 +291,7 @@ const lastMediaAction = ref<{ source: string; path: string | null } | null>(null
 const editorOriginalSource = ref('')
 const editorSaving = ref(false)
 const editorCursor = ref({ line: 1, column: 1 })
+const editorCursorOffset = ref(0)
 const editorInlineAssets = ref<Record<string, string>>({})
 const editorInlineAssetSources = new Map<string, string>()
 const editorSplitRatio = ref(58)
@@ -835,6 +837,7 @@ async function openEditor() {
   editorConflict.value = Boolean(recovered && hasSaveConflict(recovered.baseSource, originalSource, recovered.source))
   editorBackupError.value = ''
   editorCursor.value = { line: 1, column: 1 }
+  editorCursorOffset.value = 0
   editorOpen.value = true
   view.value = 'reader'
   editorContextMenu.value = null
@@ -1022,6 +1025,13 @@ function openEditorPreviewImage(event: MouseEvent) {
 }
 
 function jumpToEditorHeading(index: number) {
+  const item = editorHeadings.value[index]
+  const region = editorPreviewDocument.value?.regions.find(region => region.id === item?.regionId)
+  if (region) editorCursorOffset.value = region.sourceStart
+  if (region && editorMode.value !== 'preview') {
+    editorTextarea.value?.focus()
+    editorTextarea.value?.setSelectionRange(region.sourceStart, region.sourceStart)
+  }
   const heading = editorPreview.value?.querySelectorAll('h1, h2, h3, h4, h5, h6, .editor-semantic-heading').item(index)
   heading?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
@@ -1063,6 +1073,7 @@ function updateEditorCursor() {
   const element = editorTextarea.value
   if (!element) return
   const position = element.selectionStart
+  editorCursorOffset.value = position
   const before = editorSource.value.slice(0, position)
   const lastBreak = before.lastIndexOf('\n')
   editorCursor.value = {
@@ -4974,6 +4985,8 @@ async function requestFullscreen() {
                   </div>
                   <p v-if="editorFindResult.error" role="alert" class="search-error">{{ editorFindResult.error }}</p>
                 </section>
+                <div class="editor-draft-layout">
+                <EditorOutline :document="editorPreviewDocument" :cursor="editorCursorOffset" @jump="jumpToEditorHeading" />
                 <div class="editor-workspace" :class="[`editor-mode-${editorMode}`, { 'is-resizing-split': editorSplitResizing }]" :style="editorMode === 'split' ? { '--editor-split-ratio': `${editorSplitRatio}%` } : undefined">
                   <section v-show="editorMode !== 'preview'" class="editor-main-pane" :class="editorMode === 'rich' ? 'editor-rich-pane' : 'editor-source-pane'">
                     <MarkdownEditor ref="editorTextarea" v-model="editorSource" :live="editorMode === 'rich'" :spellcheck="advancedSettings.spellcheck" :typewriter="advancedSettings.typewriterMode" :focus-mode="editorFocusMode" :resolve-url="url => resolveMarkdownAssetUrl(editorDocumentPath, url, editorInlineAssets)" @keydown="onEditorKeydown" @paste="onEditorPaste" @copy="onEditorLineClipboard($event, false)" @cut="onEditorLineClipboard($event, true)" @caret="updateEditorCursor" @history="editorUndoAvailable = $event.undo; editorRedoAvailable = $event.redo" @message="notify" @link="openExternalLink" />
@@ -4989,13 +5002,10 @@ async function requestFullscreen() {
                       </span>
                     </div>
                     <div ref="editorPreview" class="editor-preview-scroll">
-                      <nav v-if="editorHeadings.length" class="editor-outline" aria-label="编辑中的文档结构">
-                        <span class="editor-outline-label">章节导航</span>
-                        <button v-for="(heading, index) in editorHeadings" :key="heading.id" type="button" :style="{ paddingLeft: `${8 + (heading.depth - 1) * 12}px` }" @click="jumpToEditorHeading(index)">{{ heading.text }}</button>
-                      </nav>
                       <article class="editor-preview" v-html="editorPreviewHtml" @click="openEditorPreviewImage" />
                     </div>
                   </section>
+                </div>
                 </div>
                 <div class="editor-statusbar">
                   <span>{{ editorMode === 'write' ? '源码写作' : editorMode === 'rich' ? '所见即所得' : editorMode === 'preview' ? '阅读预览' : '边写边读' }}</span>

@@ -7367,6 +7367,8 @@ body.is-resizing-outline * {
 .app-shell.is-editor-studio .reader-column {
   width: 100%;
   min-width: 0;
+}
+.app-shell.is-editor-studio .reader-document-panes {
   grid-column: 1 / -1;
 }
 .app-shell.is-editor-studio .reader-column > .reader-meta {
@@ -10075,6 +10077,36 @@ a:active > .app-icon-vector { transform: scale(.92); }
 .reader-document-panes.has-second-document { grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); grid-template-rows: none; grid-auto-rows: minmax(0, 1fr); }
 .reader-document-panes > .reader-column { min-width: 0; }
 .reader-document-panes.has-second-document > .reader-column { height: auto; }
+.app-shell.is-editor-studio .reader-document-panes .editor-surface {
+  padding: 16px 24px 12px;
+  background: var(--surface);
+}
+.app-shell.is-editor-studio .reader-document-panes .editor-surface > :is(.editor-toolbar, .editor-quiet-controls, .editor-find-panel, .editor-draft-layout, .editor-statusbar) {
+  width: min(100%, 1200px);
+  max-width: none;
+  margin-inline: auto;
+}
+.editor-draft-layout { display: grid; flex: 1 1 0; grid-template-columns: clamp(140px, 18%, 200px) minmax(0, 1fr); min-height: 0; min-width: 0; gap: 20px; overflow: hidden; }
+.editor-draft-layout:has(.editor-draft-outline:not([open])) { grid-template-columns: 36px minmax(0, 1fr); }
+.app-shell.is-editor-studio .editor-draft-layout > .editor-workspace { width: 100%; height: 100%; min-height: 0; margin: 0; }
+.app-shell.is-editor-studio .reader-document-panes .editor-quiet-controls {
+  padding-inline: 0;
+}
+.app-shell.is-editor-studio .reader-document-panes .editor-mode-rich .editor-rich-pane {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.app-shell.is-editor-studio .reader-document-panes .editor-mode-rich .markdown-editor.is-live .cm-scroller {
+  font: var(--reader-size)/var(--reader-leading) var(--reader-font);
+}
+.app-shell.is-editor-studio .reader-document-panes .editor-mode-rich .markdown-editor.is-live .cm-content {
+  padding: 12px 0 44vh;
+}
+.app-shell.is-editor-studio .reader-document-panes .editor-mode-rich .markdown-editor.is-live .cm-line {
+  padding-block: 3px;
+}
 .reader-document-panes.has-second-document .reader-column .reader-content { width: min(var(--reader-width), calc(100% - 56px)); }
 .reader-document-panes.has-second-document .reader-column .reader-title { font-size: 28px; overflow-wrap: anywhere; }
 html:has(.reader-page), body:has(.reader-page), #app:has(.reader-page) { min-width: 0; }
