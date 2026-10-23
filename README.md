@@ -36,7 +36,7 @@
 
 ### 直接运行桌面版（推荐）
 
-环境要求：Node.js 20+、Rust stable、Windows 10 / 11。
+环境要求：Node.js 20+、Rust stable、Windows 或 macOS。
 
 ```bash
 # 进入项目目录后执行
@@ -139,8 +139,13 @@ npm run tauri dev   # Tauri 桌面开发模式
 npm run test         # 运行单元测试
 npm run build        # 类型检查并构建前端
 npm run preview      # 预览生产构建
-npm run tauri build  # 构建桌面端安装包
+npm run package:windows # Windows：生成 NSIS .exe 安装包
+npm run package:macos   # macOS：生成 .app 和 .dmg
 ```
+
+Windows 打包需要在 Windows 上执行，产物位于 `src-tauri/target/release/bundle/`；macOS 打包需要在 macOS 上执行。推送 `v*` 标签或在 GitHub Actions 手动运行 `Build desktop packages`，也会分别生成 Windows 和 macOS 构建物供下载。
+
+也可以直接双击项目根目录的 `一键打包桌面端.bat`（Windows）或 `一键打包桌面端.command`（macOS）。脚本会在首次运行时自动安装依赖，完成后打开产物目录。
 
 ## 当前状态
 
