@@ -1,4 +1,4 @@
-export const interfaceFont = '"Aptos", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif'
+export const interfaceFont = '"Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif'
 
 export const fontPresets = [
   { id: 'noto-serif', name: '思源宋体', note: '书籍与长文 · 笔画有轻重', family: '"Noto Serif SC", "Source Han Serif SC", "Songti SC", SimSun, serif' },

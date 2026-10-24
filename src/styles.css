@@ -4032,8 +4032,9 @@ button:focus-visible,
 }
 .viewer-stage .table-viewer td:first-child {
   color: var(--ink);
-  font-family: var(--mono);
-  font-size: .92em;
+  font-family: var(--ui-font);
+  font-size: 1em;
+  font-weight: 400;
 }
 .viewer-stage .table-viewer td code {
   padding: 0;
@@ -4042,6 +4043,37 @@ button:focus-visible,
   background: transparent;
   color: var(--ink);
   font: inherit;
+}
+
+/* A table is content-sized; do not let the shared code-viewer frame stretch it. */
+.viewer-stage .table-viewer {
+  display: block;
+  height: auto;
+  overflow: auto;
+  border-radius: 0;
+  box-shadow: none;
+}
+.viewer-stage .table-viewer > .table-scroll {
+  box-sizing: border-box;
+  overflow: hidden;
+  border-radius: 0;
+  background: transparent;
+}
+.viewer-stage .table-viewer table {
+  border: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.viewer-stage .table-viewer :is(th, td) {
+  border-top: 0;
+  border-left: 0;
+}
+.viewer-stage .table-viewer tr > :last-child {
+  border-right: 0;
+}
+.viewer-stage .table-viewer tbody tr:last-child > td,
+.viewer-stage .table-viewer thead:last-child tr:last-child > th {
+  border-bottom: 0;
 }
 @media (max-width: 720px) {
   .viewer-stage .code-viewer,
@@ -9871,6 +9903,15 @@ a:active > .app-icon-vector { transform: scale(.92); }
 .app-shell .reader-content .table-region thead:last-child tr:last-child > th {
   border-bottom: 0;
 }
+.app-shell .reader-content .table-region td:first-child {
+  font-family: var(--ui-font);
+  font-size: 1em;
+  font-weight: 400;
+}
+.app-shell .reader-content .table-region td:first-child code {
+  font-size: 1em;
+  font-weight: inherit;
+}
 
 /* Keep dense technical prose readable without turning every code span into a pill. */
 .app-shell:not(.is-focus) .reader-content:not(.is-course-outline) .region-content :is(p, li, td) code {
@@ -10391,4 +10432,96 @@ html:has(.reader-page), body:has(.reader-page), #app:has(.reader-page) { min-wid
 @media print {
   .reader-document-panes { display: block; height: auto; overflow: visible; }
   .second-document-pane { display: none; }
+}
+
+/* Keep small interface text crisp on 1080p screens without making it heavier. */
+:root {
+  text-rendering: auto;
+  --ui-font: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+}
+
+.app-shell :is(
+  .brand-mark small,
+  .profile-chip small,
+  .eyebrow,
+  .card-topline,
+  .card-footer,
+  .theme-card-meta,
+  .reader-meta,
+  .reader-footer,
+  .outline-footer,
+  .text-button,
+  .diagram-action,
+  .mermaid-loading,
+  .focus-hud,
+  .reader-tab-status
+) {
+  font-size: 11px;
+}
+
+.app-shell :is(
+  .file-badge,
+  .reader-tab small,
+  .theme-swatch small,
+  .editor-subtitle,
+  .editor-section-nav button,
+  .settings-tabs button
+) {
+  font-size: 10px;
+}
+
+.app-shell :is(.region-content, .editor-preview, .editor-rich-content, .markdown-editor.is-live .cm-scroller) {
+  text-rendering: optimizeLegibility;
+}
+
+/* Data tables should not inherit the smaller inline-code treatment used in prose. */
+.app-shell .reader-content .table-region table {
+  font-size: .96em;
+}
+
+.app-shell .reader-content .table-region :is(th, td) {
+  font-family: var(--ui-font);
+}
+
+.app-shell .reader-content .table-region :is(th, td) code {
+  font-family: var(--ui-font);
+  font-size: 1em !important;
+  font-weight: inherit;
+}
+
+.viewer-stage .table-viewer table {
+  font-size: 13px;
+}
+
+.viewer-stage .table-viewer td:first-child,
+.viewer-stage .table-viewer td:first-child code {
+  font-family: var(--ui-font);
+}
+
+.viewer-stage .table-viewer td:first-child code {
+  font-size: 1em;
+  font-weight: inherit;
+}
+
+/* Remove glass-layer softness from the main reading chrome. Text stays at normal weight. */
+.app-shell :is(.global-nav, .topbar, .reader-tabbar, .outline-panel, .context-panel, .focus-sidebar, .editor-toolbar, .editor-outline) {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.app-shell :is(
+  .nav-section-label,
+  .context-hero-art small,
+  .context-hero > small,
+  .theme-mini-caption small,
+  .side-card-heading,
+  .side-card-heading span:last-child,
+  .translation-card > small,
+  .translation-card p,
+  .diagram-action,
+  .diagram-link,
+  .reader-tab small,
+  .reader-tab-status
+) {
+  font-size: 11px;
 }

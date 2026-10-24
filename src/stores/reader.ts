@@ -354,13 +354,15 @@ export const useReaderStore = defineStore('reader', () => {
 function readSettings() {
   try {
     const saved = JSON.parse(localStorage.getItem('moyue:reader-settings') ?? '{}') as Partial<typeof defaultTokens.reader> & { interfaceFontFamily?: string }
+    const legacyDefaultReaderFonts = new Set(['Iowan Old Style, Palatino Linotype, Georgia, serif'])
+    const savedReaderFont = typeof saved?.fontFamily === 'string' ? saved.fontFamily.trim() : ''
     if (!localStorage.getItem(READER_WIDTH_VERSION_KEY)) {
       if (typeof saved.width === 'number') saved.width = Math.min(1280, saved.width + 240)
       localStorage.setItem(READER_WIDTH_VERSION_KEY, '1')
       localStorage.setItem('moyue:reader-settings', JSON.stringify(saved))
     }
     return { ...defaultTokens.reader, ...saved,
-      fontFamily: typeof saved?.fontFamily === 'string' && saved.fontFamily !== defaultTokens.reader.fontFamily ? saved.fontFamily : '',
+      fontFamily: savedReaderFont && savedReaderFont !== defaultTokens.reader.fontFamily && !legacyDefaultReaderFonts.has(savedReaderFont) ? savedReaderFont : '',
       interfaceFontFamily: typeof saved?.interfaceFontFamily === 'string' ? saved.interfaceFontFamily : '',
     }
   } catch {
