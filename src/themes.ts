@@ -5,7 +5,7 @@ export const defaultTokens: ThemeTokens = {
   color: {
     appBackground: '#0d1426', surface: '#151f34', surfaceRaised: '#1d2942', text: '#e8eaf2', textMuted: '#9ca5bd', accent: '#a5a2d8', accentSoft: '#2b3558', border: 'rgba(179,185,211,.18)', codeBackground: '#09111f'
   },
-  reader: { width: 1000, fontSize: 18, lineHeight: 1.82, paragraphGap: 22, fontFamily: 'Iowan Old Style, Palatino Linotype, Georgia, serif' }
+  reader: { width: 1000, fontSize: 18, lineHeight: 1.82, paragraphGap: 22, fontFamily: '"Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif' }
 }
 
 export const builtInThemes: MoyueTheme[] = [
