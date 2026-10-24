@@ -827,6 +827,14 @@ fn export_html_to_pdf(source: String, path: String) -> Result<(), String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+                // The native close request has already been approved here. Exit the
+                // process directly so WebView/background tasks cannot keep the EXE alive.
+                let _ = window;
+                std::process::exit(0);
+            }
+        })
         .on_page_load(|webview, payload| {
             if webview.label() == "main" && payload.event() == tauri::webview::PageLoadEvent::Finished {
                 if let Err(error) = webview.window().show() {

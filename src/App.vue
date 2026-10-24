@@ -17,7 +17,6 @@ import IconButton from './components/IconButton.vue'
 import FontPicker from './components/FontPicker.vue'
 import type MarkdownEditorComponent from './components/MarkdownEditor.vue'
 import EditorExportMenu from './components/EditorExportMenu.vue'
-import { getCurrentWindow } from '@tauri-apps/api/window'
 import { interfaceFont } from './fonts'
 import { defaultTokens } from './themes'
 import type { FileSystemTreeNode } from './components/FileSystemTree.vue'
@@ -277,8 +276,6 @@ const editorDocumentId = ref('')
 const editorBackupError = ref('')
 const editorConflict = ref(false)
 let editorAutoSaveTimer: number | null = null
-let stopEditorCloseGuard: (() => void) | undefined
-let editorAppDisposed = false
 const editorContextMenu = ref<{ x: number; y: number } | null>(null)
 const imageManagerOpen = ref(false)
 const tableBuilderOpen = ref(false)
@@ -882,7 +879,6 @@ function persistEditorDraft() {
 }
 
 function protectUnsavedEditor(event: BeforeUnloadEvent) {
-  if (isTauriRuntime()) return
   if (editorDirty.value && !persistEditorDraft()) { event.preventDefault(); event.returnValue = '' }
 }
 
@@ -3251,10 +3247,7 @@ onMounted(() => {
   void bindNativeFileDrop()
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('paste', onPaste)
-  window.addEventListener('beforeunload', protectUnsavedEditor)
-  if (isTauriRuntime()) void getCurrentWindow().onCloseRequested(() => {
-    if (editorDirty.value) persistEditorDraft()
-  }).then(stop => { if (editorAppDisposed) stop(); else stopEditorCloseGuard = stop }).catch(() => notify('关闭窗口保护未能注册，请先保存草稿再退出'))
+  if (!isTauriRuntime()) window.addEventListener('beforeunload', protectUnsavedEditor)
   editorAutoSaveTimer = window.setInterval(() => {
     if (advancedSettings.value.editorAutoSave && editorOpen.value && editorDirty.value && !editorConflict.value && !tableEditor.value) void saveEditor()
   }, 60000)
@@ -3262,10 +3255,8 @@ onMounted(() => {
   document.addEventListener('click', onTabOutsideClick)
 })
 onUnmounted(() => {
-  editorAppDisposed = true
-  stopEditorCloseGuard?.()
   persistEditorDraft()
-  window.removeEventListener('beforeunload', protectUnsavedEditor)
+  if (!isTauriRuntime()) window.removeEventListener('beforeunload', protectUnsavedEditor)
   if (editorAutoSaveTimer !== null) window.clearInterval(editorAutoSaveTimer)
   stopOutlinePanelResize()
   stopEditorSplitResize()
@@ -3644,8 +3635,8 @@ async function onDrop(event: DragEvent) {
 async function bindNativeFileDrop() {
   if (!isTauriRuntime()) return
   try {
-    const { getCurrentWindow } = await import('@tauri-apps/api/window')
-    stopNativeFileDrop = await getCurrentWindow().onDragDropEvent(({ payload }) => {
+    const { getCurrentWebview } = await import('@tauri-apps/api/webview')
+    stopNativeFileDrop = await getCurrentWebview().onDragDropEvent(({ payload }) => {
       if (payload.type === 'enter' || payload.type === 'over') draggingFiles.value = true
       if (payload.type === 'leave') draggingFiles.value = false
       if (payload.type === 'drop') {
@@ -4839,7 +4830,7 @@ async function requestFullscreen() {
               <button ref="outlinePanelToggleButton" class="text-button outline-panel-toggle" type="button" title="收起阅读侧栏" aria-label="收起阅读侧栏" :aria-expanded="!outlinePanelCollapsed" aria-controls="reader-sidebar" @click="toggleOutlinePanel"><AppIcon name="chevron-right" :size="12" />收起</button>
             </div>
             <div v-if="leftPanelTab === 'files'" class="file-browser-panel">
-              <div class="file-location" :title="fileBrowserMode === 'tree' ? filesystemTree?.path : currentDirectory"><AppIcon name="folder" :size="13" /><span>{{ fileBrowserMode === 'tree' ? '目录树' : currentDirectoryLabel }}</span><button class="file-tree-back" type="button" :aria-label="fileBrowserMode === 'tree' ? '切换到文档列表' : '切换到目录树'" @click="fileBrowserMode === 'tree' ? showDocumentList() : showDocumentTree()">{{ fileBrowserMode === 'tree' ? '列表' : '目录树' }}</button></div>
+              <div class="file-location" :title="fileBrowserMode === 'tree' ? filesystemTree?.path : currentDirectory"><AppIcon name="folder" :size="15" :stroke-width="2" /><span>{{ fileBrowserMode === 'tree' ? '目录树' : currentDirectoryLabel }}</span><button class="file-tree-back" type="button" :aria-label="fileBrowserMode === 'tree' ? '切换到文档列表' : '切换到目录树'" @click="fileBrowserMode === 'tree' ? showDocumentList() : showDocumentTree()">{{ fileBrowserMode === 'tree' ? '列表' : '目录树' }}</button></div>
               <div class="file-filter-toolbar" aria-label="文件侧栏筛选">
                 <select v-model="sidebarFilter" aria-label="文件筛选方式"><option value="markdown">Markdown 文件</option><option value="hidden">包含隐藏文件</option><option value="all">全部文件</option><option value="glob">自定义 glob</option></select>
                 <input v-if="sidebarFilter === 'glob'" v-model="sidebarGlob" aria-label="自定义 glob" placeholder="例如 *.md" />

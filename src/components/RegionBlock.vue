@@ -192,10 +192,10 @@ function handleContentClick(event: MouseEvent) {
       <div v-else class="region-content" @click="handleContentClick">
       <div v-if="region.type === 'code'" class="code-frame" :class="{ 'is-diagram': isDiagramLike }" :data-language="isDiagramLike ? 'diagram' : codeLanguage">
         <div class="code-toolbar" @click.stop>
-          <span class="code-language"><AppIcon name="code" :size="13" /><b>{{ codeLanguage }}</b><small>{{ codeLineCount }} 行</small></span>
+          <span class="code-language"><AppIcon name="code" :size="14" :stroke-width="2" /><b>{{ codeLanguage }}</b><small>{{ codeLineCount }} 行</small></span>
           <span class="code-toolbar-actions">
-            <button class="code-view" type="button" @click.stop="emit('openViewer')"><AppIcon name="external" :size="12" />独立查看</button>
-            <button class="code-copy" type="button" @click="copyCode"><AppIcon :name="copied ? 'check' : 'copy'" :size="13" />{{ copied ? '已复制' : '复制全部' }}</button>
+            <button class="code-view" type="button" @click.stop="emit('openViewer')"><AppIcon name="external" :size="14" :stroke-width="2" />独立查看</button>
+            <button class="code-copy" type="button" @click="copyCode"><AppIcon :name="copied ? 'check' : 'copy'" :size="14" :stroke-width="2" />{{ copied ? '已复制' : '复制全部' }}</button>
             <button class="code-copy" type="button" :disabled="!activeCodeLine" @click="copyActiveCodeLine">复制当前行</button>
             <button class="code-copy" type="button" :disabled="!selectedCodeText" @click="copySelectedCode">复制选中</button>
             <button class="code-copy code-wrap-toggle" type="button" :class="{ active: wrapped }" @click="wrapped = !wrapped">{{ wrapped ? '横向滚动' : '软换行' }}</button>
@@ -205,8 +205,8 @@ function handleContentClick(event: MouseEvent) {
       </div>
       <div v-else-if="region.type === 'table'" class="table-region">
         <div class="table-region-toolbar">
-          <span><AppIcon name="table" :size="13" /> 数据表</span>
-          <button class="inline-view-action" type="button" @click.stop="emit('openViewer')">独立查看 <AppIcon name="table" :size="12" /></button>
+          <span><AppIcon name="table" :size="15" :stroke-width="2" /> 数据表</span>
+          <button class="code-view" type="button" @click.stop="emit('openViewer')"><AppIcon name="external" :size="14" :stroke-width="2" />独立查看</button>
         </div>
         <div v-html="renderedHtml" />
       </div>

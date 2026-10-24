@@ -2231,14 +2231,6 @@ html, body, #app { background: var(--app-bg, #070d22); }
   color: var(--accent);
   font-weight: 600;
 }
-.table-region-toolbar .inline-view-action {
-  margin: 0;
-  padding: 5px 8px;
-  background: color-mix(in srgb, var(--surface-raised) 55%, transparent);
-}
-.table-region-toolbar .inline-view-action:hover {
-  background: var(--accent-soft);
-}
 
 /* Reference-style markdown tables: flat grid, quiet header, compact rows. */
 .reader-content .table-scroll {
@@ -8357,6 +8349,17 @@ a:active > .app-icon-vector { transform: scale(.92); }
   text-align: justify;
   text-justify: inter-ideograph;
 }
+.app-shell .reader-content .region-content blockquote p {
+  text-align: center;
+}
+.app-shell .reader-content .region-block:is(.region-paragraph, .region-heading) {
+  display: flex;
+  align-items: center;
+  padding-block: 10px !important;
+}
+.app-shell .reader-content .region-block.region-heading .region-content :is(h1, h2, h3, h4) {
+  margin-bottom: 0 !important;
+}
 .app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)) .region-content a {
   text-decoration-thickness: 1px;
   text-underline-offset: .18em;
@@ -8533,6 +8536,12 @@ a:active > .app-icon-vector { transform: scale(.92); }
   background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 7%, transparent), transparent 82%);
   outline: 0;
   box-shadow: none;
+}
+.app-shell .reader-content .region-content blockquote p:last-child {
+  margin-bottom: 0;
+}
+.app-shell .reader-content .region-block.region-paragraph .region-content > p:last-child {
+  margin-bottom: 0;
 }
 .app-shell.is-region-focus .region-block.focused .region-content blockquote {
   padding: 18px 22px 18px 48px;
@@ -9705,6 +9714,13 @@ a:active > .app-icon-vector { transform: scale(.92); }
   border-left-color: var(--accent) !important;
   background: color-mix(in srgb, var(--accent) 10%, transparent) !important;
 }
+.app-shell .reader-content .region-block:is(.region-code, .region-table),
+.app-shell .reader-content .region-block:is(.region-code, .region-table):hover,
+.app-shell .reader-content .region-block:is(.region-code, .region-table).active,
+.app-shell.is-region-focus .reader-content .region-block:is(.region-code, .region-table).focused {
+  border-left-color: transparent !important;
+  background: transparent !important;
+}
 .app-shell .reader-content .region-content blockquote {
   margin: 7px 0 !important;
   padding: 13px 18px !important;
@@ -9739,6 +9755,121 @@ a:active > .app-icon-vector { transform: scale(.92); }
 .app-shell .reader-content :is(.code-toolbar, .table-region-toolbar) {
   border-bottom-color: var(--border) !important;
   background: var(--surface) !important;
+}
+.app-shell .reader-content .table-region {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.app-shell .reader-content .region-table .table-region-toolbar {
+  min-height: 38px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border);
+  font: 600 12px/1.2 var(--ui-font);
+  letter-spacing: 0;
+}
+.app-shell .reader-content .region-table .table-region-toolbar > span {
+  gap: 7px;
+  color: var(--ink);
+  font-weight: 650;
+}
+.app-shell .reader-content .region-table .table-region-toolbar > span .app-icon-vector {
+  color: var(--accent);
+  stroke-width: 2;
+}
+.app-shell .reader-content .region-table .table-region-toolbar .code-view {
+  min-height: 26px;
+  padding: 0 4px;
+  color: var(--muted);
+  font: 600 12px/1.2 var(--ui-font);
+}
+.app-shell .reader-content .region-table .table-region-toolbar .code-view .app-icon-vector {
+  stroke-width: 2;
+}
+.app-shell .reader-content .code-frame .code-toolbar {
+  min-height: 38px;
+  padding: 0 10px;
+  font: 600 12px/1.2 var(--ui-font);
+  letter-spacing: 0;
+}
+.app-shell .reader-content .code-frame .code-language {
+  gap: 8px;
+}
+.app-shell .reader-content .code-frame .code-language .app-icon-vector {
+  color: var(--accent);
+  stroke-width: 2;
+}
+.app-shell .reader-content .code-frame .code-language b {
+  font: 700 11px/1 var(--mono);
+  letter-spacing: .02em;
+}
+.app-shell .reader-content .code-frame .code-language small {
+  padding-left: 9px;
+  font: 600 11px/1 var(--ui-font);
+}
+.app-shell .reader-content .code-frame .code-toolbar-actions {
+  gap: 5px;
+}
+.app-shell .reader-content .code-frame :is(.code-view, .code-copy) {
+  min-height: 28px;
+  padding: 0 7px;
+  font: 600 12px/1.2 var(--ui-font);
+}
+.app-shell .reader-content .code-frame :is(.code-view, .code-copy) .app-icon-vector {
+  stroke-width: 2;
+}
+.app-shell .viewer-stage .code-viewer-toolbar {
+  min-height: 38px;
+  padding-inline: 10px;
+  font: 600 12px/1.2 var(--ui-font);
+  letter-spacing: 0;
+}
+.app-shell .viewer-stage .code-viewer-toolbar .code-language {
+  gap: 8px;
+}
+.app-shell .viewer-stage .code-viewer-toolbar .code-language .app-icon-vector {
+  color: var(--accent);
+  stroke-width: 2;
+}
+.app-shell .viewer-stage .code-viewer-toolbar .code-language b {
+  font: 700 11px/1 var(--mono);
+  letter-spacing: .02em;
+}
+.app-shell .viewer-stage .code-viewer-toolbar .code-language small {
+  padding-left: 9px;
+  font: 600 11px/1 var(--ui-font);
+}
+.app-shell .viewer-stage .code-viewer-toolbar .code-toolbar-actions {
+  gap: 5px;
+}
+.app-shell .viewer-stage .code-viewer-toolbar .code-copy {
+  min-height: 28px;
+  padding: 0 7px;
+  font: 600 12px/1.2 var(--ui-font);
+}
+.app-shell .viewer-stage .code-viewer-toolbar .code-copy .app-icon-vector {
+  stroke-width: 2;
+}
+.app-shell .reader-content .table-region .table-scroll {
+  border: 0 !important;
+  border-radius: 0 !important;
+}
+.app-shell .reader-content .table-region table {
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 0;
+  border-radius: 0;
+}
+.app-shell .reader-content .table-region :is(th, td) {
+  border-top: 0;
+  border-left: 0;
+}
+.app-shell .reader-content .table-region tr > :last-child {
+  border-right: 0;
+}
+.app-shell .reader-content .table-region tbody tr:last-child > td,
+.app-shell .reader-content .table-region thead:last-child tr:last-child > th {
+  border-bottom: 0;
 }
 
 /* Keep dense technical prose readable without turning every code span into a pill. */
@@ -10230,6 +10361,32 @@ html:has(.reader-page), body:has(.reader-page), #app:has(.reader-page) { min-wid
   .outline-panel-toggle .app-icon {
     transition: none;
   }
+}
+
+/* Center the visible prose blocks in both axes without changing the document structure. */
+.app-shell .reader-content .region-block:is(.region-paragraph, .region-heading, .region-blockquote) {
+  display: flex;
+  box-sizing: border-box;
+  min-height: 54px;
+  align-items: center;
+  padding-block: 10px !important;
+}
+.app-shell .reader-content .region-block:is(.region-paragraph, .region-heading, .region-blockquote) .region-content {
+  width: 100%;
+  text-align: start;
+}
+.app-shell .reader-content .region-block.region-paragraph .region-content p {
+  text-align: start !important;
+}
+.app-shell .reader-content .region-block.region-heading .region-content :is(h1, h2, h3, h4) {
+  margin: 0 !important;
+  text-align: start !important;
+}
+.app-shell .reader-content .region-block.region-heading .region-content :is(h1, h2, h3, h4).numbered-heading {
+  justify-content: flex-start;
+}
+.app-shell .reader-content .region-block.region-blockquote .region-content p {
+  text-align: start !important;
 }
 @media print {
   .reader-document-panes { display: block; height: auto; overflow: visible; }
