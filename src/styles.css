@@ -10525,3 +10525,10 @@ html:has(.reader-page), body:has(.reader-page), #app:has(.reader-page) { min-wid
 ) {
   font-size: 11px;
 }
+
+/* Fade in place: filtered, fractionally scaled layers can leave colored edges in the desktop WebView. */
+.app-shell.is-region-focus .reader-content .region-block:not(.focused),
+.app-shell.is-focus.has-focus-region .reader-content .region-block:not(.focused) {
+  filter: none !important;
+  transform: none !important;
+}

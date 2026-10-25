@@ -26,6 +26,14 @@ if [[ ! -d "node_modules" ]]; then
   }
 fi
 
+echo "正在构建最新前端资源..."
+npm run build || {
+  echo
+  echo "构建失败，已停止启动，避免使用旧版本。"
+  read -k 1 "?按任意键退出..."
+  exit 1
+}
+
 echo "正在启动 Tauri 桌面端，关闭窗口或按 Ctrl+C 可停止开发服务。"
 echo
 npm run tauri dev
