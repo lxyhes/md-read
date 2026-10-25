@@ -2,12 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { parseMarkdown } from '../parser'
 import { useReaderStore } from './reader'
-import { saveDocument, deleteDocument, loadAnnotations, loadDocumentSnapshots, saveDocumentSnapshot, getProgress } from '../persistence'
+import { saveDocument, deleteDocument, loadAnnotations, loadDocumentSnapshots, loadDocumentSnapshotsAsync, saveDocumentSnapshot, getProgress } from '../persistence'
 import { createRemoteAssetMap } from '../fileService'
 
 vi.mock('../persistence', () => ({
   deleteAnnotation: vi.fn(), deleteDocument: vi.fn(), getLocalProgress: vi.fn(),
-  getProgress: vi.fn(), loadAnnotations: vi.fn(() => []), loadDocumentSnapshots: vi.fn(() => []),
+  getProgress: vi.fn(), loadAnnotations: vi.fn(() => []), loadDocumentSnapshots: vi.fn(() => []), loadDocumentSnapshotsAsync: vi.fn(async () => []),
   saveAnnotation: vi.fn(), saveDocument: vi.fn(), saveDocumentSnapshot: vi.fn(), saveProgress: vi.fn(),
 }))
 vi.mock('../fileService', () => ({
@@ -88,6 +88,18 @@ describe('path-only document rename', () => {
 
 
 describe('restoring saved reader documents', () => {
+  it('opens a dragged document even when persistence hits a storage quota', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.mocked(saveDocumentSnapshot).mockRejectedValueOnce(new Error('quota exceeded'))
+    try {
+      const store = useReaderStore()
+      await expect(store.addOpenedFiles([{ path: 'dropped.md', source: '# Dropped' }])).resolves.toBe(1)
+      expect(store.currentDocument?.path).toBe('dropped.md')
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
   it('rebuilds stale HTML and image URLs before displaying each restored tab', async () => {
     vi.stubGlobal('document', {
       documentElement: { style: { setProperty: vi.fn() } },
@@ -97,7 +109,7 @@ describe('restoring saved reader documents', () => {
     first.regions[1]!.html = '<table>HTML 已隐藏</table>'
     const imageUrl = 'https://example.com/image.png'
     const second = parseMarkdown('second.md', `# Second\n\n![image](${imageUrl})`, () => 'blob:expired-session')
-    vi.mocked(loadDocumentSnapshots).mockReturnValue([first, second])
+    vi.mocked(loadDocumentSnapshotsAsync).mockResolvedValue([first, second])
     vi.mocked(createRemoteAssetMap).mockResolvedValue({ [imageUrl]: 'blob:current-session' })
     const store = useReaderStore()
 

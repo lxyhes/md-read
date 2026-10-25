@@ -6,11 +6,64 @@ const isTauri = () => tauriIsTauri()
 const SNAPSHOT_INDEX_KEY = 'moyue:documents:index'
 const LEGACY_SNAPSHOT_KEY = 'moyue:documents:full'
 const snapshotKey = (documentId: string) => `moyue:document-snapshot:${documentId}`
+const BROWSER_SNAPSHOT_DB = 'moyue-reader'
+const BROWSER_SNAPSHOT_STORE = 'document-snapshots'
 const KNOWLEDGE_CONVERSATIONS_KEY = 'moyue:knowledge-conversations'
 const KNOWLEDGE_ACTIVITY_KEY = 'moyue:knowledge-activity'
 type DatabaseConnection = Awaited<ReturnType<typeof import('@tauri-apps/plugin-sql')['default']['load']>>
 let database: DatabaseConnection | null = null
 let databasePromise: Promise<DatabaseConnection | null> | null = null
+let browserSnapshotDatabase: Promise<IDBDatabase | null> | null = null
+
+function openBrowserSnapshotDatabase(): Promise<IDBDatabase | null> {
+  if (typeof indexedDB === 'undefined') return Promise.resolve(null)
+  return browserSnapshotDatabase ??= new Promise((resolve) => {
+    try {
+      const request = indexedDB.open(BROWSER_SNAPSHOT_DB, 1)
+      request.onupgradeneeded = () => request.result.createObjectStore(BROWSER_SNAPSHOT_STORE, { keyPath: 'id' })
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => resolve(null)
+      request.onblocked = () => resolve(null)
+    } catch {
+      resolve(null)
+    }
+  })
+}
+
+function browserSnapshotRequest<T>(request: IDBRequest<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error ?? new Error('browser snapshot storage failed'))
+  })
+}
+
+async function readBrowserSnapshots(): Promise<ReaderDocument[]> {
+  const database = await openBrowserSnapshotDatabase()
+  if (!database) return []
+  try {
+    return await browserSnapshotRequest<ReaderDocument[]>(database.transaction(BROWSER_SNAPSHOT_STORE, 'readonly').objectStore(BROWSER_SNAPSHOT_STORE).getAll())
+  } catch {
+    return []
+  }
+}
+
+async function writeBrowserSnapshot(document: ReaderDocument): Promise<boolean> {
+  const database = await openBrowserSnapshotDatabase()
+  if (!database) return false
+  try {
+    await browserSnapshotRequest(database.transaction(BROWSER_SNAPSHOT_STORE, 'readwrite').objectStore(BROWSER_SNAPSHOT_STORE).put(document))
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function deleteBrowserSnapshot(documentId: string): Promise<void> {
+  const database = await openBrowserSnapshotDatabase()
+  if (!database) return
+  try { await browserSnapshotRequest(database.transaction(BROWSER_SNAPSHOT_STORE, 'readwrite').objectStore(BROWSER_SNAPSHOT_STORE).delete(documentId)) }
+  catch { /* Local storage cleanup below remains best effort. */ }
+}
 
 async function getDatabase() {
   if (!isTauri()) return null
@@ -156,18 +209,28 @@ export async function recordKnowledgeAnswer(day: string): Promise<KnowledgeActiv
 }
 
 export async function saveDocument(document: DocumentRecord): Promise<void> {
-  writeJson(`moyue:document:${document.id}`, document)
+  // The reader snapshot is the source of truth; avoid storing the Markdown twice.
+  const browserStore = await openBrowserSnapshotDatabase()
+  if (!browserStore) {
+    const { source: _source, ...metadata } = document
+    writeJson(`moyue:document:${document.id}`, metadata)
+  }
   const db = await getDatabase()
   await db?.execute('INSERT OR REPLACE INTO documents (id, path, title, source_hash, source, updated_at) VALUES (?, ?, ?, ?, ?, ?)', [document.id, document.path, document.title, document.sourceHash, document.source ?? null, document.updatedAt])
 }
 
 export async function saveDocumentSnapshot(document: ReaderDocument): Promise<void> {
+  // Dragged browser files have no reusable path after refresh. Keep their source,
+  // but rebuild derived HTML/regions on startup.
+  const snapshot: ReaderDocument = { ...document, headings: [], regions: [], wordCount: 0, estimatedReadMinutes: 0 }
+  if (await writeBrowserSnapshot(snapshot)) return
   const ids = snapshotIndex()
-  writeJson(snapshotKey(document.id), document)
+  writeJson(snapshotKey(document.id), snapshot)
   if (!ids.includes(document.id)) writeJson(SNAPSHOT_INDEX_KEY, [...ids, document.id])
 }
 
 export async function deleteDocument(documentId: string): Promise<void> {
+  await deleteBrowserSnapshot(documentId)
   const ids = snapshotIndex()
   writeJson(SNAPSHOT_INDEX_KEY, ids.filter((id) => id !== documentId))
   localStorage.removeItem(snapshotKey(documentId))
@@ -184,6 +247,14 @@ export function loadDocumentSnapshots(): ReaderDocument[] {
   return snapshotIndex()
     .map((id) => readJson<ReaderDocument | null>(snapshotKey(id), null))
     .filter((document): document is ReaderDocument => Boolean(document))
+}
+
+export async function loadDocumentSnapshotsAsync(): Promise<ReaderDocument[]> {
+  const local = loadDocumentSnapshots()
+  const browser = await readBrowserSnapshots()
+  const merged = new Map(local.map((document) => [document.id, document]))
+  browser.forEach((document) => merged.set(document.id, document))
+  return [...merged.values()]
 }
 
 export async function saveProgress(progress: ReadingProgress): Promise<void> {

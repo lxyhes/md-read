@@ -1,6 +1,6 @@
 import { computed, ref, shallowRef } from 'vue'
 import { defineStore } from 'pinia'
-import { deleteAnnotation, deleteDocument, getLocalProgress, getProgress, loadAnnotations, loadDocumentSnapshots, saveAnnotation, saveDocument, saveDocumentSnapshot, saveProgress } from '../persistence'
+import { deleteAnnotation, deleteDocument, getLocalProgress, getProgress, loadAnnotations, loadDocumentSnapshots, loadDocumentSnapshotsAsync, saveAnnotation, saveDocument, saveDocumentSnapshot, saveProgress } from '../persistence'
 import { authorizeMarkdownAssets, createRemoteAssetMap, createTauriAssetMap, downloadMarkdownImages, openMarkdownFile, openMarkdownFolder, resolveMarkdownAssetUrl, writeMarkdownFile, type OpenedFile } from '../fileService'
 import { builtInThemes, cssVariables, defaultTokens } from '../themes'
 import { interfaceFont } from '../fonts'
@@ -49,8 +49,11 @@ export const useReaderStore = defineStore('reader', () => {
     try {
       const settings = JSON.parse(localStorage.getItem('moyue:advanced-settings') ?? '{}') as { rememberRecent?: boolean }
       if (settings.rememberRecent === false) { localStorage.removeItem(SESSION_KEY); return }
-    } catch { /* keep the default session behavior */ }
-    localStorage.setItem(SESSION_KEY, JSON.stringify({ openDocumentIds: openDocumentIds.value, currentDocumentId: currentDocumentId.value }))
+      localStorage.setItem(SESSION_KEY, JSON.stringify({ openDocumentIds: openDocumentIds.value, currentDocumentId: currentDocumentId.value }))
+    } catch (error) {
+      // A full browser store must not prevent the current document from opening.
+      console.warn('无法保存阅读会话，本次仍继续打开文档', error)
+    }
   }
 
   function applyTheme(theme: MoyueTheme, adoptReaderSettings = false) {
@@ -125,8 +128,10 @@ export const useReaderStore = defineStore('reader', () => {
       documents.value = [...documents.value.filter((item) => item.id !== document.id), document]
       openedIds.push(document.id)
       if (options.persist !== false) {
-        await saveDocumentSnapshot(document)
-        await saveDocument({ id: document.id, path: document.path, title: document.title, sourceHash: document.sourceHash, updatedAt: document.updatedAt, source: document.source })
+        try { await saveDocumentSnapshot(document) }
+        catch (error) { console.warn('无法持久化 Markdown 快照，本次仍继续打开文档', error) }
+        try { await saveDocument({ id: document.id, path: document.path, title: document.title, sourceHash: document.sourceHash, updatedAt: document.updatedAt, source: document.source }) }
+        catch (error) { console.warn('无法持久化 Markdown 元数据，本次仍继续打开文档', error) }
       }
     }
     openDocumentIds.value = [...new Set([...openDocumentIds.value, ...openedIds])]
@@ -218,10 +223,14 @@ export const useReaderStore = defineStore('reader', () => {
 
   async function bootstrap() {
     applyTheme(activeTheme.value)
-    const saved = loadDocumentSnapshots()
+    const saved = await (typeof loadDocumentSnapshotsAsync === 'function' ? loadDocumentSnapshotsAsync() : loadDocumentSnapshots())
     const session = readSession()
     if (saved.length) {
-      documents.value = saved
+      documents.value = saved.map((document) => {
+        if (document.regions.length || !document.source) return document
+        try { return parseMarkdown(document.path, document.source) }
+        catch { return document }
+      })
       saved.forEach((document) => restoredDocumentIds.add(document.id))
     }
     else {
@@ -242,12 +251,17 @@ export const useReaderStore = defineStore('reader', () => {
     const document = documents.value.find((item) => item.id === id)
     if (!document) return
     const request = ++openDocumentRequest
-    if (restoredDocumentIds.has(id)) {
-      const refreshed = await parseOpenedFile({ path: document.path, source: document.source })
-      if (documents.value.includes(document)) {
-        documents.value = documents.value.map((item) => item.id === id ? refreshed : item)
-        restoredDocumentIds.delete(id)
-        await saveDocumentSnapshot(refreshed)
+    const needsRestoreRefresh = restoredDocumentIds.has(id)
+    if (needsRestoreRefresh && !options.deferProgress) {
+      restoredDocumentIds.delete(id)
+      try {
+        const refreshed = await parseOpenedFile({ path: document.path, source: document.source })
+        if (documents.value.includes(document)) {
+          documents.value = documents.value.map((item) => item.id === id ? refreshed : item)
+          await saveDocumentSnapshot(refreshed)
+        }
+      } catch {
+        // Keep the persisted snapshot available when a local asset cannot be refreshed.
       }
       if (request !== openDocumentRequest) return
     }
@@ -270,15 +284,26 @@ export const useReaderStore = defineStore('reader', () => {
     }
     if (localProgress) {
       applyProgress(localProgress)
-      return
-    }
-    if (options.deferProgress) {
+    } else if (options.deferProgress) {
       void getProgress(id).then((saved) => {
         if (currentDocumentId.value === id && !getLocalProgress(id)) applyProgress(saved)
       }).catch(() => {})
-      return
+    } else {
+      applyProgress(await getProgress(id))
     }
-    applyProgress(await getProgress(id))
+    if (needsRestoreRefresh && options.deferProgress) {
+      restoredDocumentIds.delete(id)
+      try {
+        const refreshed = await parseOpenedFile({ path: document.path, source: document.source })
+        const latest = documents.value.find((item) => item.id === id)
+        if (latest && latest.sourceHash === document.sourceHash) {
+          documents.value = documents.value.map((item) => item.id === id ? refreshed : item)
+          await saveDocumentSnapshot(refreshed)
+        }
+      } catch {
+        // Keep the persisted snapshot visible when a local asset cannot be refreshed.
+      }
+    }
   }
 
   async function closeDocument(id: string) {
