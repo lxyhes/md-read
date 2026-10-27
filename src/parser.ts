@@ -2,7 +2,7 @@ import type { HeadingItem, ReaderDocument, ReaderRegion, ReaderRegionType } from
 import { blockHtmlWithSourceIndent, renderFootnotes, renderVideoNode } from './markdown/render'
 import { createRenderContext, nodeText, renderMath, resolveMarkdownReferences, type MarkdownUrlResolver, type MdastNode } from './markdown/shared'
 import { formatPastedText, isLikelyProseBlock, normalizeMixedOrderedListSource } from './pasteMarkdown'
-import { isTimestampedParagraph, markdownProcessor as processor, normalizeArticleStrong, normalizeLatexDelimiters, normalizeMixedOrderedLists, promoteTimestampedParagraphs, removeEmptyListItems } from './markdown/fragment'
+import { isTimestampedParagraph, markdownProcessor as processor, normalizeArticleStrong, normalizeLatexDelimiters, normalizeMixedOrderedLists, promoteStandaloneImageLinks, promoteTimestampedParagraphs, removeEmptyListItems } from './markdown/fragment'
 
 export type { MarkdownUrlResolver } from './markdown/shared'
 export { makeImplicitMarkdownHeadingsExplicit, renderMarkdownFragment } from './markdown/fragment'
@@ -127,6 +127,11 @@ function restoreTimestampedListHeadings(tree: MdastNode) {
       restored.push(node)
       continue
     }
+    // A fully nested chapter list already expresses its hierarchy in Markdown.
+    if (node.children.every((item) => chapterText(item) && item.children?.some((child) => child.type === 'list'))) {
+      restored.push(...node.children.map((item) => ({ ...node, children: [item], position: item.position })))
+      continue
+    }
     let items: MdastNode[] = []
     const flush = () => {
       if (items.length) restored.push({ ...node, children: items, position: { start: items[0].position?.start, end: items.at(-1)?.position?.end } })
@@ -177,6 +182,7 @@ export function parseMarkdown(path: string, source: string, resolveUrl: Markdown
   const normalizedSource = normalizeMixedOrderedListSource(normalizeLatexDelimiters(source)).source
   const tree = processor.parse(normalizedSource) as unknown as MdastNode
   resolveMarkdownReferences(tree)
+  promoteStandaloneImageLinks(tree)
   normalizeMixedOrderedLists(tree)
   promoteTimestampedParagraphs(tree)
   restoreTimestampedLists(tree)

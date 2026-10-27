@@ -56,6 +56,13 @@ export function safeImageUrl(value: string): string {
   return escapeHtml(value)
 }
 
+export function isQuarkImageUrl(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return (url.protocol === 'https:' || url.protocol === 'http:') && /^img-view(?:-[a-z0-9-]+)?\.drive\.quark\.cn$/i.test(url.hostname)
+  } catch { return false }
+}
+
 export function safeMediaUrl(value: string): string {
   if (!value.trim().toLowerCase().startsWith('data:')) return safeUrl(value)
   return /^data:(?:video\/(?:mp4|webm|ogg)|text\/vtt);base64,[a-z\d+/=\s]+$/i.test(value.trim()) ? escapeHtml(value) : ''

@@ -5,7 +5,7 @@ import remarkMath from 'remark-math'
 import remarkParse from 'remark-parse'
 import { blockHtmlWithSourceIndent, renderFootnotes } from './render'
 import { createRenderContext, nodeText, resolveMarkdownReferences, type MarkdownUrlResolver, type MdastNode } from './shared'
-import { normalizeMixedOrderedListSource } from '../pasteMarkdown'
+import { isClipboardImageLink, normalizeMixedOrderedListSource } from '../pasteMarkdown'
 
 export const markdownProcessor = unified()
   .use(remarkParse)
@@ -77,6 +77,17 @@ export function promoteTimestampedParagraph(node: MdastNode): MdastNode {
 
 export function promoteTimestampedParagraphs(tree: MdastNode) {
   if (tree.children) tree.children = tree.children.map(promoteTimestampedParagraph)
+}
+
+export function promoteStandaloneImageLinks(node: MdastNode) {
+  if (node.type === 'paragraph' && node.children?.length === 1) {
+    const link = node.children[0]
+    const label = nodeText(link)
+    if (link.type === 'link' && isClipboardImageLink(label, link.url ?? '')) {
+      node.children = [{ ...link, type: 'image', alt: label, children: undefined }]
+    }
+  }
+  node.children?.forEach(promoteStandaloneImageLinks)
 }
 
 function normalizeMixedOrderedList(node: MdastNode): MdastNode {
@@ -158,6 +169,7 @@ export function renderMarkdownFragment(source: string, resolveUrl: MarkdownUrlRe
   const normalizedSource = normalizeMixedOrderedListSource(normalizeLatexDelimiters(source)).source
   const tree = markdownProcessor.parse(normalizedSource) as unknown as MdastNode
   resolveMarkdownReferences(tree)
+  promoteStandaloneImageLinks(tree)
   normalizeMixedOrderedLists(tree)
   promoteTimestampedParagraphs(tree)
   removeEmptyListItems(tree)

@@ -308,14 +308,14 @@ function hasMarkdownSyntax(value: string) {
   return /(?:^|\n)\s*(?:#{1,6}\s|[-*+]\s|[•◦▪]\s|\d+[.)]\s|>\s|```|~~~)|\*\*[^*\n]+\*\*|__[^_\n]+__|\[[^\]\n]+\]\([^\n)]+\)|`[^`\n]+`/m.test(value)
 }
 
-function isClipboardImageLink(label: string, target: string) {
+export function isClipboardImageLink(label: string, target: string) {
   const imageLabel = /^(?:image|图片|图像|截图)(?:\s*\d+)?$/i.test(label.trim())
   if (!imageLabel) return false
   const value = target.trim().replace(/^<|>$/g, '')
   return /\.(?:avif|bmp|gif|jiff?|jfif|jpe?g|png|svg|webp)(?:[?#].*)?$/i.test(value) || /(?:^|[./_-])(?:img|image|preview)(?:[./?_-]|$)/i.test(value)
 }
 
-function promoteClipboardImageLinks(value: string) {
+export function promoteClipboardImageLinks(value: string) {
   return value.split('\n').map((line) => line.replace(/^(\s*)\[([^\]\n]+)\]\((<[^>\n]+>|[^)\n]+)\)(\s*)$/, (match, indent: string, label: string, target: string, trailing: string) => {
     return isClipboardImageLink(label, target) ? `${indent}![${label}](${target})${trailing}` : match
   })).join('\n')

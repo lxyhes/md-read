@@ -2,6 +2,7 @@
 import { computed, defineAsyncComponent, getCurrentInstance, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { invoke, isTauri as tauriIsTauri } from '@tauri-apps/api/core'
 import { readNativeClipboardRichText } from './nativeClipboard'
+import { canScrollFocusedRegion } from './focusWheel'
 import { useReaderStore } from './stores/reader'
 import RegionBlock from './components/RegionBlock.vue'
 import SecondDocumentPane from './components/SecondDocumentPane.vue'
@@ -21,9 +22,9 @@ import { interfaceFont } from './fonts'
 import { defaultTokens } from './themes'
 import type { FileSystemTreeNode } from './components/FileSystemTree.vue'
 import ClipboardManager from './components/ClipboardManager.vue'
-import { copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, downloadMarkdownImages, exportDocumentWithPandoc, importDocumentWithPandoc, importMarkdownAsset, importMarkdownAssetFromPath, listDirectoryFiles, listFileSystemEntries, markdownPathExists, openFileSystemDirectory, openMarkdownDirectory, openMarkdownFile, openMarkdownFolderAt, organizeMarkdownAssets, readMarkdownExportAssets, readMarkdownPath, removeMarkdownAsset, renameMarkdownAsset, renameMarkdownPath, resolveMarkdownAssetUrl, resolveMarkdownPath, saveBinaryExportFile, saveClipboardImage, saveExportFile, saveMarkdownFile, savePdfExportFile, selectDocxReference, selectFileSystemDirectory, selectMarkdownFolder, splitMarkdownLinkTarget, uploadMarkdownImage, watchDirectoryPath, watchMarkdownPath, writeMarkdownFile, type PandocExportFormat, type WorkspaceFile } from './fileService'
+import { cachePastedRemoteImages, copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, downloadMarkdownImages, exportDocumentWithPandoc, importDocumentWithPandoc, importMarkdownAsset, importMarkdownAssetFromPath, listDirectoryFiles, listFileSystemEntries, markdownPathExists, openFileSystemDirectory, openMarkdownDirectory, openMarkdownFile, openMarkdownFolderAt, organizeMarkdownAssets, readMarkdownExportAssets, readMarkdownPath, removeMarkdownAsset, renameMarkdownAsset, renameMarkdownPath, resolveMarkdownAssetUrl, resolveMarkdownPath, saveBinaryExportFile, saveClipboardImage, saveExportFile, saveMarkdownFile, savePdfExportFile, selectDocxReference, selectFileSystemDirectory, selectMarkdownFolder, splitMarkdownLinkTarget, uploadMarkdownImage, watchDirectoryPath, watchMarkdownPath, writeMarkdownFile, type PandocExportFormat, type WorkspaceFile } from './fileService'
 import type { Annotation, ReaderDocument, ReaderRegion, ViewerType } from './types'
-import { escapeHtml, renderMathMl } from './markdown/shared'
+import { escapeHtml, isQuarkImageUrl, renderMathMl } from './markdown/shared'
 import { makeImplicitMarkdownHeadingsExplicit, parseMarkdown, renderMarkdownFragment } from './parser'
 import { getDocumentStatistics } from './documentStats'
 import { asciiDiagramToMermaid, asciiTreeToTree, markdownToTree } from './asciiDiagram'
@@ -1942,13 +1943,23 @@ async function saveCurrentDocument() {
   if (!document || isRealDocumentPath(document.path) || savingDocument.value) return
   savingDocument.value = true
   try {
-    const source = document.source
+    let source = document.source
     const path = isTauriRuntime()
       ? await saveMarkdownFile(source, document.title || '文档')
       : await saveExportFile(source, document.title || '文档', 'md', 'Markdown')
     if (!path) return
+    let imageDownloadFailed = false
+    if (isTauriRuntime()) {
+      try {
+        const localized = await downloadMarkdownImages(path, source, advancedSettings.value.relativeImagePathPrefix)
+        if (localized.count) {
+          await writeMarkdownFile(path, localized.source, source)
+          source = localized.source
+        }
+      } catch { imageDownloadFailed = true }
+    }
     await store.renameDocument(document.id, path, source)
-    notify(`Markdown 已保存：${path}`)
+    notify(imageDownloadFailed ? `Markdown 已保存，但远程图片下载失败：${path}` : `Markdown 已保存：${path}`)
   } catch (error) {
     notify(error instanceof Error ? error.message : 'Markdown 保存失败')
   } finally {
@@ -2496,6 +2507,11 @@ async function importClipboardContent(html: string, text: string, saveToFile = f
   }
   busyAction.value = action ?? (saveToFile ? 'paste-save' : 'paste')
   try {
+    let imageDownloadFailed = false
+    if (!saveToFile) {
+      try { source = (await cachePastedRemoteImages(source)).source }
+      catch { imageDownloadFailed = true }
+    }
     const suggestedName = suggestPastedMarkdownName(source)
     let path = saveToFile ? await saveMarkdownFile(source, suggestedName) : `${suggestedName}.md`
     if (!path) return
@@ -2513,7 +2529,7 @@ async function importClipboardContent(html: string, text: string, saveToFile = f
       view.value = 'reader'
       await nextTick()
       restoreScroll()
-      notify(saveToFile ? `已保存并打开：${path}` : '已粘贴并格式化为 Markdown')
+      notify(imageDownloadFailed ? '已粘贴，但远程图片下载失败，请检查网络或图片地址' : saveToFile ? `已保存并打开：${path}` : '已粘贴并格式化为 Markdown')
     }
   } catch (error) {
     notify(error instanceof Error ? error.message : '粘贴内容失败')
@@ -3517,7 +3533,9 @@ function moveFocus(delta: number) {
     const targetRect = target.getBoundingClientRect()
     const probeOffset = Math.min(viewport.clientHeight * .34, 280)
     const targetCenter = viewport.scrollTop + targetRect.top - viewportRect.top + targetRect.height / 2
-    const targetTop = targetCenter - probeOffset
+    const targetTop = targetRect.height > viewport.clientHeight
+      ? viewport.scrollTop + (delta > 0 ? targetRect.top - viewportRect.top : targetRect.bottom - viewportRect.bottom)
+      : targetCenter - probeOffset
     const maxScroll = Math.max(0, viewport.scrollHeight - viewport.clientHeight)
     viewport.scrollTop = Math.min(maxScroll, Math.max(0, targetTop))
   })
@@ -4021,6 +4039,11 @@ function onReaderWheel(event: WheelEvent) {
     return
   }
   if (!isFocusMode || event.ctrlKey || event.metaKey) return
+  const focused = [...viewport.querySelectorAll<HTMLElement>('[data-region-id]')].find((element) => element.dataset.regionId === store.focusedRegionId)
+  if (focused && canScrollFocusedRegion(focused.getBoundingClientRect(), viewport.getBoundingClientRect(), event.deltaY)) {
+    focusScrollTargetId = null
+    return
+  }
   event.preventDefault()
   const now = performance.now()
   if (now - focusWheelAt < 180) return
@@ -5214,7 +5237,7 @@ async function requestFullscreen() {
             <div class="viewer-source-toolbar"><span>图表结构</span></div>
             <pre class="viewer-source">{{ JSON.stringify(viewer.region.metadata ?? {}, null, 2) }}</pre>
           </div>
-          <div v-else-if="viewer.type === 'image'" class="image-viewer"><img :src="String(viewer.region.metadata?.url ?? '')" :alt="viewer.region.textContent" :style="viewerImageStyle" draggable="false" decoding="async" :referrerpolicy="advancedSettings.remoteImagePrivacy ? 'no-referrer' : undefined" @load="fitViewer" /></div>
+          <div v-else-if="viewer.type === 'image'" class="image-viewer"><img :src="String(viewer.region.metadata?.url ?? '')" :alt="viewer.region.textContent" :style="viewerImageStyle" draggable="false" decoding="async" :referrerpolicy="advancedSettings.remoteImagePrivacy || isQuarkImageUrl(String(viewer.region.metadata?.url ?? '')) ? 'no-referrer' : undefined" @load="fitViewer" /></div>
           <ViewerCode v-else-if="viewer.type === 'code'" :region="viewer.region" :theme-mode="store.activeTheme?.manifest.mode" @copied="notify('代码已复制')" />
           <div v-else class="code-viewer table-viewer" v-html="viewer.region.html" />
         </div>

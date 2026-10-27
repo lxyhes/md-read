@@ -139,10 +139,16 @@ $$`)
     expect(document.regions[0].html).toBe('<p>第一行<br />&nbsp;&nbsp;第二行<br />&nbsp;&nbsp;&nbsp;第三行</p>')
   })
 
-  it('preserves leading spaces in paragraphs nested inside list items', () => {
+  it('does not render structural list indentation as extra spaces', () => {
     const source = '- **摘要内容由AI生成**\n\n  第一行\n  第二行\n\n- **分段总结**'
     const document = parseMarkdown('notes/nested-indent.md', source)
-    expect(document.regions[0].html).toContain('<p>&nbsp;&nbsp;第一行<br />&nbsp;&nbsp;第二行</p>')
+    expect(document.regions[0].html).toContain('<p>第一行<br />第二行</p>')
+  })
+
+  it('removes pasted full-width spaces between list markers and text', () => {
+    const document = parseMarkdown('list-spaces.md', '- 第一层\n  - 　　返利网是联盟的下级。\n    1. 　　从上级联盟获取。')
+    expect(document.regions[0].html).toContain('<p>返利网是联盟的下级。</p>')
+    expect(document.regions[0].html).toContain('<p>从上级联盟获取。</p>')
   })
 
   it('preserves full-width leading spaces in reader HTML', () => {
@@ -466,13 +472,13 @@ $$`)
 - **下一章&#xA0;**[**00:36**](https://b.quark.cn/apps/5AZ7aRopS/routes/Gj8VNtRtS?debug=0\&fid=example#?seek_t=36)
   - 解释“道”的本质。`
     const document = parseMarkdown('chapter-list.md', source)
-    expect(document.regions.map((region) => region.type)).toEqual(['heading', 'list', 'heading', 'list'])
+    expect(document.regions.map((region) => region.type)).toEqual(['list', 'list'])
     const html = document.regions.map((region) => region.html).join('')
     expect(html).toContain('课程主旨与IP四维模型')
     expect(html).toContain('<strong>录制艰辛</strong>')
     expect(html).toContain('利用间隙录制。')
     expect(html).toContain('href="https://b.quark.cn/apps/5AZ7aRopS/routes/Gj8VNtRtS?debug=0&amp;fid=example#?seek_t=2"')
-    expect((html.match(/<li(?:\s|>)/g) ?? []).length).toBe(4)
+    expect((html.match(/<li(?:\s|>)/g) ?? []).length).toBe(6)
     expect(formatPastedText(source)).toContain('  - **录制艰辛**：\n    - 利用间隙录制。')
     const tree = markdownToTree(source, '视频')
     expect(tree?.children.map((child) => child.label)).toEqual(['课程主旨与IP四维模型 [00:02]', '下一章 [00:36]'])
@@ -505,7 +511,7 @@ $$`)
     expect(document.regions[5]?.html).toContain('<ul>')
   })
 
-  it('splits timestamped chapters when the source is a list without an explicit heading', () => {
+  it('preserves timestamped chapter lists with nested items', () => {
     const source = [
       '- 总纲领：人与AI的关系定位 00:35',
       '  - 核心原则是“人是将军，AI是军师”。',
@@ -516,12 +522,8 @@ $$`)
     ].join('\n')
     const document = parseMarkdown('timestamped-list-only.md', source)
 
-    expect(document.regions.map((region) => region.type)).toEqual(['heading', 'list', 'heading', 'list', 'heading', 'list'])
-    expect(document.headings.map((heading) => heading.text)).toEqual([
-      '总纲领：人与AI的关系定位 00:35',
-      '第一步：学会高质量提问 01:50',
-      '第二步：AI的进阶应用与优势分析 04:43',
-    ])
+    expect(document.regions.map((region) => region.type)).toEqual(['list', 'list', 'list'])
+    expect(document.regions[0].html).toContain('<ul><li><p>核心原则')
   })
 
   it('removes empty list rows left by trailing bullet markers', () => {

@@ -1,9 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import courseSource from '../docs/fixtures/直播电商选品-原文.md?raw'
 import { formatClipboardToMarkdown } from './pasteMarkdown'
-import { parseMarkdown } from './parser'
+import { parseMarkdown, renderMarkdownFragment } from './parser'
 
 describe('rich clipboard list hierarchy', () => {
+  it('renders standalone pasted image links in saved documents and previews', () => {
+    const source = '[image](https://img-view-c-sz.drive.quark.cn/assets/preview?token=abc\\&sp=100)'
+    const document = parseMarkdown('course.md', source)
+    expect(document.regions[0].type).toBe('image')
+    expect(document.regions[0].html).toContain('token=abc&amp;sp=100')
+    expect(document.regions[0].html).toContain('referrerpolicy="no-referrer"')
+    expect(renderMarkdownFragment(source)).toContain('<img ')
+    expect(renderMarkdownFragment(`文本 ![图片](https://img-view-c-sz.drive.quark.cn/preview)`)).toContain('referrerpolicy="no-referrer"')
+    expect(renderMarkdownFragment('[image](https://example.com/article)')).toContain('<a ')
+    expect(renderMarkdownFragment('见 [image](https://example.com/image.png)')).toContain('<a ')
+  })
   it('retains every timestamp link in the full user-supplied course, before and after paste formatting', () => {
     const source = courseSource
     const expected = ['10:53', '15:29', '24:21', '38:02', '42:42', '01:02:58', '01:11:02', '01:10:58']

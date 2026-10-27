@@ -1335,13 +1335,18 @@ html, body, #app { background: var(--app-bg, #070d22); }
   padding-left: 28px;
 }
 .reader-content .region-content li {
-  padding: 4px 0 4px 4px;
+  padding: 4px 0;
   line-height: 1.72;
 }
 .reader-content .region-content li::marker {
   color: var(--accent);
   font-family: var(--mono);
   font-size: .8em;
+}
+.app-shell .reader-content .region-content ul > li::marker,
+.app-shell:not(.is-focus) .reader-content.is-course-outline .region-content ul > li::marker {
+  color: var(--ink);
+  font-size: 1em;
 }
 .reader-content .region-content li > p {
   margin-bottom: 6px;

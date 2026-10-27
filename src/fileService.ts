@@ -1,7 +1,9 @@
 import { convertFileSrc, invoke, isTauri as tauriIsTauri } from '@tauri-apps/api/core'
+import { appDataDir } from '@tauri-apps/api/path'
 import { open, save } from '@tauri-apps/plugin-dialog'
 import { copyFile, mkdir, readDir, readFile, readTextFile, remove, rename, stat, watch, writeFile, writeTextFile } from '@tauri-apps/plugin-fs'
 import { renderMarkdownFragment } from './markdown/fragment'
+import { promoteClipboardImageLinks } from './pasteMarkdown'
 
 const isTauri = () => tauriIsTauri()
 
@@ -397,14 +399,15 @@ export async function downloadMarkdownImages(markdownPath: string, source: strin
   const directory = dirnameOf(markdownPath)
   if (!directory) throw new Error('请先将 Markdown 保存到本地')
   const pattern = /(!\[[^\]\n]*\]\()(<https?:\/\/[^>\n]+>|https?:\/\/[^)\s\n]+)(\))/gi
-  const urls = [...new Set([...source.matchAll(pattern)].map((match) => match[2].replace(/^<|>$/g, '')))]
+  const normalizedSource = promoteClipboardImageLinks(source)
+  const urls = [...new Set([...normalizedSource.matchAll(pattern)].map((match) => match[2].replace(/^<|>$/g, '')))]
   if (!urls.length) return { source, count: 0 }
   const assetDirectory = `${directory}/.moyue-assets`
   await mkdir(assetDirectory, { recursive: true })
   const replacements = new Map<string, string>()
   for (const [index, url] of urls.entries()) {
     try {
-      const image = await invoke<{ bytes: number[]; mime: string }>('download_remote_image', { url })
+      const image = await invoke<{ bytes: number[]; mime: string }>('download_remote_image', { url: url.replace(/\\([!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])/g, '$1') })
       const extension = imageExtension(url, image.mime)
       const name = `download-${Date.now().toString(36)}-${index + 1}.${extension}`
       await writeFile(`${assetDirectory}/${name}`, Uint8Array.from(image.bytes))
@@ -416,12 +419,20 @@ export async function downloadMarkdownImages(markdownPath: string, source: strin
   if (!replacements.size) throw new Error('远程图片下载失败，请检查图片地址或网络')
   await authorizeMarkdownAssets(markdownPath)
   return {
-    source: source.replace(pattern, (match, before: string, wrapped: string, after: string) => {
+    source: normalizedSource.replace(pattern, (match, before: string, wrapped: string, after: string) => {
       const value = wrapped.replace(/^<|>$/g, '')
       return `${before}${replacements.get(value) ?? wrapped}${after}`
     }),
     count: replacements.size,
   }
+}
+
+export async function cachePastedRemoteImages(source: string): Promise<{ source: string; count: number }> {
+  if (!isTauri()) return { source, count: 0 }
+  const directory = (await appDataDir()).replace(/\\/g, '/').replace(/\/$/, '')
+  const result = await downloadMarkdownImages(`${directory}/clipboard.md`, source)
+  const encodedDirectory = encodeURI(directory).replace(/[?#]/g, (character) => encodeURIComponent(character))
+  return { ...result, source: result.source.replace(/(!\[[^\]\n]*\]\()\.moyue-assets\//g, (_match, prefix: string) => `${prefix}${encodedDirectory}/.moyue-assets/`) }
 }
 
 function managedAssetPath(markdownPath: string, markdownUrl: string) {

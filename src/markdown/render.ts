@@ -2,6 +2,7 @@ import DOMPurify from 'dompurify'
 import {
   createRenderContext,
   escapeHtml,
+  isQuarkImageUrl,
   nodeText,
   renderMath,
   safeImageUrl,
@@ -27,7 +28,8 @@ function autoLinkEnabled() {
   catch { return true }
 }
 
-function imageReferrerPolicyAttribute() {
+function imageReferrerPolicyAttribute(url: string) {
+  if (isQuarkImageUrl(url)) return ' referrerpolicy="no-referrer"'
   if (typeof localStorage === 'undefined') return ''
   try { return JSON.parse(localStorage.getItem('moyue:advanced-settings') ?? '{}').remoteImagePrivacy === true ? ' referrerpolicy="no-referrer"' : '' }
   catch { return '' }
@@ -52,7 +54,7 @@ function inlineHtml(node: MdastNode, preserveSoftBreaks = false, resolveUrl: Mar
     case 'link': return !autoLinkEnabled() && nodeText(node) === node.url ? escapeHtml(nodeText(node)) : `<a href="${safeUrl(resolveUrl(node.url ?? ''))}" target="_blank" rel="noreferrer">${children()}</a>`
     case 'image': {
       const url = resolveUrl(node.url ?? '')
-      return `<img src="${safeImageUrl(url)}" alt="${escapeHtml(node.title ?? nodeText(node))}" loading="lazy" decoding="async"${imageReferrerPolicyAttribute()} />`
+      return `<img src="${safeImageUrl(url)}" alt="${escapeHtml(node.title ?? nodeText(node))}" loading="lazy" decoding="async"${imageReferrerPolicyAttribute(url)} />`
     }
     case 'break': return '<br />'
     case 'inlineMath': return renderMath(node.value ?? '', false)
@@ -156,8 +158,8 @@ export function renderVideoNode(video: MdastNode, resolveUrl: MarkdownUrlResolve
   return `<figure class="markdown-video"><video src="${safeMediaUrl(resolveUrl(video.url ?? ''))}"${poster} controls preload="metadata">${track}</video><figcaption>${escapeHtml(caption)}</figcaption></figure>`
 }
 
-function blockHtml(node: MdastNode, resolveUrl: MarkdownUrlResolver = (url) => url, context = createRenderContext(), source?: string): string {
-  const children = () => (node.children ?? []).map((child) => blockHtml(child, resolveUrl, context, source)).join('')
+function blockHtml(node: MdastNode, resolveUrl: MarkdownUrlResolver = (url) => url, context = createRenderContext(), source?: string, inList = false): string {
+  const children = () => (node.children ?? []).map((child) => blockHtml(child, resolveUrl, context, source, inList || node.type === 'listItem')).join('')
   const inlineChildren = (preserveSoftBreaks = false) => (node.children ?? []).map((child) => inlineHtml(child, preserveSoftBreaks, resolveUrl, context)).join('')
   switch (node.type) {
     case 'heading': {
@@ -175,7 +177,9 @@ function blockHtml(node: MdastNode, resolveUrl: MarkdownUrlResolver = (url) => u
       if (standaloneImage) return blockHtml(standaloneImage, resolveUrl, context)
       const video = standaloneVideoNode(node)
       if (video) return renderVideoNode(video, resolveUrl)
-      return source ? sourceIndentedHtml(`<p>${inlineChildren(true)}</p>`, source, node) : `<p>${inlineChildren(true)}</p>`
+      const content = inlineChildren(true)
+      if (inList) return `<p>${content.replace(/^(?:\s|&nbsp;|\u00a0|\u3000)+/, '')}</p>`
+      return source ? sourceIndentedHtml(`<p>${content}</p>`, source, node) : `<p>${content}</p>`
     }
     case 'blockquote': return calloutHtml(node, resolveUrl, context, source) ?? `<blockquote>${children()}</blockquote>`
     case 'list': return `<${node.ordered ? 'ol' : 'ul'}>${children()}</${node.ordered ? 'ol' : 'ul'}>`
@@ -189,7 +193,7 @@ function blockHtml(node: MdastNode, resolveUrl: MarkdownUrlResolver = (url) => u
     case 'math': return `<div class="math-block">${renderMath(node.value ?? '', true)}</div>`
     case 'image': {
       const url = resolveUrl(node.url ?? '')
-      return `<img src="${safeImageUrl(url)}" alt="${escapeHtml(node.title ?? '')}" loading="eager" decoding="async"${imageReferrerPolicyAttribute()} />`
+      return `<img src="${safeImageUrl(url)}" alt="${escapeHtml(node.title ?? node.alt ?? '')}" loading="eager" decoding="async"${imageReferrerPolicyAttribute(url)} />`
     }
     case 'thematicBreak': return '<hr />'
     case 'table': {
