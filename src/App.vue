@@ -4967,10 +4967,10 @@ async function requestFullscreen() {
             <div v-if="leftPanelTab === 'files'" class="file-browser-panel">
               <div class="file-location" :title="fileBrowserMode === 'tree' ? filesystemTree?.path : currentDirectory"><AppIcon name="folder" :size="15" :stroke-width="2" /><span>{{ fileBrowserMode === 'tree' ? '目录树' : currentDirectoryLabel }}</span><button class="file-tree-back" type="button" :aria-label="fileBrowserMode === 'tree' ? '切换到文档列表' : '切换到目录树'" @click="fileBrowserMode === 'tree' ? showDocumentList() : showDocumentTree()">{{ fileBrowserMode === 'tree' ? '列表' : '目录树' }}</button></div>
               <div class="file-filter-toolbar" aria-label="文件侧栏筛选">
-                <Select v-model="sidebarFilter" aria-label="文件筛选方式" class="file-filter-select"><Option value="markdown">Markdown 文件</Option><Option value="hidden">包含隐藏文件</Option><Option value="all">全部文件</Option><Option value="glob">自定义 glob</Option></Select>
+                <Select v-model="sidebarFilter" size="small" aria-label="文件筛选方式" class="file-filter-select"><Option value="markdown">Markdown 文件</Option><Option value="hidden">包含隐藏文件</Option><Option value="all">全部文件</Option><Option value="glob">自定义 glob</Option></Select>
                 <Input v-if="sidebarFilter === 'glob'" v-model="sidebarGlob" class="file-glob-input" allow-clear :input-attrs="{ 'aria-label': '自定义 glob' }" placeholder="例如 *.md" />
-                <Select v-model="fileSort" aria-label="文件排序方式" class="file-sort-select"><Option value="name">名称</Option><Option value="natural">自然顺序</Option><Option value="created">创建时间</Option><Option value="modified">修改时间</Option><Option value="size">文件大小</Option></Select>
-                <Checkbox v-if="fileBrowserMode === 'tree'" v-model="fileTreeMixFolders" class="file-tree-mix">混排</Checkbox>
+                <Select v-model="fileSort" size="small" aria-label="文件排序方式" class="file-sort-select"><Option value="name">名称</Option><Option value="natural">自然顺序</Option><Option value="created">创建时间</Option><Option value="modified">修改时间</Option><Option value="size">文件大小</Option></Select>
+                <div v-if="fileBrowserMode === 'tree'" class="file-tree-mix"><span>文件夹与文件混排</span><Switch v-model="fileTreeMixFolders" size="small" aria-label="文件夹与文件混排" /></div>
               </div>
               <div v-if="fileBrowserMode === 'tree'" class="filesystem-tree-panel">
                 <div v-if="filesystemTree" class="filesystem-tree" :aria-label="filesystemTreeScope === 'system' ? '当前目录文档树' : '当前目录已载入文档'"><FileSystemTree :node="filesystemTree" :selected-path="filesystemTreeTarget" @toggle="toggleFilesystemNode" @open="openFilesystemTreeNode" @contextmenu="openFilesystemContextMenu" /></div>

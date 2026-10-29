@@ -3528,6 +3528,14 @@ body .app-shell.is-editor-studio .reader-layout {
   min-width: 0;
 }
 
+.app-shell .file-filter-toolbar .arco-select-view-single {
+  height: 32px;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
 .app-shell .file-filter-toolbar .arco-input {
   min-width: 0;
   padding: 0;

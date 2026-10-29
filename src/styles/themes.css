@@ -2878,13 +2878,12 @@ body.is-resizing-outline * {
   }
 }
 .reader-edit-actions { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
-.file-filter-toolbar { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
-.file-filter-toolbar .arco-select, .file-filter-toolbar input { min-width: 0; width: 100%; }
-.file-filter-toolbar .arco-select-view-single, .file-filter-toolbar input { padding: 6px 7px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-raised); color: var(--ink); font: 10px var(--ui-font); }
-.file-filter-toolbar .arco-select { flex: 1 1 92px; min-width: 78px; }
-.file-filter-toolbar .file-sort-select { flex: 0 0 92px; min-width: 92px; }
-.file-filter-toolbar input { flex: 1 1 76px; }
-.file-tree-mix { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 4px; padding: 0 2px; color: var(--muted); font: 9px var(--ui-font); white-space: nowrap; }
+.file-filter-toolbar { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 10px 8px; padding: 12px 0 10px; border-bottom: 1px solid var(--border); }
+.file-filter-toolbar .arco-select { width: 100%; min-width: 0; }
+.file-filter-toolbar .file-filter-select { grid-column: 1; grid-row: 1; }
+.file-filter-toolbar .file-sort-select { grid-column: 2; grid-row: 1; }
+.file-filter-toolbar .file-glob-input { grid-column: 1 / -1; }
+.file-tree-mix { display: flex; grid-column: 1 / -1; align-items: center; justify-content: space-between; gap: 8px; min-height: 24px; color: var(--muted); font: 12px var(--ui-font); }
 .table-alignment-actions { display: flex; align-items: center; gap: 5px; margin: 0 0 10px; color: var(--muted); font: 10px var(--ui-font); }
 .table-alignment-actions button { min-width: 26px; padding: 4px 7px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface-raised); color: var(--ink); font: inherit; }
 .table-column-selection { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin: 0 0 10px; color: var(--muted); font: 10px var(--ui-font); }
