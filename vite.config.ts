@@ -7,6 +7,7 @@ export default defineConfig({
   server: {
     port: 1420,
     strictPort: true,
+    headers: { 'Cache-Control': 'no-store' },
     watch: { ignored: ['**/src-tauri/**', '**/.cargo-task/**', '**/.rustup-task/**'] },
     warmup: { clientFiles: ['./src/main.ts', './src/App.vue', './src/styles.css'] }
   },

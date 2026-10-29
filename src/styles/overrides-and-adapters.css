@@ -2845,11 +2845,11 @@ body .app-shell.is-editor-studio .reader-layout {
 }
 
 .app-shell:not(.is-editor-studio):not(.is-focus) .reader-layout:not(.focus-layout):not(.clean-layout) {
-  grid-template-columns: clamp(240px, 19vw, 300px) minmax(0, 1fr) 0;
+  grid-template-columns: var(--outline-panel-width, clamp(240px, 19vw, 300px)) minmax(0, 1fr) 0;
 }
 
 .app-shell:not(.is-editor-studio):not(.is-focus) .reader-layout.context-open:not(.focus-layout):not(.clean-layout) {
-  grid-template-columns: clamp(240px, 19vw, 300px) minmax(0, 1fr) 260px;
+  grid-template-columns: var(--outline-panel-width, clamp(240px, 19vw, 300px)) minmax(0, 1fr) 260px;
 }
 
 .app-shell:not(.is-editor-studio):not(.is-focus) .reader-layout.outline-panel-collapsed:not(.context-open):not(.focus-layout):not(.clean-layout) {
@@ -2934,7 +2934,7 @@ body .app-shell.is-editor-studio .reader-layout {
 
 @media (max-width: 900px) {
   .app-shell:not(.is-editor-studio):not(.is-focus) .reader-layout:not(.focus-layout):not(.clean-layout) {
-    grid-template-columns: 220px minmax(0, 1fr) 0;
+    grid-template-columns: var(--outline-panel-width, 220px) minmax(0, 1fr) 0;
   }
 
   .app-shell:not(.is-editor-studio):not(.is-focus) .reader-content {
@@ -3226,15 +3226,25 @@ body .app-shell.is-editor-studio .reader-layout {
 
 /* Reading desk chrome: tools form a calm command row; open files sit on a
    separate, tactile tab shelf. */
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column {
+  container: reader-main / inline-size;
+}
+
+.reader-toolbar-slot {
+  flex: 0 0 auto;
+}
+
 .app-shell:not(.is-editor-studio):not(.is-focus) .reader-toolbar-slot > .reader-meta-topbar {
   min-height: 52px;
-  height: 52px;
-  flex-basis: 52px;
+  height: auto;
+  flex-basis: auto;
   padding: 7px 16px;
   background: color-mix(in srgb, var(--surface-raised) 42%, var(--surface));
 }
 
 .app-shell:not(.is-editor-studio):not(.is-focus) .reader-toolbar-slot > .reader-meta-topbar .reader-meta-tools {
+  flex-wrap: wrap;
+  justify-content: flex-start;
   gap: 8px;
 }
 
@@ -3244,6 +3254,8 @@ body .app-shell.is-editor-studio .reader-layout {
 }
 
 .app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-edit-actions {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
   margin-right: auto;
 }
 
@@ -3364,7 +3376,7 @@ body .app-shell.is-editor-studio .reader-layout {
   white-space: nowrap;
 }
 
-@media (max-width: 1320px) {
+@container reader-main (max-width: 1100px) {
   .app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-command-trigger {
     min-width: 34px;
     width: 34px;
