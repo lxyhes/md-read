@@ -5,7 +5,8 @@ import { EditorView, keymap, drawSelection, dropCursor, lineNumbers, highlightAc
 import { defaultKeymap, history, historyKeymap, undo, redo, undoDepth, redoDepth } from '@codemirror/commands'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { Subscript, Superscript } from '@lezer/markdown'
-import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language'
+import { syntaxHighlighting, defaultHighlightStyle, syntaxTree } from '@codemirror/language'
+import { isTopLevelParagraph } from '../editorInput'
 import { liveMarkdown } from '../liveMarkdown'
 import MermaidBlock from './MermaidBlock.vue'
 
@@ -22,6 +23,8 @@ const emit = defineEmits<{
   link: [url: string]
 }>()
 const host = ref<HTMLElement | null>(null)
+const fallback = ref(false)
+const failed = ref(false)
 const appearance = new Compartment()
 let view: EditorView | null = null
 let publishing = false
@@ -49,7 +52,7 @@ const live = liveMarkdown({ resolveUrl: url => props.resolveUrl(url), openLink: 
   render(node, root)
   return () => render(null, root)
 } })
-const extensions = () => [props.live ? live : [lineNumbers(), syntaxHighlighting(defaultHighlightStyle)], EditorView.contentAttributes.of({ 'aria-label': props.live ? 'Markdown 所见即所得编辑器' : 'Markdown 源码编辑器', spellcheck: String(props.spellcheck) })]
+const extensions = () => [props.live && !fallback.value ? live : [lineNumbers(), syntaxHighlighting(defaultHighlightStyle)], EditorView.contentAttributes.of({ 'aria-label': props.live && !fallback.value ? 'Markdown 所见即所得编辑器' : 'Markdown 源码编辑器', spellcheck: String(props.spellcheck) })]
 
 function replaceSource(value: string, start?: number, end = start) {
   if (!view) return
@@ -69,8 +72,8 @@ function centerCaret() {
 
 onMounted(() => {
   host.value!.addEventListener('focusin', onFocus)
-  view = new EditorView({ parent: host.value!, state: EditorState.create({ doc: props.modelValue, extensions: [
-    EditorState.lineSeparator.of('\n'), markdown({ base: markdownLanguage, extensions: [Subscript, Superscript] }), history(), drawSelection(), dropCursor(), highlightActiveLine(), EditorView.lineWrapping,
+  const createEditor = () => new EditorView({ parent: host.value!, state: EditorState.create({ doc: props.modelValue, extensions: [
+    EditorState.lineSeparator.of('\n'), ...(fallback.value ? [] : [markdown({ base: markdownLanguage, extensions: [Subscript, Superscript] })]), history(), drawSelection(), dropCursor(), highlightActiveLine(), EditorView.lineWrapping,
     keymap.of([...historyKeymap, ...defaultKeymap]), appearance.of(extensions()),
     EditorView.domEventHandlers({
       keydown(event) { emit('keydown', event); return event.defaultPrevented },
@@ -87,7 +90,23 @@ onMounted(() => {
       }
     }),
   ] }) })
-  view.focus()
+  try {
+    view = createEditor()
+  } catch (error) {
+    console.error('Markdown editor initialization failed', error)
+    fallback.value = true
+    host.value!.replaceChildren()
+    try {
+      view = createEditor()
+      emit('message', '实时编辑器加载失败，已切换到源码编辑；草稿内容未改变')
+    } catch (fallbackError) {
+      console.error('Markdown source editor initialization failed', fallbackError)
+      host.value!.replaceChildren()
+      failed.value = true
+      emit('message', '编辑器加载失败，原文可复制；请退出编辑后重试')
+    }
+  }
+  view?.focus()
 })
 watch(() => props.modelValue, value => { if (!publishing && view?.state.doc.toString() !== value) replaceSource(value) })
 watch(() => [props.live, props.spellcheck], () => view?.dispatch({ effects: appearance.reconfigure(extensions()) }))
@@ -108,7 +127,21 @@ defineExpose({
   scrollTo: (options: ScrollToOptions) => view?.scrollDOM.scrollTo(options),
   centerCaret,
   wrapInlineCell,
+  isTopLevelParagraph: () => view && !fallback.value ? isTopLevelParagraph(syntaxTree(view.state), view.state.selection.main.from, view.state.selection.main.to) : false,
 })
 </script>
 
-<template><div ref="host" class="markdown-editor" :class="{ 'is-live': live, 'is-line-focus': focusMode }" /></template>
+<template>
+  <div class="markdown-editor" :class="{ 'is-live': live && !fallback, 'is-line-focus': focusMode && !fallback }">
+    <p v-if="fallback" role="alert" class="editor-fallback-notice">{{ failed ? '编辑器加载失败，原文未改变。请复制原文或退出编辑后重试。' : '实时渲染加载失败，已切换到源码编辑；草稿内容未改变。' }}</p>
+    <textarea v-if="failed" :value="modelValue" class="editor-fallback-source" readonly aria-label="编辑器加载失败时的原文" />
+    <div ref="host" class="editor-code-host" :hidden="failed" />
+  </div>
+</template>
+
+<style scoped>
+.markdown-editor { display: flex; flex-direction: column; }
+.editor-code-host { flex: 1; min-height: 0; }
+.editor-fallback-notice { flex: none; margin: 0; padding: 10px 16px; color: var(--ink); background: var(--accent-soft); font: 13px/1.5 var(--ui-font); }
+.editor-fallback-source { flex: 1; min-height: 0; width: 100%; padding: 16px; resize: none; color: var(--ink); background: var(--surface); font: 14px/1.6 var(--mono); }
+</style>

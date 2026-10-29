@@ -1,5 +1,25 @@
 import { describe, expect, it } from 'vitest'
-import { codeIndentInsertion, indentSelection, isFenceBacktickInput, selectedLineRange, removeSelectedLines } from './editorInput'
+import { markdownLanguage } from '@codemirror/lang-markdown'
+import { codeIndentInsertion, indentSelection, isFenceBacktickInput, isTopLevelParagraph, selectedLineRange, removeSelectedLines, setHeadingLines } from './editorInput'
+
+it('changes heading levels without stacking Markdown markers', () => {
+  expect(setHeadingLines('# one\n## two\ntext', 0, 12, 3)).toEqual({ value: '### one\n### two\ntext', start: 0, end: 15 })
+})
+
+describe('paragraph editing', () => {
+  it('recognizes plain paragraphs and inline formatting', () => {
+    const tree = markdownLanguage.parser.parse('hello **world**')
+    expect(isTopLevelParagraph(tree, 0, 0)).toBe(true)
+    expect(isTopLevelParagraph(tree, 9, 11)).toBe(true)
+    expect(isTopLevelParagraph(tree, 15, 15)).toBe(true)
+  })
+  it('leaves structured blocks and cross-paragraph selections alone', () => {
+    for (const source of ['- item', '> quote', '# heading', '```\ncode\n```']) {
+      expect(isTopLevelParagraph(markdownLanguage.parser.parse(source), 3, 3)).toBe(false)
+    }
+    expect(isTopLevelParagraph(markdownLanguage.parser.parse('one\n\ntwo'), 1, 7)).toBe(false)
+  })
+})
 
 describe('line selection and deletion', () => {
   it('selects an empty first line without skipping it', () => {

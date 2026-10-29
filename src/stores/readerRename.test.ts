@@ -30,6 +30,18 @@ beforeEach(() => {
 })
 
 describe('path-only document rename', () => {
+  it('keeps browser image assets available to the editor through rename and clears them on removal', async () => {
+    const store = useReaderStore()
+    await store.addOpenedFiles([{ path: 'photo.md', source: '![image](cover.png)', assets: { 'cover.png': 'blob:cover' } }])
+    const id = store.currentDocumentId!
+    expect(store.getDocumentAssets(id)['cover.png']).toBe('blob:cover')
+    const renamed = await store.renameDocument(id, 'renamed.md')
+    expect(store.getDocumentAssets(id)).toEqual({})
+    expect(store.getDocumentAssets(renamed!.id)['cover.png']).toBe('blob:cover')
+    await store.removeDocument(renamed!.id)
+    expect(store.getDocumentAssets(renamed!.id)).toEqual({})
+  })
+
   it('updates all paths and the current tab before a failed database write settles', async () => {
     const store = useReaderStore()
     const first = parseMarkdown('C:/旧目录/first.md', '# First\n\n![image](https://mmbiz.qpic.cn/example)')

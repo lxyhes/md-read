@@ -1,3 +1,14 @@
+import type { Tree } from '@lezer/common'
+
+export function isTopLevelParagraph(tree: Tree, start: number, end: number) {
+  for (const side of [1, -1] as const) {
+    let node = tree.resolveInner(start, side)
+    while (node && node.name !== 'Paragraph') node = node.parent!
+    if (node && node.parent?.name === 'Document' && node.from <= start && end <= node.to) return true
+  }
+  return false
+}
+
 export function isFenceBacktickInput(value: string, cursor: number) {
   const lineStart = cursor === 0 ? 0 : value.lastIndexOf('\n', cursor - 1) + 1
   return /^ {0,3}`{2,}$/.test(value.slice(lineStart, cursor)) && value[cursor] !== '`'
@@ -7,6 +18,13 @@ export function selectedLineRange(value: string, start: number, end: number) {
   const lineStart = start === 0 ? 0 : value.lastIndexOf('\n', start - 1) + 1
   const nextBreak = value.indexOf('\n', end > start ? end - 1 : end)
   return { start: lineStart, end: nextBreak < 0 ? value.length : nextBreak }
+}
+
+export function setHeadingLines(value: string, start: number, end: number, level: number) {
+  const range = selectedLineRange(value, start, end)
+  const prefix = `${'#'.repeat(level)} `
+  const replacement = value.slice(range.start, range.end).split('\n').map(line => prefix + line.replace(/^ {0,3}#{1,6}(?:[ \t]+|$)/, '')).join('\n')
+  return { value: value.slice(0, range.start) + replacement + value.slice(range.end), start: range.start, end: range.start + replacement.length }
 }
 
 export function removeSelectedLines(value: string, start: number, end: number) {

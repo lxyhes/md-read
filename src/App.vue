@@ -17,7 +17,7 @@ import KnowledgeComposer from './components/KnowledgeComposer.vue'
 import IconButton from './components/IconButton.vue'
 import FontPicker from './components/FontPicker.vue'
 import type MarkdownEditorComponent from './components/MarkdownEditor.vue'
-import EditorExportMenu from './components/EditorExportMenu.vue'
+import EditorMenuBar from './components/EditorMenuBar.vue'
 import { interfaceFont } from './fonts'
 import { defaultTokens } from './themes'
 import type { FileSystemTreeNode } from './components/FileSystemTree.vue'
@@ -30,7 +30,7 @@ import { getDocumentStatistics } from './documentStats'
 import { asciiDiagramToMermaid, asciiTreeToTree, markdownToTree } from './asciiDiagram'
 import { formatClipboardImage, formatClipboardToMarkdown, htmlToMarkdown, normalizeMixedOrderedListSource, suggestPastedMarkdownName } from './pasteMarkdown'
 import { matchQuickOpen } from './quickOpen'
-import { indentSelection, codeIndentInsertion, isFenceBacktickInput, selectedLineRange, removeSelectedLines } from './editorInput'
+import { indentSelection, codeIndentInsertion, isFenceBacktickInput, selectedLineRange, removeSelectedLines, setHeadingLines } from './editorInput'
 import { createEditorHistory, recordEditorHistory, stepEditorHistory } from './editorHistory'
 import { findEditorMatches, replaceEditorMatches } from './editorFind'
 import { parseEditableTable, serializeEditableTable, moveTableRow, moveTableColumn, deleteTableRow, deleteTableColumn, pasteTableCells, type TableAlignment } from './tableEditing'
@@ -43,7 +43,7 @@ import { createExportCss, createPortableHtml } from './exportPresentation'
 import { createPrintHtml, printPortableHtml } from './exportPrint'
 import { embedExportImages, rasterizeExportImages } from './exportImages'
 import { normalizeLatexDelimiters } from './markdown/fragment'
-import { readEditorDraft, saveEditorDraft, removeEditorDraft, hasSaveConflict } from './editorDrafts'
+import { readEditorDraft, saveEditorDraft, removeEditorDraft, hasSaveConflict, editorAssetMap } from './editorDrafts'
 import { startupStylesReady } from './startup'
 import { confirmAppAction, promptAppText } from './appDialog'
 import { searchKnowledge } from './knowledgeSearch'
@@ -271,13 +271,14 @@ const editorFocusMode = ref(localStorage.getItem('moyue:editor-focus') === 'true
 const editorPreview = ref<HTMLElement | null>(null)
 const savedEditorMode = localStorage.getItem('moyue:editor-mode')
 const editorMode = ref<'write' | 'split' | 'rich' | 'preview'>(savedEditorMode && ['write', 'split', 'rich', 'preview'].includes(savedEditorMode) ? savedEditorMode as 'write' | 'split' | 'rich' | 'preview' : 'rich')
-const editorCalmMode = ref(localStorage.getItem('moyue:editor-calm') !== 'false')
+const editorOutlineOpen = ref(localStorage.getItem('moyue:editor-outline-open') !== 'false')
 const editorDocumentPath = ref('')
 const editorDocumentId = ref('')
 const editorBackupError = ref('')
 const editorConflict = ref(false)
 let editorAutoSaveTimer: number | null = null
 const editorContextMenu = ref<{ x: number; y: number } | null>(null)
+const editorContextMenuElement = ref<HTMLElement | null>(null)
 const imageManagerOpen = ref(false)
 const tableBuilderOpen = ref(false)
 const tableBuilder = ref({ rows: 3, columns: 3, alignment: 'left' as 'left' | 'center' | 'right' })
@@ -531,20 +532,22 @@ const currentMindmap = computed(() => {
   const document = store.currentDocument
   return document ? markdownToTree(document.source, document.title) : null
 })
-const editorPreviewDocument = computed(() => {
-  if (!editorSource.value.trim()) return null
+const editorPreviewResult = computed(() => {
+  if (!editorSource.value.trim()) return { document: null, failed: false }
   try {
     const path = store.currentDocument?.path ?? '编辑.md'
-    return parseMarkdown(path, editorSource.value, (url) => resolveMarkdownAssetUrl(path, url, editorInlineAssets.value))
-  } catch {
-    return null
+    return { document: parseMarkdown(path, editorSource.value, (url) => resolveEditorAssetUrl(path, url)), failed: false }
+  } catch (error) {
+    console.error('编辑文档解析失败', error)
+    return { document: null, failed: true }
   }
 })
+const editorPreviewDocument = computed(() => editorPreviewResult.value.document)
 const editorPreviewHtml = computed(() => {
   if (!editorSource.value.trim()) return '<p class="editor-preview-empty">从左侧开始写作，右侧会实时出现阅读效果。</p>'
   try {
     const path = store.currentDocument?.path ?? ''
-    const html = renderMarkdownFragment(editorSource.value, (url) => resolveMarkdownAssetUrl(path, url, editorInlineAssets.value))
+    const html = renderMarkdownFragment(editorSource.value, (url) => resolveEditorAssetUrl(path, url))
     return html.replace(/<p><strong>([\s\S]*?)<\/strong><\/p>/g, '<h2 class="editor-semantic-heading">$1</h2>')
   } catch {
     return '<p class="editor-preview-error">预览暂时无法解析，请检查 Markdown 语法。</p>'
@@ -866,6 +869,71 @@ function closeEditor() {
   clearEditorInlineAssets()
 }
 
+const editorMenuGroups = computed(() => {
+  const disabled = editorMode.value === 'preview'
+  return [
+    { label: '文件', items: [
+      { label: '保存', shortcut: 'Ctrl+S', disabled: !editorDirty.value || editorSaving.value, action: () => void saveEditor() },
+      { label: '另存草稿副本', action: () => void saveEditorCopy() },
+      { label: '导出 Markdown', disabled: exporting.value, action: () => void exportDocument('markdown') },
+      { label: '导出 HTML', disabled: exporting.value, action: () => void exportDocument('html') },
+      { label: '导出 DOCX', disabled: exporting.value, action: () => void exportDocument('docx') },
+      { label: '导出 EPUB', disabled: exporting.value, action: () => void exportDocument('epub') },
+      { label: '导出 LaTeX', disabled: exporting.value, action: () => void exportDocument('latex') },
+      { label: '导出 PNG', disabled: exporting.value, action: () => void exportDocument('image') },
+      { label: '导出 PDF', disabled: exporting.value, action: () => void exportPdfDocument() },
+      { label: '返回阅读', action: closeEditor },
+    ] },
+    { label: '编辑', items: [
+      { label: '撤销', shortcut: 'Ctrl+Z', disabled: !editorUndoAvailable.value, action: () => restoreEditorHistory(-1) },
+      { label: '重做', shortcut: 'Ctrl+Y', disabled: !editorRedoAvailable.value, action: () => restoreEditorHistory(1) },
+      { label: '查找与替换', shortcut: 'Ctrl+F', action: openEditorFind },
+      { label: '选中当前行', disabled, action: selectEditorLine },
+      { label: '删除当前行', disabled, action: deleteEditorLine },
+      { label: '上移当前段落', shortcut: 'Alt+↑', disabled, action: () => moveEditorLine(-1) },
+      { label: '下移当前段落', shortcut: 'Alt+↓', disabled, action: () => moveEditorLine(1) },
+    ] },
+    { label: '段落', items: [
+      ...[1, 2, 3, 4, 5, 6].map(level => ({ label: `${level} 级标题`, disabled, action: () => updateEditor((value, start, end) => setHeadingLines(value, start, end, level)) })),
+      { label: '引用', disabled, action: () => prefixEditorLines('> ') },
+      { label: '警告框', disabled, action: () => toggleEditorAlert('NOTE') },
+      { label: '无序列表', disabled, action: () => prefixEditorLines('- ') },
+      { label: '有序列表', disabled, action: () => prefixEditorLines('1. ') },
+      { label: '任务列表', disabled, action: () => prefixEditorLines('- [ ] ') },
+      { label: '代码块', disabled, action: insertEditorCodeBlock },
+      { label: '表格', disabled, action: insertEditorTable },
+      { label: '编辑表格', disabled, action: openDraftTableEditor },
+      { label: '分隔线', disabled, action: insertEditorDivider },
+      { label: '目录', disabled, action: insertEditorToc },
+    ] },
+    { label: '格式', items: [
+      { label: '粗体', shortcut: 'Ctrl+B', disabled, action: () => wrapEditorSelection('**', '**', '粗体') },
+      { label: '斜体', shortcut: 'Ctrl+I', disabled, action: () => wrapEditorSelection('*', '*', '斜体') },
+      { label: '删除线', disabled, action: () => wrapEditorSelection('~~', '~~', '删除线') },
+      { label: '行内代码', disabled, action: () => wrapEditorSelection('`', '`', '代码') },
+      { label: '高亮', disabled, action: () => wrapEditorSelection('==', '==', '高亮') },
+      { label: '下标', disabled, action: () => wrapEditorSelection('~', '~', '下标') },
+      { label: '上标', disabled, action: () => wrapEditorSelection('^', '^', '上标') },
+      { label: '链接', shortcut: 'Ctrl+K', disabled, action: insertEditorLink },
+      { label: '插入图片', disabled, action: insertEditorImage },
+      { label: '上传图片', disabled, action: () => void uploadEditorImage() },
+      { label: '图片管理', disabled, action: () => { imageManagerOpen.value = true } },
+      { label: '整理媒体', disabled, action: () => void organizeEditorMedia() },
+      { label: '撤销上次图片操作', disabled: disabled || !lastMediaAction.value, action: () => void undoLastMediaAction() },
+      { label: '插入视频', disabled, action: insertEditorVideo },
+    ] },
+    { label: '视图', items: [
+      { label: '所见即所得', action: () => setEditorMode('rich') },
+      { label: '源码', shortcut: 'Ctrl+/', action: () => setEditorMode('write') },
+      { label: '并排预览', action: () => setEditorMode('split') },
+      { label: '阅读预览', action: () => setEditorMode('preview') },
+      { label: editorOutlineOpen.value ? '隐藏大纲' : '显示大纲', action: () => { editorOutlineOpen.value = !editorOutlineOpen.value } },
+      { label: editorFocusMode.value ? '关闭专注' : '专注模式', action: () => { editorFocusMode.value = !editorFocusMode.value } },
+      { label: advancedSettings.value.typewriterMode ? '关闭打字机模式' : '打字机模式', action: toggleTypewriterMode },
+    ] },
+  ]
+})
+
 function persistEditorDraft() {
   if (!editorOpen.value || !editorDocumentPath.value) return true
   try {
@@ -1014,11 +1082,6 @@ function startEditorSplitResize(event: PointerEvent) {
     window.removeEventListener('pointercancel', finish)
   }
   updateRatio(event)
-}
-
-function toggleEditorCalmMode() {
-  editorCalmMode.value = !editorCalmMode.value
-  void nextTick(() => editorTextarea.value?.focus())
 }
 
 function openEditorPreviewImage(event: MouseEvent) {
@@ -1235,6 +1298,11 @@ function onEditorLineClipboard(event: ClipboardEvent, cut: boolean) {
 
 function onEditorKeydown(event: KeyboardEvent) {
   if (event.isComposing || event.keyCode === 229) return
+  if ((event.ctrlKey || event.metaKey) && event.key === '/' && !event.shiftKey && !event.altKey) {
+    event.preventDefault()
+    setEditorMode(editorMode.value === 'rich' ? 'write' : 'rich')
+    return
+  }
   if ((event.ctrlKey || event.metaKey) && ['z', 'y'].includes(event.key.toLowerCase()) && !event.altKey) {
     event.preventDefault()
     restoreEditorHistory(event.key.toLowerCase() === 'y' || event.shiftKey ? 1 : -1)
@@ -1252,6 +1320,12 @@ function onEditorKeydown(event: KeyboardEvent) {
   }
   if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey && (continueEditorCodeIndent() || continueEditorList())) {
     event.preventDefault()
+    return
+  }
+  if (event.key === 'Enter' && editorMode.value === 'rich' && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey && editorTextarea.value?.isTopLevelParagraph()) {
+    const start = editorTextarea.value.selectionStart, end = editorTextarea.value.selectionEnd
+    event.preventDefault()
+    applyEditorChange(`${editorSource.value.slice(0, start)}\n\n${editorSource.value.slice(end)}`, start + 2)
     return
   }
   if (event.ctrlKey || event.metaKey || event.altKey) return
@@ -1788,7 +1862,7 @@ function prefixEditorLines(prefix: string) {
     const lineEnd = value.indexOf('\n', end)
     const stop = lineEnd < 0 ? value.length : lineEnd
     const lines = value.slice(lineStart, stop).split('\n').map((line) => {
-      if (prefix !== '- ' && prefix !== '- [ ] ') return `${prefix}${line}`
+      if (prefix !== '- ' && prefix !== '- [ ] ' && prefix !== '1. ') return `${prefix}${line}`
       const content = line.replace(/^(\s*)(?:(?:[-+*]\s+)?\d+[.)]\s+|[-+*]\s+)(?:\[[ xX]\]\s*)?/, '$1')
       return `${prefix}${content}`
     })
@@ -1872,7 +1946,14 @@ function moveEditorLine(delta: number) {
 
 function openEditorContextMenu(event: MouseEvent) {
   event.preventDefault()
-  editorContextMenu.value = { x: Math.min(event.clientX, window.innerWidth - 180), y: Math.min(event.clientY, window.innerHeight - 190) }
+  const position = { x: event.clientX, y: event.clientY }
+  editorContextMenu.value = position
+  void nextTick(() => {
+    const menu = editorContextMenuElement.value
+    if (!menu || editorContextMenu.value?.x !== position.x || editorContextMenu.value?.y !== position.y) return
+    const bounds = menu.getBoundingClientRect()
+    editorContextMenu.value = { x: Math.max(8, Math.min(position.x, window.innerWidth - bounds.width - 8)), y: Math.max(8, Math.min(position.y, window.innerHeight - bounds.height - 8)) }
+  })
 }
 
 function closeEditorContextMenu() { editorContextMenu.value = null }
@@ -2429,6 +2510,10 @@ function dataUrlToBlob(value: string): Blob | null {
   } catch {
     return null
   }
+}
+
+function resolveEditorAssetUrl(path: string, url: string) {
+  return resolveMarkdownAssetUrl(path, url, editorAssetMap(store, editorDocumentId.value ?? '', editorInlineAssets.value))
 }
 
 function clearEditorInlineAssets() {
@@ -3235,7 +3320,7 @@ async function reopenLastClosedTab() {
 function onTabOutsideClick(event: MouseEvent) {
   const target = event.target as HTMLElement | null
   if (!target?.closest('.reader-tab-actions, .tab-list-popover, .tab-context-menu, .file-context-menu')) closeTabMenus()
-  if (!target?.closest('.editor-context-menu, .editor-toolbar, .editor-surface')) closeEditorContextMenu()
+  if (!target?.closest('.editor-context-menu')) closeEditorContextMenu()
 }
 
 async function boot() {
@@ -3296,8 +3381,8 @@ onUnmounted(() => {
   viewportResizeObserver?.disconnect()
 })
 watch(editorSource, () => { persistEditorDraft() }, { flush: 'sync' })
-watch(editorCalmMode, value => localStorage.setItem('moyue:editor-calm', String(value)))
 watch(editorFocusMode, value => localStorage.setItem('moyue:editor-focus', String(value)))
+watch(editorOutlineOpen, value => localStorage.setItem('moyue:editor-outline-open', String(value)))
 watch(editorMode, value => localStorage.setItem('moyue:editor-mode', value))
 watch(tableEditorState, (value, oldValue) => {
   if (value === null || oldValue === null) {
@@ -4027,6 +4112,7 @@ function restoreViewportPercent(percent: number) {
   })
 }
 function onReaderWheel(event: WheelEvent) {
+  closeEditorContextMenu()
   const viewport = readerViewport.value
   const isFocusMode = store.mode === 'region-focus' || store.mode === 'focus'
   if (!viewport || event.deltaY === 0) return
@@ -4622,6 +4708,7 @@ async function requestFullscreen() {
 
 <template>
   <div class="app-shell" :aria-busy="booting || busyAction !== null" :class="{ 'is-focus': store.mode === 'focus', 'is-clean': store.mode === 'clean', 'is-editor-studio': editorOpen, 'is-region-focus': store.mode === 'region-focus', 'has-focus-region': Boolean(store.focusedRegionId), 'is-dragging': draggingFiles, 'nav-collapsed': navCollapsed, [`theme-${store.activeThemeId}`]: true }" :style="store.mode === 'focus' ? focusThemeStyles : undefined" @dragover.prevent @dragenter.prevent="onDragEnter" @dragleave.prevent="onDragLeave" @drop.prevent="onDrop">
+    <datalist id="editor-code-languages"><option v-for="language in ['text', 'typescript', 'javascript', 'python', 'rust', 'go', 'java', 'sql', 'bash', 'json', 'yaml', 'mermaid', 'gas', 'url']" :key="language" :value="language" /></datalist>
     <AppDialog />
     <aside class="global-nav">
       <div class="workspace-rail" aria-label="阅读工具栏">
@@ -4749,6 +4836,7 @@ async function requestFullscreen() {
       </section>
 
       <section v-else-if="view === 'reader'" class="reader-page">
+        <EditorMenuBar v-if="editorOpen" :groups="editorMenuGroups"><span>{{ editorDirty ? '未保存' : '已保存' }}</span><button class="editor-return-button" type="button" @click="closeEditor">返回阅读</button></EditorMenuBar>
         <div class="reader-tabbar" aria-label="已打开文档">
           <div class="reader-tab-scroll" role="tablist" aria-label="已打开文档">
             <div v-for="document in store.openDocuments" :key="document.id" class="reader-tab" :class="{ active: store.currentDocumentId === document.id }" role="tab" :aria-selected="store.currentDocumentId === document.id" :aria-label="`打开 ${document.title}`" :title="`${document.title}\n${document.path}`" tabindex="0" @click="chooseDocument(document.id)" @contextmenu.prevent="openTabContextMenu($event, document.id)" @auxclick="onTabAuxClick($event, document.id)" @keydown.enter="chooseDocument(document.id)" @keydown.space.prevent="chooseDocument(document.id)">
@@ -4898,10 +4986,11 @@ async function requestFullscreen() {
           </aside>
           <div class="reader-document-panes" :class="{ 'has-second-document': showSecondDocument }">
           <div class="reader-column">
-            <div class="reader-meta">
+            <Teleport v-if="!editorOpen" to=".topbar">
+            <div class="reader-meta reader-meta-topbar">
               <div class="reader-meta-document">
                 <span class="section-kicker reader-path" :title="store.currentDocument?.path"><AppIcon name="file" :size="13" /><span class="reader-path-value">{{ currentDocumentFileName }}</span></span>
-                <span class="reader-stat">{{ (editorOpen ? editorPreviewDocument : store.currentDocument)?.wordCount ?? 0 }} 字 · 约 {{ (editorOpen ? editorPreviewDocument : store.currentDocument)?.estimatedReadMinutes ?? 0 }} 分钟</span>
+                <span class="reader-stat">{{ editorOpen && editorPreviewResult.failed ? '正文解析失败' : `${(editorOpen ? editorPreviewDocument : store.currentDocument)?.wordCount ?? 0} 字 · 约 ${(editorOpen ? editorPreviewDocument : store.currentDocument)?.estimatedReadMinutes ?? 0} 分钟` }}</span>
               </div>
               <div v-if="!editorOpen" class="reader-meta-tools">
                 <div class="reader-edit-actions">
@@ -4912,6 +5001,7 @@ async function requestFullscreen() {
                     <div class="reader-more-popover">
                       <FontPicker compact label="正文字体" :model-value="store.readerSettings.fontFamily" :fallback-family="defaultTokens.reader.fontFamily" @update:model-value="store.updateSettings({ fontFamily: $event })" />
                       <button type="button" @click="toggleCleanMode">纯净阅读</button>
+                      <button type="button" :class="{ active: !outlinePanelCollapsed }" @click="toggleOutlinePanel">{{ outlinePanelCollapsed ? '显示大纲' : '隐藏大纲' }}</button>
                       <button type="button" :class="{ active: contextPanelOpen }" @click="contextPanelOpen = !contextPanelOpen">{{ contextPanelOpen ? '收起阅读信息' : '查看阅读信息' }}</button>
                       <button type="button" @click="wordCountOpen = true">字数统计</button>
                       <button type="button" @click="exportDocument('markdown')">导出 Markdown</button>
@@ -4953,65 +5043,12 @@ async function requestFullscreen() {
               </div>
               <div v-if="!editorOpen && store.currentDocument" class="reader-progress-track" role="progressbar" aria-label="文档阅读进度" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="Math.round(readerScrollPercent * 100)"><span :style="{ transform: `scaleX(${readerScrollPercent})` }" /></div>
             </div>
+            </Teleport>
             <div ref="readerViewport" class="reader-viewport" @scroll="onReaderScroll" @wheel="onReaderWheel" @pointerdown="onReaderPointerDown" @mouseup="captureSelection">
               <div v-if="exportError || exporting" class="editor-safety-notice" :role="exportError ? 'alert' : 'status'"><span>{{ exportError || '正在生成完整导出文件…' }}</span><button v-if="exportError" type="button" @click="exportError = ''">关闭</button></div>
-              <div v-if="editorOpen" class="editor-surface" :class="{ 'editor-calm-mode': editorCalmMode, 'editor-typewriter-mode': advancedSettings.typewriterMode }" @contextmenu="openEditorContextMenu">
+              <div v-if="editorOpen" class="editor-surface" :class="{ 'editor-typewriter-mode': advancedSettings.typewriterMode }" @contextmenu="openEditorContextMenu">
+                <div v-if="editorPreviewResult.failed" class="editor-safety-notice" role="alert">正文解析失败，草稿仍保留；请切换源码查看并重新打开文档。</div>
                 <div v-if="editorBackupError || editorConflict" class="editor-safety-notice" role="alert"><span>{{ editorBackupError || '原文件有外部修改：草稿已保留，不会直接覆盖' }}</span><button type="button" @click="saveEditorCopy">另存草稿副本</button></div>
-                <div v-if="!editorCalmMode" class="editor-toolbar" aria-label="Markdown 编辑工具栏">
-                  <div class="editor-toolbar-group" aria-label="文字格式">
-                    <button class="editor-tool-button" type="button" title="查找替换草稿（Ctrl/Cmd+F / Ctrl+H）" @click="openEditorFind">查找</button>
-                    <button class="editor-tool-button" type="button" title="撤销（Ctrl/Cmd+Z）" :disabled="!editorUndoAvailable" @click="restoreEditorHistory(-1)">撤销</button>
-                    <button class="editor-tool-button" type="button" title="重做（Ctrl/Cmd+Shift+Z / Ctrl+Y）" :disabled="!editorRedoAvailable" @click="restoreEditorHistory(1)">重做</button>
-                    <button class="editor-tool-button" type="button" title="粗体（Ctrl/Cmd+B）" @click="wrapEditorSelection('**', '**', '粗体')"><b>B</b></button>
-                    <button class="editor-tool-button" type="button" title="斜体（Ctrl/Cmd+I）" @click="wrapEditorSelection('*', '*', '斜体')"><i>I</i></button>
-                    <button class="editor-tool-button" type="button" title="删除线 ~~文字~~" @click="wrapEditorSelection('~~', '~~', '删除线')"><s>S</s></button>
-                    <button class="editor-tool-button" type="button" title="行内代码" @click="wrapEditorSelection('`', '`', '代码')">行内码</button>
-                    <button class="editor-tool-button" type="button" title="高亮 ==文字==" @click="wrapEditorSelection('==', '==', '高亮')">高亮</button>
-                    <button class="editor-tool-button" type="button" title="下标 ~文字~" @click="wrapEditorSelection('~', '~', '下标')">X₂</button>
-                    <button class="editor-tool-button" type="button" title="上标 ^文字^" @click="wrapEditorSelection('^', '^', '上标')">X²</button>
-                    <button class="editor-tool-button" type="button" title="链接（Ctrl/Cmd+K）" @click="insertEditorLink">链接</button>
-                  </div>
-                  <div class="editor-toolbar-group" aria-label="块格式">
-                    <button class="editor-tool-button" type="button" title="一级标题" @click="prefixEditorLines('# ')">H1</button>
-                    <button class="editor-tool-button" type="button" title="引用" @click="prefixEditorLines('> ')">引用</button>
-                    <button class="editor-tool-button" type="button" title="无序列表" @click="prefixEditorLines('- ')">列表</button>
-                    <button class="editor-tool-button" type="button" title="任务列表" @click="prefixEditorLines('- [ ] ')">任务</button>
-                    <input v-model="editorCodeLanguage" class="editor-language-input" list="editor-code-languages" aria-label="代码语言" placeholder="语言" />
-                    <datalist id="editor-code-languages"><option v-for="language in ['text', 'typescript', 'javascript', 'python', 'rust', 'go', 'java', 'sql', 'bash', 'json', 'yaml', 'mermaid', 'gas', 'url']" :key="language" :value="language" /></datalist>
-                    <button class="editor-tool-button" type="button" title="插入带语言的代码块" @click="insertEditorCodeBlock">代码</button>
-                    <button class="editor-tool-button" type="button" title="将当前段落或选中行切换为 GitHub Alert" @click="toggleEditorAlert('NOTE')">警告框</button>
-                    <button class="editor-tool-button" type="button" title="插入自动目录 [toc]" @click="insertEditorToc">目录</button>
-                    <button class="editor-tool-button" type="button" title="表格" @click="insertEditorTable">表格</button>
-                    <button class="editor-tool-button" type="button" :disabled="editorMode === 'preview'" title="原地表格可直接编辑，也可打开详细编辑工具" @click="openDraftTableEditor">编辑表格</button>
-                    <button class="editor-tool-button" type="button" title="图片" @click="insertEditorImage">图片</button>
-                    <button class="editor-tool-button" type="button" title="通过 PicList 上传图片" @click="uploadEditorImage">上传</button>
-                    <button class="editor-tool-button" type="button" title="导入视频" @click="insertEditorVideo">视频</button>
-                    <button class="editor-tool-button" type="button" title="移动本地图片和视频到 .moyue-assets" @click="organizeEditorMedia">整理媒体</button>
-                    <button class="editor-tool-button" type="button" title="图片管理" @click="imageManagerOpen = true">图片管理</button>
-                    <button v-if="lastMediaAction" class="editor-tool-button" type="button" title="撤销上一次图片操作" @click="undoLastMediaAction">撤销图片</button>
-                    <button class="editor-tool-button" type="button" title="分隔线" @click="insertEditorDivider">分隔线</button>
-                  </div>
-                  <div class="editor-toolbar-group" aria-label="段落移动">
-                    <button class="editor-tool-button icon-only" type="button" title="上移当前段落（Alt+↑）" aria-label="上移当前段落" @click="moveEditorLine(-1)"><AppIcon name="arrow-up" :size="14" /></button>
-                    <button class="editor-tool-button icon-only" type="button" title="下移当前段落（Alt+↓）" aria-label="下移当前段落" @click="moveEditorLine(1)"><AppIcon name="arrow-down" :size="14" /></button>
-                  </div>
-                  <span class="editor-toolbar-spacer" />
-                  <div class="editor-toolbar-actions">
-                    <div class="editor-mode-switch" role="tablist" aria-label="编辑模式">
-                      <button type="button" role="tab" :aria-selected="editorMode === 'write'" :class="{ active: editorMode === 'write' }" @click="setEditorMode('write')">写作</button>
-                      <button type="button" role="tab" :aria-selected="editorMode === 'split'" :class="{ active: editorMode === 'split' }" @click="setEditorMode('split')">并排</button>
-                      <button type="button" role="tab" :aria-selected="editorMode === 'rich'" :class="{ active: editorMode === 'rich' }" @click="setEditorMode('rich')">所见即所得</button>
-                      <button type="button" role="tab" :aria-selected="editorMode === 'preview'" :class="{ active: editorMode === 'preview' }" @click="setEditorMode('preview')">预览</button>
-                    </div>
-                    <button class="editor-calm-toggle" type="button" :class="{ active: editorCalmMode }" :aria-pressed="editorCalmMode" @click="toggleEditorCalmMode">静写</button>
-                    <button class="editor-calm-toggle" type="button" :aria-pressed="editorFocusMode" @click="editorFocusMode = !editorFocusMode">专注</button>
-                    <EditorExportMenu :disabled="exporting" @export="exportDocument" @pdf="exportPdfDocument" />
-                    <button class="editor-calm-toggle" type="button" :class="{ active: advancedSettings.typewriterMode }" :aria-pressed="advancedSettings.typewriterMode" @click="toggleTypewriterMode">打字机</button>
-                    <kbd>⌘/Ctrl + S</kbd>
-                    <button class="primary-button editor-save-button" type="button" :disabled="!editorDirty || editorSaving" @click="saveEditor">{{ editorSaving ? '保存中…' : '保存' }}</button>
-                  </div>
-                </div>
-                <div v-if="editorCalmMode" class="editor-quiet-controls"><span>墨写</span><button type="button" @click="openEditorFind">查找</button><button type="button" @click="editorFocusMode = !editorFocusMode" :aria-pressed="editorFocusMode">专注</button><button type="button" @click="toggleTypewriterMode" :aria-pressed="advancedSettings.typewriterMode">打字机</button><button type="button" @click="setEditorMode(editorMode === 'rich' ? 'write' : 'rich')">{{ editorMode === 'rich' ? '源码' : '墨写' }}</button><button type="button" @click="toggleEditorCalmMode">工具</button><EditorExportMenu :disabled="exporting" @export="exportDocument" @pdf="exportPdfDocument" /><button type="button" :disabled="!editorDirty || editorSaving" @click="saveEditor">保存</button></div>
                 <section v-if="editorFindOpen" class="editor-find-panel" aria-label="草稿查找替换" @keydown.esc.prevent.stop="closeEditorFind">
                   <div class="editor-find-row">
                     <input ref="editorFindInput" v-model="editorFindQuery" aria-label="查找草稿内容" placeholder="查找当前草稿…" :aria-invalid="!!editorFindResult.error" @keydown.enter.prevent="navigateEditorFind($event.shiftKey ? -1 : 1)" />
@@ -5035,10 +5072,10 @@ async function requestFullscreen() {
                   <p v-if="editorFindResult.error" role="alert" class="search-error">{{ editorFindResult.error }}</p>
                 </section>
                 <div class="editor-draft-layout">
-                <EditorOutline :document="editorPreviewDocument" :cursor="editorCursorOffset" @jump="jumpToEditorHeading" />
+                <EditorOutline v-if="editorPreviewDocument?.headings.length" :document="editorPreviewDocument" :cursor="editorCursorOffset" :open="editorOutlineOpen" @jump="jumpToEditorHeading" @toggle="editorOutlineOpen = $event" />
                 <div class="editor-workspace" :class="[`editor-mode-${editorMode}`, { 'is-resizing-split': editorSplitResizing }]" :style="editorMode === 'split' ? { '--editor-split-ratio': `${editorSplitRatio}%` } : undefined">
                   <section v-show="editorMode !== 'preview'" class="editor-main-pane" :class="editorMode === 'rich' ? 'editor-rich-pane' : 'editor-source-pane'">
-                    <MarkdownEditor ref="editorTextarea" v-model="editorSource" :live="editorMode === 'rich'" :spellcheck="advancedSettings.spellcheck" :typewriter="advancedSettings.typewriterMode" :focus-mode="editorFocusMode" :resolve-url="url => resolveMarkdownAssetUrl(editorDocumentPath, url, editorInlineAssets)" @keydown="onEditorKeydown" @paste="onEditorPaste" @copy="onEditorLineClipboard($event, false)" @cut="onEditorLineClipboard($event, true)" @caret="updateEditorCursor" @history="editorUndoAvailable = $event.undo; editorRedoAvailable = $event.redo" @message="notify" @link="openExternalLink" />
+                    <MarkdownEditor ref="editorTextarea" v-model="editorSource" :live="editorMode === 'rich'" :spellcheck="advancedSettings.spellcheck" :typewriter="advancedSettings.typewriterMode" :focus-mode="editorFocusMode" :resolve-url="url => resolveEditorAssetUrl(editorDocumentPath, url)" @keydown="onEditorKeydown" @paste="onEditorPaste" @copy="onEditorLineClipboard($event, false)" @cut="onEditorLineClipboard($event, true)" @caret="updateEditorCursor" @history="editorUndoAvailable = $event.undo; editorRedoAvailable = $event.redo" @message="notify" @link="openExternalLink" />
                     <div v-if="editorEmojiSuggestions.length" class="editor-emoji-menu" role="listbox" aria-label="Emoji 建议"><button v-for="emoji in editorEmojiSuggestions" :key="emoji.code" type="button" @click="insertEditorEmoji(emoji.value)"><span>{{ emoji.value }}</span>:{{ emoji.code }}:</button></div>
                   </section>
                   <div v-if="editorMode === 'split'" class="editor-split-divider" role="separator" tabindex="0" aria-orientation="vertical" :aria-valuemin="36" :aria-valuemax="70" :aria-valuenow="Math.round(editorSplitRatio)" aria-label="调整源码与预览宽度" @pointerdown="startEditorSplitResize" @keydown="onEditorSplitResizeKeydown"><span /></div>
@@ -5088,7 +5125,7 @@ async function requestFullscreen() {
           </KeepAlive>
           </div>
           <Teleport to="body">
-            <div v-if="editorContextMenu" class="editor-context-menu" :style="{ top: `${editorContextMenu.y}px`, left: `${editorContextMenu.x}px` }" role="menu">
+            <div v-if="editorContextMenu" ref="editorContextMenuElement" class="editor-context-menu" :style="{ top: `${editorContextMenu.y}px`, left: `${editorContextMenu.x}px` }" role="menu">
               <button type="button" role="menuitem" @click="wrapEditorSelection('**', '**', '粗体'); closeEditorContextMenu()">粗体</button>
               <button type="button" role="menuitem" @click="wrapEditorSelection('*', '*', '斜体'); closeEditorContextMenu()">斜体</button>
               <button type="button" role="menuitem" @click="wrapEditorSelection('~~', '~~', '删除线'); closeEditorContextMenu()">删除线</button>

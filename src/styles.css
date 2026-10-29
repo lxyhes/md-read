@@ -7196,7 +7196,7 @@ body.is-resizing-outline * {
 .editor-toolbar kbd { color: var(--muted); font: 10px var(--ui-font); }
 .editor-textarea { width: min(980px, 100%); min-height: calc(100vh - 260px); margin: 0 auto; padding: 20px; border: 1px solid var(--border); border-radius: 10px; outline: none; resize: vertical; background: var(--surface-raised); color: var(--ink); font: 14px/1.75 ui-monospace, SFMono-Regular, Consolas, monospace; tab-size: 2; }
 .editor-textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
-.editor-context-menu { position: fixed; z-index: 40; display: grid; min-width: 160px; padding: 5px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); box-shadow: 0 14px 36px rgba(0,0,0,.25); }
+.editor-context-menu { position: fixed; z-index: 40; display: grid; min-width: 160px; max-height: calc(100vh - 16px); overflow-y: auto; padding: 5px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); box-shadow: 0 14px 36px rgba(0,0,0,.25); }
 .editor-context-menu button { padding: 8px 10px; border: 0; border-radius: 5px; background: transparent; color: var(--ink); text-align: left; font: 11px var(--ui-font); }
 .editor-context-menu button:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
 .task-checkbox { cursor: var(--moyue-cursor-pointer); }
@@ -7382,7 +7382,9 @@ body.is-resizing-outline * {
 .app-shell.is-editor-studio .reader-layout,
 .app-shell.is-editor-studio .reader-layout.split-layout {
   grid-template-columns: minmax(0, 1fr);
-  height: calc(100% - 42px);
+  flex: 1 1 0;
+  height: auto;
+  min-height: 0;
   min-width: 0;
 }
 .app-shell.is-editor-studio .outline-panel,
@@ -10291,13 +10293,17 @@ a:active > .app-icon-vector { transform: scale(.92); }
   padding: 16px 24px 12px;
   background: var(--surface);
 }
-.app-shell.is-editor-studio .reader-document-panes .editor-surface > :is(.editor-toolbar, .editor-quiet-controls, .editor-find-panel, .editor-draft-layout, .editor-statusbar) {
+.app-shell.is-editor-studio .reader-document-panes .editor-surface > :is(.editor-toolbar, .editor-quiet-controls, .editor-find-panel, .editor-statusbar) {
   width: min(100%, 1200px);
   max-width: none;
   margin-inline: auto;
 }
-.editor-draft-layout { display: grid; flex: 1 1 0; grid-template-columns: clamp(140px, 18%, 200px) minmax(0, 1fr); min-height: 0; min-width: 0; gap: 20px; overflow: hidden; }
-.editor-draft-layout:has(.editor-draft-outline:not([open])) { grid-template-columns: 36px minmax(0, 1fr); }
+.editor-draft-layout { display: grid; flex: 1 1 0; grid-template-columns: clamp(180px, 20%, 260px) minmax(0, 1fr); width: 100%; min-height: 0; min-width: 0; gap: 20px; overflow: hidden; }
+.editor-draft-layout:has(.editor-draft-outline:not([open])) { grid-template-columns: minmax(0, 1fr); gap: 0; }
+.editor-draft-layout:not(:has(.editor-draft-outline)) { grid-template-columns: minmax(0, 1fr); }
+.editor-return-button { padding: 5px 9px; border-radius: 4px; background: transparent; color: var(--ink); font: 12px var(--ui-font); }
+.editor-return-button:hover, .editor-return-button:focus-visible { background: var(--accent-soft); }
+.app-shell.is-editor-studio .markdown-editor.is-live .live-preview-widget img { max-height: 42vh; }
 .app-shell.is-editor-studio .editor-draft-layout > .editor-workspace { width: 100%; height: 100%; min-height: 0; margin: 0; }
 .app-shell.is-editor-studio .reader-document-panes .editor-quiet-controls {
   padding-inline: 0;
@@ -10312,11 +10318,31 @@ a:active > .app-icon-vector { transform: scale(.92); }
   font: var(--reader-size)/var(--reader-leading) var(--reader-font);
 }
 .app-shell.is-editor-studio .reader-document-panes .editor-mode-rich .markdown-editor.is-live .cm-content {
+  box-sizing: border-box;
+  width: min(var(--reader-width), calc(100% - 64px));
+  max-width: var(--reader-width);
+  margin-inline: auto;
   padding: 12px 0 44vh;
 }
 .app-shell.is-editor-studio .reader-document-panes .editor-mode-rich .markdown-editor.is-live .cm-line {
   padding-block: 3px;
 }
+.app-shell.is-editor-studio .reader-document-panes .editor-mode-rich .markdown-editor.is-live .cm-line.live-list-line {
+  padding-inline-start: var(--live-list-indent);
+  text-indent: calc(-1 * var(--live-list-indent));
+}
+.markdown-editor.is-live .live-list-line :is(.live-preview-widget, .live-list-bullet) {
+  text-indent: 0;
+}
+.app-shell.is-editor-studio .reader-document-panes .editor-mode-rich .markdown-editor.is-live .cm-activeLine {
+  background: transparent;
+}
+.app-shell.is-editor-studio .reader-document-panes .editor-mode-rich .markdown-editor.is-live .cm-line.live-heading {
+  padding-block: 1.1em .45em;
+}
+.app-shell.is-editor-studio .reader-document-panes .editor-mode-rich .markdown-editor.is-live .live-h1 { font-size: 1.9em; }
+.app-shell.is-editor-studio .reader-document-panes .editor-mode-rich .markdown-editor.is-live .live-h2 { font-size: 1.5em; }
+.app-shell.is-editor-studio .reader-document-panes .editor-mode-rich .markdown-editor.is-live .live-h3 { font-size: 1.25em; }
 .reader-document-panes.has-second-document .reader-column .reader-content { width: min(var(--reader-width), calc(100% - 56px)); }
 .reader-document-panes.has-second-document .reader-column .reader-title { font-size: 28px; overflow-wrap: anywhere; }
 html:has(.reader-page), body:has(.reader-page), #app:has(.reader-page) { min-width: 0; }
@@ -10326,48 +10352,16 @@ html:has(.reader-page), body:has(.reader-page), #app:has(.reader-page) { min-wid
 .dual-document-toggle[aria-pressed="true"] { color: var(--accent); }
 .dual-document-toggle:disabled { opacity: .45; cursor: default; }
 .app-shell:not(.is-focus) .reader-layout.outline-panel-collapsed:not(.focus-layout):not(.clean-layout) {
-  grid-template-columns: 42px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
 }
 .app-shell:not(.is-focus) .reader-layout:not(.is-resizing-outline) {
   transition: grid-template-columns .22s cubic-bezier(.2, .8, .2, 1);
 }
 .app-shell:not(.is-focus) .reader-layout.outline-panel-collapsed.context-open:not(.focus-layout):not(.clean-layout) {
-  grid-template-columns: 42px minmax(0, 1fr) 220px;
+  grid-template-columns: minmax(0, 1fr) 220px;
 }
 .reader-layout > .outline-panel.is-collapsed {
-  display: flex;
-  align-items: stretch;
-  justify-content: center;
-  min-width: 0;
-  padding: 0;
-  overflow: hidden;
-}
-.outline-panel-expand {
-  display: flex;
-  width: 100%;
-  min-height: 100%;
-  flex-direction: column;
-  align-items: center;
-  gap: 9px;
-  padding: 12px 0;
-  background: transparent;
-  color: var(--muted);
-  transition: background .18s ease, color .18s ease;
-}
-.outline-panel-expand:hover,
-.outline-panel-expand:focus-visible {
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-  color: var(--accent);
-}
-.outline-panel-expand:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -3px;
-}
-.outline-panel-expand span {
-  writing-mode: vertical-rl;
-  color: inherit;
-  font: 10px var(--ui-font);
-  letter-spacing: .08em;
+  display: none;
 }
 .outline-panel-toggle {
   display: inline-flex;
@@ -10390,20 +10384,16 @@ html:has(.reader-page), body:has(.reader-page), #app:has(.reader-page) { min-wid
 }
 @media (max-width: 1080px) {
   .app-shell:not(.is-focus) .reader-layout.outline-panel-collapsed.context-open:not(.focus-layout):not(.clean-layout) {
-    grid-template-columns: 42px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 @media (max-width: 720px) {
   .app-shell:not(.is-focus) .reader-layout.outline-panel-collapsed:not(.focus-layout):not(.clean-layout) {
-    grid-template-columns: 42px minmax(0, 1fr);
-  }
-  .app-shell:not(.is-focus) .reader-layout.outline-panel-collapsed > .outline-panel.is-collapsed {
-    display: flex;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 @media (prefers-reduced-motion: reduce) {
   .app-shell:not(.is-focus) .reader-layout:not(.is-resizing-outline),
-  .outline-panel-expand,
   .outline-panel-toggle .app-icon {
     transition: none;
   }
@@ -10536,4 +10526,460 @@ html:has(.reader-page), body:has(.reader-page), #app:has(.reader-page) { min-wid
 .app-shell.is-focus.has-focus-region .reader-content .region-block:not(.focused) {
   filter: none !important;
   transform: none !important;
+}
+
+/* Editing owns the whole window. Keep the reader's persistent tool rail from
+   reappearing through the later collapsed-navigation rules. */
+.app-shell.is-editor-studio .global-nav {
+  width: 0 !important;
+  flex-basis: 0 !important;
+  min-width: 0;
+  padding: 0 !important;
+  border: 0 !important;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.app-shell.is-editor-studio .main-shell {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* Typora-like writing canvas: one quiet menu row, one outline rail, one
+   readable document column. The editor should not inherit reader chrome. */
+.app-shell.is-editor-studio .reader-tabbar {
+  display: none !important;
+}
+
+.app-shell.is-editor-studio .reader-page > .reader-layout {
+  height: auto;
+  flex: 1 1 0;
+}
+
+.app-shell.is-editor-studio .editor-surface {
+  padding: 0;
+  background: var(--surface);
+}
+
+.app-shell.is-editor-studio .editor-draft-layout {
+  grid-template-columns: clamp(220px, 24vw, 320px) minmax(0, 1fr);
+  gap: 0;
+}
+
+.app-shell.is-editor-studio .editor-draft-layout:has(.editor-draft-outline:not([open])),
+.app-shell.is-editor-studio .editor-draft-layout:not(:has(.editor-draft-outline)) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.app-shell.is-editor-studio .editor-draft-outline {
+  box-sizing: border-box;
+  padding: 0 18px 0 24px;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.app-shell.is-editor-studio .editor-draft-outline summary {
+  min-height: 46px;
+  box-sizing: border-box;
+  padding: 14px 0 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.app-shell.is-editor-studio .editor-draft-outline summary small {
+  display: none;
+}
+
+.app-shell.is-editor-studio .editor-draft-outline nav {
+  padding-top: 12px;
+}
+
+.app-shell.is-editor-studio .editor-draft-outline nav button {
+  min-height: 30px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: left;
+}
+
+.app-shell.is-editor-studio .editor-draft-outline nav button:hover,
+.app-shell.is-editor-studio .editor-draft-outline nav button[aria-current="location"] {
+  background: color-mix(in srgb, var(--accent-soft) 72%, transparent);
+  color: var(--accent);
+}
+
+.app-shell.is-editor-studio .editor-draft-outline nav button[aria-current="location"] {
+  background: transparent;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.app-shell.is-editor-studio .editor-workspace.editor-mode-rich .markdown-editor.is-live .cm-content {
+  width: min(var(--reader-width), calc(100% - 96px));
+  max-width: var(--reader-width);
+  padding-top: 42px;
+  padding-bottom: 45vh;
+}
+
+@media (max-width: 860px) {
+  .app-shell.is-editor-studio .editor-draft-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-shell.is-editor-studio .editor-draft-outline {
+    display: none;
+  }
+}
+
+/* Reader desk refresh: keep the document, not the chrome, as the visual
+   anchor. Reader and editor share the same calm paper language. */
+.app-shell:not(.is-editor-studio):not(.is-focus) .topbar {
+  height: 58px;
+  flex-basis: 58px;
+  padding-inline: 24px;
+  background: var(--surface);
+  border-bottom-color: var(--border);
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .crumbs strong {
+  display: block;
+  max-width: min(52vw, 620px);
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .command-trigger {
+  height: 34px;
+  border-color: var(--border);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  box-shadow: none;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-tabbar {
+  height: 38px;
+  flex-basis: 38px;
+  padding-inline: 16px;
+  background: var(--surface);
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-tab {
+  padding-inline: 12px;
+  border-bottom-color: transparent;
+  color: var(--muted);
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-tab.active {
+  border-bottom-color: var(--accent);
+  color: var(--ink);
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-layout:not(.focus-layout):not(.clean-layout) {
+  grid-template-columns: clamp(240px, 19vw, 300px) minmax(0, 1fr) 0;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-layout.context-open:not(.focus-layout):not(.clean-layout) {
+  grid-template-columns: clamp(240px, 19vw, 300px) minmax(0, 1fr) 260px;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-layout.outline-panel-collapsed:not(.context-open):not(.focus-layout):not(.clean-layout) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-layout.outline-panel-collapsed.context-open:not(.focus-layout):not(.clean-layout) {
+  grid-template-columns: minmax(0, 1fr) 260px;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .outline-panel,
+.app-shell:not(.is-editor-studio):not(.is-focus) .context-panel {
+  padding: 20px 16px;
+  background: var(--surface);
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .panel-switcher {
+  min-height: 34px;
+  border-bottom: 1px solid var(--border);
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .panel-tabs button {
+  min-height: 34px;
+  padding-inline: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .panel-tabs button.active {
+  color: var(--ink);
+  font-weight: 650;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta {
+  min-height: 42px;
+  box-sizing: border-box;
+  justify-content: flex-end;
+  padding: 6px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-document {
+  display: none;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-tools {
+  width: 100%;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-content {
+  width: min(var(--reader-width), calc(100% - 64px)) !important;
+  padding-top: 42px !important;
+  padding-bottom: 96px !important;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-content .regions-stack {
+  gap: 3px;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-content .region-block {
+  margin-inline: -12px;
+  padding-inline: 12px;
+  border-radius: 7px;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-content .region-block.region-image {
+  margin-block: 16px;
+  padding-block: 0;
+  border-left-color: transparent;
+  background: transparent;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-content .region-image .image-region img {
+  margin-block: 0;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--app-bg) 10%, transparent);
+}
+
+@media (max-width: 900px) {
+  .app-shell:not(.is-editor-studio):not(.is-focus) .reader-layout:not(.focus-layout):not(.clean-layout) {
+    grid-template-columns: 220px minmax(0, 1fr) 0;
+  }
+
+  .app-shell:not(.is-editor-studio):not(.is-focus) .reader-content {
+    width: min(var(--reader-width), calc(100% - 40px)) !important;
+  }
+}
+
+/* Two-row reader header: title, search, and reading tools on row one; the
+   second row is reserved for switching documents. */
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-page > .reader-tabbar {
+  position: relative;
+  z-index: 0;
+  padding-right: min(58%, 920px);
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-page > .reader-tabbar .reader-tab-actions {
+  display: none;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-page > .reader-tabbar .reader-tab-status {
+  position: absolute;
+  top: 0;
+  right: 16px;
+  height: 100%;
+  padding-left: 10px;
+  background: var(--surface);
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-layout {
+  position: relative;
+  z-index: 2;
+  height: calc(100% - 38px);
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-column {
+  position: relative;
+  overflow: visible;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-document-panes {
+  overflow: visible;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-column > .reader-meta {
+  position: relative;
+  top: auto;
+  right: auto;
+  z-index: 8;
+  box-sizing: border-box;
+  width: min(58%, 820px);
+  min-height: 38px;
+  height: 38px;
+  margin: -38px 100px 0 auto;
+  padding: 0 12px;
+  border: 0;
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-column > .reader-meta .reader-meta-tools {
+  min-height: 38px;
+  height: 38px;
+  justify-content: flex-end;
+}
+
+@media (max-width: 900px) {
+  .app-shell:not(.is-editor-studio):not(.is-focus) .reader-page > .reader-tabbar {
+    padding-right: 100px;
+  }
+
+  .app-shell:not(.is-editor-studio):not(.is-focus) .reader-column > .reader-meta {
+    right: auto;
+    width: 100%;
+    top: auto;
+    min-height: 42px;
+    height: 42px;
+    margin: 0;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+  }
+
+  .app-shell:not(.is-editor-studio):not(.is-focus) .reader-layout {
+    height: calc(100% - 80px);
+  }
+}
+
+/* Reader controls belong to the title row. The second row is reserved for
+   switching documents, matching the compact two-line workspace requested for
+   the reading desk. */
+.app-shell:not(.is-editor-studio):not(.is-focus) .topbar {
+  gap: 12px;
+  padding-inline: 18px;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .topbar > .crumbs {
+  order: 1;
+  min-width: 180px;
+  flex: 0 1 min(34vw, 430px);
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .topbar > .reader-meta-topbar {
+  position: static;
+  order: 2;
+  display: flex;
+  flex: 0 1 auto;
+  width: auto !important;
+  min-width: 0;
+  height: 38px;
+  min-height: 38px;
+  margin: 0 0 0 auto !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .topbar > .reader-meta-topbar .reader-meta-document {
+  display: none;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .topbar > .reader-meta-topbar .reader-meta-tools {
+  display: flex;
+  width: auto;
+  min-height: 38px;
+  height: 38px;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-edit-actions {
+  gap: 3px;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-edit-actions button,
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-more-menu summary {
+  min-height: 28px;
+  padding: 4px 7px;
+  border-radius: 6px;
+  font-size: 10px;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-display-switch,
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-navigation {
+  padding: 2px;
+  border-radius: 7px;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-display-switch button,
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-navigation button {
+  min-height: 26px;
+  padding: 4px 6px;
+  font-size: 10px;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-navigation {
+  min-width: 0;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-progress-label {
+  display: none;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .topbar > .command-trigger {
+  order: 3;
+  flex: 0 1 210px;
+  min-width: 150px;
+  max-width: 230px;
+  margin-left: 0;
+  padding-block: 7px;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .topbar > .top-actions {
+  order: 4;
+  flex: 0 0 auto;
+  gap: 2px;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-page > .reader-tabbar {
+  padding-right: 16px !important;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-page > .reader-tabbar .reader-tab-actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 8px;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-page > .reader-tabbar .reader-tab-status {
+  position: static;
+  display: flex;
+  align-items: center;
+  height: auto;
+  margin-left: 8px;
+  padding-left: 12px;
+  background: transparent;
+}
+
+@media (max-width: 1180px) {
+  .app-shell:not(.is-editor-studio):not(.is-focus) .topbar > .command-trigger {
+    flex-basis: 34px;
+    min-width: 34px;
+    width: 34px;
+    padding: 7px;
+  }
+
+  .app-shell:not(.is-editor-studio):not(.is-focus) .topbar > .command-trigger > :is(span, kbd) {
+    display: none;
+  }
 }

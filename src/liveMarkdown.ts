@@ -285,22 +285,24 @@ export function liveMarkdown(options: LiveOptions) {
         }
       }
       if (node.name === 'Image' && !active) {
-        const imageLink = raw.match(/^!\[([^\]\n]*)\]\((<[^>\n]+>|[^)\n]+)\)$/)
-        const previewSource = imageLink ? `[${imageLink[1] || 'image'}](${imageLink[2]})` : raw
-        ranges.push(Decoration.replace({ widget: new PreviewWidget(raw, node.from, options, false, `${previewSource}\n\n${referenceDefinitions}`) }).range(node.from, node.to))
+        ranges.push(Decoration.replace({ widget: new PreviewWidget(raw, node.from, options, false, `${raw}\n\n${referenceDefinitions}`) }).range(node.from, node.to))
         return false
       }
       if (node.name === 'TaskMarker' && !active) {
         ranges.push(Decoration.replace({ widget: new TaskWidget(/x/i.test(raw), node.from) }).range(node.from, node.to))
         return false
       }
-      if (node.name === 'ListMark' && node.node.parent && !selectionTouches(state, node.node.parent.from, node.node.parent.to)) {
+      if (node.name === 'ListMark' && node.node.parent) {
+        const line = state.doc.lineAt(node.from)
+        const prefix = line.text.match(/^[ \t]*(?:[-+*]|\d+[.)])[ \t]+(?:\[[ xX]\][ \t]+)?/)?.[0]
+        if (prefix) ranges.push(Decoration.line({ class: 'live-list-line', attributes: { style: `--live-list-indent: ${prefix.replace(/\t/g, '    ').length}ch` } }).range(line.from))
+        if (selectionTouches(state, node.node.parent.from, node.node.parent.to)) return
         if (node.node.parent.getChild('Task')) replace(node.from, node.to)
         else if (/^[-+*]$/.test(raw)) {
           let depth = 0
           let ancestor: SyntaxNode | null = node.node.parent
           while (ancestor) {
-            if (ancestor.name === 'List') depth += 1
+            if (ancestor.name === 'BulletList' || ancestor.name === 'OrderedList') depth += 1
             ancestor = ancestor.parent
           }
           ranges.push(Decoration.replace({ widget: new BulletWidget(Math.max(depth, 1)) }).range(node.from, node.to))

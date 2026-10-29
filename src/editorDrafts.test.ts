@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { hasSaveConflict, readEditorDraft, removeEditorDraft, saveEditorDraft } from './editorDrafts'
+import { editorAssetMap, hasSaveConflict, readEditorDraft, removeEditorDraft, saveEditorDraft } from './editorDrafts'
 
 describe('editor recovery and conflict guards', () => {
+  it('uses inline assets when an existing store has not acquired the asset lookup after hot reload', () => {
+    expect(editorAssetMap({}, 'document', { image: 'blob:inline' })).toEqual({ image: 'blob:inline' })
+    expect(editorAssetMap({ getDocumentAssets: () => ({ image: 'blob:cached', other: 'blob:other' }) }, 'document', { image: 'blob:inline' })).toEqual({ image: 'blob:inline', other: 'blob:other' })
+  })
   it('recovers an exact draft by canonical Windows path without touching its baseline', () => {
     const values = new Map<string, string>()
     const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value) }, removeItem: (key: string) => { values.delete(key) } }

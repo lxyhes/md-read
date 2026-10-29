@@ -32,3 +32,7 @@ export function removeEditorDraft(path: string, storage: Pick<Storage, 'removeIt
 export function hasSaveConflict(base: string, disk: string, proposed: string) {
   return disk !== base && disk !== proposed
 }
+
+export function editorAssetMap(store: { getDocumentAssets?: (id: string) => Record<string, string> }, id: string, inline: Record<string, string>) {
+  return { ...store.getDocumentAssets?.(id), ...inline }
+}

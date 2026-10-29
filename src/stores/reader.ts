@@ -24,6 +24,7 @@ const sample = `# 一次安静的阅读\n\n墨阅把 Markdown 变成一个可以
 
 export const useReaderStore = defineStore('reader', () => {
   const documents = shallowRef<ReaderDocument[]>([])
+  const documentAssets = new Map<string, Record<string, string>>()
   const restoredDocumentIds = new Set<string>()
   let openDocumentRequest = 0
   const openDocumentIds = ref<string[]>([])
@@ -92,8 +93,9 @@ export const useReaderStore = defineStore('reader', () => {
     const urls: string[] = []
     const firstDocument = parseMarkdown(file.path, file.source, (url) => { urls.push(url); return url })
     const hasImage = firstDocument.regions.some((region) => region.type === 'image' || /<img\b/i.test(region.html))
-    if (!hasImage) return firstDocument
-    const assets = { ...await createTauriAssetMap(file.path, urls), ...await createRemoteAssetMap(urls), ...file.assets }
+    if (!hasImage) { documentAssets.delete(firstDocument.id); return firstDocument }
+    const assets = { ...documentAssets.get(firstDocument.id), ...await createTauriAssetMap(file.path, urls), ...await createRemoteAssetMap(urls), ...file.assets }
+    documentAssets.set(firstDocument.id, assets)
     const hasPotentialLocalAsset = urls.some((url) => {
       const value = url.trim()
       return Boolean(value) && !value.startsWith('#') && !/^(?:https?:|mailto:|tel:|data:|blob:|\/\/)/i.test(value)
@@ -180,6 +182,8 @@ export const useReaderStore = defineStore('reader', () => {
       ...annotation, regionId: regionIds.get(annotation.regionId) ?? annotation.regionId,
     }))
     if (nextSource === undefined) {
+      const previousAssets = documentAssets.get(id)
+      if (previousAssets) documentAssets.set(document.id, previousAssets)
       // Keep already loaded image blobs while rebasing local assets to the new directory.
       document.regions.forEach((region, index) => {
         const previous = existing.regions[index]
@@ -189,6 +193,7 @@ export const useReaderStore = defineStore('reader', () => {
         }
       })
     }
+    if (id !== document.id) documentAssets.delete(id)
     const wasCurrent = currentDocumentId.value === id
     documents.value = [...documents.value.filter((item) => item.id !== id && item.id !== document.id), document]
     openDocumentIds.value = openDocumentIds.value.map((item) => item === id ? document.id : item)
@@ -326,6 +331,7 @@ export const useReaderStore = defineStore('reader', () => {
   async function removeDocument(id: string) {
     const documentIndex = documents.value.findIndex((item) => item.id === id)
     if (documentIndex < 0) return
+    documentAssets.delete(id)
     const openIndex = openDocumentIds.value.indexOf(id)
     const wasCurrent = currentDocumentId.value === id
     documents.value = documents.value.filter((item) => item.id !== id)
@@ -373,7 +379,7 @@ export const useReaderStore = defineStore('reader', () => {
 
   const openDocuments = computed(() => openDocumentIds.value.map((id) => documents.value.find((document) => document.id === id)).filter((document): document is ReaderDocument => Boolean(document)))
 
-  return { documents, openDocuments, openDocumentIds, currentDocumentId, currentDocument, mode, activeRegionId, focusedRegionId, activeHeadingId, selection, progress, annotations, themes, activeThemeId, activeTheme, readerSettings, bootstrap, importFiles, importFolder, addOpenedFiles, reloadDocument, replaceDocumentSource, renameDocument, openDocument, closeDocument, removeDocument, setProgress, setFocusedRegion, clearFocusedRegion, focusRegion, clearFocus, setMode, addAnnotation, removeAnnotation, applyTheme, installTheme, updateSettings }
+  return { documents, openDocuments, openDocumentIds, currentDocumentId, currentDocument, mode, activeRegionId, focusedRegionId, activeHeadingId, selection, progress, annotations, themes, activeThemeId, activeTheme, readerSettings, bootstrap, importFiles, importFolder, addOpenedFiles, reloadDocument, replaceDocumentSource, renameDocument, openDocument, closeDocument, removeDocument, setProgress, setFocusedRegion, clearFocusedRegion, focusRegion, clearFocus, setMode, addAnnotation, removeAnnotation, applyTheme, installTheme, updateSettings, getDocumentAssets: (id: string) => documentAssets.get(id) ?? {} }
 })
 
 function readSettings() {

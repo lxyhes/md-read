@@ -3,8 +3,8 @@ import { computed } from 'vue'
 import type { ReaderDocument } from '../types'
 import AppIcon from './AppIcon.vue'
 
-const props = defineProps<{ document: ReaderDocument | null; cursor: number }>()
-const emit = defineEmits<{ jump: [index: number] }>()
+const props = withDefaults(defineProps<{ document: ReaderDocument | null; cursor: number; open?: boolean }>(), { open: true })
+const emit = defineEmits<{ jump: [index: number]; toggle: [open: boolean] }>()
 const headings = computed(() => props.document?.headings ?? [])
 const minDepth = computed(() => Math.min(6, ...headings.value.map(heading => heading.depth)))
 const activeId = computed(() => {
@@ -19,7 +19,7 @@ const activeId = computed(() => {
 </script>
 
 <template>
-  <details class="editor-draft-outline" open>
+  <details class="editor-draft-outline" :open="props.open" @toggle="emit('toggle', ($event.currentTarget as HTMLDetailsElement).open)">
     <summary><AppIcon name="reader" :size="14" /><span>大纲</span><small>{{ headings.length }} 个章节 · 当前草稿</small><AppIcon name="chevron-down" :size="13" /></summary>
     <nav v-if="headings.length" aria-label="编辑中的文档大纲">
       <button v-for="(heading, index) in headings" :key="heading.id" type="button" :style="{ paddingInlineStart: `${12 + (heading.depth - minDepth) * 12}px` }" :aria-current="activeId === heading.id ? 'location' : undefined" @click="emit('jump', index)">{{ heading.text }}</button>
@@ -37,6 +37,7 @@ summary > .app-icon:last-child { margin-left: auto; transform: rotate(-90deg); }
 [open] summary > .app-icon:last-child { transform: none; }
 nav { display: flex; flex-direction: column; height: calc(100% - 56px); overflow: auto; padding-bottom: 6px; scrollbar-width: thin; }
 .editor-draft-outline:not([open]) { padding: 0; }
+.editor-draft-outline:not([open]) { display: none; }
 .editor-draft-outline:not([open]) summary { flex-direction: column; padding: 8px 0; }
 .editor-draft-outline:not([open]) summary small { display: none; }
 button { flex: 0 0 auto; padding: 6px 12px; border-radius: 4px; background: transparent; color: var(--muted); font: 12px/1.5 var(--ui-font); text-align: left; overflow-wrap: anywhere; }

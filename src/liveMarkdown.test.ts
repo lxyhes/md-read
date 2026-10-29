@@ -18,6 +18,23 @@ function editor(source: string) {
 }
 
 describe('source-backed live Markdown', () => {
+  it('adds hanging indents and distinguishes nested list markers without changing the source', () => {
+    const source = '- first\n  - nested\n    1. numbered\n\nend'
+    const { state, field } = editor(source)
+    const lines: Array<{ from: number; style: string }> = []
+    const depths: number[] = []
+    state.field(field).between(0, state.doc.length, (from, _to, decoration) => {
+      if (decoration.spec.class === 'live-list-line') lines.push({ from, style: decoration.spec.attributes.style })
+      if (decoration.spec.widget?.constructor.name === 'BulletWidget') depths.push((decoration.spec.widget as unknown as { depth: number }).depth)
+    })
+    expect(lines).toEqual([
+      { from: 0, style: '--live-list-indent: 2ch' },
+      { from: 8, style: '--live-list-indent: 4ch' },
+      { from: 19, style: '--live-list-indent: 7ch' },
+    ])
+    expect(depths).toEqual([1, 2])
+    expect(state.doc.toString()).toBe(source)
+  })
   it('renders inline math, block math, images, diagrams, tables and tasks without rewriting source', () => {
     const source = '# 标题\r\n\r\n**粗体** $x^2$\r\n\r\n$$\r\n\\frac{a}{b}\r\n$$\r\n\r\n![图](./图.png)\r\n\r\n```mermaid\r\ngraph TD; A-->B\r\n```\r\n\r\n| A | B |\r\n| --- | --- |\r\n| 一 | 二 |\r\n\r\n- [ ] 待办\r\n\r\n尾段'
     const { state, widgets } = editor(source)
