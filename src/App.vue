@@ -18,6 +18,7 @@ import IconButton from './components/IconButton.vue'
 import FontPicker from './components/FontPicker.vue'
 import type MarkdownEditorComponent from './components/MarkdownEditor.vue'
 import EditorMenuBar from './components/EditorMenuBar.vue'
+import SemiDropdown from './components/SemiDropdown.vue'
 import { interfaceFont } from './fonts'
 import { defaultTokens } from './themes'
 import type { FileSystemTreeNode } from './components/FileSystemTree.vue'
@@ -2685,8 +2686,7 @@ function switchDocument(delta: number) {
 }
 
 function tabLabel(document: { title: string; path: string }) {
-  const duplicates = store.openDocuments.filter((item) => item.title === document.title)
-  return duplicates.length > 1 ? `${displayTitle(document.title)} · ${displayTitle(fileNameOf(document.path))}` : displayTitle(document.title)
+  return fileNameOf(document.path)
 }
 
 function closeTabMenus() {
@@ -4733,7 +4733,7 @@ async function requestFullscreen() {
 
     <main class="main-shell" :class="{ 'with-web-preview': Boolean(webPreviewUrl) }">
       <header class="topbar" :class="{ faded: store.mode === 'focus' }">
-        <div class="crumbs"><strong>{{ view === 'reader' ? currentDocumentFileName : view === 'themes' ? '主题空间' : view === 'clipboard' ? '剪贴板' : view === 'favorites' ? '收藏夹' : view === 'knowledge' ? 'AI 知识库' : view === 'notes' ? '个人笔记' : view === 'settings' ? '偏好设置' : '我的文档' }}</strong></div>
+        <div v-if="view !== 'reader'" class="crumbs"><strong>{{ view === 'themes' ? '主题空间' : view === 'clipboard' ? '剪贴板' : view === 'favorites' ? '收藏夹' : view === 'knowledge' ? 'AI 知识库' : view === 'notes' ? '个人笔记' : view === 'settings' ? '偏好设置' : '我的文档' }}</strong></div>
         <button class="command-trigger" type="button" title="搜索：Ctrl/Cmd + K；快速打开：Ctrl/Cmd + P" @click="openSearch('all')"><AppIcon v-if="webPreviewUrl" name="search" :size="16" /><span>搜索文档、标题、内容</span><kbd>⌘ K</kbd></button>
         <div class="top-actions">
           <IconButton icon="focus" label="专注阅读" :active="store.mode === 'focus'" @click="toggleFocusMode" />
@@ -4839,24 +4839,6 @@ async function requestFullscreen() {
       </section>
 
       <section v-else-if="view === 'reader'" class="reader-page">
-        <EditorMenuBar v-if="editorOpen" :groups="editorMenuGroups"><span>{{ editorDirty ? '未保存' : '已保存' }}</span><button class="editor-return-button" type="button" @click="closeEditor">返回阅读</button></EditorMenuBar>
-        <div class="reader-tabbar" aria-label="已打开文档">
-          <div class="reader-tab-scroll" role="tablist" aria-label="已打开文档">
-            <div v-for="document in store.openDocuments" :key="document.id" class="reader-tab" :class="{ active: store.currentDocumentId === document.id }" role="tab" :aria-selected="store.currentDocumentId === document.id" :aria-label="`打开 ${document.title}`" :title="`${document.title}\n${document.path}`" tabindex="0" @click="chooseDocument(document.id)" @contextmenu.prevent="openTabContextMenu($event, document.id)" @auxclick="onTabAuxClick($event, document.id)" @keydown.enter="chooseDocument(document.id)" @keydown.space.prevent="chooseDocument(document.id)">
-              <span><AppIcon name="reader" :size="15" /></span>
-              <strong>{{ tabLabel(document) }}</strong>
-              <IconButton icon="close" size="sm" :label="`关闭 ${document.title}`" @click.stop="closeDocument(document.id)" />
-            </div>
-          </div>
-          <div class="reader-tab-actions">
-            <button class="text-button dual-document-toggle" type="button" :aria-pressed="dualDocumentMode" :disabled="store.openDocuments.length < 2" :title="store.openDocuments.length < 2 ? '先打开两篇 Markdown 文档' : '并排阅读两篇 Markdown 文档'" @click="dualDocumentMode = !dualDocumentMode">{{ dualDocumentMode ? '单文档' : '双文档' }}</button>
-            <IconButton class="reader-new-tab" icon="plus" size="sm" label="打开新文档" :disabled="busyAction !== null" @click="openFile" />
-            <div ref="tabListTrigger" class="reader-tab-list-wrap">
-              <IconButton class="reader-tab-list-trigger" icon="chevron-down" size="sm" :active="tabListOpen" :label="`查看全部标签（${store.openDocuments.length}）`" :aria-expanded="tabListOpen" @click.stop="toggleTabList" />
-            </div>
-          </div>
-          <div class="reader-tab-status" :class="{ 'is-error': saveFailed || fileSyncState === 'error', 'is-syncing': fileSyncState === 'syncing' }"><span><AppIcon :name="saveFailed || fileSyncState === 'error' ? 'info' : fileSyncState === 'updated' ? 'check' : 'sync'" :size="13" /></span><span>{{ store.currentDocument?.wordCount }} 字</span><span><AppIcon name="history" :size="13" /> {{ fileSyncState === 'syncing' ? '正在同步' : fileSyncState === 'updated' ? '已自动更新' : saveFailed ? '保存失败' : '自动保存' }}</span></div>
-        </div>
         <Teleport to=".app-shell">
           <div v-if="tabListOpen" class="tab-list-popover" :style="tabListPopoverStyle" role="menu" @click.stop>
             <div class="tab-list-heading"><span>已打开文档</span><small>{{ store.openDocuments.length }}</small></div>
@@ -4933,7 +4915,7 @@ async function requestFullscreen() {
         </Teleport>
         <div class="reader-layout" :class="{ 'focus-layout': store.mode === 'focus', 'clean-layout': store.mode === 'clean', 'split-layout': readerDisplayMode === 'split', 'context-open': contextPanelOpen, 'outline-panel-collapsed': outlinePanelCollapsed, 'is-resizing-outline': outlinePanelResizing }" :style="{ '--outline-panel-width': `${outlinePanelWidth}px`, gridTemplateColumns: webPreviewUrl ? 'minmax(0, 1fr)' : undefined }">
           <aside v-if="store.mode !== 'focus' && store.mode !== 'clean'" id="reader-sidebar" class="outline-panel" :class="{ 'is-collapsed': outlinePanelCollapsed }">
-            <button v-if="outlinePanelCollapsed" ref="outlinePanelExpandButton" class="outline-panel-expand" type="button" title="展开阅读侧栏" aria-label="展开阅读侧栏" :aria-expanded="!outlinePanelCollapsed" aria-controls="reader-sidebar" @click="toggleOutlinePanel"><AppIcon name="chevron-right" :size="13" /><span>展开</span></button>
+            <button v-if="outlinePanelCollapsed" ref="outlinePanelExpandButton" class="outline-panel-expand" type="button" title="展开阅读侧栏" aria-label="展开阅读侧栏" :aria-expanded="!outlinePanelCollapsed" aria-controls="reader-sidebar" @click="toggleOutlinePanel"><AppIcon name="chevron-right" :size="13" /></button>
             <template v-else>
             <div class="outline-resizer" role="separator" tabindex="0" aria-orientation="vertical" aria-label="调整阅读侧栏宽度；拖窄可收起，双击恢复默认宽度，按 Enter 收起" :aria-valuemin="outlinePanelMinWidth" :aria-valuemax="outlinePanelMaxWidth" :aria-valuenow="outlinePanelWidth" :aria-valuetext="`${outlinePanelWidth}px`" title="拖动调整宽度；拖窄可收起；双击恢复默认宽度" @pointerdown="startOutlinePanelResize" @dblclick="resetOutlinePanelWidth" @keydown="onOutlinePanelResizeKeydown" />
             <div class="panel-heading panel-switcher">
@@ -4987,10 +4969,30 @@ async function requestFullscreen() {
             </div>
             </template>
           </aside>
+          <div class="reader-main-column">
+          <div id="reader-toolbar-slot" class="reader-toolbar-slot" />
+          <EditorMenuBar v-if="editorOpen" :groups="editorMenuGroups"><span>{{ editorDirty ? '未保存' : '已保存' }}</span><button class="editor-return-button" type="button" @click="closeEditor">返回阅读</button></EditorMenuBar>
+          <div class="reader-tabbar" aria-label="已打开文档">
+            <div class="reader-tab-scroll" role="tablist" aria-label="已打开文档">
+              <div v-for="document in store.openDocuments" :key="document.id" class="reader-tab" :class="{ active: store.currentDocumentId === document.id }" role="tab" :aria-selected="store.currentDocumentId === document.id" :aria-label="`打开 ${tabLabel(document)}`" :title="`${tabLabel(document)}\n${document.path}`" tabindex="0" @click="chooseDocument(document.id)" @contextmenu.prevent="openTabContextMenu($event, document.id)" @auxclick="onTabAuxClick($event, document.id)" @keydown.enter="chooseDocument(document.id)" @keydown.space.prevent="chooseDocument(document.id)">
+                <span><AppIcon name="reader" :size="15" /></span>
+                <strong>{{ tabLabel(document) }}</strong>
+                <IconButton icon="close" size="sm" :label="`关闭 ${tabLabel(document)}`" @click.stop="closeDocument(document.id)" />
+              </div>
+            </div>
+            <div class="reader-tab-actions">
+              <button class="text-button dual-document-toggle" type="button" :aria-pressed="dualDocumentMode" :disabled="store.openDocuments.length < 2" :title="store.openDocuments.length < 2 ? '先打开两篇 Markdown 文档' : '并排阅读两篇 Markdown 文档'" @click="dualDocumentMode = !dualDocumentMode">{{ dualDocumentMode ? '单文档' : '双文档' }}</button>
+              <IconButton class="reader-new-tab" icon="plus" size="sm" label="打开新文档" :disabled="busyAction !== null" @click="openFile" />
+              <div ref="tabListTrigger" class="reader-tab-list-wrap">
+                <IconButton class="reader-tab-list-trigger" icon="chevron-down" size="sm" :active="tabListOpen" :label="`查看全部标签（${store.openDocuments.length}）`" :aria-expanded="tabListOpen" @click.stop="toggleTabList" />
+              </div>
+            </div>
+            <div class="reader-tab-status" :class="{ 'is-error': saveFailed || fileSyncState === 'error', 'is-syncing': fileSyncState === 'syncing' }"><span><AppIcon :name="saveFailed || fileSyncState === 'error' ? 'info' : fileSyncState === 'updated' ? 'check' : 'sync'" :size="13" /></span><span>{{ store.currentDocument?.wordCount }} 字</span><span><AppIcon name="history" :size="13" /> {{ fileSyncState === 'syncing' ? '正在同步' : fileSyncState === 'updated' ? '已自动更新' : saveFailed ? '保存失败' : '自动保存' }}</span></div>
+          </div>
           <div class="reader-document-panes" :class="{ 'has-second-document': showSecondDocument }">
           <div class="reader-column">
-            <Teleport v-if="!editorOpen" to=".topbar">
-            <div class="reader-meta reader-meta-topbar">
+            <Teleport to="#reader-toolbar-slot" defer>
+            <div v-if="!editorOpen" class="reader-meta reader-meta-topbar">
               <div class="reader-meta-document">
                 <span class="section-kicker reader-path" :title="store.currentDocument?.path"><AppIcon name="file" :size="13" /><span class="reader-path-value">{{ currentDocumentFileName }}</span></span>
                 <span class="reader-stat">{{ editorOpen && editorPreviewResult.failed ? '正文解析失败' : `${(editorOpen ? editorPreviewDocument : store.currentDocument)?.wordCount ?? 0} 字 · 约 ${(editorOpen ? editorPreviewDocument : store.currentDocument)?.estimatedReadMinutes ?? 0} 分钟` }}</span>
@@ -4999,9 +5001,9 @@ async function requestFullscreen() {
                 <div class="reader-edit-actions">
                   <button type="button" :class="{ active: editorOpen }" @click="editorOpen ? closeEditor() : openEditor()">{{ editorOpen ? '阅读' : '编辑' }}</button>
                   <button v-if="!isRealDocumentPath(store.currentDocument?.path ?? '')" class="save-pasted-button" type="button" :disabled="savingDocument" @click="saveCurrentDocument">{{ savingDocument ? '保存中…' : '保存 Markdown' }}</button>
-                  <details class="reader-more-menu">
-                    <summary>更多</summary>
-                    <div class="reader-more-popover">
+                  <SemiDropdown class="reader-more-menu">
+                    <button type="button">更多</button>
+                    <template #menu>
                       <FontPicker compact label="正文字体" :model-value="store.readerSettings.fontFamily" :fallback-family="defaultTokens.reader.fontFamily" @update:model-value="store.updateSettings({ fontFamily: $event })" />
                       <button type="button" @click="toggleCleanMode">纯净阅读</button>
                       <button type="button" :class="{ active: contextPanelOpen }" @click="contextPanelOpen = !contextPanelOpen">{{ contextPanelOpen ? '收起阅读信息' : '查看阅读信息' }}</button>
@@ -5020,8 +5022,8 @@ async function requestFullscreen() {
                       <button type="button" @click="exportDocument('mediawiki')">导出 MediaWiki</button>
                       <button type="button" @click="exportPdfDocument()">导出 PDF</button>
                       <button type="button" @click="printDocument">打印</button>
-                    </div>
-                  </details>
+                    </template>
+                  </SemiDropdown>
                 </div>
                 <div class="reader-display-switch" role="tablist" aria-label="阅读视图">
                   <button type="button" role="tab" :aria-selected="readerDisplayMode === 'markdown'" :class="{ active: readerDisplayMode === 'markdown' }" @click="readerDisplayMode = 'markdown'">Markdown</button>
@@ -5035,6 +5037,12 @@ async function requestFullscreen() {
                   <button v-if="store.mode === 'clean' && currentHeading" type="button" @click="jumpToCurrentHeading">本章开头</button>
                   <button type="button" :disabled="readerAtTop" @click="scrollToTop">回到顶部</button>
                   <button type="button" :disabled="readerAtBottom" @click="scrollToBottom">到文末</button>
+                </div>
+                <button class="command-trigger reader-command-trigger" type="button" title="搜索：Ctrl/Cmd + K；快速打开：Ctrl/Cmd + P" @click="openSearch('all')"><AppIcon name="search" :size="16" /><span>搜索文档、标题、内容</span><kbd>⌘ K</kbd></button>
+                <div class="top-actions reader-top-actions">
+                  <IconButton icon="focus" label="专注阅读" :active="store.mode === 'focus'" @click="toggleFocusMode" />
+                  <IconButton icon="palette" label="切换主题" @click="view = 'themes'" />
+                  <IconButton icon="fullscreen" :active="fullscreenActive" :label="fullscreenActive ? '退出全屏' : '全屏'" @click="requestFullscreen" />
                 </div>
               </div>
               <div v-else class="reader-editing-meta">
@@ -5125,6 +5133,7 @@ async function requestFullscreen() {
           <KeepAlive>
             <SecondDocumentPane v-if="showSecondDocument" :documents="store.openDocuments" :current-document-id="store.currentDocumentId" :theme-mode="store.activeTheme?.manifest.mode" :theme-key="store.activeThemeId" @close="dualDocumentMode = false" @activate="chooseDocument" @notify="notify" @open-link="openExternalLink" @open-viewer="openViewer" @copy-image="copyRegionAsImage" />
           </KeepAlive>
+          </div>
           </div>
           <Teleport to="body">
             <div v-if="editorContextMenu" ref="editorContextMenuElement" class="editor-context-menu" :style="{ top: `${editorContextMenu.y}px`, left: `${editorContextMenu.x}px` }" role="menu">
