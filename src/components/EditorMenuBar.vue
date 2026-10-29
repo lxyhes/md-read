@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { ref } from 'vue'
+import ArcoDropdown from './ArcoDropdown.vue'
 
 type Item = { label: string; action: () => void; shortcut?: string; disabled?: boolean }
 defineProps<{ groups: { label: string; items: Item[] }[] }>()
 const root = ref<HTMLElement | null>(null)
 const open = ref<string | null>(null)
-function outside(event: PointerEvent) { if (!root.value?.contains(event.target as Node)) open.value = null }
 function navigate(event: KeyboardEvent) {
   if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); open.value = null; (event.currentTarget as HTMLElement).querySelector<HTMLButtonElement>('.editor-menu-trigger')?.focus(); return }
   if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
@@ -16,18 +16,20 @@ function navigate(event: KeyboardEvent) {
   const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : event.key === 'ArrowDown' ? (index + 1) % buttons.length : (index <= 0 ? buttons.length - 1 : index - 1)
   buttons[next].focus()
 }
-function select(item: Item) { open.value = null; item.action() }
-onMounted(() => document.addEventListener('pointerdown', outside))
-onBeforeUnmount(() => document.removeEventListener('pointerdown', outside))
+function select(item: Item) { item.action() }
 </script>
 
 <template>
   <nav ref="root" class="editor-menu-bar" aria-label="编辑菜单">
     <div v-for="group in groups" :key="group.label" class="editor-menu-group" @keydown="navigate">
-      <button class="editor-menu-trigger" type="button" :aria-expanded="open === group.label" aria-haspopup="menu" @click="open = open === group.label ? null : group.label">{{ group.label }}</button>
-      <div v-if="open === group.label" class="editor-menu-popover" role="menu" :aria-label="group.label">
-        <button v-for="item in group.items" :key="item.label" role="menuitem" type="button" :disabled="item.disabled" @click="select(item)"><span>{{ item.label }}</span><kbd v-if="item.shortcut">{{ item.shortcut }}</kbd></button>
-      </div>
+      <ArcoDropdown panel-class="editor-menu-popover" :popup-container="root || undefined" @visible-change="(next) => { open = next ? group.label : (open === group.label ? null : open) }">
+        <button class="editor-menu-trigger" type="button" :aria-expanded="open === group.label" aria-haspopup="menu">{{ group.label }}</button>
+        <template #menu>
+          <div role="menu" :aria-label="group.label">
+            <button v-for="item in group.items" :key="item.label" role="menuitem" type="button" :disabled="item.disabled" @click="select(item)"><span>{{ item.label }}</span><kbd v-if="item.shortcut">{{ item.shortcut }}</kbd></button>
+          </div>
+        </template>
+      </ArcoDropdown>
     </div>
     <div class="editor-menu-actions"><slot /></div>
   </nav>

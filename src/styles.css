@@ -274,7 +274,8 @@ html, body, #app { background: var(--app-bg, #070d22); }
 
 /* Theme center previews inherit the actual theme instead of a card-order preset. */
 .app-shell:not(.is-focus) .theme-center-toolbar { padding: 8px; border: 1px solid var(--border); border-radius: 13px; background: color-mix(in srgb, var(--surface) 78%, transparent); box-shadow: 0 12px 28px color-mix(in srgb, var(--app-bg) 14%, transparent); }
-.app-shell:not(.is-focus) .theme-search input::placeholder { color: var(--muted); opacity: .78; }
+.app-shell:not(.is-focus) .theme-search input::placeholder,
+.app-shell:not(.is-focus) .theme-search .arco-input::placeholder { color: var(--muted); opacity: .78; }
 .app-shell:not(.is-focus) .theme-filter { outline: none; }
 .app-shell:not(.is-focus) .theme-card { position: relative; overflow: hidden; }
 .app-shell:not(.is-focus) .theme-card .theme-swatch { background: var(--theme-bg); color: var(--theme-ink); }
@@ -572,6 +573,9 @@ html, body, #app { background: var(--app-bg, #070d22); }
   .knowledge-working-dot { animation: none; }
 }
 .knowledge-ask-form { display: flex; gap: 9px; margin-top: 19px; }
+.knowledge-ask-form .arco-textarea-wrapper { min-width: 0; flex: 1; }
+.knowledge-ask-form .arco-textarea { min-height: 76px; max-height: 180px; resize: vertical; padding: 12px 13px; border-color: var(--border); border-radius: 8px; background: color-mix(in srgb, var(--surface-raised) 80%, transparent); color: var(--ink); font: 12px/1.6 var(--ui-font); }
+.knowledge-ask-form .arco-textarea-wrapper:focus-within .arco-textarea { border-color: color-mix(in srgb, var(--accent) 65%, var(--border)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent); }
 .knowledge-ask-form textarea { min-width: 0; min-height: 76px; max-height: 180px; resize: vertical; flex: 1; padding: 12px 13px; border: 1px solid var(--border); border-radius: 8px; outline: none; background: color-mix(in srgb, var(--surface-raised) 80%, transparent); color: var(--ink); font: 12px/1.6 var(--ui-font); }
 .knowledge-ask-form textarea:focus { border-color: color-mix(in srgb, var(--accent) 65%, var(--border)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent); }
 .knowledge-ask-form .primary-button { align-self: flex-end; }
@@ -10632,6 +10636,12 @@ html:has(.reader-page), body:has(.reader-page), #app:has(.reader-page) { min-wid
   padding-bottom: 45vh;
 }
 
+/* The reader width rules above are intentionally stronger than the older
+   editor rule. Once editing owns the window, its main column must span it. */
+body .app-shell.is-editor-studio .reader-layout {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
 @media (max-width: 860px) {
   .app-shell.is-editor-studio .editor-draft-layout {
     grid-template-columns: minmax(0, 1fr);
@@ -11029,6 +11039,44 @@ html:has(.reader-page), body:has(.reader-page), #app:has(.reader-page) { min-wid
   display: flex;
   flex: 0 0 auto;
   gap: 2px;
+}
+
+.arco-dropdown:has(.reader-more-popover, .library-more-popover) {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.arco-dropdown:has(.reader-more-popover, .library-more-popover) :is(.reader-more-popover, .library-more-popover) {
+  position: static;
+  inset: auto;
+}
+
+.arco-dropdown:has(.reader-more-popover, .library-more-popover) :is(.reader-more-popover, .library-more-popover) button {
+  width: 100%;
+  padding: 8px 9px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  text-align: left;
+}
+
+.arco-dropdown:has(.reader-more-popover, .library-more-popover) :is(.reader-more-popover, .library-more-popover) button:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--ink);
+}
+
+.arco-dropdown:has(.editor-menu-popover) {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.arco-dropdown:has(.editor-menu-popover) .editor-menu-popover {
+  position: static;
+  inset: auto;
 }
 
 /* Reading desk chrome: tools form a calm command row; open files sit on a

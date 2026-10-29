@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
+import Button from '@arco-design/web-vue/es/button'
+import '@arco-design/web-vue/es/button/style/css.js'
 import AppIcon from './AppIcon.vue'
 import { confirmAppAction } from '../appDialog'
 
@@ -316,9 +318,9 @@ onUnmounted(() => {
     <div class="clipboard-toolbar">
       <div class="clipboard-toolbar-status"><span class="status-pulse" :class="{ paused: !captureEnabled }" /><span>{{ captureStatus }}</span><small v-if="lastReadAt">· {{ formatTime(lastReadAt) }} 更新</small></div>
       <div class="clipboard-toolbar-actions">
-        <button class="clipboard-quiet-action" type="button" @click="checkClipboard(true)"><AppIcon name="sync" :size="13" />立即读取</button>
-        <button class="clipboard-quiet-action" type="button" @click="toggleCapture"><AppIcon :name="captureEnabled ? 'eye' : 'close'" :size="13" />{{ captureEnabled ? '暂停监测' : '恢复监测' }}</button>
-        <button class="clipboard-clear-action" type="button" :disabled="!items.length || !items.some((item) => !item.pinned)" @click="clearHistory"><AppIcon name="trash" :size="13" />清空未置顶</button>
+        <Button class="clipboard-quiet-action" type="text" @click="checkClipboard(true)"><AppIcon name="sync" :size="13" />立即读取</Button>
+        <Button class="clipboard-quiet-action" type="text" @click="toggleCapture"><AppIcon :name="captureEnabled ? 'eye' : 'close'" :size="13" />{{ captureEnabled ? '暂停监测' : '恢复监测' }}</Button>
+        <Button class="clipboard-clear-action" type="text" status="danger" :disabled="!items.length || !items.some((item) => !item.pinned)" @click="clearHistory"><AppIcon name="trash" :size="13" />清空未置顶</Button>
       </div>
     </div>
 
@@ -330,9 +332,9 @@ onUnmounted(() => {
         </div>
         <div class="clipboard-filter-row">
           <div class="clipboard-filters" role="tablist" aria-label="剪贴板类型">
-            <button type="button" :class="{ active: filter === 'all' }" @click="filter = 'all'">全部 <b>{{ items.length }}</b></button>
-            <button type="button" :class="{ active: filter === 'text' }" @click="filter = 'text'"><AppIcon name="type" :size="12" />文本 <b>{{ textCount }}</b></button>
-            <button type="button" :class="{ active: filter === 'image' }" @click="filter = 'image'"><AppIcon name="image" :size="12" />图片 <b>{{ imageCount }}</b></button>
+            <Button type="text" :class="{ active: filter === 'all' }" @click="filter = 'all'">全部 <b>{{ items.length }}</b></Button>
+            <Button type="text" :class="{ active: filter === 'text' }" @click="filter = 'text'"><AppIcon name="type" :size="12" />文本 <b>{{ textCount }}</b></Button>
+            <Button type="text" :class="{ active: filter === 'image' }" @click="filter = 'image'"><AppIcon name="image" :size="12" />图片 <b>{{ imageCount }}</b></Button>
           </div>
           <label class="clipboard-search"><AppIcon name="search" :size="13" /><input v-model="query" type="search" placeholder="搜索历史内容…" aria-label="搜索剪贴板历史" /><button v-if="query" type="button" aria-label="清空搜索" @click="query = ''"><AppIcon name="close" :size="11" /></button></label>
         </div>

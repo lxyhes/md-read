@@ -1,5 +1,11 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import Button from '@arco-design/web-vue/es/button'
+import Input from '@arco-design/web-vue/es/input'
+import Select, { Option } from '@arco-design/web-vue/es/select'
+import '@arco-design/web-vue/es/button/style/css.js'
+import '@arco-design/web-vue/es/input/style/css.js'
+import '@arco-design/web-vue/es/select/style/css.js'
 import { exportTheme, importTheme } from '../themes'
 import type { MoyueTheme } from '../types'
 import ThemeEditor from './ThemeEditor.vue'
@@ -75,17 +81,21 @@ async function onThemeFile(event: Event) {
       <div><h1>主题中心</h1><p class="theme-page-lede">先选一种主题，再调整颜色与组件样式。</p></div>
       <div class="toolbar-actions">
         <input ref="themeInput" type="file" accept=".moyue-theme,.zip" hidden @change="onThemeFile" />
-        <button class="ghost-button" type="button" @click="themeInput?.click()"><AppIcon name="upload" :size="14" />导入主题包</button>
-        <button class="primary-button" type="button" :disabled="!themeDraft" @click="downloadTheme"><AppIcon name="download" :size="14" />导出当前主题</button>
+        <Button class="ghost-button" type="secondary" @click="themeInput?.click()"><AppIcon name="upload" :size="14" />导入主题包</Button>
+        <Button class="primary-button" type="primary" :disabled="!themeDraft" @click="downloadTheme"><AppIcon name="download" :size="14" />导出当前主题</Button>
       </div>
     </div>
     <div class="theme-center-toolbar">
       <div class="segmented-tabs">
-        <button :class="{ active: themeTab === 'official' }" type="button" @click="themeTab = 'official'">官方主题</button>
-        <button :class="{ active: themeTab === 'mine' }" type="button" @click="themeTab = 'mine'">我的主题</button>
+        <Button :class="{ active: themeTab === 'official' }" type="text" @click="themeTab = 'official'">官方主题</Button>
+        <Button :class="{ active: themeTab === 'mine' }" type="text" @click="themeTab = 'mine'">我的主题</Button>
       </div>
-      <label class="theme-search"><AppIcon name="search" :size="14" /><input v-model="themeSearch" placeholder="搜索主题、风格、作者…" /></label>
-      <select v-model="themeModeFilter" class="theme-filter" aria-label="主题风格"><option value="all">全部风格</option><option value="dark">深色阅读</option><option value="light">浅色阅读</option></select>
+      <label class="theme-search"><AppIcon name="search" :size="14" /><Input v-model="themeSearch" placeholder="搜索主题、风格、作者…" allow-clear /></label>
+      <Select v-model="themeModeFilter" class="theme-filter" aria-label="主题风格">
+        <Option value="all">全部风格</Option>
+        <Option value="dark">深色阅读</Option>
+        <Option value="light">浅色阅读</Option>
+      </Select>
     </div>
     <div class="theme-layout">
       <div class="theme-gallery">

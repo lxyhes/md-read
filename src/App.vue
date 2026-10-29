@@ -18,7 +18,7 @@ import IconButton from './components/IconButton.vue'
 import FontPicker from './components/FontPicker.vue'
 import type MarkdownEditorComponent from './components/MarkdownEditor.vue'
 import EditorMenuBar from './components/EditorMenuBar.vue'
-import SemiDropdown from './components/SemiDropdown.vue'
+import ArcoDropdown from './components/ArcoDropdown.vue'
 import { interfaceFont } from './fonts'
 import { defaultTokens } from './themes'
 import type { FileSystemTreeNode } from './components/FileSystemTree.vue'
@@ -4748,8 +4748,25 @@ async function requestFullscreen() {
           <button v-if="store.currentDocument" class="hero-continue" type="button" @click="chooseDocument(store.currentDocument.id)"><span>继续阅读</span><strong>{{ displayTitle(store.currentDocument.title) }}</strong><small>{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}% 已读 · 约 {{ store.currentDocument.estimatedReadMinutes }} 分钟</small><AppIcon name="chevron-right" :size="16" /></button>
         </div>
         <div class="page-toolbar reveal-2"><div class="library-toolbar-heading"><div><h2>最近阅读 <span>{{ filteredLibraryDocuments.length }}<i v-if="librarySearchQuery.trim()"> / {{ store.documents.length }}</i></span></h2></div><div class="library-search"><AppIcon name="search" :size="14" /><input v-model="librarySearchQuery" type="search" placeholder="搜索已打开的 Markdown…" aria-label="按名称搜索已打开的 Markdown" /><button v-if="librarySearchQuery" type="button" aria-label="清空搜索" @click="librarySearchQuery = ''"><AppIcon name="close" :size="12" /></button></div></div><div class="toolbar-actions">
-          <details class="library-more-menu"><summary class="ghost-button"><AppIcon name="copy" :size="14" />更多导入</summary><div class="library-more-popover"><button type="button" :disabled="busyAction !== null" @click="importOfficeDocument">{{ busyAction === 'pandoc' ? '转换中…' : '导入 Word / EPUB…' }}</button><button type="button" :disabled="busyAction !== null" @click="() => pasteFromClipboard()">{{ busyAction === 'paste' ? '格式化中…' : '粘贴并格式化' }}</button><button type="button" :disabled="busyAction !== null" @click="() => pasteImageFromClipboard()">{{ busyAction === 'paste-image' ? '读取中…' : '粘贴图片' }}</button><button type="button" :disabled="busyAction !== null" @click="() => pasteFromClipboard(true)">{{ busyAction === 'paste-save' ? '保存中…' : '粘贴并保存' }}</button></div></details>
-          <details v-if="isTauriRuntime() && orderedRecentFolders.length" class="library-more-menu recent-folders-menu"><summary class="ghost-button"><AppIcon name="history" :size="14" />最近文件夹</summary><div class="library-more-popover recent-folders-popover"><div v-for="folder in orderedRecentFolders" :key="folder.path" class="recent-folder-row"><button class="recent-folder-open" type="button" :title="folder.path" :disabled="busyAction !== null" @click="openSavedRecentFolder(folder)"><strong>{{ folderNameOf(folder.path) }}</strong><small>{{ folder.path }}</small></button><button class="recent-folder-action" type="button" :title="folder.pinned ? '取消置顶' : '置顶文件夹'" @click="toggleRecentFolderPin(folder.path)">{{ folder.pinned ? '取消置顶' : '置顶' }}</button><button class="recent-folder-action" type="button" title="移除最近文件夹" @click="removeSavedRecentFolder(folder.path)">移除</button></div></div></details>
+          <ArcoDropdown panel-class="library-more-popover">
+            <button class="ghost-button" type="button"><AppIcon name="copy" :size="14" />更多导入</button>
+            <template #menu>
+              <button type="button" :disabled="busyAction !== null" @click="importOfficeDocument">{{ busyAction === 'pandoc' ? '转换中…' : '导入 Word / EPUB…' }}</button>
+              <button type="button" :disabled="busyAction !== null" @click="() => pasteFromClipboard()">{{ busyAction === 'paste' ? '格式化中…' : '粘贴并格式化' }}</button>
+              <button type="button" :disabled="busyAction !== null" @click="() => pasteImageFromClipboard()">{{ busyAction === 'paste-image' ? '读取中…' : '粘贴图片' }}</button>
+              <button type="button" :disabled="busyAction !== null" @click="() => pasteFromClipboard(true)">{{ busyAction === 'paste-save' ? '保存中…' : '粘贴并保存' }}</button>
+            </template>
+          </ArcoDropdown>
+          <ArcoDropdown v-if="isTauriRuntime() && orderedRecentFolders.length" panel-class="library-more-popover recent-folders-popover">
+            <button class="ghost-button" type="button"><AppIcon name="history" :size="14" />最近文件夹</button>
+            <template #menu>
+              <div v-for="folder in orderedRecentFolders" :key="folder.path" class="recent-folder-row">
+                <button class="recent-folder-open" type="button" :title="folder.path" :disabled="busyAction !== null" @click="openSavedRecentFolder(folder)"><strong>{{ folderNameOf(folder.path) }}</strong><small>{{ folder.path }}</small></button>
+                <button class="recent-folder-action" type="button" :title="folder.pinned ? '取消置顶' : '置顶文件夹'" @click="toggleRecentFolderPin(folder.path)">{{ folder.pinned ? '取消置顶' : '置顶' }}</button>
+                <button class="recent-folder-action" type="button" title="移除最近文件夹" @click="removeSavedRecentFolder(folder.path)">移除</button>
+              </div>
+            </template>
+          </ArcoDropdown>
           <button class="ghost-button" type="button" :disabled="busyAction !== null" @click="openFolder"><AppIcon name="folder" :size="14" />{{ busyAction === 'folder' ? '扫描中…' : '打开文件夹' }}</button><button class="primary-button" type="button" :disabled="busyAction !== null" @click="openFile"><AppIcon name="plus" :size="14" />{{ busyAction === 'file' ? '打开中…' : '导入 Markdown' }}</button></div></div>
         <div class="document-grid reveal-3">
           <div v-if="librarySearchQuery.trim() && !filteredLibraryDocuments.length" class="library-empty"><AppIcon name="search" :size="20" /><strong>没有找到匹配的文档</strong><span>试试搜索其他 Markdown 名称</span></div>
@@ -5001,7 +5018,7 @@ async function requestFullscreen() {
                 <div class="reader-edit-actions">
                   <button type="button" :class="{ active: editorOpen }" @click="editorOpen ? closeEditor() : openEditor()">{{ editorOpen ? '阅读' : '编辑' }}</button>
                   <button v-if="!isRealDocumentPath(store.currentDocument?.path ?? '')" class="save-pasted-button" type="button" :disabled="savingDocument" @click="saveCurrentDocument">{{ savingDocument ? '保存中…' : '保存 Markdown' }}</button>
-                  <SemiDropdown class="reader-more-menu">
+                  <ArcoDropdown class="reader-more-menu">
                     <button type="button">更多</button>
                     <template #menu>
                       <FontPicker compact label="正文字体" :model-value="store.readerSettings.fontFamily" :fallback-family="defaultTokens.reader.fontFamily" @update:model-value="store.updateSettings({ fontFamily: $event })" />
@@ -5023,7 +5040,7 @@ async function requestFullscreen() {
                       <button type="button" @click="exportPdfDocument()">导出 PDF</button>
                       <button type="button" @click="printDocument">打印</button>
                     </template>
-                  </SemiDropdown>
+                  </ArcoDropdown>
                 </div>
                 <div class="reader-display-switch" role="tablist" aria-label="阅读视图">
                   <button type="button" role="tab" :aria-selected="readerDisplayMode === 'markdown'" :class="{ active: readerDisplayMode === 'markdown' }" @click="readerDisplayMode = 'markdown'">Markdown</button>
