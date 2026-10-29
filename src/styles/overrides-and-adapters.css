@@ -1479,6 +1479,59 @@ a:active > .app-icon-vector { transform: scale(.92); }
   font-size: 12px;
 }
 .app-shell .arco-select-view-single .arco-select-view-value { font: inherit !important; }
+.app-shell :is(.settings-page, .editor-dialog, .note-dialog) .arco-input-wrapper .arco-input,
+.app-shell .note-dialog .arco-textarea {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.app-shell .setting-row .arco-slider {
+  width: 100%;
+}
+.app-shell .setting-row .arco-slider span {
+  display: inline-block;
+  margin-bottom: 0;
+}
+.app-shell .editor-find-row > .arco-input-wrapper {
+  flex: 1;
+  min-width: 180px;
+  text-align: left;
+}
+.app-shell .knowledge-scope-list .arco-checkbox-icon {
+  overflow: visible;
+}
+.app-shell .knowledge-scope-list .arco-checkbox-label {
+  min-width: 0;
+}
+.app-shell .knowledge-manager-select .arco-checkbox input {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+.app-shell :is(.knowledge-source-scope, .knowledge-citations, .knowledge-citation, .knowledge-source-overflow).arco-collapse {
+  border-color: var(--border);
+  background: var(--surface);
+  color: var(--ink);
+}
+.app-shell .knowledge-page .arco-collapse-item-header {
+  border-color: var(--border);
+  background: var(--surface-raised);
+  color: var(--ink);
+  font: 12px/1.5 var(--ui-font);
+}
+.app-shell .knowledge-page .arco-collapse-item-content {
+  background: var(--surface);
+  color: var(--ink);
+}
+.app-shell .knowledge-page .arco-collapse-item-header-title {
+  min-width: 0;
+}
+.app-shell .knowledge-page .arco-collapse-item-header-title > small {
+  margin-left: 8px;
+  color: var(--muted);
+}
 .app-shell :is(.arco-input-wrapper, .arco-textarea-wrapper, .arco-select-view-single) {
   min-height: 34px;
   border: 1px solid var(--border);
@@ -1739,6 +1792,26 @@ a:active > .app-icon-vector { transform: scale(.92); }
 }
 .app-shell .library-search input {
   font-size: 12px;
+}
+.app-shell .library-search.arco-input-wrapper {
+  height: 38px;
+  padding: 0 11px;
+  box-shadow: none;
+}
+.app-shell .library-search.arco-input-wrapper:hover,
+.app-shell .library-search.arco-input-wrapper.arco-input-focus {
+  border-color: color-mix(in srgb, var(--accent) 65%, var(--border));
+  background: var(--surface-raised);
+}
+.app-shell .library-search .arco-input-prefix {
+  margin-right: 8px;
+}
+.app-shell .library-search .arco-input-clear-btn {
+  color: var(--muted);
+}
+.library-more-popover .library-import-action {
+  justify-content: flex-start;
+  text-align: left;
 }
 .app-shell .editor-outline-label {
   font-size: 11px;
@@ -3394,7 +3467,7 @@ body .app-shell.is-editor-studio .reader-layout {
   box-shadow: 0 30px 80px color-mix(in srgb, var(--app-bg) 38%, transparent), 0 4px 18px color-mix(in srgb, var(--ink) 8%, transparent);
 }
 
-.app-shell .search-dialog::before {
+.app-shell .search-dialog:not(.global-search-dialog)::before {
   position: absolute;
   inset: 0 20px auto;
   height: 2px;
@@ -3409,6 +3482,33 @@ body .app-shell.is-editor-studio .reader-layout {
   gap: 13px;
   padding: 14px 18px 13px 21px;
   background: color-mix(in srgb, var(--surface) 58%, transparent);
+}
+
+.app-shell .global-search-dialog,
+.app-shell .global-search-dialog .search-input-row,
+.app-shell .global-search-dialog .search-scope-row,
+.app-shell .global-search-dialog .replace-row {
+  background: var(--surface-raised);
+}
+
+.app-shell .global-search-input {
+  min-width: 0;
+  flex: 1;
+  border-color: transparent;
+  background: transparent;
+}
+
+.app-shell .global-replace-input {
+  min-width: 0;
+  flex: 1;
+}
+
+.app-shell .global-search-dialog .replace-row .arco-input {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .app-shell .search-input-row > .app-icon {
@@ -3509,7 +3609,7 @@ body .app-shell.is-editor-studio .reader-layout {
   font-size: 11px;
 }
 
-.app-shell .replace-row label input {
+.app-shell .replace-row label:not(.arco-checkbox) input {
   width: 14px;
   height: 14px;
   margin: 0;

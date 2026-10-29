@@ -1,26 +1,28 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import Dropdown, { Doption } from '@arco-design/web-vue/es/dropdown'
+import Button from '@arco-design/web-vue/es/button'
+import '@arco-design/web-vue/es/dropdown/style/css.js'
+import '@arco-design/web-vue/es/button/style/css.js'
 import type { PandocExportFormat } from '../fileService'
 defineProps<{ disabled?: boolean }>()
 const emit = defineEmits<{ export: [format: 'markdown' | 'html' | 'html-clean' | 'image' | PandocExportFormat]; pdf: [] }>()
-const menu = ref<HTMLDetailsElement | null>(null)
-function choose(format: 'markdown' | 'html' | 'html-clean' | 'image' | PandocExportFormat) {
-  if (menu.value) menu.value.open = false
-  emit('export', format)
+function choose(format: string | number | Record<string, any> | undefined) {
+  if (format === 'pdf') emit('pdf')
+  else emit('export', format as 'markdown' | 'html' | 'html-clean' | 'image' | PandocExportFormat)
 }
 </script>
 
 <template>
-  <details ref="menu" class="editor-export-menu" @keydown.esc.stop="menu && (menu.open = false)">
-    <summary aria-label="导出当前草稿" :aria-disabled="disabled" @click="disabled && $event.preventDefault()">{{ disabled ? '导出中…' : '导出' }}</summary>
-    <div role="menu" aria-label="草稿导出格式">
-      <button type="button" role="menuitem" @click="choose('markdown')">Markdown</button>
-      <button type="button" role="menuitem" @click="choose('html')">HTML · 当前主题</button>
-      <button type="button" role="menuitem" @click="choose('docx')">DOCX · Word</button>
-      <button type="button" role="menuitem" @click="choose('epub')">EPUB · 电子书</button>
-      <button type="button" role="menuitem" @click="choose('latex')">LaTeX</button>
-      <button type="button" role="menuitem" @click="choose('image')">PNG · 长图</button>
-      <button type="button" role="menuitem" @click="menu && (menu.open = false); emit('pdf')">PDF</button>
-    </div>
-  </details>
+  <Dropdown trigger="click" position="br" :disabled="disabled" @select="choose">
+    <Button type="secondary" :disabled="disabled" :loading="disabled" aria-label="导出当前草稿">导出</Button>
+    <template #content>
+      <Doption value="markdown">Markdown</Doption>
+      <Doption value="html">HTML · 当前主题</Doption>
+      <Doption value="docx">DOCX · Word</Doption>
+      <Doption value="epub">EPUB · 电子书</Doption>
+      <Doption value="latex">LaTeX</Doption>
+      <Doption value="image">PNG · 长图</Doption>
+      <Doption value="pdf">PDF</Doption>
+    </template>
+  </Dropdown>
 </template>
