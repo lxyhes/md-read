@@ -1,5 +1,9 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import Input from '@arco-design/web-vue/es/input'
+import Textarea from '@arco-design/web-vue/es/textarea'
+import '@arco-design/web-vue/es/input/style/css.js'
+import '@arco-design/web-vue/es/textarea/style/css.js'
 import type { MoyueTheme } from '../types'
 import AppIcon from './AppIcon.vue'
 
@@ -52,9 +56,9 @@ function apply() { emit('apply', clone(draft.value)) }
 
     <div class="editor-fields">
       <template v-if="section === 'base'">
-        <label>主题名称<input v-model="draft.manifest.name" /></label>
-        <label>主题作者<input v-model="draft.manifest.author" /></label>
-        <label class="field-wide">主题描述<textarea v-model="draft.manifest.description" rows="3" /></label>
+        <label>主题名称<Input v-model="draft.manifest.name" /></label>
+        <label>主题作者<Input v-model="draft.manifest.author" /></label>
+        <label class="field-wide">主题描述<Textarea v-model="draft.manifest.description" :textarea-attrs="{ rows: 3 }" /></label>
       </template>
       <template v-else-if="section === 'color'">
         <label>主色<input v-model="draft.tokens.color.accent" type="color" /></label>

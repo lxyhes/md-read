@@ -230,6 +230,9 @@ button:disabled { cursor: wait; opacity: .58; transform: none !important; }
 .theme-editor .editor-note { display: grid; gap: 8px; min-height: 74px; padding: 13px 14px; border: 1px dashed var(--border); border-radius: 9px; background: color-mix(in srgb, var(--surface-raised) 65%, transparent); color: var(--muted); font: 11px/1.6 var(--ui-font); }
 .theme-editor .editor-note strong { color: var(--ink); font-size: 12px; }
 .theme-editor .editor-fields input[type="color"] { width: 100%; height: 39px; padding: 4px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-raised); }
+.theme-editor .editor-fields :is(.arco-input-wrapper, .arco-textarea-wrapper) { width: 100%; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-raised); box-shadow: none; }
+.theme-editor .editor-fields :is(.arco-input-wrapper, .arco-textarea-wrapper):focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent); }
+.theme-editor .editor-fields :is(.arco-input, .arco-textarea) { color: var(--ink); font: 11px var(--ui-font); }
 .themes-page .theme-card.create-theme { min-height: 200px; }
 
 /* Keep every non-focus surface driven by the active Moyue theme tokens. */
@@ -7178,7 +7181,7 @@ body.is-resizing-outline * {
 .file-filter-toolbar .arco-select, .file-filter-toolbar input { min-width: 0; width: 100%; }
 .file-filter-toolbar .arco-select-view-single, .file-filter-toolbar input { padding: 6px 7px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-raised); color: var(--ink); font: 10px var(--ui-font); }
 .file-filter-toolbar .arco-select { flex: 1 1 92px; min-width: 78px; }
-.file-filter-toolbar .file-sort-select { flex-basis: 78px; }
+.file-filter-toolbar .file-sort-select { flex: 0 0 92px; min-width: 92px; }
 .file-filter-toolbar input { flex: 1 1 76px; }
 .file-tree-mix { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 4px; padding: 0 2px; color: var(--muted); font: 9px var(--ui-font); white-space: nowrap; }
 .file-tree-mix input { width: 12px; min-width: 12px; height: 12px; margin: 0; accent-color: var(--accent); }
@@ -9561,6 +9564,159 @@ a:active > .app-icon-vector { transform: scale(.92); }
 .app-shell :is(select, .arco-select, .arco-select-view-single) {
   font-family: var(--ui-font);
   font-size: 12px;
+}
+.app-shell .arco-select-view-single .arco-select-view-value { font: inherit !important; }
+.app-shell :is(.arco-input-wrapper, .arco-textarea-wrapper, .arco-select-view-single) {
+  min-height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--surface-raised) 88%, transparent);
+  color: var(--ink);
+  box-shadow: none;
+  font: 12px/1.4 var(--ui-font);
+  transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+}
+.app-shell :is(.arco-input-wrapper, .arco-textarea-wrapper, .arco-select-view-single):hover {
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--border));
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface-raised));
+}
+.app-shell :is(.arco-input-wrapper, .arco-textarea-wrapper, .arco-select-view-single):focus-within,
+.app-shell .arco-select-view-single.arco-select-view-focus {
+  z-index: 1;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.app-shell :is(.arco-input-wrapper, .arco-textarea-wrapper) :is(.arco-input, .arco-textarea) {
+  color: inherit;
+  font: inherit;
+}
+.app-shell .arco-select-view-single .arco-select-view-suffix,
+.app-shell :is(.arco-input-wrapper, .arco-textarea-wrapper) :is(.arco-input-clear-btn, .arco-textarea-clear-btn) {
+  color: var(--muted);
+}
+.app-shell :is(.arco-input-wrapper.arco-input-disabled, .arco-textarea-wrapper.arco-textarea-disabled, .arco-select-view-single.arco-select-view-disabled) {
+  opacity: .58;
+  cursor: not-allowed;
+}
+
+/* Select views keep the toolbars compact without inheriting Arco's roomy default. */
+.app-shell .theme-filter.arco-select-view-single {
+  box-sizing: border-box;
+  min-height: 34px;
+  height: 34px;
+  padding: 0 9px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  font: 12px/1.4 var(--ui-font);
+  box-shadow: none;
+}
+.app-shell .theme-filter.arco-select-view-single:hover {
+  border-bottom-color: color-mix(in srgb, var(--accent) 52%, var(--border));
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+.app-shell .theme-filter.arco-select-view-single.arco-select-view-focus {
+  border-bottom-color: var(--accent);
+  box-shadow: 0 2px 0 color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.app-shell .theme-search .arco-input-wrapper {
+  min-height: 34px;
+  padding-inline: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.app-shell .theme-search .arco-input.arco-input-size-medium {
+  padding: 0;
+  color: var(--ink);
+  font: 12px/1.4 var(--ui-font);
+}
+.app-shell .theme-search .arco-input-clear-btn {
+  color: var(--muted);
+}
+.app-shell .setting-input > input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]) {
+  box-sizing: border-box;
+  min-height: 34px;
+  font: 12px/1.4 var(--ui-font);
+}
+.arco-select-dropdown,
+.arco-dropdown-list,
+.arco-trigger-popup .arco-dropdown-list-wrapper {
+  border: 1px solid var(--border) !important;
+  border-radius: 8px !important;
+  background: var(--surface-raised) !important;
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--app-bg) 28%, transparent) !important;
+}
+.arco-select-dropdown .arco-select-option,
+.arco-dropdown-list .arco-dropdown-option {
+  min-height: 34px !important;
+  color: var(--ink) !important;
+  font: 12px/1.45 var(--ui-font) !important;
+}
+.arco-select-dropdown .arco-select-option-active,
+.arco-select-dropdown .arco-select-option-selected,
+.arco-dropdown-list .arco-dropdown-option-active,
+.arco-dropdown-list .arco-dropdown-option:hover {
+  background: var(--accent-soft) !important;
+  color: var(--ink) !important;
+}
+.app-shell .arco-btn {
+  min-height: 34px;
+  border-radius: 6px;
+  font: 12px/1.35 var(--ui-font);
+}
+.app-shell .arco-btn-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--app-bg);
+}
+.app-shell .arco-btn-secondary {
+  border-color: var(--border);
+  background: transparent;
+  color: var(--muted);
+}
+.app-shell .arco-btn-text {
+  color: var(--muted);
+}
+.app-shell .arco-btn-text:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+/* Modal and dropdown portals render outside .app-shell; keep their controls on the same tokens. */
+.arco-modal :is(.arco-input-wrapper, .arco-textarea-wrapper) {
+  min-height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-raised);
+  color: var(--ink);
+  box-shadow: none;
+  font: 12px/1.4 var(--ui-font);
+}
+.arco-modal :is(.arco-input-wrapper, .arco-textarea-wrapper):focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.arco-modal :is(.arco-input, .arco-textarea) {
+  color: inherit;
+  font: inherit;
+}
+.arco-modal .arco-btn {
+  min-height: 34px;
+  border-radius: 6px;
+  font: 12px/1.35 var(--ui-font);
+}
+.arco-modal .arco-btn-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--app-bg);
+}
+.arco-modal .arco-btn-secondary {
+  border-color: var(--border);
+  background: transparent;
+  color: var(--muted);
 }
 .app-shell :is(.segmented-tabs, .search-scope-tabs) button {
   min-height: 34px;
