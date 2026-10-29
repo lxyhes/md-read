@@ -4764,12 +4764,12 @@ async function requestFullscreen() {
           <ArcoDropdown v-if="isTauriRuntime() && orderedRecentFolders.length" panel-class="library-more-popover recent-folders-popover">
             <Button class="ghost-button" type="secondary"><AppIcon name="history" :size="14" />最近文件夹</Button>
             <template #menu>
-              <div class="recent-folders-heading"><div><strong>最近打开</strong><small>{{ orderedRecentFolders.length }} 个文件夹</small></div></div>
+              <div class="recent-folders-heading"><div><strong>最近打开</strong><span class="recent-folder-count">· {{ orderedRecentFolders.length }} 个文件夹</span></div></div>
               <div class="recent-folder-list" aria-label="最近文件夹">
                 <div v-for="folder in orderedRecentFolders" :key="folder.path" class="recent-folder-row">
-                  <Button class="recent-folder-open" type="text" :title="folder.path" :disabled="busyAction !== null" @click="openSavedRecentFolder(folder)"><AppIcon name="folder" :size="14" /><span class="recent-folder-copy"><strong>{{ folderNameOf(folder.path) }}</strong><small>{{ folder.path }}</small></span></Button>
-                  <Button class="recent-folder-action" type="text" :title="folder.pinned ? '取消置顶' : '置顶文件夹'" @click="toggleRecentFolderPin(folder.path)">{{ folder.pinned ? '取消置顶' : '置顶' }}</Button>
-                  <Button class="recent-folder-action" type="text" title="移除最近文件夹" @click="removeSavedRecentFolder(folder.path)">移除</Button>
+                  <Button class="recent-folder-open" type="text" :aria-label="`打开文件夹：${folder.path}`" :disabled="busyAction !== null" @click="openSavedRecentFolder(folder)"><template #icon><AppIcon name="folder" :size="14" /></template><span class="recent-folder-copy"><strong>{{ folderNameOf(folder.path) }}</strong><small>{{ folder.path }}</small></span></Button>
+                  <Button class="recent-folder-action" type="text" :aria-label="folder.pinned ? '取消置顶文件夹' : '置顶文件夹'" @click="toggleRecentFolderPin(folder.path)">{{ folder.pinned ? '取消置顶' : '置顶' }}</Button>
+                  <Button class="recent-folder-action" type="text" aria-label="移除最近文件夹" @click="removeSavedRecentFolder(folder.path)">移除</Button>
                 </div>
               </div>
             </template>

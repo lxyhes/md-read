@@ -438,11 +438,11 @@ a:active > .app-icon-vector { transform: scale(.92); }
   }
 }
 
-/* Recent folders: use the same quiet, structured rhythm as the Arco menus. */
-.app-shell .recent-folders-popover {
+/* Arco teleports this panel to body, so scope it to the popup class itself. */
+.recent-folders-popover {
+  box-sizing: border-box;
   width: min(374px, calc(100vw - 32px));
   max-height: min(390px, 60vh);
-  gap: 0;
   padding: 7px;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
@@ -451,161 +451,132 @@ a:active > .app-icon-vector { transform: scale(.92); }
   box-shadow: 0 18px 46px color-mix(in srgb, var(--app-bg) 28%, transparent), 0 3px 12px color-mix(in srgb, var(--ink) 8%, transparent);
 }
 
-.app-shell .recent-folders-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.recent-folders-popover .recent-folders-heading {
   min-height: 38px;
   padding: 4px 8px 8px;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
-  color: var(--accent);
 }
 
-.app-shell .recent-folders-heading > div {
+.recent-folders-popover .recent-folders-heading > div {
   display: flex;
   align-items: baseline;
   gap: 8px;
   min-width: 0;
 }
 
-.app-shell .recent-folders-heading strong {
+.recent-folders-popover .recent-folders-heading strong {
   color: var(--ink);
   font: 650 12px var(--ui-font);
 }
 
-.app-shell .recent-folders-heading small {
+.recent-folders-popover .recent-folder-count {
   color: var(--muted);
   font: 10px var(--ui-font);
+  white-space: nowrap;
 }
 
-.app-shell .recent-folder-list {
+.recent-folders-popover .recent-folder-list {
   max-height: min(335px, calc(60vh - 54px));
-  overflow-y: auto;
+  min-width: 0;
   padding-top: 4px;
+  overflow-x: hidden;
+  overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--accent) 42%, transparent) transparent;
 }
 
-.app-shell .recent-folder-row {
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  min-height: 58px;
+.recent-folders-popover .recent-folder-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 46px 42px;
+  align-items: center;
+  min-width: 0;
+  min-height: 52px;
+  overflow: hidden;
   border: 1px solid transparent;
   border-radius: 9px;
   transition: background-color .18s ease, border-color .18s ease;
 }
 
-.app-shell .recent-folder-row + .recent-folder-row {
+.recent-folders-popover .recent-folder-row + .recent-folder-row {
   margin-top: 2px;
 }
 
-.app-shell .recent-folder-row:hover {
+.recent-folders-popover .recent-folder-row:hover {
   border-color: color-mix(in srgb, var(--accent) 20%, var(--border));
   background: color-mix(in srgb, var(--accent-soft) 34%, transparent);
 }
 
-.app-shell .recent-folder-open {
+.recent-folders-popover .recent-folder-open.arco-btn {
   display: flex;
   align-items: center;
-  gap: 9px;
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
   min-width: 0;
-  padding: 9px 7px 9px 8px;
-  border-radius: 7px;
+  min-height: 50px;
+  padding: 7px 8px;
+  overflow: hidden;
   color: var(--accent);
-}
-
-.app-shell .recent-folder-open:hover {
-  background: transparent;
-  color: var(--accent);
-}
-
-.app-shell .recent-folder-open > .app-icon {
-  flex: 0 0 auto;
-  opacity: .82;
-}
-
-.app-shell .recent-folder-copy {
-  display: block;
-  min-width: 0;
   text-align: left;
 }
 
-.app-shell .recent-folder-open strong,
-.app-shell .recent-folder-open small {
+.recent-folders-popover .recent-folder-open.arco-btn > .arco-btn-icon {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  margin: 0;
+  place-items: center;
+}
+
+.recent-folders-popover .recent-folder-open.arco-btn > .arco-btn-content {
+  min-width: 0;
+  flex: 1 1 0;
+  overflow: hidden;
+  text-align: left;
+}
+
+.recent-folders-popover .recent-folder-copy,
+.recent-folders-popover .recent-folder-copy strong,
+.recent-folders-popover .recent-folder-copy small {
+  display: block;
+  width: 100%;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.app-shell .recent-folder-open strong {
+.recent-folders-popover .recent-folder-copy strong {
   color: var(--ink);
-  font-size: 12px;
-  font-weight: 620;
+  font: 620 12px var(--ui-font);
 }
 
-.app-shell .recent-folder-open small {
+.recent-folders-popover .recent-folder-copy small {
   margin-top: 4px;
   color: var(--muted);
-  font: 10px var(--mono);
-  line-height: 1.2;
+  font: 10px/1.2 var(--mono);
 }
 
-.app-shell .recent-folder-action {
-  min-width: 38px;
-  min-height: 28px;
-  margin-right: 2px;
-  padding: 5px 6px;
-  border-radius: 6px;
+.recent-folders-popover .recent-folder-action.arco-btn {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  justify-content: center;
   color: var(--muted);
-  font-size: 10px;
-  text-align: center;
+  font-size: 11px;
   white-space: nowrap;
 }
 
-.app-shell .recent-folder-action:hover {
+.recent-folders-popover .recent-folder-action.arco-btn:hover {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--accent);
 }
 
-.app-shell .recent-folder-row .recent-folder-action:first-of-type {
-  color: var(--accent);
-}
-
 @media (max-width: 720px) {
-  .app-shell .recent-folders-popover {
+  .recent-folders-popover {
     width: min(374px, calc(100vw - 24px));
   }
-}
-
-/* Final alignment pass: keep the folder icon and copy on one stable row. */
-.app-shell .recent-folders-heading > div {
-  gap: 0;
-}
-
-.app-shell .recent-folders-heading small {
-  margin-left: 10px;
-}
-
-.app-shell .recent-folders-heading small::before {
-  margin-right: 10px;
-  color: var(--border);
-  content: "·";
-}
-
-.app-shell .recent-folder-open {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
-}
-
-.app-shell .recent-folder-open > .app-icon {
-  width: 15px;
-  height: 15px;
-  margin-top: 0;
-}
-
-.app-shell .recent-folder-copy {
-  min-width: 0;
 }
 
 /* Reader chrome stays secondary until the reader asks for it. */
@@ -684,14 +655,6 @@ a:active > .app-icon-vector { transform: scale(.92); }
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   color: var(--ink);
 }
-.recent-folders-popover { width: min(350px, calc(100vw - 48px)); max-height: min(340px, 54vh); overflow: auto; }
-.recent-folder-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; border-top: 1px solid color-mix(in srgb, var(--border) 76%, transparent); }
-.recent-folder-row:first-child { border-top: 0; }
-.library-more-popover .recent-folder-open { width: auto; min-width: 0; padding: 8px 9px; }
-.recent-folder-open strong, .recent-folder-open small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.recent-folder-open strong { color: var(--ink); font: 600 10px var(--ui-font); }
-.recent-folder-open small { margin-top: 3px; color: var(--muted); font: 9px var(--mono); }
-.library-more-popover .recent-folder-action { width: auto; padding: 7px 6px; color: var(--accent); font: 9px var(--ui-font); white-space: nowrap; }
 
 /* Library landing: one useful reading gesture, then the shelf. */
 .app-shell:not(.is-focus) .library-page {
