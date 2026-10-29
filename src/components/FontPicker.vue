@@ -17,7 +17,7 @@ const custom = computed(() => props.modelValue && !fontPresets.some((font) => fo
 
 <template>
   <div class="font-picker" :class="{ 'font-picker-compact': compact }">
-    <label class="font-select-label">
+    <div class="font-select-label">
       <span>{{ label }}</span>
       <Select
         :model-value="modelValue"
@@ -29,7 +29,7 @@ const custom = computed(() => props.modelValue && !fontPresets.some((font) => fo
         <Option v-for="font in fontPresets" :key="font.id" :value="font.family">{{ font.name }}</Option>
         <Option v-if="custom" :value="modelValue">自定义字体</Option>
       </Select>
-    </label>
+    </div>
     <template v-if="!compact">
       <p class="font-picker-note">使用本机字体；未安装时自动使用同类字体。选择后立即生效并保存。</p>
       <div class="font-samples" :aria-label="`${label}样张`">
@@ -76,5 +76,10 @@ const custom = computed(() => props.modelValue && !fontPresets.some((font) => fo
 .font-picker-compact .font-select-label { min-width: 0; gap: 7px; font-size: 12px; }
 .font-picker-compact :deep(.arco-select) { width: 118px; min-width: 118px; flex: 0 1 154px; }
 .font-picker-compact :deep(.arco-select-view-single) { min-height: 30px; padding-inline: 8px; }
+.font-picker-compact :deep(.arco-select-view-single) { display: flex; align-items: center; }
+.font-picker-compact :deep(.arco-select-view-value),
+.font-picker-compact :deep(.arco-select-view-input) { min-height: 0; padding-block: 0; line-height: 1.35; }
+.font-picker-compact :deep(.arco-select-view-value) { justify-content: center; text-align: center; }
+.font-picker-compact :deep(.arco-select-view-suffix) { align-self: stretch; }
 @media (max-width: 1180px) { .font-samples { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>

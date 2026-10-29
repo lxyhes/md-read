@@ -2,6 +2,8 @@
 import { computed, defineAsyncComponent, getCurrentInstance, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import Select, { Option } from '@arco-design/web-vue/es/select'
 import '@arco-design/web-vue/es/select/style/css.js'
+import Button from '@arco-design/web-vue/es/button'
+import '@arco-design/web-vue/es/button/style/css.js'
 import { invoke, isTauri as tauriIsTauri } from '@tauri-apps/api/core'
 import { readNativeClipboardRichText } from './nativeClipboard'
 import { canScrollFocusedRegion } from './focusWheel'
@@ -4760,12 +4762,15 @@ async function requestFullscreen() {
             </template>
           </ArcoDropdown>
           <ArcoDropdown v-if="isTauriRuntime() && orderedRecentFolders.length" panel-class="library-more-popover recent-folders-popover">
-            <button class="ghost-button" type="button"><AppIcon name="history" :size="14" />最近文件夹</button>
+            <Button class="ghost-button" type="secondary"><AppIcon name="history" :size="14" />最近文件夹</Button>
             <template #menu>
-              <div v-for="folder in orderedRecentFolders" :key="folder.path" class="recent-folder-row">
-                <button class="recent-folder-open" type="button" :title="folder.path" :disabled="busyAction !== null" @click="openSavedRecentFolder(folder)"><strong>{{ folderNameOf(folder.path) }}</strong><small>{{ folder.path }}</small></button>
-                <button class="recent-folder-action" type="button" :title="folder.pinned ? '取消置顶' : '置顶文件夹'" @click="toggleRecentFolderPin(folder.path)">{{ folder.pinned ? '取消置顶' : '置顶' }}</button>
-                <button class="recent-folder-action" type="button" title="移除最近文件夹" @click="removeSavedRecentFolder(folder.path)">移除</button>
+              <div class="recent-folders-heading"><div><strong>最近打开</strong><small>{{ orderedRecentFolders.length }} 个文件夹</small></div></div>
+              <div class="recent-folder-list" aria-label="最近文件夹">
+                <div v-for="folder in orderedRecentFolders" :key="folder.path" class="recent-folder-row">
+                  <Button class="recent-folder-open" type="text" :title="folder.path" :disabled="busyAction !== null" @click="openSavedRecentFolder(folder)"><AppIcon name="folder" :size="14" /><span class="recent-folder-copy"><strong>{{ folderNameOf(folder.path) }}</strong><small>{{ folder.path }}</small></span></Button>
+                  <Button class="recent-folder-action" type="text" :title="folder.pinned ? '取消置顶' : '置顶文件夹'" @click="toggleRecentFolderPin(folder.path)">{{ folder.pinned ? '取消置顶' : '置顶' }}</Button>
+                  <Button class="recent-folder-action" type="text" title="移除最近文件夹" @click="removeSavedRecentFolder(folder.path)">移除</Button>
+                </div>
               </div>
             </template>
           </ArcoDropdown>
@@ -5023,7 +5028,6 @@ async function requestFullscreen() {
                   <ArcoDropdown class="reader-more-menu">
                     <button type="button">更多</button>
                     <template #menu>
-                      <FontPicker compact label="正文字体" :model-value="store.readerSettings.fontFamily" :fallback-family="defaultTokens.reader.fontFamily" @update:model-value="store.updateSettings({ fontFamily: $event })" />
                       <button type="button" @click="toggleCleanMode">纯净阅读</button>
                       <button type="button" :class="{ active: contextPanelOpen }" @click="contextPanelOpen = !contextPanelOpen">{{ contextPanelOpen ? '收起阅读信息' : '查看阅读信息' }}</button>
                       <button type="button" @click="wordCountOpen = true">字数统计</button>
@@ -5043,6 +5047,7 @@ async function requestFullscreen() {
                       <button type="button" @click="printDocument">打印</button>
                     </template>
                   </ArcoDropdown>
+                  <FontPicker class="reader-toolbar-font-picker" compact label="正文字体" :model-value="store.readerSettings.fontFamily" :fallback-family="defaultTokens.reader.fontFamily" @update:model-value="store.updateSettings({ fontFamily: $event })" />
                 </div>
                 <div class="reader-display-switch" role="tablist" aria-label="阅读视图">
                   <button type="button" role="tab" :aria-selected="readerDisplayMode === 'markdown'" :class="{ active: readerDisplayMode === 'markdown' }" @click="readerDisplayMode = 'markdown'">Markdown</button>
@@ -5236,7 +5241,38 @@ async function requestFullscreen() {
       </div>
     </div>
 
-    <div v-if="searchOpen" class="overlay search-overlay" @click.self="searchOpen = false"><div class="search-dialog"><div class="search-input-row"><AppIcon name="search" :size="17" /><input v-model="query" autofocus :placeholder="searchScope === 'current' ? '搜索当前文档…' : '搜索文档、标题、内容…'" aria-label="搜索内容" @keydown.esc="searchOpen = false" /><kbd>ESC</kbd></div><div class="search-scope-row"><div class="search-scope-tabs" role="tablist" aria-label="搜索范围"><button type="button" :class="{ active: searchScope === 'all' }" @click="searchScope = 'all'">全部文档</button><button type="button" :class="{ active: searchScope === 'current' }" :disabled="!store.currentDocument" @click="searchScope = 'current'">当前文档</button><button type="button" :class="{ active: replaceOpen }" @click="replaceOpen = !replaceOpen">查找替换</button></div><span>{{ searchResults.reduce((total, result) => total + result.matchCount, 0) }} 个匹配</span><small>Ctrl/Cmd + F 搜当前文档</small></div><div v-if="replaceOpen" class="replace-row"><input v-model="replaceValue" placeholder="替换为…" aria-label="替换内容" /><label><input v-model="searchRegex" type="checkbox" /> 正则</label><button type="button" :disabled="!searchPattern || searchPatternError" @click="replaceSearchMatches">全部替换</button></div><p v-if="searchPatternError" class="search-error">正则表达式无效</p><div v-if="searchResults.length" class="search-results"><button v-for="(result, index) in searchResults" :key="`${result.document.id}-${result.region.id}`" type="button" :class="{ selected: searchIndex === index }" @click="chooseSearchResult(result.document.id, result.region.id)"><span class="result-kind">{{ result.region.type }}</span><span><b>{{ displayTitle(result.document.title) }}</b><small>{{ result.region.textContent.slice(0, 100) }} · {{ result.matchCount }} 处匹配</small></span><AppIcon name="external" :size="14" /></button></div><div v-else class="empty-search">{{ query ? '没有找到相关内容' : searchScope === 'current' ? '输入关键词，搜索当前文档' : '输入关键词，搜索你的阅读空间' }}</div></div></div>
+    <div v-if="searchOpen" class="overlay search-overlay" @click.self="searchOpen = false">
+      <div class="search-dialog global-search-dialog" role="dialog" aria-modal="true" aria-label="搜索文档">
+        <div class="search-input-row">
+          <AppIcon name="search" :size="17" />
+          <input v-model="query" autofocus type="search" :placeholder="searchScope === 'current' ? '搜索当前文档…' : '搜索文档、标题、内容…'" aria-label="搜索内容" @keydown.esc="searchOpen = false" />
+          <kbd>ESC</kbd>
+        </div>
+        <div class="search-scope-row">
+          <div class="search-scope-tabs" role="tablist" aria-label="搜索范围">
+            <button type="button" :class="{ active: searchScope === 'all' }" @click="searchScope = 'all'">全部文档</button>
+            <button type="button" :class="{ active: searchScope === 'current' }" :disabled="!store.currentDocument" @click="searchScope = 'current'">当前文档</button>
+            <button type="button" :class="{ active: replaceOpen }" @click="replaceOpen = !replaceOpen">查找替换</button>
+          </div>
+          <span class="search-count" aria-live="polite">{{ searchResults.reduce((total, result) => total + result.matchCount, 0) }} 个匹配</span>
+          <small>Ctrl/Cmd + F 搜当前文档</small>
+        </div>
+        <div v-if="replaceOpen" class="replace-row">
+          <input v-model="replaceValue" placeholder="替换为…" aria-label="替换内容" />
+          <label><input v-model="searchRegex" type="checkbox" /> 正则</label>
+          <button type="button" :disabled="!searchPattern || searchPatternError" @click="replaceSearchMatches">全部替换</button>
+        </div>
+        <p v-if="searchPatternError" class="search-error">正则表达式无效</p>
+        <div v-if="searchResults.length" class="search-results">
+          <button v-for="(result, index) in searchResults" :key="`${result.document.id}-${result.region.id}`" type="button" :class="{ selected: searchIndex === index }" @click="chooseSearchResult(result.document.id, result.region.id)">
+            <span class="result-kind">{{ result.region.type }}</span>
+            <span><b>{{ displayTitle(result.document.title) }}</b><small>{{ result.region.textContent.slice(0, 100) }} · {{ result.matchCount }} 处匹配</small></span>
+            <AppIcon name="external" :size="14" />
+          </button>
+        </div>
+        <div v-else class="empty-search">{{ query ? '没有找到相关内容' : searchScope === 'current' ? '输入关键词，搜索当前文档' : '输入关键词，搜索你的阅读空间' }}</div>
+      </div>
+    </div>
 
     <div v-if="tableBuilderOpen" class="overlay editor-dialog-overlay" @click.self="tableBuilderOpen = false"><div class="editor-dialog" role="dialog" aria-modal="true" aria-label="插入表格"><span class="section-kicker">表格工具</span><h2>插入可编辑表格</h2><div class="setting-form-grid"><label class="setting-input">行数<input v-model.number="tableBuilder.rows" type="number" min="2" max="20" /></label><label class="setting-input">列数<input v-model.number="tableBuilder.columns" type="number" min="1" max="12" /></label><label class="setting-input">对齐<Select v-model="tableBuilder.alignment"><Option value="left">左对齐</Option><Option value="center">居中</Option><Option value="right">右对齐</Option></Select></label></div><div class="note-actions"><button class="ghost-button" type="button" @click="tableBuilderOpen = false">取消</button><button class="primary-button" type="button" @click="confirmInsertEditorTable">插入表格</button></div></div></div>
       <dialog v-if="tableEditor" ref="tableEditorDialog" class="editor-dialog table-editor-dialog" aria-label="编辑表格" @cancel.prevent="closeTableEditor" @keydown="onTableEditorDialogKeydown">

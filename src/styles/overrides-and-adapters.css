@@ -1,0 +1,3680 @@
+/* Icon system v2 — one optical grid, quiet ink-seal states, no font glyph fallbacks. */
+.app-icon-vector {
+  overflow: visible;
+  shape-rendering: geometricPrecision;
+  transform-origin: center;
+}
+.app-icon-vector * { vector-effect: non-scaling-stroke; }
+button > .app-icon-vector,
+a > .app-icon-vector {
+  transition: opacity .16s ease, transform .16s cubic-bezier(.2, .8, .2, 1);
+}
+button:not(:disabled):active > .app-icon-vector,
+a:active > .app-icon-vector { transform: scale(.92); }
+
+.icon-button {
+  position: relative;
+  isolation: isolate;
+  cursor: pointer;
+}
+.icon-button::before {
+  position: absolute;
+  inset: 3px;
+  z-index: -1;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  content: "";
+  opacity: 0;
+  transform: scale(.72);
+  transition: opacity .16s ease, transform .2s cubic-bezier(.2, .8, .2, 1);
+}
+.icon-button:hover::before,
+.icon-button.active::before { opacity: 1; transform: scale(1); }
+.icon-button.active {
+  border-color: color-mix(in srgb, var(--accent) 44%, var(--border));
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.icon-button:disabled { cursor: not-allowed; opacity: .42; }
+.icon-button:disabled::before { display: none; }
+
+.nav-icon {
+  border: 1px solid transparent;
+  border-radius: 6px;
+  transition: color .18s ease, background-color .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+.nav-item:hover .nav-icon {
+  border-color: color-mix(in srgb, var(--accent) 16%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.nav-item.active .nav-icon {
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.theme-mini-option-check {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid color-mix(in srgb, var(--theme-accent, #9b91ff) 48%, transparent);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--theme-accent, #9b91ff) 14%, var(--theme-surface, transparent));
+}
+.outline-search button {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  padding: 0;
+  border-radius: 5px;
+}
+.outline-search button:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.editor-tool-button.icon-only { display: inline-grid; place-items: center; }
+
+@media (prefers-reduced-motion: reduce) {
+  button > .app-icon-vector,
+  a > .app-icon-vector,
+  .icon-button::before,
+  .nav-icon { transition: none; }
+}
+
+/* Ink collection refinement — typography and interaction share the same quiet grammar. */
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)) {
+  --ink-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", STSong, serif;
+  --ink-ui: "Noto Sans SC", "Source Han Sans SC", "PingFang SC", system-ui, sans-serif;
+}
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)) ::selection {
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+  color: var(--ink);
+}
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)) :is(button, a, input, select, .arco-select-view-single, textarea):focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 66%, transparent);
+  outline-offset: 3px;
+}
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)) .reader-viewport {
+  scrollbar-color: color-mix(in srgb, var(--accent) 46%, transparent) transparent;
+}
+
+/* Navigation becomes a slim ink annotation instead of a generic filled pill. */
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)):not(.is-focus) .nav-item {
+  position: relative;
+  border-radius: 8px;
+}
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)):not(.is-focus) .nav-item.active {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 14%, transparent), transparent 92%);
+  box-shadow: none;
+}
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)):not(.is-focus) .nav-item.active::before {
+  position: absolute;
+  top: 9px;
+  bottom: 9px;
+  left: -4px;
+  width: 2px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 9px color-mix(in srgb, var(--accent) 24%, transparent);
+  content: "";
+}
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)):not(.is-focus) .nav-item.active .nav-icon {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)):not(.is-focus) .reader-tab.active {
+  background: color-mix(in srgb, var(--surface-raised) 78%, transparent);
+  box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--accent) 74%, transparent);
+}
+
+/* Book typography: calm line endings, restrained links, and a more deliberate hierarchy. */
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)) .reader-markdown {
+  font-family: var(--ink-serif);
+}
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)) .reader-title {
+  position: relative;
+  max-width: 17ch;
+  font-weight: 600;
+  line-height: 1.08;
+  letter-spacing: -.045em;
+  text-wrap: balance;
+}
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)) .region-content :is(h1, h2, h3, h4) {
+  font-family: var(--ink-serif);
+  font-weight: 600;
+  text-wrap: pretty;
+}
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)) .region-content :is(h1, h2, h3, h4) a {
+  color: inherit;
+  text-decoration-color: color-mix(in srgb, var(--accent) 44%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: .16em;
+}
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)) .region-content :is(h1, h2, h3, h4) a:hover {
+  color: var(--accent);
+  text-decoration-color: currentColor;
+}
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)) .region-content :is(h2, h3) a[href^="http"] {
+  display: inline-block;
+  max-width: min(32ch, 82%);
+  padding: .08em .42em .12em;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  color: color-mix(in srgb, var(--accent) 82%, var(--ink));
+  font-family: var(--ink-ui);
+  font-size: .5em;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.4;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: .16em;
+}
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)) .region-content p {
+  letter-spacing: .012em;
+  text-align: justify;
+  text-justify: inter-ideograph;
+}
+.app-shell .reader-content .region-content blockquote p {
+  text-align: center;
+}
+.app-shell .reader-content .region-block:is(.region-paragraph, .region-heading) {
+  display: flex;
+  align-items: center;
+  padding-block: 10px !important;
+}
+.app-shell .reader-content .region-block.region-heading .region-content :is(h1, h2, h3, h4) {
+  margin-bottom: 0 !important;
+}
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)) .region-content a {
+  text-decoration-thickness: 1px;
+  text-underline-offset: .18em;
+}
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)) .reader-footer {
+  opacity: .78;
+  font-family: var(--ink-ui);
+  letter-spacing: .08em;
+}
+
+/* Fix the seal: it belongs to the title, outside the clipped dry-brush rule. */
+.app-shell:not(*) .reader-title::after {
+  position: absolute;
+  right: -45px;
+  bottom: .12em;
+  display: grid;
+  place-items: center;
+  width: 31px;
+  height: 31px;
+  border: 1px solid rgba(151, 53, 43, .7);
+  border-radius: 2px;
+  background: rgba(151, 53, 43, .035);
+  color: rgba(151, 53, 43, .84);
+  content: "墨阅";
+  font: 9px/1 var(--ink-serif);
+  letter-spacing: -.08em;
+  transform: rotate(-4deg);
+}
+.app-shell:not(*) .reader-content .region-content blockquote {
+  color: #43534a;
+}
+/* Tables and code should feel placed on the paper, not pasted on top of it. */
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*)):not(.is-focus) .reader-content .code-frame,
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*)):not(.is-focus) .reader-content .table-scroll {
+  border-color: color-mix(in srgb, var(--ink) 12%, transparent);
+  background: color-mix(in srgb, var(--code-bg) 88%, var(--surface-raised));
+  box-shadow: 0 12px 30px rgba(53, 47, 37, .055);
+}
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*)):not(.is-focus) .reader-content .code-toolbar,
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*)):not(.is-focus) .reader-content .table-region-toolbar {
+  border-bottom-color: color-mix(in srgb, var(--ink) 10%, transparent);
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+}
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*)):not(.is-focus) .reader-content .table-scroll tbody tr:hover td {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+.app-shell:not(*):not(.is-focus) .reader-content .code-frame,
+.app-shell:not(*):not(.is-focus) .reader-content .table-scroll {
+  border-color: rgba(232, 228, 216, .11);
+  background: #0d0f0d;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, .25);
+}
+
+/* Keep the reader controls closer to a quiet desk rail than a button wall. */
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)):not(.is-focus) :is(.reader-display-switch, .reader-navigation) {
+  border-color: color-mix(in srgb, var(--border) 58%, transparent);
+  border-radius: 5px;
+  background: transparent;
+}
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)):not(.is-focus) .reader-edit-actions button {
+  border-color: transparent;
+  background: transparent;
+}
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)):not(.is-focus) .reader-edit-actions button.save-pasted-button {
+  border-color: color-mix(in srgb, var(--accent) 36%, transparent);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--accent);
+}
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)):not(.is-focus) .reader-edit-actions button:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--ink);
+}
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)):not(.is-focus) .reader-display-switch button.active {
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+  box-shadow: inset 0 -2px 0 var(--accent);
+  color: var(--ink);
+}
+.app-shell:not(*):not(.is-focus) .reader-content .code-toolbar,
+.app-shell:not(*):not(.is-focus) .reader-content .table-region-toolbar {
+  background: rgba(183, 173, 145, .055);
+}
+
+/* Focus mode keeps the chosen material instead of reverting to the generic ambience. */
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*)).is-focus {
+  --focus-page-bg: var(--surface-raised);
+  --focus-sidebar-bg: linear-gradient(180deg, color-mix(in srgb, var(--surface) 94%, var(--surface-raised)), var(--app-bg));
+  --focus-card-bg: color-mix(in srgb, var(--surface-raised) 76%, var(--surface));
+  background: var(--surface-raised);
+}
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*)).is-focus .reader-viewport {
+  background:
+    radial-gradient(ellipse at 12% 4%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 28%),
+    repeating-linear-gradient(88deg, transparent 0 15px, rgba(55, 49, 39, .012) 16px, transparent 17px 27px);
+}
+.app-shell:not(*).is-focus {
+  --focus-page-bg: radial-gradient(ellipse at 50% 0%, rgba(183, 173, 145, .06), transparent 36%), #121411;
+  --focus-sidebar-bg: linear-gradient(180deg, #1b1d19, #10120f);
+  --focus-card-bg: #232620;
+  background: #10120f;
+}
+.app-shell:not(*).is-focus .focus-sidebar {
+  box-shadow: -18px 0 44px rgba(0, 0, 0, .18);
+}
+
+/* Individual finishing notes. */
+.app-shell.theme-bamboo-shadow .reader-content .region-content blockquote {
+  color: #405a4b;
+}
+
+.app-shell.theme-bamboo-shadow .reader-content .region-content h2::before,
+.app-shell.theme-bamboo-shadow .reader-content .region-content h3::before {
+  width: 3px;
+  border-radius: 999px;
+  background: #526b5c;
+}
+.app-shell:not(*) .reader-content .region-content blockquote {
+  color: #674b43;
+}
+.app-shell:not(*) .reader-title::after {
+  display: inline-block;
+  margin-left: .38em;
+  color: #963a2f;
+  content: "笺";
+  font-size: .28em;
+  font-weight: 500;
+  letter-spacing: 0;
+  vertical-align: top;
+  transform: translateY(.4em);
+}
+.app-shell:not(*) .region-content a:not(:hover) {
+  color: #c8bea0;
+}
+
+@media (max-width: 1260px) {
+  .app-shell:not(*) .reader-title::after { display: none; }
+}
+
+/* Keep region actions quiet until the reader is interacting with a region. */
+.app-shell .reader-content .region-more {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-raised) 90%, var(--accent-soft));
+  color: var(--accent);
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: none;
+  transition: opacity .18s ease, background-color .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+.app-shell .reader-content .region-more .app-icon-vector {
+  width: 17px;
+  height: 17px;
+}
+.app-shell .reader-content .region-more:hover,
+.app-shell .reader-content .region-more:focus-visible,
+.app-shell .reader-content .region-block:hover .region-more,
+.app-shell .reader-content .region-block.active .region-more {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface-raised));
+  color: color-mix(in srgb, var(--accent) 88%, var(--ink));
+  opacity: 1;
+  pointer-events: auto;
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+/* Region focus: one quiet reading cue instead of stacked cards and controls. */
+.app-shell.is-region-focus .reader-content .region-block.focused {
+  padding-right: 20px;
+  border-left-color: var(--accent);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 7%, transparent), transparent 82%);
+  outline: 0;
+  box-shadow: none;
+}
+.app-shell .reader-content .region-content blockquote p:last-child {
+  margin-bottom: 0;
+}
+.app-shell .reader-content .region-block.region-paragraph .region-content > p:last-child {
+  margin-bottom: 0;
+}
+.app-shell.is-region-focus .region-block.focused .region-content blockquote {
+  padding: 18px 22px 18px 48px;
+  border: 0;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 12px 12px 0;
+  background: color-mix(in srgb, var(--surface-raised) 44%, transparent);
+  box-shadow: none;
+}
+.app-shell.is-region-focus .region-block.focused .region-content blockquote::before {
+  top: 7px;
+  left: 16px;
+}
+.focus-hud {
+  z-index: 4;
+  align-items: center;
+  gap: 0;
+  padding: 6px 8px;
+  border-color: color-mix(in srgb, var(--accent) 18%, var(--border));
+  background: color-mix(in srgb, var(--surface-raised) 94%, transparent);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--app-bg) 18%, transparent);
+  backdrop-filter: blur(14px);
+}
+.focus-hud > span,
+.focus-hud > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+.focus-hud > button {
+  border-left: 1px solid var(--border);
+  color: var(--muted);
+}
+.focus-hud > button:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--ink);
+}
+.focus-hud kbd {
+  min-width: 20px;
+  padding: 3px 5px;
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, var(--border));
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  color: var(--ink);
+  font: 9px/1 var(--ui-font);
+  text-align: center;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--ink) 12%, transparent);
+}
+.focus-hud-position {
+  margin-right: 2px;
+  padding-right: 12px !important;
+}
+
+@media (max-width: 720px) {
+  .focus-hud {
+    bottom: 14px;
+    max-width: calc(100% - 24px);
+  }
+  .focus-hud > span,
+  .focus-hud > button {
+    padding-inline: 7px;
+  }
+}
+
+/* Recent folders: use the same quiet, structured rhythm as the Arco menus. */
+.app-shell .recent-folders-popover {
+  width: min(374px, calc(100vw - 32px));
+  max-height: min(390px, 60vh);
+  gap: 0;
+  padding: 7px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--surface-raised) 97%, var(--surface));
+  box-shadow: 0 18px 46px color-mix(in srgb, var(--app-bg) 28%, transparent), 0 3px 12px color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+.app-shell .recent-folders-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 38px;
+  padding: 4px 8px 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+  color: var(--accent);
+}
+
+.app-shell .recent-folders-heading > div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.app-shell .recent-folders-heading strong {
+  color: var(--ink);
+  font: 650 12px var(--ui-font);
+}
+
+.app-shell .recent-folders-heading small {
+  color: var(--muted);
+  font: 10px var(--ui-font);
+}
+
+.app-shell .recent-folder-list {
+  max-height: min(335px, calc(60vh - 54px));
+  overflow-y: auto;
+  padding-top: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--accent) 42%, transparent) transparent;
+}
+
+.app-shell .recent-folder-row {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  min-height: 58px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  transition: background-color .18s ease, border-color .18s ease;
+}
+
+.app-shell .recent-folder-row + .recent-folder-row {
+  margin-top: 2px;
+}
+
+.app-shell .recent-folder-row:hover {
+  border-color: color-mix(in srgb, var(--accent) 20%, var(--border));
+  background: color-mix(in srgb, var(--accent-soft) 34%, transparent);
+}
+
+.app-shell .recent-folder-open {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 9px 7px 9px 8px;
+  border-radius: 7px;
+  color: var(--accent);
+}
+
+.app-shell .recent-folder-open:hover {
+  background: transparent;
+  color: var(--accent);
+}
+
+.app-shell .recent-folder-open > .app-icon {
+  flex: 0 0 auto;
+  opacity: .82;
+}
+
+.app-shell .recent-folder-copy {
+  display: block;
+  min-width: 0;
+  text-align: left;
+}
+
+.app-shell .recent-folder-open strong,
+.app-shell .recent-folder-open small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell .recent-folder-open strong {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 620;
+}
+
+.app-shell .recent-folder-open small {
+  margin-top: 4px;
+  color: var(--muted);
+  font: 10px var(--mono);
+  line-height: 1.2;
+}
+
+.app-shell .recent-folder-action {
+  min-width: 38px;
+  min-height: 28px;
+  margin-right: 2px;
+  padding: 5px 6px;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 10px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.app-shell .recent-folder-action:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+
+.app-shell .recent-folder-row .recent-folder-action:first-of-type {
+  color: var(--accent);
+}
+
+@media (max-width: 720px) {
+  .app-shell .recent-folders-popover {
+    width: min(374px, calc(100vw - 24px));
+  }
+}
+
+/* Final alignment pass: keep the folder icon and copy on one stable row. */
+.app-shell .recent-folders-heading > div {
+  gap: 0;
+}
+
+.app-shell .recent-folders-heading small {
+  margin-left: 10px;
+}
+
+.app-shell .recent-folders-heading small::before {
+  margin-right: 10px;
+  color: var(--border);
+  content: "·";
+}
+
+.app-shell .recent-folder-open {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.app-shell .recent-folder-open > .app-icon {
+  width: 15px;
+  height: 15px;
+  margin-top: 0;
+}
+
+.app-shell .recent-folder-copy {
+  min-width: 0;
+}
+
+/* Reader chrome stays secondary until the reader asks for it. */
+.app-shell:not(.is-focus) .reader-layout:not(.focus-layout):not(.clean-layout) {
+  grid-template-columns: var(--outline-panel-width, 204px) minmax(0, 1fr);
+}
+.app-shell:not(.is-focus) .reader-layout.context-open:not(.focus-layout):not(.clean-layout) {
+  grid-template-columns: var(--outline-panel-width, 204px) minmax(0, 1fr) 220px;
+}
+.reader-more-menu,
+.library-more-menu {
+  position: relative;
+}
+.app-shell:not(.is-focus) .reader-column > .reader-meta,
+.app-shell:not(.is-focus) .page-toolbar {
+  position: relative;
+  z-index: 10;
+  overflow: visible;
+}
+.reader-more-menu summary,
+.library-more-menu summary {
+  cursor: var(--moyue-cursor-pointer);
+  list-style: none;
+}
+.reader-more-menu summary::-webkit-details-marker,
+.library-more-menu summary::-webkit-details-marker {
+  display: none;
+}
+.reader-more-menu summary {
+  padding: 6px 8px;
+  color: var(--muted);
+  font: 10px var(--ui-font);
+}
+.reader-more-menu[open] summary,
+.reader-more-menu summary:hover {
+  color: var(--ink);
+}
+.reader-more-popover,
+.library-more-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  display: grid;
+  min-width: 210px;
+  gap: 3px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  box-shadow: 0 16px 36px color-mix(in srgb, var(--app-bg) 24%, transparent);
+}
+.reader-more-popover {
+  right: auto;
+  left: 0;
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
+}
+.reader-more-popover .font-picker-compact {
+  justify-content: space-between;
+  margin-bottom: 4px;
+  padding: 4px 5px 9px;
+  border-bottom: 1px solid var(--border);
+}
+.reader-edit-actions .reader-more-popover button,
+.library-more-popover button {
+  width: 100%;
+  padding: 8px 9px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  text-align: left;
+}
+.reader-edit-actions .reader-more-popover button:hover,
+.library-more-popover button:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--ink);
+}
+.recent-folders-popover { width: min(350px, calc(100vw - 48px)); max-height: min(340px, 54vh); overflow: auto; }
+.recent-folder-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; border-top: 1px solid color-mix(in srgb, var(--border) 76%, transparent); }
+.recent-folder-row:first-child { border-top: 0; }
+.library-more-popover .recent-folder-open { width: auto; min-width: 0; padding: 8px 9px; }
+.recent-folder-open strong, .recent-folder-open small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recent-folder-open strong { color: var(--ink); font: 600 10px var(--ui-font); }
+.recent-folder-open small { margin-top: 3px; color: var(--muted); font: 9px var(--mono); }
+.library-more-popover .recent-folder-action { width: auto; padding: 7px 6px; color: var(--accent); font: 9px var(--ui-font); white-space: nowrap; }
+
+/* Library landing: one useful reading gesture, then the shelf. */
+.app-shell:not(.is-focus) .library-page {
+  padding-top: clamp(38px, 5vh, 54px);
+  padding-bottom: 56px;
+}
+.app-shell:not(.is-focus) .library-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+  gap: clamp(40px, 7vw, 96px);
+  align-items: center;
+  width: min(1160px, 100%);
+  min-height: clamp(210px, 27vh, 260px);
+  margin-inline: auto;
+}
+.app-shell:not(.is-focus) .library-hero .section-kicker {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: .08em;
+}
+.app-shell:not(.is-focus) .library-hero h1 {
+  max-width: 12ch;
+  margin: 14px 0 17px;
+  font-family: var(--ink-serif, inherit);
+  font-size: clamp(44px, 4.4vw, 62px);
+  line-height: 1.04;
+  letter-spacing: -.055em;
+  text-wrap: balance;
+}
+.app-shell:not(.is-focus) .hero-copy {
+  max-width: 34em;
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.75;
+}
+.hero-continue {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 7px 16px;
+  padding: 22px 2px;
+  border-block: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+.hero-continue > span,
+.hero-continue > small {
+  color: var(--muted);
+  font: 11px var(--ui-font);
+}
+.hero-continue > strong {
+  grid-column: 1;
+  overflow: hidden;
+  font: 600 20px/1.35 var(--ink-serif, var(--ui-font));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hero-continue > .app-icon {
+  grid-row: 1 / 4;
+  grid-column: 2;
+  align-self: center;
+  color: var(--accent);
+  transition: transform .18s ease;
+}
+.hero-continue:hover > .app-icon {
+  transform: translateX(4px);
+}
+.app-shell:not(.is-focus) .page-toolbar {
+  width: min(1160px, 100%);
+  margin-top: 20px;
+  margin-bottom: 18px;
+  column-gap: 12px;
+  align-items: center;
+}
+.app-shell:not(.is-focus) .library-toolbar-heading {
+  gap: 28px;
+  flex: 1 1 auto;
+}
+.app-shell:not(.is-focus) .library-toolbar-heading > div:first-child {
+  flex: 0 0 auto;
+}
+.app-shell:not(.is-focus) .page-toolbar h2 {
+  margin: 0;
+  font-size: 24px;
+  letter-spacing: -.025em;
+  white-space: nowrap;
+}
+.app-shell:not(.is-focus) .library-search {
+  width: min(270px, 28vw);
+  min-width: 220px;
+}
+.app-shell:not(.is-focus) .toolbar-actions {
+  flex: 0 0 auto;
+  gap: 7px;
+}
+.app-shell:not(.is-focus) .ghost-button,
+.app-shell:not(.is-focus) .primary-button {
+  min-height: 38px;
+  padding: 9px 13px;
+}
+.app-shell:not(.is-focus) .document-grid {
+  width: min(1160px, 100%);
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+}
+.app-shell:not(.is-focus) .document-card,
+.app-shell:not(.is-focus) .import-card {
+  min-height: 184px;
+  padding: 18px;
+  border-radius: 12px;
+  box-shadow: none;
+}
+.app-shell:not(.is-focus) .document-card {
+  position: relative;
+  overflow: hidden;
+}
+.app-shell:not(.is-focus) .document-card::before {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(110deg, transparent 30%, color-mix(in srgb, white 40%, transparent) 50%, transparent 70%);
+  transform: translateX(-120%);
+  transition: transform .7s ease;
+  content: "";
+}
+.app-shell:not(.is-focus) .document-card > * {
+  position: relative;
+  z-index: 1;
+}
+.app-shell:not(.is-focus) .document-card:is(:hover, :focus-visible)::before {
+  transform: translateX(120%);
+}
+.app-shell:not(.is-focus) .document-card:is(:hover, :focus-visible) {
+  position: relative;
+  z-index: 2;
+  transform: scale(1.02) translateY(-6px);
+  border-color: color-mix(in srgb, var(--accent) 78%, var(--border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 38%, transparent), 0 16px 30px color-mix(in srgb, var(--app-bg) 22%, transparent), 0 0 16px color-mix(in srgb, var(--accent) 20%, transparent);
+  animation: document-card-glow 2.2s ease-in-out infinite;
+}
+@keyframes document-card-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 32%, transparent), 0 16px 30px color-mix(in srgb, var(--app-bg) 22%, transparent), 0 0 12px color-mix(in srgb, var(--accent) 14%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 52%, transparent), 0 18px 34px color-mix(in srgb, var(--app-bg) 26%, transparent), 0 0 18px color-mix(in srgb, var(--accent) 24%, transparent);
+  }
+}
+.app-shell:not(.is-focus) .library-note {
+  margin-top: 30px;
+}
+
+@media (max-width: 1320px) {
+  .app-shell:not(.is-focus) .library-hero {
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+    gap: 34px;
+  }
+  .app-shell:not(.is-focus) .library-toolbar-heading {
+    gap: 14px;
+  }
+  .app-shell:not(.is-focus) .library-search {
+    min-width: 190px;
+  }
+}
+
+@media (max-width: 980px) {
+  .app-shell:not(.is-focus) .library-hero {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+  .app-shell:not(.is-focus) .page-toolbar {
+    align-items: flex-end;
+  }
+  .app-shell:not(.is-focus) .toolbar-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .app-shell:not(.is-focus) .reader-layout.context-open:not(.focus-layout):not(.clean-layout) {
+    grid-template-columns: var(--outline-panel-width, 180px) minmax(0, 1fr);
+  }
+  .app-shell:not(.is-focus) .reader-layout.context-open .context-panel {
+    display: none;
+  }
+}
+
+
+/* Water-ink edition — paper, ink density and dry-brush rhythm replace ornamental nostalgia. */
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)) {
+  --ink-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", STSong, serif;
+  --ink-ui: "Noto Sans SC", "Source Han Sans SC", "PingFang SC", system-ui, sans-serif;
+  --ink-vermilion: #913b32;
+  font-family: var(--ink-ui);
+}
+
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*)):not(.is-focus)::before {
+  opacity: .48;
+  background:
+    repeating-linear-gradient(91deg, transparent 0 17px, rgba(25, 28, 25, .018) 18px, transparent 19px 34px),
+    repeating-linear-gradient(1deg, transparent 0 23px, rgba(255, 255, 255, .08) 24px, transparent 25px 42px);
+}
+
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*)):not(.is-focus) :is(.global-nav, .topbar, .reader-tabbar) {
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  border-color: color-mix(in srgb, var(--ink) 16%, transparent);
+  box-shadow: none;
+  backdrop-filter: blur(12px) grayscale(.45);
+}
+
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*)) .reader-page {
+  background: var(--surface-raised);
+}
+
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*)) .reader-page::before {
+  opacity: .78;
+  background:
+    radial-gradient(ellipse 29% 8% at 82% 4%, color-mix(in srgb, var(--ink) 7%, transparent), transparent 76%),
+    radial-gradient(ellipse 18% 6% at 76% 10%, color-mix(in srgb, var(--ink) 4%, transparent), transparent 78%),
+    repeating-linear-gradient(88deg, transparent 0 19px, color-mix(in srgb, var(--ink) 1.2%, transparent) 20px, transparent 21px 39px);
+}
+
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)) .reader-content {
+  position: relative;
+  isolation: isolate;
+  font-family: var(--ink-serif);
+}
+
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*)) .reader-content::after {
+  position: absolute;
+  top: -35px;
+  right: -85px;
+  z-index: -1;
+  width: 390px;
+  height: 190px;
+  background: url('../assets/ink-wash-landscape.svg') right top / contain no-repeat;
+  content: "";
+  opacity: .72;
+  pointer-events: none;
+}
+
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)) .reader-title {
+  position: relative;
+  max-width: 18ch;
+  color: var(--ink);
+  font-family: var(--ink-serif);
+  font-weight: 650;
+  letter-spacing: -.06em;
+  line-height: 1.08;
+  text-shadow: none;
+  text-wrap: balance;
+}
+
+.app-shell.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)) .reader-rule {
+  width: min(42%, 310px);
+  height: 12px;
+  margin: 24px 0 39px;
+  background:
+    radial-gradient(ellipse at 3% 48%, color-mix(in srgb, var(--ink) 88%, transparent) 0 4px, transparent 8px),
+    linear-gradient(90deg, color-mix(in srgb, var(--ink) 84%, transparent) 0 29%, transparent 31% 34%, color-mix(in srgb, var(--ink) 57%, transparent) 36% 54%, transparent 57% 61%, color-mix(in srgb, var(--ink) 32%, transparent) 64% 78%, transparent 94%);
+  box-shadow: none;
+  clip-path: polygon(0 28%, 9% 16%, 18% 36%, 31% 19%, 45% 43%, 60% 26%, 74% 51%, 89% 33%, 100% 49%, 88% 72%, 72% 61%, 57% 79%, 39% 59%, 20% 78%, 0 65%);
+  filter: blur(.15px);
+}
+
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)) .reader-content .region-content :is(h2, h3)::before {
+  width: 7px;
+  height: 7px;
+  border-radius: 50% 43% 56% 45%;
+  background: color-mix(in srgb, var(--ink) 74%, var(--accent));
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--ink) 5%, transparent);
+  clip-path: none;
+  transform: translateY(-1px) rotate(-12deg);
+}
+
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)) .reader-content .region-content blockquote {
+  margin-left: 0;
+  padding: 17px 22px 17px 25px;
+  border: 0;
+  border-radius: 0;
+  background:
+    radial-gradient(ellipse 22px 72% at 0 50%, color-mix(in srgb, var(--ink) 13%, transparent), transparent 78%),
+    linear-gradient(90deg, color-mix(in srgb, var(--ink) 6%, transparent), transparent 78%);
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--ink) 72%, transparent);
+  color: color-mix(in srgb, var(--ink) 78%, var(--muted));
+}
+
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)) .reader-content .region-content blockquote::before {
+  content: none;
+}
+
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)) .reader-content :is(.code-frame, .table-scroll) {
+  border-color: color-mix(in srgb, var(--ink) 14%, transparent);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--code-bg) 92%, var(--surface-raised));
+  box-shadow: none;
+}
+
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)):not(.is-focus) :is(.nav-item, .reader-tab, .reader-display-switch, .reader-navigation) {
+  border-radius: 2px;
+}
+
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)):not(.is-focus) .nav-item.active {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--ink) 9%, transparent), transparent 88%);
+}
+
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)):not(.is-focus) .nav-item.active::before {
+  width: 3px;
+  border-radius: 0;
+  background: var(--ink);
+  box-shadow: none;
+  clip-path: polygon(20% 0, 100% 5%, 72% 49%, 100% 82%, 24% 100%, 0 68%, 23% 34%);
+}
+
+.app-shell:not(*) .reader-title::after {
+  right: -44px;
+  bottom: .08em;
+  width: 31px;
+  height: 31px;
+  border: 1px solid color-mix(in srgb, var(--ink-vermilion) 78%, transparent);
+  border-radius: 1px;
+  background: transparent;
+  color: var(--ink-vermilion);
+  content: "水墨";
+  font: 9px/1 var(--ink-serif);
+  letter-spacing: -.08em;
+  transform: rotate(-4deg);
+}
+
+.app-shell:not(*):not(.is-focus) {
+  background: #0c0e0d;
+}
+
+.app-shell:not(*):not(.is-focus)::before {
+  opacity: .5;
+  background:
+    radial-gradient(ellipse 52% 13% at 8% 2%, rgba(228, 230, 223, .055), transparent 74%),
+    repeating-linear-gradient(91deg, transparent 0 21px, rgba(228, 230, 223, .012) 22px, transparent 23px 41px);
+}
+
+.app-shell:not(*):not(.is-focus) :is(.global-nav, .topbar, .reader-tabbar) {
+  background: rgba(15, 18, 16, .94);
+  border-color: rgba(228, 230, 223, .11);
+  box-shadow: none;
+}
+
+.app-shell:not(*) .reader-page {
+  background: #111412;
+}
+
+.app-shell:not(*) .reader-page::before {
+  opacity: .5;
+  background: radial-gradient(ellipse 58% 12% at 9% 1%, rgba(228, 230, 223, .06), transparent 76%);
+}
+
+.app-shell.theme-bamboo-shadow .reader-rule {
+  background: linear-gradient(90deg, rgba(34, 40, 36, .76), rgba(70, 91, 77, .32) 54%, transparent 94%);
+}
+
+.app-shell:not(*) .reader-title::after {
+  display: inline-grid;
+  width: 25px;
+  height: 25px;
+  margin-left: .42em;
+  place-items: center;
+  border: 1px solid rgba(145, 59, 50, .72);
+  color: #913b32;
+  content: "朱";
+  font-size: 10px;
+  line-height: 1;
+  transform: translateY(-.04em) rotate(3deg);
+}
+
+.theme-card:not(*) .theme-swatch::before {
+  background:
+    radial-gradient(ellipse 62% 9% at 18% 24%, rgba(32, 34, 31, .3), transparent 70%),
+    repeating-linear-gradient(88deg, transparent 0 15px, rgba(32, 34, 31, .025) 16px, transparent 17px 31px),
+    #f3f3ee;
+}
+
+.theme-card:not(*) .theme-card-mark {
+  border-radius: 1px;
+  background: #913b32;
+  color: #f3f3ee;
+}
+
+@media (max-width: 1260px) {
+  .app-shell:is(:not(*), .theme-bamboo-shadow, :not(*)) .reader-content::after {
+    right: -30px;
+    width: 300px;
+    opacity: .42;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-shell:not(*) .reader-title::after,
+  .app-shell:is(:not(*), .theme-bamboo-shadow, :not(*)) .reader-content::after { display: none; }
+}
+.editor-main-pane { min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+.markdown-editor { flex: 1; min-height: 0; overflow: hidden; width: 100%; }
+.markdown-editor .cm-editor { height: 100%; color: var(--ink); background: transparent; outline: none; }
+.markdown-editor .cm-scroller { overflow: auto; font: 15px/1.7 var(--mono); }
+.markdown-editor .cm-content { padding: 32px 24px 45vh; caret-color: var(--accent); }
+.markdown-editor .cm-line { padding: 0 4px; }
+.markdown-editor .cm-focused { outline: none; }
+.markdown-editor .cm-cursor { border-left-color: var(--accent); }
+.markdown-editor .cm-selectionBackground, .markdown-editor .cm-focused .cm-selectionBackground { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.markdown-editor .cm-gutters { border: 0; background: transparent; color: var(--muted); }
+.markdown-editor.is-live .cm-scroller { font: var(--reader-size)/var(--reader-leading) var(--reader-font); }
+.markdown-editor.is-live .cm-content { max-width: min(var(--reader-width), 76ch); margin: 0 auto; width: 100%; padding: 32px clamp(18px, 4vw, 48px) 45vh; }
+.markdown-editor.is-live .cm-line { padding: 3px 0; }
+/* CodeMirror measures line boxes; vertical margins make pointer coordinates drift. */
+.markdown-editor .live-heading { font-family: var(--reader-font); font-weight: 650; line-height: 1.35; margin: 0; }
+.markdown-editor.is-live .cm-line.live-heading { padding-block: 1.1em .45em; }
+.markdown-editor .live-h1 { font-size: 1.9em; }
+.markdown-editor .live-h2 { font-size: 1.5em; }
+.markdown-editor .live-h3 { font-size: 1.25em; }
+.markdown-editor .live-h4, .markdown-editor .live-h5, .markdown-editor .live-h6 { font-size: 1.08em; }
+.markdown-editor .live-strong { font-weight: 700; }
+.markdown-editor .live-emphasis { font-style: italic; }
+.markdown-editor .live-strike { text-decoration: line-through; }
+.markdown-editor .live-link { color: var(--accent); text-decoration: underline; text-underline-offset: .2em; }
+.markdown-editor .live-quote { color: color-mix(in srgb, var(--ink) 75%, var(--accent)); }
+.markdown-editor .live-code { font-family: var(--mono); font-size: .9em; background: var(--code-bg); border-radius: 3px; }
+.markdown-editor .live-code-line { font: .85em/1.7 var(--mono); background: var(--code-bg); padding-inline: 16px !important; }
+.markdown-editor .live-sub { vertical-align: sub; font-size: .75em; }
+.markdown-editor .live-sup { vertical-align: super; font-size: .75em; }
+.markdown-editor.is-line-focus .cm-line { opacity: .65; }
+.markdown-editor.is-line-focus .cm-activeLine { opacity: 1; background: transparent; }
+.live-preview-widget { display: inline-block; vertical-align: middle; max-width: 100%; }
+.live-preview-widget p { margin: 0; }
+.live-preview-widget img, .live-preview-widget video { max-width: 100%; max-height: 60vh; object-fit: contain; }
+.live-preview-widget mjx-container { margin: 0 !important; }
+.live-table-widget { margin: 20px 0; overflow: auto; }
+.live-table-widget table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.live-table-widget th, .live-table-widget td { padding: 6px; border: 1px solid var(--border); min-width: 100px; }
+.live-table-widget th { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.live-table-widget textarea { width: 100%; min-height: 32px; resize: vertical; border: 0; border-radius: 3px; padding: 4px; background: transparent; color: var(--ink); font: .9em/1.6 var(--reader-font); }
+.live-table-widget textarea:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+.live-table-tools { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 7px; opacity: 0; transition: opacity .15s; }
+.live-table-widget:hover .live-table-tools, .live-table-widget:focus-within .live-table-tools { opacity: 1; }
+.live-table-tools button, .editor-quiet-controls button, .editor-safety-notice button { padding: 5px 8px; background: transparent; color: var(--muted); font: 12px var(--ui-font); border-radius: 4px; }
+.live-table-tools button:hover, .editor-quiet-controls button:hover, .editor-quiet-controls button[aria-pressed='true'] { background: var(--accent-soft); color: var(--ink); }
+.editor-quiet-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; padding: 7px 16px; border-bottom: 1px solid var(--border); }
+.editor-quiet-controls > span { margin-right: auto; color: var(--accent); font: 13px var(--ui-font); }
+.editor-surface.editor-calm-mode { padding-top: 0; }
+.editor-safety-notice { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; color: var(--ink); border-bottom: 1px solid var(--accent); background: var(--accent-soft); font: 13px/1.5 var(--ui-font); }
+@media (max-width: 720px) {
+  .markdown-editor.is-live .cm-content { padding: 20px 16px 45vh; }
+  .live-table-widget table { min-width: 420px; }
+}
+@media (prefers-reduced-motion: reduce) { .live-table-tools { transition: none; } }
+.live-diagram-widget { margin: 18px 0; }
+.live-diagram-widget .mermaid-block { width: 100%; border: 0; background: transparent; }
+.editor-export-menu { position: relative; font: 12px var(--ui-font); color: var(--muted); }
+.editor-export-menu summary { cursor: pointer; list-style: none; padding: 5px 8px; border-radius: 4px; }
+.editor-export-menu summary::-webkit-details-marker { display: none; }
+.editor-export-menu summary:hover, .editor-export-menu[open] summary { background: var(--accent-soft); color: var(--ink); }
+.editor-export-menu > div { position: absolute; top: 100%; right: 0; z-index: 20; display: grid; min-width: 164px; padding: 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-raised); box-shadow: 0 8px 24px rgb(0 0 0 / .12); }
+.editor-export-menu > div button { text-align: left; white-space: nowrap; color: var(--ink); }
+.editor-export-menu :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.live-highlight { background: var(--accent-soft); color: var(--ink); }
+.live-list-bullet { display: inline-block; width: 1em; color: var(--accent); }
+.live-footnote-ref { vertical-align: super; padding: 0 2px; color: var(--accent); background: transparent; font: .75em var(--reader-font); }
+
+/* Rich paste should feel like a focused composer, not a raw Markdown workbench. */
+.editor-workspace.editor-mode-rich {
+  width: min(820px, calc(100% - 32px));
+  height: min(520px, calc(100vh - 250px));
+  min-height: 0;
+}
+.editor-workspace.editor-mode-rich .editor-rich-pane {
+  border: 1px solid color-mix(in srgb, var(--border) 88%, var(--editor-accent));
+  border-top: 1px solid color-mix(in srgb, var(--border) 88%, var(--editor-accent));
+  border-radius: 18px;
+  background: var(--surface-raised);
+  box-shadow: 0 12px 34px color-mix(in srgb, var(--app-bg) 16%, transparent);
+}
+.editor-workspace.editor-mode-rich .markdown-editor.is-live .cm-scroller { font: 14px/1.48 var(--reader-font); }
+.editor-workspace.editor-mode-rich .markdown-editor.is-live .cm-content {
+  max-width: none;
+  margin: 0;
+  padding: 18px 22px 44vh;
+}
+.editor-workspace.editor-mode-rich .markdown-editor.is-live .cm-line { padding: 1px 0; }
+.editor-workspace.editor-mode-rich .markdown-editor .live-heading {
+  margin: 0;
+  padding-block: .68em .16em;
+  font-family: var(--ui-font);
+  font-weight: 700;
+  line-height: 1.3;
+}
+.editor-workspace.editor-mode-rich .markdown-editor .live-h1 { font-size: 1.36em; }
+.editor-workspace.editor-mode-rich .markdown-editor .live-h2 { font-size: 1.2em; }
+.editor-workspace.editor-mode-rich .markdown-editor .live-h3 { font-size: 1.1em; }
+.editor-workspace.editor-mode-rich .markdown-editor .live-list-bullet { width: 1.1em; color: var(--ink); }
+
+/* Timestamped course notes use the compact hierarchy shown in the source composer. */
+.app-shell:not(.is-focus) .reader-content.is-course-outline .reader-title { max-width: none; overflow: hidden; font-size: 24px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+.app-shell:not(.is-focus) .reader-content.is-course-outline .regions-stack { gap: 2px; }
+.app-shell:not(.is-focus) .reader-content.is-course-outline .region-block,
+.app-shell:not(.is-focus) .reader-content.is-course-outline .region-block.region-heading { padding-top: 3px; padding-bottom: 3px; }
+.app-shell:not(.is-focus) .reader-content.is-course-outline .region-content { font: 400 var(--reader-size)/1.48 var(--ui-font); }
+.app-shell:not(.is-focus) .reader-content.is-course-outline .region-content h3 { margin: 4px 0; font: 700 17px/1.35 var(--ui-font); letter-spacing: 0; }
+.app-shell:not(.is-focus) .reader-content.is-course-outline .region-content h3::before { width: 5px; margin-right: 7px; }
+.app-shell:not(.is-focus) .reader-content.is-course-outline .region-content p { margin-bottom: 3px; line-height: 1.48; }
+.app-shell:not(.is-focus) .reader-content.is-course-outline .region-content ul,
+.app-shell:not(.is-focus) .reader-content.is-course-outline .region-content ol { margin-top: 2px; margin-bottom: 5px; padding-left: 23px; }
+.app-shell:not(.is-focus) .reader-content.is-course-outline .region-content li { padding: 0; line-height: 1.48; }
+.app-shell:not(.is-focus) .reader-content.is-course-outline .region-content li::marker { font-size: .9em; }
+
+.app-shell:not(.is-focus) .reader-content.is-course-outline .region-more {
+  top: 50%;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  transform: translateY(-50%);
+}
+.app-shell:not(.is-focus) .reader-content.is-course-outline .region-more .app-icon-vector {
+  width: 14px;
+  height: 14px;
+}
+.editor-workspace.editor-mode-rich .markdown-editor .live-preview-widget a.live-link { color: #2166c1; text-decoration: none; white-space: nowrap; }
+.editor-workspace.editor-mode-rich .markdown-editor .live-preview-widget a.live-link::before {
+  content: '🌐';
+  display: inline-block;
+  margin-right: .18em;
+  font-size: .86em;
+  text-decoration: none;
+}
+.editor-workspace.editor-mode-rich .markdown-editor .cm-scroller::-webkit-scrollbar { width: 8px; }
+.editor-workspace.editor-mode-rich .markdown-editor .cm-scroller::-webkit-scrollbar-thumb { border-radius: 999px; background: color-mix(in srgb, var(--muted) 35%, transparent); }
+@media (max-width: 720px) {
+  .editor-workspace.editor-mode-rich { width: calc(100% - 18px); height: min(520px, calc(100vh - 220px)); }
+  .editor-workspace.editor-mode-rich .markdown-editor.is-live .cm-content { padding-inline: 16px; }
+}
+
+/* Course outlines: let the hierarchy read as sections, without turning every point into a card. */
+.app-shell:not(.is-focus) .reader-content.is-course-outline .regions-stack {
+  gap: 0;
+}
+.app-shell:not(.is-focus) .reader-content.is-course-outline .region-block {
+  margin-left: 0;
+  border-left-color: transparent;
+  border-radius: 0;
+  padding-right: 34px;
+  padding-left: 20px;
+}
+.app-shell:not(.is-focus) .reader-content.is-course-outline .region-block.region-heading {
+  margin-top: 18px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  border-left: 2px solid color-mix(in srgb, var(--accent) 72%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 2%, transparent);
+}
+.app-shell:not(.is-focus) .reader-content.is-course-outline .region-block.region-heading:first-child {
+  margin-top: 0;
+}
+.app-shell:not(.is-focus) .reader-content.is-course-outline .region-block.region-heading + .region-block.region-list {
+  margin-left: 16px;
+  padding-top: 7px;
+  padding-bottom: 14px;
+  padding-left: 18px;
+  border-radius: 0 0 8px 8px;
+  background: transparent;
+}
+.app-shell:not(.is-focus) .reader-content.is-course-outline .region-content > ul > li > p > strong:first-child,
+.app-shell:not(.is-focus) .reader-content.is-course-outline .region-content > ol > li > p > strong:first-child {
+  color: color-mix(in srgb, var(--ink) 86%, var(--accent));
+}
+.app-shell:not(.is-focus) .reader-content.is-course-outline .region-content li::marker {
+  color: color-mix(in srgb, var(--accent) 72%, var(--muted));
+}
+.app-shell.is-region-focus .reader-content.is-course-outline .region-block.region-heading + .region-block.region-list {
+  margin-left: 20px;
+  padding-left: 22px;
+}
+
+@media (max-width: 720px) {
+  .app-shell:not(.is-focus) .reader-content.is-course-outline .region-block {
+    padding-right: 16px;
+    padding-left: 12px;
+  }
+  .app-shell:not(.is-focus) .reader-content.is-course-outline .region-block.region-heading + .region-block.region-list,
+  .app-shell.is-region-focus .reader-content.is-course-outline .region-block.region-heading + .region-block.region-list {
+    margin-left: 12px;
+    padding-left: 15px;
+  }
+}
+
+.reader-column > .reader-meta { position: relative; }
+.reader-progress-track {
+  position: absolute;
+  right: 10px;
+  bottom: 0;
+  left: 10px;
+  height: 2px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--border) 72%, transparent);
+  pointer-events: none;
+}
+.reader-progress-track span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--accent);
+  transform-origin: left center;
+  transition: transform .14s linear;
+}
+.reader-navigation .reader-zoom-button {
+  min-width: 30px;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 650;
+}
+.reader-navigation .reader-zoom-button:disabled { color: var(--muted); opacity: .48; }
+@media (prefers-reduced-motion: reduce) {
+  .reader-progress-track span { transition: none; }
+}
+
+/* 清白留界：用一条细线分开浅灰导航与纯白阅读页。 */
+.app-shell.theme-clear-margin { background: #fafafa; }
+.app-shell.theme-clear-margin:not(.is-focus)::before,
+.app-shell.theme-clear-margin:not(.is-focus) .reader-page::before { display: none; }
+.app-shell.theme-clear-margin:not(.is-focus) .global-nav,
+.app-shell.theme-clear-margin:not(.is-focus) .outline-panel,
+.app-shell.theme-clear-margin:not(.is-focus) .context-panel {
+  border-color: #e8e8e8;
+  background: #fafafa;
+  box-shadow: none;
+}
+.app-shell.theme-clear-margin:not(.is-focus) .topbar,
+.app-shell.theme-clear-margin:not(.is-focus) .reader-tabbar,
+.app-shell.theme-clear-margin:not(.is-focus) .reader-page,
+.app-shell.theme-clear-margin:not(.is-focus) .reader-viewport {
+  border-color: #e8e8e8;
+  background: #fff;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+.app-shell.theme-clear-margin .reader-content {
+  width: min(var(--reader-width), calc(100% - 96px));
+  padding-top: 64px;
+}
+.app-shell.theme-clear-margin .reader-title {
+  max-width: none;
+  color: #333;
+  font-family: var(--reader-font);
+  font-size: clamp(34px, 3.5vw, 48px);
+  font-weight: 600;
+  letter-spacing: -.035em;
+  text-shadow: none;
+}
+.app-shell.theme-clear-margin .reader-rule { background: #e8e8e8; }
+.app-shell.theme-clear-margin .region-block { border-radius: 0; }
+.app-shell.theme-clear-margin .region-block:hover,
+.app-shell.theme-clear-margin .region-block.active { background: #fafafa; }
+.app-shell.theme-clear-margin .reader-content .region-content blockquote {
+  border-left-color: #b8b8b8;
+  border-radius: 0;
+  background: #fafafa;
+  color: #565656;
+  box-shadow: none;
+}
+.app-shell.theme-clear-margin .reader-content :is(.code-frame, .table-scroll) {
+  border-color: #e8e8e8;
+  border-radius: 2px;
+  background: #f6f6f6;
+  box-shadow: none;
+}
+.app-shell.theme-clear-margin.is-focus .reader-viewport { background: #fff; }
+.app-shell.theme-clear-margin.is-focus .focus-sidebar { border-left-color: #e8e8e8; background: #fafafa; box-shadow: none; }
+
+.app-shell.theme-clear-margin.is-editor-studio .editor-surface { background: #fff; }
+@media (min-width: 981px) {
+  .app-shell.theme-clear-margin.is-editor-studio .editor-workspace.editor-mode-split {
+    grid-template-columns: minmax(0, var(--editor-split-ratio, 58%)) 1px minmax(0, 1fr);
+    gap: 0;
+  }
+}
+.app-shell.theme-clear-margin.is-editor-studio .editor-source-pane {
+  padding-right: 0;
+  background: #fafafa;
+}
+.app-shell.theme-clear-margin.is-editor-studio .editor-preview-pane {
+  padding-left: 0;
+  background: #fff;
+}
+.app-shell.theme-clear-margin.is-editor-studio .editor-split-divider span {
+  width: 1px;
+  height: 100%;
+  border-radius: 0;
+  background: #e8e8e8;
+}
+.app-shell.theme-clear-margin.is-editor-studio .editor-split-divider:hover span,
+.app-shell.theme-clear-margin.is-editor-studio .editor-split-divider:focus-visible span,
+.app-shell.theme-clear-margin.is-editor-studio .editor-workspace.is-resizing-split .editor-split-divider span {
+  width: 1px;
+  height: 100%;
+  background: #a8a8a8;
+  box-shadow: 0 0 0 2px rgb(51 51 51 / .12);
+}
+.app-shell.theme-clear-margin.is-editor-studio :is(.editor-pane-heading, .editor-outline) {
+  border-color: #e8e8e8;
+  background: inherit;
+  backdrop-filter: none;
+}
+
+.theme-card.theme-card-clear-margin .theme-swatch::before {
+  background: linear-gradient(90deg, #fafafa 0 53%, #e8e8e8 53% calc(53% + 1px), #fff calc(53% + 1px));
+}
+.theme-card.theme-card-clear-margin .theme-card-mark {
+  border: 1px solid #e8e8e8;
+  border-radius: 2px;
+  background: #fff;
+  color: #333;
+}
+
+/* Keep system navigation and menus readable at the same scale. */
+.app-shell .nav-item > span:last-child {
+  font-size: 13px;
+  letter-spacing: 0;
+}
+.app-shell .reader-tab {
+  font-size: 12px;
+}
+.app-shell .reader-tab small,
+.app-shell .reader-tab-status {
+  font-size: 11px;
+}
+.app-shell .reader-meta-document .reader-path-value {
+  font-size: 12px;
+  letter-spacing: 0;
+}
+.app-shell .reader-meta-document .reader-stat {
+  font: 12px/1.35 var(--ui-font);
+}
+.app-shell .reader-meta-tools .font-select-label,
+.app-shell .reader-meta-tools .font-picker-compact .arco-select {
+  font-size: 12px;
+}
+.app-shell .reader-edit-actions button,
+.app-shell .reader-more-menu summary,
+.app-shell .reader-display-switch button,
+.app-shell .reader-navigation button {
+  font: 12px/1.35 var(--ui-font);
+}
+.app-shell .reader-more-menu summary {
+  display: flex;
+  min-height: 32px;
+  align-items: center;
+}
+.app-shell .reader-display-switch button,
+.app-shell .reader-navigation button {
+  min-height: 34px;
+}
+.app-shell .reader-progress-label {
+  font: 12px/1.2 var(--ui-font);
+}
+.app-shell:not(.is-focus) .settings-tabs button,
+.app-shell .ghost-button,
+.app-shell .primary-button {
+  font-size: 12px;
+}
+.app-shell :is(.reader-more-popover, .library-more-popover, .tab-context-menu, .file-context-menu, .editor-context-menu, .editor-emoji-menu, .editor-export-menu) button {
+  min-height: 34px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  color: var(--ink);
+  font: 12px/1.45 var(--ui-font);
+}
+.app-shell .reader-more-popover button,
+.app-shell .reader-more-popover .font-select-label,
+.app-shell .reader-more-popover .font-picker-compact .arco-select {
+  font-size: 13px;
+  font-weight: 500;
+}
+.app-shell :is(.reader-more-popover, .library-more-popover, .tab-context-menu, .file-context-menu, .editor-context-menu, .editor-emoji-menu, .editor-export-menu) button:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+.app-shell .reader-more-popover .font-select-label,
+.app-shell .reader-more-popover .font-picker-compact .arco-select {
+  font-size: 12px;
+}
+.app-shell .tab-list-heading,
+.app-shell .tab-context-title,
+.app-shell .file-context-title {
+  font: 12px/1.4 var(--ui-font);
+  letter-spacing: 0;
+}
+.app-shell .tab-list-item {
+  min-height: 40px;
+  color: var(--ink);
+  font-size: 12px;
+}
+.app-shell .tab-list-copy strong {
+  font-size: 13px;
+}
+.app-shell .tab-list-copy small,
+.app-shell .recent-folder-open small,
+.app-shell .recent-folder-action {
+  font-size: 11px;
+}
+.app-shell .recent-folder-open strong {
+  font-size: 12px;
+}
+
+/* Apply the same readable control scale across every app menu and picker. */
+.app-shell :is([role="menu"], [role="listbox"]) {
+  font-family: var(--ui-font);
+  font-size: 12px;
+}
+.app-shell [role="menuitem"] {
+  min-height: 34px;
+  font: 12px/1.45 var(--ui-font);
+}
+.app-shell :is(select, .arco-select, .arco-select-view-single) {
+  font-family: var(--ui-font);
+  font-size: 12px;
+}
+.app-shell .arco-select-view-single .arco-select-view-value { font: inherit !important; }
+.app-shell :is(.arco-input-wrapper, .arco-textarea-wrapper, .arco-select-view-single) {
+  min-height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--surface-raised) 88%, transparent);
+  color: var(--ink);
+  box-shadow: none;
+  font: 12px/1.4 var(--ui-font);
+  transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+}
+.app-shell :is(.arco-input-wrapper, .arco-textarea-wrapper, .arco-select-view-single):hover {
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--border));
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface-raised));
+}
+.app-shell :is(.arco-input-wrapper, .arco-textarea-wrapper, .arco-select-view-single):focus-within,
+.app-shell .arco-select-view-single.arco-select-view-focus {
+  z-index: 1;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.app-shell :is(.arco-input-wrapper, .arco-textarea-wrapper) :is(.arco-input, .arco-textarea) {
+  color: inherit;
+  font: inherit;
+}
+.app-shell .arco-select-view-single .arco-select-view-suffix,
+.app-shell :is(.arco-input-wrapper, .arco-textarea-wrapper) :is(.arco-input-clear-btn, .arco-textarea-clear-btn) {
+  color: var(--muted);
+}
+.app-shell :is(.arco-input-wrapper.arco-input-disabled, .arco-textarea-wrapper.arco-textarea-disabled, .arco-select-view-single.arco-select-view-disabled) {
+  opacity: .58;
+  cursor: not-allowed;
+}
+
+/* Select views keep the toolbars compact without inheriting Arco's roomy default. */
+.app-shell .theme-filter.arco-select-view-single {
+  box-sizing: border-box;
+  min-height: 34px;
+  height: 34px;
+  padding: 0 9px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  font: 12px/1.4 var(--ui-font);
+  box-shadow: none;
+}
+.app-shell .theme-filter.arco-select-view-single:hover {
+  border-bottom-color: color-mix(in srgb, var(--accent) 52%, var(--border));
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+.app-shell .theme-filter.arco-select-view-single.arco-select-view-focus {
+  border-bottom-color: var(--accent);
+  box-shadow: 0 2px 0 color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.app-shell .theme-search .arco-input-wrapper {
+  min-height: 34px;
+  padding-inline: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.app-shell .theme-search .arco-input.arco-input-size-medium {
+  padding: 0;
+  color: var(--ink);
+  font: 12px/1.4 var(--ui-font);
+}
+.app-shell .theme-search .arco-input-clear-btn {
+  color: var(--muted);
+}
+.app-shell .setting-input > input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]) {
+  box-sizing: border-box;
+  min-height: 34px;
+  font: 12px/1.4 var(--ui-font);
+}
+.arco-select-dropdown,
+.arco-dropdown-list,
+.arco-trigger-popup .arco-dropdown-list-wrapper {
+  border: 1px solid var(--border) !important;
+  border-radius: 8px !important;
+  background: var(--surface-raised) !important;
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--app-bg) 28%, transparent) !important;
+}
+.arco-select-dropdown .arco-select-option,
+.arco-dropdown-list .arco-dropdown-option {
+  min-height: 34px !important;
+  color: var(--ink) !important;
+  font: 12px/1.45 var(--ui-font) !important;
+}
+.arco-select-dropdown .arco-select-option-active,
+.arco-select-dropdown .arco-select-option-selected,
+.arco-dropdown-list .arco-dropdown-option-active,
+.arco-dropdown-list .arco-dropdown-option:hover {
+  background: var(--accent-soft) !important;
+  color: var(--ink) !important;
+}
+.app-shell .arco-btn {
+  min-height: 34px;
+  border-radius: 6px;
+  font: 12px/1.35 var(--ui-font);
+}
+.app-shell .arco-btn-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--app-bg);
+}
+.app-shell .arco-btn-secondary {
+  border-color: var(--border);
+  background: transparent;
+  color: var(--muted);
+}
+.app-shell .arco-btn-text {
+  color: var(--muted);
+}
+.app-shell .arco-btn-text:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+/* Modal and dropdown portals render outside .app-shell; keep their controls on the same tokens. */
+.arco-modal :is(.arco-input-wrapper, .arco-textarea-wrapper) {
+  min-height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-raised);
+  color: var(--ink);
+  box-shadow: none;
+  font: 12px/1.4 var(--ui-font);
+}
+.arco-modal :is(.arco-input-wrapper, .arco-textarea-wrapper):focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.arco-modal :is(.arco-input, .arco-textarea) {
+  color: inherit;
+  font: inherit;
+}
+.arco-modal .arco-btn {
+  min-height: 34px;
+  border-radius: 6px;
+  font: 12px/1.35 var(--ui-font);
+}
+.arco-modal .arco-btn-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--app-bg);
+}
+.arco-modal .arco-btn-secondary {
+  border-color: var(--border);
+  background: transparent;
+  color: var(--muted);
+}
+.app-shell :is(.segmented-tabs, .search-scope-tabs) button {
+  min-height: 34px;
+  font: 12px/1.35 var(--ui-font);
+}
+.app-shell:not(.is-focus) .themes-page .segmented-tabs button {
+  min-height: 34px;
+  font-size: 12px;
+}
+.app-shell .panel-tabs button {
+  min-height: 34px;
+  font-size: 12px;
+}
+.app-shell .panel-tabs button span {
+  font-size: 10px;
+}
+.app-shell .editor-mode-switch button,
+.app-shell .editor-section-nav button {
+  min-height: 32px;
+  font-size: 12px;
+}
+.app-shell .search-scope-row {
+  font-size: 12px;
+}
+.app-shell .search-results b {
+  font-size: 13px;
+}
+.app-shell .search-results small {
+  font-size: 12px;
+}
+.app-shell .result-kind {
+  font-size: 10px;
+}
+.app-shell .quick-open-meta strong {
+  font-size: 12px;
+}
+.app-shell .quick-open-results .quick-open-path {
+  font-size: 11px;
+}
+.app-shell .selection-toolbar button,
+.app-shell .selection-label {
+  font-size: 12px;
+}
+.app-shell [role="tablist"] button {
+  min-height: 34px;
+  font: 12px/1.35 var(--ui-font);
+}
+.app-shell .settings-tabs button,
+.app-shell :is(.reader-more-menu, .library-more-menu, .editor-export-menu) > summary {
+  min-height: 34px;
+}
+.app-shell .theme-search input {
+  font-size: 12px;
+}
+.app-shell .tab-list-heading small {
+  font-size: 11px;
+}
+.app-shell .recent-folder-action {
+  font-size: 12px;
+}
+.app-shell .knowledge-source-scope summary,
+.app-shell .knowledge-source-warning,
+.app-shell .knowledge-source-warning .text-button,
+.app-shell .knowledge-scope-list label,
+.app-shell .knowledge-source-overflow > summary {
+  font-size: 12px;
+}
+.app-shell .knowledge-citations-summary > span:first-child,
+.app-shell .knowledge-citation-top strong,
+.app-shell .knowledge-citation-preview,
+.app-shell .knowledge-source-preview-row {
+  font-size: 12px;
+}
+.app-shell .knowledge-citations-summary small,
+.app-shell .knowledge-citations-toggle,
+.app-shell .knowledge-citation-top small,
+.app-shell .knowledge-source-preview-list > small,
+.app-shell .knowledge-source-preview-empty {
+  font-size: 11px;
+}
+.app-shell .theme-mini-option-copy strong,
+.app-shell .ambience-copy b {
+  font-size: 12px;
+}
+.app-shell .theme-mini-option-copy small,
+.app-shell .ambience-copy small {
+  font-size: 11px;
+}
+.app-shell .tree-summary-popover-heading {
+  font-size: 12px;
+}
+
+/* Secondary controls also need the same legible scale as primary menus. */
+.app-shell :is(.text-button, .context-actions button, .reader-edit-actions button, .reader-editing-meta button, .file-batch-delete, .replace-row label, .replace-row button, .viewer-tabs button, .viewer-source-toolbar button, .editor-toolbar button, .editor-calm-toggle, .editor-calm-exit, .editor-pane-heading-actions button, .editor-outline button, .focus-hud button) {
+  font-size: 12px;
+}
+.app-shell :is(.setting-row, .setting-toggle-row, .setting-input, .shortcut-row, .file-filter-toolbar input, .file-tree-mix, .table-alignment-actions, .table-column-selection) {
+  font-size: 12px;
+}
+.app-shell .shortcut-row kbd,
+.app-shell .reader-editing-meta > span:not(.section-kicker),
+.app-shell .file-item-copy small,
+.app-shell .file-location small,
+.app-shell .file-browser-note,
+.app-shell .table-column-selection small {
+  font-size: 11px;
+}
+.app-shell .library-search input {
+  font-size: 12px;
+}
+.app-shell .editor-outline-label {
+  font-size: 11px;
+}
+.app-shell :is(.diagram-action, .inline-view-action, .focus-timer-actions button, .focus-outline nav button, .collection-card-action, .knowledge-prompts button, .viewer-fit-button, .viewer-footer-actions button, .viewer-shell footer button, .code-copy, .code-viewer-toolbar button, .tab-reopen-button, .outline-actions button, .side-card-heading button, .translation-card button) {
+  font-size: 12px;
+}
+.app-shell :is(.editor-fields label, .theme-editor .editor-fields input, .theme-editor .editor-fields textarea, .tab-list-search input, .outline-search input) {
+  font-size: 12px;
+}
+.app-shell .knowledge-history-select strong {
+  font-size: 12px;
+}
+.app-shell .knowledge-history-select small,
+.app-shell .knowledge-history-select time {
+  font-size: 11px;
+}
+.app-shell .knowledge-source-preview-heading .text-button {
+  font-size: 12px;
+}
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)) :is(.reader-meta-tools button, .reader-meta-tools summary, .reader-progress-label, .editor-fields label, .outline-list button) {
+  font-size: 12px;
+}
+.app-shell.is-focus .focus-outline nav button {
+  font-size: 12px;
+}
+.app-shell .reader-navigation .reader-zoom-button {
+  font-size: 12px;
+}
+.app-shell .section-kicker {
+  font-size: 11px;
+  letter-spacing: .04em;
+}
+.app-shell .nav-section-label {
+  font-size: 11px;
+  letter-spacing: 0;
+}
+.app-shell .result-kind,
+.app-shell .file-selection-count,
+.app-shell .panel-tabs button span,
+.app-shell .profile-chip small,
+.app-shell .knowledge-message-label,
+.app-shell .knowledge-message-label time {
+  font-size: 11px;
+}
+
+/* Themes share one reader layout and Markdown treatment; their color tokens still apply. */
+.app-shell .reader-page {
+  background: var(--surface-raised) !important;
+}
+.app-shell .reader-page::before {
+  display: none !important;
+}
+.app-shell .reader-viewport {
+  background: transparent !important;
+}
+.app-shell .reader-content {
+  width: min(var(--reader-width), calc(100% - 70px)) !important;
+  padding-top: 62px !important;
+  font-family: var(--reader-font) !important;
+}
+.app-shell .reader-content:not(.is-course-outline) .reader-title {
+  max-width: none !important;
+  color: var(--ink) !important;
+  font-family: var(--reader-font) !important;
+  font-size: clamp(37px, 4vw, 58px) !important;
+  font-weight: 400 !important;
+  letter-spacing: -.05em !important;
+  line-height: 1.03 !important;
+  text-shadow: none !important;
+  text-wrap: initial !important;
+}
+.app-shell .reader-title::after,
+.app-shell .reader-content::after {
+  display: none !important;
+}
+.app-shell .reader-rule {
+  width: 100% !important;
+  height: 1px !important;
+  margin: 36px 0 37px !important;
+  background: linear-gradient(90deg, var(--accent), transparent) !important;
+  clip-path: none !important;
+  opacity: 1 !important;
+}
+.app-shell .reader-content .region-block {
+  border-radius: 3px 12px 12px 3px !important;
+}
+.app-shell .reader-content .region-block:hover {
+  border-left-color: color-mix(in srgb, var(--accent) 55%, transparent) !important;
+  background: color-mix(in srgb, var(--accent) 7%, transparent) !important;
+}
+.app-shell .reader-content .region-block.active,
+.app-shell.is-region-focus .reader-content .region-block.focused {
+  border-left-color: var(--accent) !important;
+  background: color-mix(in srgb, var(--accent) 10%, transparent) !important;
+}
+.app-shell .reader-content .region-block:is(.region-code, .region-table),
+.app-shell .reader-content .region-block:is(.region-code, .region-table):hover,
+.app-shell .reader-content .region-block:is(.region-code, .region-table).active,
+.app-shell.is-region-focus .reader-content .region-block:is(.region-code, .region-table).focused {
+  border-left-color: transparent !important;
+  background: transparent !important;
+}
+.app-shell .reader-content .region-content blockquote {
+  margin: 7px 0 !important;
+  padding: 13px 18px !important;
+  border: 0 !important;
+  border-left: 3px solid var(--accent) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: color-mix(in srgb, var(--ink) 77%, var(--accent)) !important;
+}
+.app-shell .reader-content .region-content blockquote::before,
+.app-shell .reader-content .region-content :is(h2, h3)::before {
+  display: none !important;
+  content: none !important;
+}
+.app-shell .reader-content .image-region img {
+  display: block;
+  width: min(100%, 860px);
+  max-width: 100%;
+  max-height: min(68vh, 720px);
+  height: auto;
+  margin: 12px auto;
+  object-fit: contain;
+  cursor: zoom-in;
+}
+.app-shell .reader-content :is(.code-frame, .table-scroll) {
+  border: 1px solid var(--border) !important;
+  border-radius: 10px !important;
+  background: var(--code-bg) !important;
+  box-shadow: none !important;
+}
+.app-shell .reader-content :is(.code-toolbar, .table-region-toolbar) {
+  border-bottom-color: var(--border) !important;
+  background: var(--surface) !important;
+}
+.app-shell .reader-content .table-region {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.app-shell .reader-content .region-table .table-region-toolbar {
+  min-height: 38px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border);
+  font: 600 12px/1.2 var(--ui-font);
+  letter-spacing: 0;
+}
+.app-shell .reader-content .region-table .table-region-toolbar > span {
+  gap: 7px;
+  color: var(--ink);
+  font-weight: 650;
+}
+.app-shell .reader-content .region-table .table-region-toolbar > span .app-icon-vector {
+  color: var(--accent);
+  stroke-width: 2;
+}
+.app-shell .reader-content .region-table .table-region-toolbar .code-view {
+  min-height: 26px;
+  padding: 0 4px;
+  color: var(--muted);
+  font: 600 12px/1.2 var(--ui-font);
+}
+.app-shell .reader-content .region-table .table-region-toolbar .code-view .app-icon-vector {
+  stroke-width: 2;
+}
+.app-shell .reader-content .code-frame .code-toolbar {
+  min-height: 38px;
+  padding: 0 10px;
+  font: 600 12px/1.2 var(--ui-font);
+  letter-spacing: 0;
+}
+.app-shell .reader-content .code-frame .code-language {
+  gap: 8px;
+}
+.app-shell .reader-content .code-frame .code-language .app-icon-vector {
+  color: var(--accent);
+  stroke-width: 2;
+}
+.app-shell .reader-content .code-frame .code-language b {
+  font: 700 11px/1 var(--mono);
+  letter-spacing: .02em;
+}
+.app-shell .reader-content .code-frame .code-language small {
+  padding-left: 9px;
+  font: 600 11px/1 var(--ui-font);
+}
+.app-shell .reader-content .code-frame .code-toolbar-actions {
+  gap: 5px;
+}
+.app-shell .reader-content .code-frame :is(.code-view, .code-copy) {
+  min-height: 28px;
+  padding: 0 7px;
+  font: 600 12px/1.2 var(--ui-font);
+}
+.app-shell .reader-content .code-frame :is(.code-view, .code-copy) .app-icon-vector {
+  stroke-width: 2;
+}
+.app-shell .viewer-stage .code-viewer-toolbar {
+  min-height: 38px;
+  padding-inline: 10px;
+  font: 600 12px/1.2 var(--ui-font);
+  letter-spacing: 0;
+}
+.app-shell .viewer-stage .code-viewer-toolbar .code-language {
+  gap: 8px;
+}
+.app-shell .viewer-stage .code-viewer-toolbar .code-language .app-icon-vector {
+  color: var(--accent);
+  stroke-width: 2;
+}
+.app-shell .viewer-stage .code-viewer-toolbar .code-language b {
+  font: 700 11px/1 var(--mono);
+  letter-spacing: .02em;
+}
+.app-shell .viewer-stage .code-viewer-toolbar .code-language small {
+  padding-left: 9px;
+  font: 600 11px/1 var(--ui-font);
+}
+.app-shell .viewer-stage .code-viewer-toolbar .code-toolbar-actions {
+  gap: 5px;
+}
+.app-shell .viewer-stage .code-viewer-toolbar .code-copy {
+  min-height: 28px;
+  padding: 0 7px;
+  font: 600 12px/1.2 var(--ui-font);
+}
+.app-shell .viewer-stage .code-viewer-toolbar .code-copy .app-icon-vector {
+  stroke-width: 2;
+}
+.app-shell .reader-content .table-region .table-scroll {
+  border: 0 !important;
+  border-radius: 0 !important;
+}
+.app-shell .reader-content .table-region table {
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 0;
+  border-radius: 0;
+}
+.app-shell .reader-content .table-region :is(th, td) {
+  border-top: 0;
+  border-left: 0;
+}
+.app-shell .reader-content .table-region tr > :last-child {
+  border-right: 0;
+}
+.app-shell .reader-content .table-region tbody tr:last-child > td,
+.app-shell .reader-content .table-region thead:last-child tr:last-child > th {
+  border-bottom: 0;
+}
+.app-shell .reader-content .table-region td:first-child {
+  font-family: var(--ui-font);
+  font-size: 1em;
+  font-weight: 400;
+}
+.app-shell .reader-content .table-region td:first-child code {
+  font-size: 1em;
+  font-weight: inherit;
+}
+
+/* Keep dense technical prose readable without turning every code span into a pill. */
+.app-shell:not(.is-focus) .reader-content:not(.is-course-outline) .region-content :is(p, li, td) code {
+  display: inline;
+  max-width: none;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  padding: .05em .2em;
+  border: 0;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent-soft) 62%, transparent);
+  color: color-mix(in srgb, var(--ink) 94%, var(--accent));
+  font-size: .88em;
+  line-height: inherit;
+  vertical-align: baseline;
+  white-space: break-spaces;
+}
+
+.app-shell:not(.is-focus) .reader-content:not(.is-course-outline) .region-content p:has(br) {
+  line-height: max(var(--reader-leading), 2.15);
+  text-align: start;
+}
+
+@media (min-width: 1181px) {
+  .app-shell:not(.is-focus) .reader-content {
+    width: min(var(--reader-width), calc(100% - 64px)) !important;
+    padding-top: 38px !important;
+  }
+}
+@media (min-width: 721px) and (max-width: 1180px) {
+  .app-shell:not(.is-focus) .reader-content {
+    width: min(var(--reader-width), calc(100% - 40px)) !important;
+  }
+}
+@media (max-width: 720px) {
+  .app-shell:not(.is-focus) .reader-content {
+    width: calc(100% - 28px) !important;
+    padding-top: 26px !important;
+  }
+  .app-shell .reader-content:not(.is-course-outline) .reader-title {
+    margin-top: 16px !important;
+    font-size: clamp(32px, 9vw, 46px) !important;
+    line-height: 1.06 !important;
+  }
+  .app-shell .reader-rule {
+    margin: 24px 0 28px !important;
+  }
+}
+@media (min-width: 1500px) {
+  .app-shell.is-focus .reader-content {
+    width: min(980px, calc(100% - 64px)) !important;
+    padding-top: 54px !important;
+  }
+}
+@media (min-width: 721px) and (max-width: 1499px) {
+  .app-shell.is-focus .reader-content {
+    width: min(920px, calc(100% - 72px)) !important;
+    padding-top: 54px !important;
+  }
+}
+
+/* Moyue reading workspace: a slim tool rail beside a calm document drawer. */
+.app-shell:not(.is-focus) .global-nav {
+  width: 68px !important;
+  flex: 0 0 68px !important;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0;
+  padding: 0 !important;
+  overflow: visible;
+  border: 0;
+  background: color-mix(in srgb, var(--app-bg) 88%, var(--surface));
+  box-shadow: none;
+}
+.workspace-rail {
+  display: flex;
+  width: 68px;
+  min-height: 0;
+  flex: 0 0 68px;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 14px 5px 10px;
+  overflow-y: auto;
+  background: transparent;
+}
+.rail-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 56px;
+  height: 52px;
+  flex: 0 0 52px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+}
+.rail-divider {
+  width: 24px;
+  height: 1px;
+  flex-shrink: 0;
+  margin: 5px 0 4px;
+  background: color-mix(in srgb, var(--border) 78%, transparent);
+}
+.rail-divider-secondary { margin-top: 7px; }
+.rail-item {
+  padding: 0;
+  background: transparent;
+  color: color-mix(in srgb, var(--ink) 58%, var(--muted));
+  transition: background-color .18s ease, border-color .18s ease, color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+.rail-item .app-icon-vector {
+  width: 20px;
+  height: 20px;
+  stroke-width: 1.75;
+  shape-rendering: geometricPrecision;
+}
+.rail-item > span {
+  font: 500 11px/1 var(--ui-font);
+  white-space: nowrap;
+}
+.rail-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.rail-item:hover,
+.rail-item.active {
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+  background: color-mix(in srgb, var(--accent) 13%, var(--surface));
+  color: var(--accent);
+  box-shadow: 0 3px 11px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.rail-item:hover { transform: translateY(-1px); }
+.rail-item:hover:not(.active) {
+  border-color: color-mix(in srgb, var(--border) 75%, transparent);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--ink);
+}
+.rail-collapse { margin-top: 2px; }
+.app-shell:not(.nav-collapsed) .rail-collapse { transform: rotate(180deg); }
+.app-shell:not(.nav-collapsed) .rail-collapse:hover { transform: rotate(180deg) translateY(-1px); }
+.rail-spacer { flex: 1 1 auto; }
+.workspace-drawer {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  margin: 18px 0;
+  padding: 18px 12px 12px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 92%, transparent);
+  border-right: 1px solid color-mix(in srgb, var(--border) 92%, transparent);
+  border-radius: 16px 0 0 16px;
+  background: var(--surface);
+  box-shadow: 0 2px 12px color-mix(in srgb, var(--app-bg) 9%, transparent);
+}
+.workspace-drawer .brand-mark {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 38px;
+  margin: 0 30px 19px 4px;
+}
+.workspace-drawer .brand-mark-logo {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+.workspace-drawer .brand-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.workspace-drawer .brand-copy b {
+  color: var(--ink);
+  font: 650 14px/1 var(--ui-font);
+  letter-spacing: .02em;
+}
+.workspace-drawer .brand-copy small {
+  color: var(--muted);
+  overflow: hidden;
+  font: 9px/1 var(--ui-font);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workspace-drawer .nav-collapse-toggle { display: none; }
+.workspace-current {
+  display: grid;
+  grid-template-columns: 25px minmax(0, 1fr) 13px;
+  align-items: center;
+  width: 100%;
+  min-height: 48px;
+  gap: 8px;
+  margin: 0 0 17px;
+  padding: 6px 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface-raised));
+  color: var(--ink);
+  text-align: left;
+}
+.workspace-current:hover {
+  border-color: color-mix(in srgb, var(--accent) 44%, var(--border));
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface-raised));
+}
+.workspace-current-icon {
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  border-radius: 7px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.workspace-current > span:nth-child(2) {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+.workspace-current small,
+.workspace-current b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workspace-current small { color: var(--muted); font: 9px/1 var(--ui-font); }
+.workspace-current b { font: 600 11px/1.2 var(--ui-font); }
+.workspace-current > .app-icon { color: var(--muted); }
+.workspace-drawer nav {
+  display: block;
+  min-height: 0;
+  overflow: hidden;
+}
+.workspace-drawer .nav-section-label,
+.workspace-drawer .nav-item > span:last-child {
+  display: block;
+}
+.workspace-drawer .nav-section-label {
+  margin: 0 9px 7px;
+  color: var(--muted);
+  font: 600 10px/1.2 var(--ui-font);
+  letter-spacing: .04em;
+  text-transform: none;
+}
+.workspace-drawer .nav-section-gap {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.workspace-drawer .nav-item {
+  min-height: 34px;
+  margin: 2px 0;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  gap: 10px;
+  justify-content: flex-start !important;
+  color: var(--muted);
+}
+.workspace-drawer .nav-item:hover,
+.workspace-drawer .nav-item.active {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+  box-shadow: inset 3px 0 0 var(--accent);
+  color: var(--ink);
+}
+.workspace-drawer .nav-item.active .nav-icon { color: var(--accent); }
+.workspace-drawer .nav-item span:last-child {
+  display: block !important;
+  opacity: 1 !important;
+  font: 500 12px/1 var(--ui-font);
+  letter-spacing: 0;
+}
+.workspace-drawer .nav-icon { display: grid; place-items: center; width: 18px; color: currentColor; }
+.workspace-projects {
+  min-height: 0;
+  margin-top: 16px;
+  padding: 14px 0 0;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent-soft) transparent;
+}
+.workspace-projects-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 9px 7px;
+  color: var(--muted);
+  font: 600 10px/1.2 var(--ui-font);
+}
+.workspace-projects-heading small {
+  margin-left: auto;
+  color: var(--muted);
+  font: 500 10px/1 var(--ui-font);
+}
+.workspace-projects-heading button {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+}
+.workspace-projects-heading button:hover { background: var(--accent-soft); color: var(--accent); }
+.workspace-project {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 30px;
+  gap: 8px;
+  padding: 0 9px;
+  overflow: hidden;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  text-align: left;
+}
+.workspace-project:hover,
+.workspace-project.active { background: color-mix(in srgb, var(--accent) 8%, transparent); color: var(--ink); }
+.workspace-project span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 11px/1 var(--ui-font); }
+.workspace-project i { margin-left: auto; color: var(--accent); font-style: normal; }
+.workspace-projects-empty { margin: 8px 9px; color: var(--muted); font: 10px/1.5 var(--ui-font); }
+.workspace-open-documents { max-height: 220px; }
+.workspace-drawer .nav-bottom { margin-top: auto; padding-top: 12px; }
+.workspace-drawer .nav-bottom > .nav-item { display: none; }
+.workspace-drawer .profile-chip {
+  margin: 0;
+  padding: 10px 8px 0;
+  border-top: 1px solid var(--border);
+}
+.workspace-drawer .profile-chip > span:last-child { opacity: 1; }
+.workspace-drawer .profile-chip b { color: var(--ink); font: 600 11px var(--ui-font); }
+.workspace-drawer .profile-chip small { color: var(--muted); font: 10px var(--ui-font); }
+.workspace-drawer .nav-motto { display: none; }
+.app-shell.nav-collapsed:not(.is-focus) .global-nav,
+.app-shell.nav-collapsed:not(.is-focus) .global-nav:hover {
+  width: 68px !important;
+  flex-basis: 68px !important;
+}
+.app-shell.nav-collapsed .workspace-drawer { display: none; }
+.app-shell.nav-collapsed .rail-collapse { transform: none; }
+.app-shell.nav-collapsed .rail-collapse:hover { transform: translateY(-1px); }
+.app-shell.is-focus .global-nav {
+  width: 0 !important;
+  flex-basis: 0 !important;
+  padding: 0 !important;
+  border-right: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.app-shell.is-focus .main-shell {
+  margin: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rail-item { transition: none; }
+}
+
+.reader-main-column { display: flex; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; }
+.reader-document-panes { display: grid; flex: 1 1 0; height: 0; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); container: document-panes / inline-size; min-width: 0; min-height: 0; overflow: hidden; }
+.reader-document-panes.has-second-document { grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); grid-template-rows: none; grid-auto-rows: minmax(0, 1fr); }
+.reader-document-panes > .reader-column { min-width: 0; }
+.reader-document-panes.has-second-document > .reader-column { height: auto; }
+.app-shell.is-editor-studio .reader-document-panes .editor-surface {
+  padding: 16px 24px 12px;
+  background: var(--surface);
+}
+.app-shell.is-editor-studio .reader-document-panes .editor-surface > :is(.editor-toolbar, .editor-quiet-controls, .editor-find-panel, .editor-statusbar) {
+  width: min(100%, 1200px);
+  max-width: none;
+  margin-inline: auto;
+}
+.editor-draft-layout { display: grid; flex: 1 1 0; grid-template-columns: clamp(180px, 20%, 260px) minmax(0, 1fr); width: 100%; min-height: 0; min-width: 0; gap: 20px; overflow: hidden; }
+.editor-draft-layout:has(.editor-draft-outline:not([open])) { grid-template-columns: minmax(0, 1fr); gap: 0; }
+.editor-draft-layout:not(:has(.editor-draft-outline)) { grid-template-columns: minmax(0, 1fr); }
+.editor-return-button { padding: 5px 9px; border-radius: 4px; background: transparent; color: var(--ink); font: 12px var(--ui-font); }
+.editor-return-button:hover, .editor-return-button:focus-visible { background: var(--accent-soft); }
+.app-shell.is-editor-studio .markdown-editor.is-live .live-preview-widget img { max-height: 42vh; }
+.app-shell.is-editor-studio .editor-draft-layout > .editor-workspace { width: 100%; height: 100%; min-height: 0; margin: 0; }
+.app-shell.is-editor-studio .reader-document-panes .editor-quiet-controls {
+  padding-inline: 0;
+}
+.app-shell.is-editor-studio .reader-document-panes .editor-mode-rich .editor-rich-pane {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.app-shell.is-editor-studio .reader-document-panes .editor-mode-rich .markdown-editor.is-live .cm-scroller {
+  font: var(--reader-size)/var(--reader-leading) var(--reader-font);
+}
+.app-shell.is-editor-studio .reader-document-panes .editor-mode-rich .markdown-editor.is-live .cm-content {
+  box-sizing: border-box;
+  width: min(var(--reader-width), calc(100% - 64px));
+  max-width: var(--reader-width);
+  margin-inline: auto;
+  padding: 12px 0 44vh;
+}
+.app-shell.is-editor-studio .reader-document-panes .editor-mode-rich .markdown-editor.is-live .cm-line {
+  padding-block: 3px;
+}
+.app-shell.is-editor-studio .reader-document-panes .editor-mode-rich .markdown-editor.is-live .cm-line.live-list-line {
+  padding-inline-start: var(--live-list-indent);
+  text-indent: calc(-1 * var(--live-list-indent));
+}
+.markdown-editor.is-live .live-list-line :is(.live-preview-widget, .live-list-bullet) {
+  text-indent: 0;
+}
+.app-shell.is-editor-studio .reader-document-panes .editor-mode-rich .markdown-editor.is-live .cm-activeLine {
+  background: transparent;
+}
+.app-shell.is-editor-studio .reader-document-panes .editor-mode-rich .markdown-editor.is-live .cm-line.live-heading {
+  padding-block: 1.1em .45em;
+}
+.app-shell.is-editor-studio .reader-document-panes .editor-mode-rich .markdown-editor.is-live .live-h1 { font-size: 1.9em; }
+.app-shell.is-editor-studio .reader-document-panes .editor-mode-rich .markdown-editor.is-live .live-h2 { font-size: 1.5em; }
+.app-shell.is-editor-studio .reader-document-panes .editor-mode-rich .markdown-editor.is-live .live-h3 { font-size: 1.25em; }
+.reader-document-panes.has-second-document .reader-column .reader-content { width: min(var(--reader-width), calc(100% - 56px)); }
+.reader-document-panes.has-second-document .reader-column .reader-title { font-size: 28px; overflow-wrap: anywhere; }
+html:has(.reader-page), body:has(.reader-page), #app:has(.reader-page) { min-width: 0; }
+.app-shell .reader-document-panes.has-second-document .reader-content { width: min(var(--reader-width), calc(100% - 56px)) !important; padding: 28px 0 80px !important; }
+.app-shell .reader-document-panes.has-second-document .reader-content:not(.is-course-outline) .reader-title { margin-top: 12px !important; font-size: 28px !important; line-height: 1.25 !important; }
+.dual-document-toggle { white-space: nowrap; padding: 6px 8px; }
+.dual-document-toggle[aria-pressed="true"] { color: var(--accent); }
+.dual-document-toggle:disabled { opacity: .45; cursor: default; }
+.app-shell:not(.is-focus) .reader-layout.outline-panel-collapsed:not(.focus-layout):not(.clean-layout) {
+  grid-template-columns: minmax(0, 1fr);
+}
+.app-shell:not(.is-focus) .reader-layout:not(.is-resizing-outline) {
+  transition: grid-template-columns .22s cubic-bezier(.2, .8, .2, 1);
+}
+.app-shell:not(.is-focus) .reader-layout.outline-panel-collapsed.context-open:not(.focus-layout):not(.clean-layout) {
+  grid-template-columns: minmax(0, 1fr) 220px;
+}
+.reader-layout > .outline-panel.is-collapsed {
+  display: none;
+}
+.outline-panel-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 6px;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+.outline-panel-toggle:hover,
+.outline-panel-toggle:focus-visible {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+.outline-panel-toggle .app-icon {
+  transform: rotate(180deg);
+  transition: transform .18s ease;
+}
+.outline-panel-toggle:hover .app-icon {
+  transform: rotate(180deg) translateX(-2px);
+}
+@media (max-width: 1080px) {
+  .app-shell:not(.is-focus) .reader-layout.outline-panel-collapsed.context-open:not(.focus-layout):not(.clean-layout) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 720px) {
+  .app-shell:not(.is-focus) .reader-layout.outline-panel-collapsed:not(.focus-layout):not(.clean-layout) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-shell:not(.is-focus) .reader-layout:not(.is-resizing-outline),
+  .outline-panel-toggle .app-icon {
+    transition: none;
+  }
+}
+
+/* Center the visible prose blocks in both axes without changing the document structure. */
+.app-shell .reader-content .region-block:is(.region-paragraph, .region-heading, .region-blockquote) {
+  display: flex;
+  box-sizing: border-box;
+  min-height: 54px;
+  align-items: center;
+  padding-block: 10px !important;
+}
+.app-shell .reader-content .region-block:is(.region-paragraph, .region-heading, .region-blockquote) .region-content {
+  width: 100%;
+  text-align: start;
+}
+.app-shell .reader-content .region-block.region-paragraph .region-content p {
+  text-align: start !important;
+}
+.app-shell .reader-content .region-block.region-heading .region-content :is(h1, h2, h3, h4) {
+  margin: 0 !important;
+  text-align: start !important;
+}
+.app-shell .reader-content .region-block.region-heading .region-content :is(h1, h2, h3, h4).numbered-heading {
+  justify-content: flex-start;
+}
+.app-shell .reader-content .region-block.region-blockquote .region-content p {
+  text-align: start !important;
+}
+@media print {
+  .reader-document-panes { display: block; height: auto; overflow: visible; }
+  .second-document-pane { display: none; }
+}
+
+/* Keep small interface text crisp on 1080p screens without making it heavier. */
+:root {
+  text-rendering: auto;
+  --ui-font: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+}
+
+.app-shell :is(
+  .brand-mark small,
+  .profile-chip small,
+  .eyebrow,
+  .card-topline,
+  .card-footer,
+  .theme-card-meta,
+  .reader-meta,
+  .reader-footer,
+  .outline-footer,
+  .text-button,
+  .diagram-action,
+  .mermaid-loading,
+  .focus-hud,
+  .reader-tab-status
+) {
+  font-size: 11px;
+}
+
+.app-shell :is(
+  .file-badge,
+  .reader-tab small,
+  .theme-swatch small,
+  .editor-subtitle,
+  .editor-section-nav button,
+  .settings-tabs button
+) {
+  font-size: 10px;
+}
+
+.app-shell :is(.region-content, .editor-preview, .editor-rich-content, .markdown-editor.is-live .cm-scroller) {
+  text-rendering: optimizeLegibility;
+}
+
+/* Data tables should not inherit the smaller inline-code treatment used in prose. */
+.app-shell .reader-content .table-region table {
+  font-size: .96em;
+}
+
+.app-shell .reader-content .table-region :is(th, td) {
+  font-family: var(--ui-font);
+}
+
+.app-shell .reader-content .table-region :is(th, td) code {
+  font-family: var(--ui-font);
+  font-size: 1em !important;
+  font-weight: inherit;
+}
+
+.viewer-stage .table-viewer table {
+  font-size: 13px;
+}
+
+.viewer-stage .table-viewer td:first-child,
+.viewer-stage .table-viewer td:first-child code {
+  font-family: var(--ui-font);
+}
+
+.viewer-stage .table-viewer td:first-child code {
+  font-size: 1em;
+  font-weight: inherit;
+}
+
+/* Remove glass-layer softness from the main reading chrome. Text stays at normal weight. */
+.app-shell :is(.global-nav, .topbar, .reader-tabbar, .outline-panel, .context-panel, .focus-sidebar, .editor-toolbar, .editor-outline) {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.app-shell :is(
+  .nav-section-label,
+  .context-hero-art small,
+  .context-hero > small,
+  .theme-mini-caption small,
+  .side-card-heading,
+  .side-card-heading span:last-child,
+  .translation-card > small,
+  .translation-card p,
+  .diagram-action,
+  .diagram-link,
+  .reader-tab small,
+  .reader-tab-status
+) {
+  font-size: 11px;
+}
+
+/* Fade in place: filtered, fractionally scaled layers can leave colored edges in the desktop WebView. */
+.app-shell.is-region-focus .reader-content .region-block:not(.focused),
+.app-shell.is-focus.has-focus-region .reader-content .region-block:not(.focused) {
+  filter: none !important;
+  transform: none !important;
+}
+
+/* Editing owns the whole window. Keep the reader's persistent tool rail from
+   reappearing through the later collapsed-navigation rules. */
+.app-shell.is-editor-studio .global-nav {
+  width: 0 !important;
+  flex-basis: 0 !important;
+  min-width: 0;
+  padding: 0 !important;
+  border: 0 !important;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.app-shell.is-editor-studio .main-shell {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* Typora-like writing canvas: one quiet menu row, one outline rail, one
+   readable document column. The editor should not inherit reader chrome. */
+.app-shell.is-editor-studio .reader-tabbar {
+  display: none !important;
+}
+
+.app-shell.is-editor-studio .reader-page > .reader-layout {
+  height: auto;
+  flex: 1 1 0;
+}
+
+.app-shell.is-editor-studio .editor-surface {
+  padding: 0;
+  background: var(--surface);
+}
+
+.app-shell.is-editor-studio .editor-draft-layout {
+  grid-template-columns: clamp(220px, 24vw, 320px) minmax(0, 1fr);
+  gap: 0;
+}
+
+.app-shell.is-editor-studio .editor-draft-layout:has(.editor-draft-outline:not([open])),
+.app-shell.is-editor-studio .editor-draft-layout:not(:has(.editor-draft-outline)) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.app-shell.is-editor-studio .editor-draft-outline {
+  box-sizing: border-box;
+  padding: 0 18px 0 24px;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.app-shell.is-editor-studio .editor-draft-outline summary {
+  min-height: 46px;
+  box-sizing: border-box;
+  padding: 14px 0 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.app-shell.is-editor-studio .editor-draft-outline summary small {
+  display: none;
+}
+
+.app-shell.is-editor-studio .editor-draft-outline nav {
+  padding-top: 12px;
+}
+
+.app-shell.is-editor-studio .editor-draft-outline nav button {
+  min-height: 30px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: left;
+}
+
+.app-shell.is-editor-studio .editor-draft-outline nav button:hover,
+.app-shell.is-editor-studio .editor-draft-outline nav button[aria-current="location"] {
+  background: color-mix(in srgb, var(--accent-soft) 72%, transparent);
+  color: var(--accent);
+}
+
+.app-shell.is-editor-studio .editor-draft-outline nav button[aria-current="location"] {
+  background: transparent;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.app-shell.is-editor-studio .editor-workspace.editor-mode-rich .markdown-editor.is-live .cm-content {
+  width: min(var(--reader-width), calc(100% - 96px));
+  max-width: var(--reader-width);
+  padding-top: 42px;
+  padding-bottom: 45vh;
+}
+
+/* The reader width rules above are intentionally stronger than the older
+   editor rule. Once editing owns the window, its main column must span it. */
+body .app-shell.is-editor-studio .reader-layout {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+@media (max-width: 860px) {
+  .app-shell.is-editor-studio .editor-draft-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-shell.is-editor-studio .editor-draft-outline {
+    display: none;
+  }
+}
+
+/* Reader desk refresh: keep the document, not the chrome, as the visual
+   anchor. Reader and editor share the same calm paper language. */
+.app-shell:not(.is-editor-studio):not(.is-focus) .topbar {
+  height: 58px;
+  flex-basis: 58px;
+  padding-inline: 24px;
+  background: var(--surface);
+  border-bottom-color: var(--border);
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .crumbs strong {
+  display: block;
+  max-width: min(52vw, 620px);
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .command-trigger {
+  height: 34px;
+  border-color: var(--border);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  box-shadow: none;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-tabbar {
+  height: 38px;
+  flex-basis: 38px;
+  padding-inline: 16px;
+  background: var(--surface);
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-tab {
+  padding-inline: 12px;
+  border-bottom-color: transparent;
+  color: var(--muted);
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-tab.active {
+  border-bottom-color: var(--accent);
+  color: var(--ink);
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-layout:not(.focus-layout):not(.clean-layout) {
+  grid-template-columns: clamp(240px, 19vw, 300px) minmax(0, 1fr) 0;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-layout.context-open:not(.focus-layout):not(.clean-layout) {
+  grid-template-columns: clamp(240px, 19vw, 300px) minmax(0, 1fr) 260px;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-layout.outline-panel-collapsed:not(.context-open):not(.focus-layout):not(.clean-layout) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-layout.outline-panel-collapsed.context-open:not(.focus-layout):not(.clean-layout) {
+  grid-template-columns: minmax(0, 1fr) 260px;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .outline-panel,
+.app-shell:not(.is-editor-studio):not(.is-focus) .context-panel {
+  padding: 20px 16px;
+  background: var(--surface);
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .panel-switcher {
+  min-height: 34px;
+  border-bottom: 1px solid var(--border);
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .panel-tabs button {
+  min-height: 34px;
+  padding-inline: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .panel-tabs button.active {
+  color: var(--ink);
+  font-weight: 650;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta {
+  min-height: 42px;
+  box-sizing: border-box;
+  justify-content: flex-end;
+  padding: 6px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-document {
+  display: none;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-tools {
+  width: 100%;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-content {
+  width: min(var(--reader-width), calc(100% - 64px)) !important;
+  padding-top: 42px !important;
+  padding-bottom: 96px !important;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-content .regions-stack {
+  gap: 3px;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-content .region-block {
+  margin-inline: -12px;
+  padding-inline: 12px;
+  border-radius: 7px;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-content .region-block.region-image {
+  margin-block: 16px;
+  padding-block: 0;
+  border-left-color: transparent;
+  background: transparent;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-content .region-image .image-region img {
+  margin-block: 0;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--app-bg) 10%, transparent);
+}
+
+@media (max-width: 900px) {
+  .app-shell:not(.is-editor-studio):not(.is-focus) .reader-layout:not(.focus-layout):not(.clean-layout) {
+    grid-template-columns: 220px minmax(0, 1fr) 0;
+  }
+
+  .app-shell:not(.is-editor-studio):not(.is-focus) .reader-content {
+    width: min(var(--reader-width), calc(100% - 40px)) !important;
+  }
+}
+
+/* Two-row reader header: title, search, and reading tools on row one; the
+   second row is reserved for switching documents. */
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar {
+  position: relative;
+  z-index: 0;
+  padding-right: min(58%, 920px);
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar .reader-tab-actions {
+  display: none;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar .reader-tab-status {
+  position: absolute;
+  top: 0;
+  right: 16px;
+  height: 100%;
+  padding-left: 10px;
+  background: var(--surface);
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-layout {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-column {
+  position: relative;
+  overflow: visible;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-document-panes {
+  overflow: visible;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-column > .reader-meta {
+  position: relative;
+  top: auto;
+  right: auto;
+  z-index: 8;
+  box-sizing: border-box;
+  width: min(58%, 820px);
+  min-height: 38px;
+  height: 38px;
+  margin: -38px 100px 0 auto;
+  padding: 0 12px;
+  border: 0;
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-column > .reader-meta .reader-meta-tools {
+  min-height: 38px;
+  height: 38px;
+  justify-content: flex-end;
+}
+
+@media (max-width: 900px) {
+  .app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar {
+    padding-right: 100px;
+  }
+
+  .app-shell:not(.is-editor-studio):not(.is-focus) .reader-column > .reader-meta {
+    right: auto;
+    width: 100%;
+    top: auto;
+    min-height: 42px;
+    height: 42px;
+    margin: 0;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+  }
+
+  .app-shell:not(.is-editor-studio):not(.is-focus) .reader-layout {
+    height: 100%;
+  }
+}
+
+/* Reader controls belong to the title row. The second row is reserved for
+   switching documents, matching the compact two-line workspace requested for
+   the reading desk. */
+.app-shell:not(.is-editor-studio):not(.is-focus) .topbar {
+  gap: 12px;
+  padding-inline: 18px;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .topbar > .crumbs {
+  order: 1;
+  min-width: 180px;
+  flex: 0 1 min(34vw, 430px);
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .topbar > .reader-meta-topbar {
+  position: static;
+  order: 2;
+  display: flex;
+  flex: 1 1 0;
+  width: auto !important;
+  min-width: 0;
+  height: 38px;
+  min-height: 38px;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .topbar > .reader-meta-topbar .reader-meta-document {
+  display: none;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .topbar > .reader-meta-topbar .reader-meta-tools {
+  display: flex;
+  width: 100%;
+  min-height: 38px;
+  height: 38px;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-edit-actions {
+  gap: 3px;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-edit-actions > button,
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-more-menu > button {
+  min-height: 28px;
+  padding: 4px 7px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-display-switch,
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-navigation {
+  padding: 2px;
+  border-radius: 7px;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-display-switch button,
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-navigation button {
+  min-height: 26px;
+  padding: 4px 6px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-navigation {
+  min-width: 0;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-progress-label {
+  display: none;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .topbar > .command-trigger {
+  order: 3;
+  flex: 0 1 210px;
+  min-width: 150px;
+  max-width: 230px;
+  margin-left: 0;
+  padding-block: 7px;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .topbar > .top-actions {
+  order: 4;
+  flex: 0 0 auto;
+  gap: 2px;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar {
+  padding-right: 16px !important;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar .reader-tab-actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 8px;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar .reader-tab-status {
+  position: static;
+  display: flex;
+  align-items: center;
+  height: auto;
+  margin-left: 8px;
+  padding-left: 12px;
+  background: transparent;
+}
+
+.main-shell:has(.reader-page) > .topbar {
+  display: none;
+}
+
+.reader-toolbar-slot:empty {
+  display: none;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-toolbar-slot > .reader-meta-topbar {
+  position: relative;
+  order: -2;
+  display: flex;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 46px;
+  height: 46px;
+  flex: 0 0 46px;
+  margin: 0;
+  padding: 4px 18px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-toolbar-slot > .reader-meta-topbar .reader-meta-document {
+  display: none;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-toolbar-slot > .reader-meta-topbar .reader-meta-tools {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-command-trigger {
+  min-width: 150px;
+  max-width: 230px;
+  flex: 0 1 210px;
+  margin-left: 0;
+  padding-block: 7px;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-top-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
+}
+
+.arco-dropdown:has(.reader-more-popover, .library-more-popover) {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.arco-dropdown:has(.reader-more-popover, .library-more-popover) :is(.reader-more-popover, .library-more-popover) {
+  position: static;
+  inset: auto;
+}
+
+.arco-dropdown:has(.reader-more-popover, .library-more-popover) :is(.reader-more-popover, .library-more-popover) button {
+  width: 100%;
+  padding: 8px 9px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  text-align: left;
+}
+
+.arco-dropdown:has(.reader-more-popover, .library-more-popover) :is(.reader-more-popover, .library-more-popover) button:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--ink);
+}
+
+.arco-dropdown:has(.editor-menu-popover) {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.arco-dropdown:has(.editor-menu-popover) .editor-menu-popover {
+  position: static;
+  inset: auto;
+}
+
+/* Reading desk chrome: tools form a calm command row; open files sit on a
+   separate, tactile tab shelf. */
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-toolbar-slot > .reader-meta-topbar {
+  min-height: 52px;
+  height: 52px;
+  flex-basis: 52px;
+  padding: 7px 16px;
+  background: color-mix(in srgb, var(--surface-raised) 42%, var(--surface));
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-toolbar-slot > .reader-meta-topbar .reader-meta-tools {
+  gap: 8px;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-meta-tools > * {
+  border-left: 0;
+  padding-left: 0;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-edit-actions {
+  margin-right: auto;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-edit-actions .reader-toolbar-font-picker {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  min-height: 30px;
+  margin-left: 3px;
+  padding-left: 10px;
+  border-left: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-edit-actions .reader-toolbar-font-picker .font-select-label {
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-edit-actions .reader-toolbar-font-picker .arco-select {
+  width: 122px;
+  min-width: 122px;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar :is(.reader-display-switch, .reader-navigation) {
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  background: var(--surface);
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-command-trigger {
+  height: 32px;
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-top-actions {
+  margin-left: 2px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar {
+  height: 42px;
+  flex-basis: 42px;
+  align-items: stretch;
+  padding: 0 14px !important;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-raised) 62%, var(--surface));
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar .reader-tab-scroll {
+  gap: 3px;
+  padding-top: 5px;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar .reader-tab {
+  min-width: 136px;
+  max-width: 240px;
+  height: 37px;
+  flex-basis: 205px;
+  align-self: end;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 8px 8px 0 0;
+  color: var(--muted);
+  box-shadow: none;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar .reader-tab:hover {
+  background: color-mix(in srgb, var(--surface) 62%, transparent);
+  color: var(--ink);
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar .reader-tab[aria-selected="true"] {
+  border-color: var(--border);
+  border-bottom-color: var(--surface);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar .reader-tab strong {
+  font-size: 12px;
+  font-weight: 540;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar .reader-tab[aria-selected="true"] strong {
+  font-weight: 650;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar .reader-tab-actions {
+  gap: 4px;
+  margin-left: 10px;
+  padding-left: 10px;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar .dual-document-toggle {
+  min-height: 28px;
+  padding: 4px 9px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar .dual-document-toggle:hover,
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar .dual-document-toggle[aria-pressed="true"] {
+  border-color: var(--border);
+  background: var(--surface);
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar .reader-tab-status {
+  gap: 10px;
+  margin-left: 10px;
+  padding: 0 10px;
+  border-left: 1px solid var(--border);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+@media (max-width: 1320px) {
+  .app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-command-trigger {
+    min-width: 34px;
+    width: 34px;
+    flex-basis: 34px;
+    padding: 7px;
+  }
+
+  .app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-command-trigger > :is(span, kbd) {
+    display: none;
+  }
+
+  .app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar .reader-tab-status > span:first-child {
+    display: none;
+  }
+}
+
+/* The collapsed outline leaves only a quiet handle on the content edge. */
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-layout.outline-panel-collapsed:not(.context-open):not(.focus-layout):not(.clean-layout) {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-layout.outline-panel-collapsed.context-open:not(.focus-layout):not(.clean-layout) {
+  grid-template-columns: minmax(0, 1fr) 260px !important;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-layout > .outline-panel.is-collapsed {
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: 2;
+  display: block;
+  box-sizing: border-box;
+  width: 0;
+  min-width: 0;
+  padding: 0 !important;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .outline-panel.is-collapsed .outline-panel-expand {
+  position: absolute;
+  top: 50%;
+  right: -18px;
+  display: flex;
+  width: 18px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-left: 0;
+  border-radius: 0 10px 10px 0;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  color: var(--muted);
+  box-shadow: 3px 0 10px color-mix(in srgb, var(--ink) 8%, transparent);
+  transform: translateY(-50%);
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .outline-panel.is-collapsed .outline-panel-expand:hover,
+.app-shell:not(.is-editor-studio):not(.is-focus) .outline-panel.is-collapsed .outline-panel-expand:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-left: 0;
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--accent);
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .outline-panel.is-collapsed .outline-panel-expand .app-icon {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 1180px) {
+  .app-shell:not(.is-editor-studio):not(.is-focus) .topbar > .command-trigger {
+    flex-basis: 34px;
+    min-width: 34px;
+    width: 34px;
+    padding: 7px;
+  }
+
+  .app-shell:not(.is-editor-studio):not(.is-focus) .topbar > .command-trigger > :is(span, kbd) {
+    display: none;
+  }
+
+}
+
+/* Search surfaces: make the command feel like a calm, focused reading tool. */
+.app-shell .search-overlay {
+  place-items: start center;
+  padding: clamp(18px, 5vh, 72px) 24px 24px;
+  background: color-mix(in srgb, var(--app-bg) 74%, #000 26%);
+  backdrop-filter: blur(15px) saturate(112%);
+}
+
+.app-shell .search-dialog {
+  position: relative;
+  width: min(760px, calc(100vw - 48px));
+  max-height: min(650px, calc(100vh - 128px));
+  border-color: color-mix(in srgb, var(--accent) 16%, var(--border));
+  border-radius: 17px;
+  background: color-mix(in srgb, var(--surface-raised) 96%, var(--surface));
+  box-shadow: 0 30px 80px color-mix(in srgb, var(--app-bg) 38%, transparent), 0 4px 18px color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+.app-shell .search-dialog::before {
+  position: absolute;
+  inset: 0 20px auto;
+  height: 2px;
+  border-radius: 0 0 3px 3px;
+  background: linear-gradient(90deg, transparent, var(--accent) 18%, color-mix(in srgb, var(--accent) 55%, transparent) 82%, transparent);
+  content: "";
+  opacity: .9;
+}
+
+.app-shell .search-input-row {
+  min-height: 70px;
+  gap: 13px;
+  padding: 14px 18px 13px 21px;
+  background: color-mix(in srgb, var(--surface) 58%, transparent);
+}
+
+.app-shell .search-input-row > .app-icon {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.app-shell .search-input-row input {
+  min-height: 38px;
+  font: 500 17px/1.4 var(--ui-font);
+  letter-spacing: -.015em;
+}
+
+.app-shell .search-input-row input[type="search"]::-webkit-search-cancel-button {
+  opacity: .5;
+}
+
+.app-shell .search-input-row kbd {
+  flex: 0 0 auto;
+  padding: 5px 7px;
+  border-color: color-mix(in srgb, var(--border) 84%, var(--surface));
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--muted);
+  font: 10px var(--mono);
+}
+
+.app-shell .search-scope-row {
+  min-height: 54px;
+  gap: 12px;
+  padding: 9px 18px;
+  border-bottom-color: color-mix(in srgb, var(--border) 72%, transparent);
+  background: color-mix(in srgb, var(--surface-raised) 54%, transparent);
+}
+
+.app-shell .search-scope-tabs {
+  gap: 2px;
+  padding: 3px;
+  border-color: color-mix(in srgb, var(--border) 88%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+}
+
+.app-shell .search-scope-tabs button {
+  min-height: 28px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  transition: background-color .18s ease, color .18s ease, box-shadow .18s ease;
+}
+
+.app-shell .search-scope-tabs button.active {
+  background: var(--surface-raised);
+  color: var(--ink);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--ink) 7%, transparent);
+}
+
+.app-shell .search-scope-tabs button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-soft) 54%, var(--surface-raised));
+  color: var(--ink);
+}
+
+.app-shell .search-scope-row > .search-count {
+  margin-left: auto;
+  color: var(--accent);
+  font: 600 11px var(--mono);
+  white-space: nowrap;
+}
+
+.app-shell .search-scope-row > small {
+  color: var(--muted);
+  font-size: 10px;
+  opacity: .86;
+  white-space: nowrap;
+}
+
+.app-shell .replace-row {
+  gap: 9px;
+  padding: 11px 18px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  background: color-mix(in srgb, var(--accent-soft) 20%, var(--surface));
+}
+
+.app-shell .replace-row input:not([type="checkbox"]) {
+  min-height: 34px;
+  padding: 7px 10px;
+  border-color: color-mix(in srgb, var(--border) 86%, transparent);
+  border-radius: 7px;
+  background: var(--surface-raised);
+  font: 12px var(--ui-font);
+}
+
+.app-shell .replace-row label {
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.app-shell .replace-row label input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.app-shell .replace-row button {
+  min-height: 34px;
+  padding: 7px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 52%, var(--border));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--accent) 88%, var(--surface));
+  color: color-mix(in srgb, var(--app-bg) 70%, var(--ink));
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.app-shell .replace-row button:hover:not(:disabled) {
+  background: var(--accent);
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.app-shell .search-error {
+  margin: 0;
+  padding: 7px 18px;
+  border-bottom: 1px solid color-mix(in srgb, #c65d57 22%, var(--border));
+  background: color-mix(in srgb, #c65d57 8%, transparent);
+  color: color-mix(in srgb, #c65d57 78%, var(--ink));
+  font-size: 11px;
+}
+
+.app-shell .search-results {
+  max-height: min(430px, calc(100vh - 318px));
+  padding: 9px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--accent) 40%, transparent) transparent;
+}
+
+.app-shell .search-results button {
+  grid-template-columns: 60px minmax(0, 1fr) 28px;
+  gap: 13px;
+  min-height: 62px;
+  padding: 11px 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  transition: background-color .18s ease, border-color .18s ease, transform .18s ease;
+}
+
+.app-shell .search-results button:hover,
+.app-shell .search-results button.selected {
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
+  background: color-mix(in srgb, var(--accent-soft) 38%, var(--surface));
+}
+
+.app-shell .search-results button.selected {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.app-shell .search-results button:hover {
+  transform: translateX(2px);
+}
+
+.app-shell .search-results .result-kind {
+  align-self: start;
+  margin-top: 3px;
+  padding: 4px 6px;
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border));
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--accent-soft) 45%, transparent);
+  color: var(--accent);
+  font-size: 9px;
+  letter-spacing: .04em;
+  text-align: center;
+}
+
+.app-shell .search-results b {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 620;
+}
+
+.app-shell .search-results small {
+  margin-top: 5px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.app-shell .search-results button > .app-icon {
+  justify-self: end;
+  color: var(--muted);
+  transition: color .18s ease, transform .18s ease;
+}
+
+.app-shell .search-results button:hover > .app-icon,
+.app-shell .search-results button.selected > .app-icon {
+  color: var(--accent);
+  transform: translateX(2px);
+}
+
+.app-shell .empty-search {
+  display: grid;
+  min-height: 190px;
+  place-items: center;
+  padding: 44px 24px;
+  background: radial-gradient(circle at 50% 18%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 32%);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.app-shell .quick-open-dialog .empty-search {
+  min-height: 150px;
+}
+
+@media (max-width: 720px) {
+  .app-shell .search-overlay {
+    padding: 18px 12px;
+  }
+
+  .app-shell .search-dialog {
+    width: min(100%, 760px);
+    max-height: calc(100vh - 36px);
+  }
+
+  .app-shell .search-scope-row > small {
+    width: 100%;
+  }
+
+  .app-shell .search-scope-row > .search-count {
+    margin-left: 0;
+  }
+}
