@@ -11,6 +11,18 @@ vi.mock('./RegionBlock.vue', () => ({
 let unmount = () => {}
 afterEach(() => { unmount(); document.body.innerHTML = '' })
 
+async function chooseDocument(host: HTMLElement, label: string) {
+  const trigger = host.querySelector<HTMLElement>('.second-document-doc-select.arco-select-view-single')
+  expect(trigger).not.toBeNull()
+  trigger!.click()
+  await nextTick()
+  await nextTick()
+  const option = [...document.querySelectorAll<HTMLElement>('.arco-select-option')].find(item => item.textContent?.trim() === label || item.textContent?.includes(label))
+  expect(option).not.toBeUndefined()
+  option!.click()
+  await nextTick()
+}
+
 describe('second document pane', () => {
   it('navigates only the right outline, tracks its position, and updates when switching documents', async () => {
     const documents = [parseMarkdown('left.md', '# Left'), parseMarkdown('right.md', '# Right\n\n## Part\n\n### Deep'), parseMarkdown('plain.md', 'No headings')]
@@ -41,10 +53,7 @@ describe('second document pane', () => {
     viewport.dispatchEvent(new Event('scroll'))
     await nextTick()
     expect(buttons[1].getAttribute('aria-current')).toBe('location')
-    const select = host.querySelector('select')!
-    select.value = documents[2].id
-    select.dispatchEvent(new Event('change'))
-    await nextTick()
+    await chooseDocument(host, 'plain')
     expect(host.querySelector('nav[aria-label="对照文档大纲"]')).toBeNull()
     expect(host.textContent).toContain('这篇文档还没有标题。')
   })
@@ -60,12 +69,14 @@ describe('second document pane', () => {
     unmount = () => app.unmount()
 
     expect(host.textContent).toContain('Second content')
-    const select = host.querySelector('select')!
-    expect(select.selectedOptions[0].textContent).toBe('Second')
-    expect(select.title).toBe(documents[1].path)
-    expect([...select.options].map(option => option.value)).toEqual([documents[1].id, documents[2].id])
-    select.value = documents[2].id
-    select.dispatchEvent(new Event('change'))
+    await nextTick()
+    const select = host.querySelector<HTMLElement>('.second-document-doc-select.arco-select-view-single')!
+    expect(host.querySelector('.second-document-doc-select .arco-select-view-value')?.textContent?.trim()).toBe('Second')
+    expect(host.querySelector<HTMLElement>('.second-document-select')?.title).toBe(documents[1].path)
+    select.click()
+    await nextTick()
+    expect([...document.querySelectorAll('.arco-select-option')].map(option => option.textContent?.trim())).toEqual(['Second', 'Third'])
+    document.querySelector<HTMLElement>('.arco-select-option:last-child')!.click()
     await nextTick()
     expect(host.textContent).toContain('Third content')
     expect(host.textContent).not.toContain('Second content')
@@ -95,16 +106,11 @@ describe('second document pane', () => {
     const app = createApp({ render: () => h(SecondDocumentPane, { ...state, onActivate, onOpenLink }) })
     app.mount(host)
     unmount = () => app.unmount()
-    const select = host.querySelector('select')!
     host.querySelector<HTMLElement>('.reader-viewport')!.scrollTop = 240
-    select.value = documents[2].id
-    select.dispatchEvent(new Event('change'))
-    await nextTick()
+    await chooseDocument(host, 'Third')
     await nextTick()
     expect(host.querySelector<HTMLElement>('.reader-viewport')!.scrollTop).toBe(0)
-    select.value = documents[1].id
-    select.dispatchEvent(new Event('change'))
-    await nextTick()
+    await chooseDocument(host, 'Second')
     await nextTick()
     expect(host.querySelector<HTMLElement>('.reader-viewport')!.scrollTop).toBe(240)
 

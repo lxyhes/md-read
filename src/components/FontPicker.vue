@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import Select, { Option } from '@arco-design/web-vue/es/select'
+import '@arco-design/web-vue/es/select/style/css.js'
 import { fontPresets } from '../fonts'
 
 const props = withDefaults(defineProps<{
@@ -17,11 +19,16 @@ const custom = computed(() => props.modelValue && !fontPresets.some((font) => fo
   <div class="font-picker" :class="{ 'font-picker-compact': compact }">
     <label class="font-select-label">
       <span>{{ label }}</span>
-      <select :value="modelValue" :aria-label="label" @keydown.stop @change="emit('update:modelValue', ($event.target as HTMLSelectElement).value)">
-        <option value="">{{ defaultLabel }}</option>
-        <option v-for="font in fontPresets" :key="font.id" :value="font.family">{{ font.name }}</option>
-        <option v-if="custom" :value="modelValue">自定义字体</option>
-      </select>
+      <Select
+        :model-value="modelValue"
+        :aria-label="label"
+        :class="{ 'font-select-compact': compact }"
+        @update:model-value="emit('update:modelValue', $event as string)"
+      >
+        <Option value="">{{ defaultLabel }}</Option>
+        <Option v-for="font in fontPresets" :key="font.id" :value="font.family">{{ font.name }}</Option>
+        <Option v-if="custom" :value="modelValue">自定义字体</Option>
+      </Select>
     </label>
     <template v-if="!compact">
       <p class="font-picker-note">使用本机字体；未安装时自动使用同类字体。选择后立即生效并保存。</p>
@@ -47,8 +54,10 @@ const custom = computed(() => props.modelValue && !fontPresets.some((font) => fo
 .font-picker { min-width: 0; color: var(--ink); font: 12px/1.5 var(--ui-font); }
 .font-select-label { display: flex; align-items: center; gap: 12px; color: var(--muted); }
 .font-select-label > span { flex-shrink: 0; }
-.font-select-label select { min-width: 154px; max-width: 100%; padding: 8px 30px 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-raised); color: var(--ink); font: inherit; }
-.font-select-label select:focus-visible, .font-sample:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.font-select-label :deep(.arco-select) { min-width: 154px; max-width: 100%; }
+.font-select-label :deep(.arco-select-view-single) { min-height: 34px; border-color: var(--border); border-radius: 6px; background: var(--surface-raised); color: var(--ink); font: inherit; }
+.font-select-label :deep(.arco-select-view-single:focus-within) { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 15%, transparent); }
+.font-sample:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .font-picker-note { margin: 12px 0 18px; color: var(--muted); font-size: 11px; }
 .font-samples { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .font-sample { display: grid; gap: 14px; min-width: 0; padding: 15px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); color: var(--ink); text-align: left; }
@@ -65,6 +74,7 @@ const custom = computed(() => props.modelValue && !fontPresets.some((font) => fo
 .font-reading-preview p[lang="en"] { margin-top: 7px; font-size: 16px; }
 .font-picker-compact { flex-shrink: 0; }
 .font-picker-compact .font-select-label { min-width: 0; gap: 7px; font-size: 12px; }
-.font-picker-compact select { width: 118px; min-width: 118px; flex: 0 1 154px; padding: 5px 8px; }
+.font-picker-compact :deep(.arco-select) { width: 118px; min-width: 118px; flex: 0 1 154px; }
+.font-picker-compact :deep(.arco-select-view-single) { min-height: 30px; padding-inline: 8px; }
 @media (max-width: 1180px) { .font-samples { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>

@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onActivated, onDeactivated, ref, watch } from 'vue'
+import Select, { Option } from '@arco-design/web-vue/es/select'
+import '@arco-design/web-vue/es/select/style/css.js'
 import type { ReaderDocument, ReaderRegion, ThemeManifest } from '../types'
 import { findDocumentHeading } from '../documentLinks'
 import RegionBlock from './RegionBlock.vue'
@@ -87,12 +89,15 @@ function onKeydown(event: KeyboardEvent) {
     <header class="second-document-toolbar">
       <div class="second-document-identity">
         <div class="second-document-caption"><span>对照文档</span><span class="second-document-readonly">只读</span></div>
-        <div class="second-document-select">
+        <div class="second-document-select" :title="document.path">
           <AppIcon name="file" :size="15" />
-          <select :value="document.id" :title="document.path" aria-label="选择第二篇 Markdown 文档" @change="selectedId = ($event.target as HTMLSelectElement).value">
-            <option v-for="choice in choices" :key="choice.id" :value="choice.id" :title="choice.path">{{ documentLabel(choice) }}{{ choices.filter(item => documentLabel(item) === documentLabel(choice)).length > 1 ? ` · ${choice.path}` : '' }}</option>
-          </select>
-          <AppIcon name="chevron-down" :size="13" />
+          <Select
+            v-model="selectedId"
+            class="second-document-doc-select"
+            aria-label="选择第二篇 Markdown 文档"
+          >
+            <Option v-for="choice in choices" :key="choice.id" :value="choice.id">{{ documentLabel(choice) }}{{ choices.filter(item => documentLabel(item) === documentLabel(choice)).length > 1 ? ` · ${choice.path}` : '' }}</Option>
+          </Select>
         </div>
       </div>
       <div class="second-document-actions">
@@ -130,8 +135,10 @@ function onKeydown(event: KeyboardEvent) {
 .second-document-select > .app-icon { position: absolute; pointer-events: none; color: var(--muted); }
 .second-document-select > .app-icon:first-child { left: 10px; }
 .second-document-select > .app-icon:last-child { right: 10px; }
-.second-document-toolbar select { appearance: none; width: 100%; min-width: 0; min-height: 34px; padding: 6px 30px; color: var(--ink); background: transparent; border: 0; border-radius: inherit; font: 500 12px/1.5 var(--ui-font); text-overflow: ellipsis; cursor: pointer; }
-.second-document-toolbar option { color: var(--ink); background: var(--surface); }
+.second-document-doc-select { width: 100%; min-width: 0; }
+:deep(.second-document-doc-select.arco-select-view-single) { min-height: 34px; padding-inline: 30px; border: 0; border-radius: inherit; background: transparent; color: var(--ink); font: 500 12px/1.5 var(--ui-font); }
+:deep(.second-document-doc-select.arco-select-view-single .arco-select-view-value) { font: inherit; }
+:deep(.second-document-doc-select.arco-select-view-single:focus-within) { box-shadow: none; }
 .second-document-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; margin-left: auto; }
 .second-document-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 34px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--muted); font: 12px/1.5 var(--ui-font); white-space: nowrap; }
 .second-document-actions .second-document-activate { color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, transparent); }
