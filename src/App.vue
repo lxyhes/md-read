@@ -4881,7 +4881,7 @@ async function requestFullscreen() {
         <Teleport to=".app-shell">
           <div v-if="tabListOpen" class="tab-list-popover" :style="tabListPopoverStyle" role="menu" @click.stop>
             <div class="tab-list-heading"><span>已打开文档</span><small>{{ store.openDocuments.length }}</small></div>
-            <label v-if="store.openDocuments.length > 3" class="tab-list-search"><AppIcon name="search" :size="13" /><input v-model="tabSearchQuery" type="search" placeholder="搜索已打开标签…" aria-label="搜索已打开标签" /></label>
+            <Input v-if="store.openDocuments.length > 3" v-model="tabSearchQuery" class="tab-list-search" allow-clear placeholder="搜索已打开标签…" :input-attrs="{ 'aria-label': '搜索已打开标签' }"><template #prefix><AppIcon name="search" :size="13" /></template></Input>
             <div v-for="group in groupedOpenDocuments" :key="group.directory" class="tab-list-group" role="group" :aria-label="group.directory">
               <div class="tab-list-group-heading" :title="group.directory"><AppIcon name="folder" :size="13" /><span class="tab-list-group-copy"><strong>{{ folderNameOf(group.directory) }}</strong><small v-if="group.directory !== '当前工作区'">{{ group.directory }}</small></span><small class="tab-list-group-count">{{ group.documents.length }}</small></div>
               <button v-for="document in group.documents" :key="document.id" class="tab-list-item" :class="{ active: store.currentDocumentId === document.id }" type="button" role="menuitem" @click="chooseDocument(document.id); closeTabMenus()">
@@ -4968,9 +4968,9 @@ async function requestFullscreen() {
               <div class="file-location" :title="fileBrowserMode === 'tree' ? filesystemTree?.path : currentDirectory"><AppIcon name="folder" :size="15" :stroke-width="2" /><span>{{ fileBrowserMode === 'tree' ? '目录树' : currentDirectoryLabel }}</span><button class="file-tree-back" type="button" :aria-label="fileBrowserMode === 'tree' ? '切换到文档列表' : '切换到目录树'" @click="fileBrowserMode === 'tree' ? showDocumentList() : showDocumentTree()">{{ fileBrowserMode === 'tree' ? '列表' : '目录树' }}</button></div>
               <div class="file-filter-toolbar" aria-label="文件侧栏筛选">
                 <Select v-model="sidebarFilter" aria-label="文件筛选方式" class="file-filter-select"><Option value="markdown">Markdown 文件</Option><Option value="hidden">包含隐藏文件</Option><Option value="all">全部文件</Option><Option value="glob">自定义 glob</Option></Select>
-                <input v-if="sidebarFilter === 'glob'" v-model="sidebarGlob" aria-label="自定义 glob" placeholder="例如 *.md" />
+                <Input v-if="sidebarFilter === 'glob'" v-model="sidebarGlob" class="file-glob-input" allow-clear :input-attrs="{ 'aria-label': '自定义 glob' }" placeholder="例如 *.md" />
                 <Select v-model="fileSort" aria-label="文件排序方式" class="file-sort-select"><Option value="name">名称</Option><Option value="natural">自然顺序</Option><Option value="created">创建时间</Option><Option value="modified">修改时间</Option><Option value="size">文件大小</Option></Select>
-                <label v-if="fileBrowserMode === 'tree'" class="file-tree-mix"><input v-model="fileTreeMixFolders" type="checkbox" />混排</label>
+                <Checkbox v-if="fileBrowserMode === 'tree'" v-model="fileTreeMixFolders" class="file-tree-mix">混排</Checkbox>
               </div>
               <div v-if="fileBrowserMode === 'tree'" class="filesystem-tree-panel">
                 <div v-if="filesystemTree" class="filesystem-tree" :aria-label="filesystemTreeScope === 'system' ? '当前目录文档树' : '当前目录已载入文档'"><FileSystemTree :node="filesystemTree" :selected-path="filesystemTreeTarget" @toggle="toggleFilesystemNode" @open="openFilesystemTreeNode" @contextmenu="openFilesystemContextMenu" /></div>
@@ -4978,19 +4978,19 @@ async function requestFullscreen() {
               </div>
               <div v-else class="file-list-shell">
                 <div v-if="batchDeletableFiles.length" class="file-list-toolbar">
-                  <label class="file-select-all"><input type="checkbox" :checked="allFilesSelected" :indeterminate="selectedFiles.length > 0 && !allFilesSelected" aria-label="全选可移除文档" @change="toggleAllFileSelection" /><span>全选</span></label>
+                  <Checkbox class="file-select-all-arco" :model-value="allFilesSelected" :indeterminate="selectedFiles.length > 0 && !allFilesSelected" aria-label="全选可移除文档" @change="toggleAllFileSelection">全选</Checkbox>
                   <div class="file-list-actions"><span v-if="selectedFiles.length" class="file-selection-count" aria-live="polite">已选 {{ selectedFiles.length }}</span><button v-if="selectedFiles.length" type="button" class="file-batch-delete" :disabled="busyAction !== null" @click="requestDeleteFiles(selectedFiles)"><AppIcon name="trash" :size="12" />删除</button></div>
                 </div>
                 <nav class="file-list" :aria-label="sidebarFilter === 'markdown' ? '当前文件夹中的 Markdown 文件' : '当前文件夹中的文件'">
                   <div v-for="file in currentDirectoryFiles" :key="file.path" class="file-item" :class="{ active: store.currentDocumentId === file.documentId, selected: isFileSelected(file), 'is-unloaded': !file.documentId }">
-                    <label v-if="batchDeletableFiles.length && isBatchDeletableFile(file)" class="file-select" :aria-label="`选择 ${file.name}`"><input type="checkbox" :checked="isFileSelected(file)" @click.stop @change="toggleFileSelection(file)" /></label><span v-else-if="batchDeletableFiles.length" class="file-select-spacer" aria-hidden="true" />
+                    <Checkbox v-if="batchDeletableFiles.length && isBatchDeletableFile(file)" class="file-select-arco" :aria-label="`选择 ${file.name}`" :model-value="isFileSelected(file)" @click.stop @change="toggleFileSelection(file)" /><span v-else-if="batchDeletableFiles.length" class="file-select-spacer" aria-hidden="true" />
                     <button type="button" class="file-item-open" :aria-label="file.documentId ? `打开 ${file.name}` : `载入 ${file.name}`" :title="file.name" @click="openFileTreeEntry(file)" @contextmenu.prevent="openFileContextMenu($event, file)"><AppIcon name="file" :size="14" /><span class="file-item-copy"><strong>{{ file.name }}</strong><small>{{ fileStatus(file) }}</small></span><i v-if="store.currentDocumentId === file.documentId" class="file-active-mark" /></button><IconButton v-if="isDeletableFile(file)" class="file-delete" icon="trash" size="sm" :label="`删除 ${file.name}`" :disabled="busyAction !== null" @click="deleteFile(file)" />
                   </div>
                 </nav>
               </div>
             </div>
             <div v-else class="outline-view">
-              <label class="outline-search"><AppIcon name="search" :size="13" /><input v-model="outlineQuery" type="search" placeholder="筛选章节…" aria-label="筛选章节" /><button v-if="outlineQuery" type="button" aria-label="清除章节筛选" @click="outlineQuery = ''"><AppIcon name="close" :size="11" /></button></label>
+              <Input v-model="outlineQuery" class="outline-search" allow-clear placeholder="筛选章节…" :input-attrs="{ 'aria-label': '筛选章节' }"><template #prefix><AppIcon name="search" :size="13" /></template></Input>
               <div v-if="store.currentDocument?.headings.length" class="outline-actions" aria-label="大纲展开控制">
                 <div class="outline-action-group">
                   <button type="button" title="展开全部章节" @click="setOutlineExpansion(true)"><AppIcon name="chevron-down" :size="11" />全部展开</button>
@@ -5241,7 +5241,7 @@ async function requestFullscreen() {
       <div class="search-dialog quick-open-dialog" role="dialog" aria-modal="true" aria-label="快速打开文件">
         <div class="search-input-row">
           <AppIcon name="search" :size="17" />
-          <input v-model="quickOpenQuery" autofocus placeholder="按文件名或文件夹路径快速打开…" aria-label="按文件名或路径快速打开" @keydown.esc="quickOpenOpen = false" />
+          <Input v-model="quickOpenQuery" class="quick-open-input" allow-clear :input-attrs="{ autofocus: true, 'aria-label': '按文件名或路径快速打开' }" placeholder="按文件名或文件夹路径快速打开…" @keydown.esc="quickOpenOpen = false" />
           <kbd>ESC</kbd>
         </div>
         <div class="search-scope-row quick-open-meta">

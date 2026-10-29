@@ -3498,6 +3498,40 @@ body .app-shell.is-editor-studio .reader-layout {
   background: transparent;
 }
 
+.app-shell .quick-open-input {
+  min-width: 0;
+  flex: 1;
+  border-color: transparent;
+  background: transparent;
+}
+
+.app-shell :is(.tab-list-search, .outline-search).arco-input-wrapper {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0 8px;
+}
+
+.app-shell .file-glob-input {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.app-shell .file-filter-toolbar .arco-input {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.app-shell .file-select-arco {
+  flex: 0 0 22px;
+  justify-content: center;
+  width: 22px;
+  margin: 0;
+  padding: 0;
+}
+
 .app-shell .global-replace-input {
   min-width: 0;
   flex: 1;

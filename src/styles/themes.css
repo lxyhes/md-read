@@ -2885,7 +2885,6 @@ body.is-resizing-outline * {
 .file-filter-toolbar .file-sort-select { flex: 0 0 92px; min-width: 92px; }
 .file-filter-toolbar input { flex: 1 1 76px; }
 .file-tree-mix { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 4px; padding: 0 2px; color: var(--muted); font: 9px var(--ui-font); white-space: nowrap; }
-.file-tree-mix input { width: 12px; min-width: 12px; height: 12px; margin: 0; accent-color: var(--accent); }
 .table-alignment-actions { display: flex; align-items: center; gap: 5px; margin: 0 0 10px; color: var(--muted); font: 10px var(--ui-font); }
 .table-alignment-actions button { min-width: 26px; padding: 4px 7px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface-raised); color: var(--ink); font: inherit; }
 .table-column-selection { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin: 0 0 10px; color: var(--muted); font: 10px var(--ui-font); }

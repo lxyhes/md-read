@@ -995,59 +995,6 @@ html, body, #app { background: var(--app-bg, #070d22); }
 .file-list-toolbar:has(input:indeterminate) {
   color: var(--ink);
 }
-.file-select-all,
-.file-select {
-  display: inline-flex;
-  align-items: center;
-  cursor: var(--moyue-cursor-pointer);
-}
-.file-select-all {
-  gap: 6px;
-}
-.file-select-all input,
-.file-select input {
-  position: relative;
-  appearance: none;
-  width: 14px;
-  height: 14px;
-  margin: 0;
-  border: 1px solid color-mix(in srgb, var(--muted) 62%, var(--border));
-  border-radius: 3px;
-  background: color-mix(in srgb, var(--surface-raised) 60%, transparent);
-  transition: border-color .18s ease, background-color .18s ease, box-shadow .18s ease;
-}
-.file-select-all input:hover,
-.file-select input:hover {
-  border-color: var(--accent);
-}
-.file-select-all input:checked,
-.file-select input:checked,
-.file-select-all input:indeterminate {
-  border-color: var(--accent);
-  background: var(--accent);
-}
-.file-select-all input:checked::after,
-.file-select input:checked::after {
-  position: absolute;
-  top: 1px;
-  left: 3px;
-  width: 5px;
-  height: 8px;
-  border: solid var(--surface);
-  border-width: 0 1.5px 1.5px 0;
-  content: "";
-  transform: rotate(45deg);
-}
-.file-select-all input:indeterminate::after {
-  position: absolute;
-  top: 6px;
-  left: 3px;
-  width: 6px;
-  height: 1.5px;
-  border-radius: 2px;
-  background: var(--surface);
-  content: "";
-}
 .file-list-actions {
   display: flex;
   align-items: center;
@@ -1074,17 +1021,9 @@ html, body, #app { background: var(--app-bg, #070d22); }
   cursor: not-allowed;
   opacity: .45;
 }
-.file-batch-delete:focus-visible,
-.file-select-all:has(input:focus-visible),
-.file-select:has(input:focus-visible) {
+.file-batch-delete:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
   outline-offset: 2px;
-}
-.file-select {
-  width: 15px;
-  flex: 0 0 15px;
-  justify-content: center;
-  margin-top: 1px;
 }
 .file-select-spacer {
   width: 15px;
