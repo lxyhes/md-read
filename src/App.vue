@@ -3321,6 +3321,9 @@ function onTabOutsideClick(event: MouseEvent) {
   const target = event.target as HTMLElement | null
   if (!target?.closest('.reader-tab-actions, .tab-list-popover, .tab-context-menu, .file-context-menu')) closeTabMenus()
   if (!target?.closest('.editor-context-menu')) closeEditorContextMenu()
+  document.querySelectorAll<HTMLDetailsElement>('.reader-more-menu[open], .library-more-menu[open]').forEach((menu) => {
+    if (!target || !menu.contains(target)) menu.open = false
+  })
 }
 
 async function boot() {
@@ -5001,7 +5004,6 @@ async function requestFullscreen() {
                     <div class="reader-more-popover">
                       <FontPicker compact label="正文字体" :model-value="store.readerSettings.fontFamily" :fallback-family="defaultTokens.reader.fontFamily" @update:model-value="store.updateSettings({ fontFamily: $event })" />
                       <button type="button" @click="toggleCleanMode">纯净阅读</button>
-                      <button type="button" :class="{ active: !outlinePanelCollapsed }" @click="toggleOutlinePanel">{{ outlinePanelCollapsed ? '显示大纲' : '隐藏大纲' }}</button>
                       <button type="button" :class="{ active: contextPanelOpen }" @click="contextPanelOpen = !contextPanelOpen">{{ contextPanelOpen ? '收起阅读信息' : '查看阅读信息' }}</button>
                       <button type="button" @click="wordCountOpen = true">字数统计</button>
                       <button type="button" @click="exportDocument('markdown')">导出 Markdown</button>

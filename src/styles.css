@@ -9505,6 +9505,12 @@ a:active > .app-icon-vector { transform: scale(.92); }
   color: var(--ink);
   font: 12px/1.45 var(--ui-font);
 }
+.app-shell .reader-more-popover button,
+.app-shell .reader-more-popover .font-select-label,
+.app-shell .reader-more-popover .font-picker-compact select {
+  font-size: 13px;
+  font-weight: 500;
+}
 .app-shell :is(.reader-more-popover, .library-more-popover, .tab-context-menu, .file-context-menu, .editor-context-menu, .editor-emoji-menu, .editor-export-menu) button:hover:not(:disabled) {
   background: var(--accent-soft);
   color: var(--ink);
@@ -10906,12 +10912,13 @@ html:has(.reader-page), body:has(.reader-page), #app:has(.reader-page) { min-wid
   gap: 3px;
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-edit-actions button,
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-edit-actions > button,
 .app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-more-menu summary {
   min-height: 28px;
   padding: 4px 7px;
   border-radius: 6px;
-  font-size: 10px;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-display-switch,
@@ -10924,7 +10931,8 @@ html:has(.reader-page), body:has(.reader-page), #app:has(.reader-page) { min-wid
 .app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-navigation button {
   min-height: 26px;
   padding: 4px 6px;
-  font-size: 10px;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-navigation {
@@ -10971,6 +10979,56 @@ html:has(.reader-page), body:has(.reader-page), #app:has(.reader-page) { min-wid
   background: transparent;
 }
 
+/* A collapsed outline keeps a small, discoverable rail. The old display:none
+   rule removed the only expand button together with the panel. */
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-layout.outline-panel-collapsed:not(.context-open):not(.focus-layout):not(.clean-layout) {
+  grid-template-columns: 44px minmax(0, 1fr) !important;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-layout.outline-panel-collapsed.context-open:not(.focus-layout):not(.clean-layout) {
+  grid-template-columns: 44px minmax(0, 1fr) 260px !important;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-layout > .outline-panel.is-collapsed {
+  display: flex;
+  box-sizing: border-box;
+  width: 44px;
+  min-width: 44px;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 8px 4px !important;
+  border-right: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .outline-panel.is-collapsed .outline-panel-expand {
+  display: inline-flex;
+  width: 36px;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 2px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font: 10px/1.25 var(--ui-font);
+  writing-mode: vertical-rl;
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .outline-panel.is-collapsed .outline-panel-expand:hover,
+.app-shell:not(.is-editor-studio):not(.is-focus) .outline-panel.is-collapsed .outline-panel-expand:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--accent);
+}
+
+.app-shell:not(.is-editor-studio):not(.is-focus) .outline-panel.is-collapsed .outline-panel-expand .app-icon {
+  flex: 0 0 auto;
+  transform: rotate(180deg);
+}
+
 @media (max-width: 1180px) {
   .app-shell:not(.is-editor-studio):not(.is-focus) .topbar > .command-trigger {
     flex-basis: 34px;
@@ -10982,4 +11040,5 @@ html:has(.reader-page), body:has(.reader-page), #app:has(.reader-page) { min-wid
   .app-shell:not(.is-editor-studio):not(.is-focus) .topbar > .command-trigger > :is(span, kbd) {
     display: none;
   }
+
 }
