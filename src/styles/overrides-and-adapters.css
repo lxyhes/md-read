@@ -1684,6 +1684,52 @@ a:active > .app-icon-vector { transform: scale(.92); }
   background: transparent;
   color: var(--muted);
 }
+
+/* Arco hover and active styles must follow the selected Moyue theme. */
+:is(.app-shell, .arco-modal, .arco-dropdown) .arco-btn.arco-btn-primary:not(.arco-btn-status-danger):not(.arco-btn-status-warning):not(.arco-btn-status-success) {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--app-bg);
+}
+:is(.app-shell, .arco-modal, .arco-dropdown) .arco-btn.arco-btn-text:not(.arco-btn-status-danger):not(.arco-btn-status-warning):not(.arco-btn-status-success) {
+  color: var(--muted);
+}
+:is(.app-shell, .arco-modal, .arco-dropdown) .arco-btn.icon-button.active {
+  color: var(--accent);
+}
+:is(.app-shell, .arco-modal, .arco-dropdown) .arco-btn-primary:not(.arco-btn-status-danger):not(.arco-btn-status-warning):not(.arco-btn-status-success):not(:disabled):hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 85%, var(--ink));
+  color: var(--app-bg);
+}
+:is(.app-shell, .arco-modal, .arco-dropdown) .arco-btn-primary:not(.arco-btn-status-danger):not(.arco-btn-status-warning):not(.arco-btn-status-success):not(:disabled):active {
+  background: color-mix(in srgb, var(--accent) 72%, var(--ink));
+}
+:is(.app-shell, .arco-modal, .arco-dropdown) :is(.arco-btn-secondary, .arco-btn-outline, .arco-btn-dashed, .arco-btn-text):not(.arco-btn-status-danger):not(.arco-btn-status-warning):not(.arco-btn-status-success):not(:disabled):hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+:is(.app-shell, .arco-modal, .arco-dropdown) :is(.arco-btn-outline, .arco-btn-dashed):not(.arco-btn-status-danger):not(.arco-btn-status-warning):not(.arco-btn-status-success) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+:is(.app-shell, .arco-modal, .arco-dropdown) .arco-btn-primary.arco-btn-status-danger {
+  border-color: rgb(var(--danger-6));
+  background: rgb(var(--danger-6));
+  color: #fff;
+}
+:is(.app-shell, .arco-modal, .arco-dropdown) .arco-btn-primary.arco-btn-status-danger:not(:disabled):hover {
+  border-color: rgb(var(--danger-5));
+  background: rgb(var(--danger-5));
+}
+:is(.app-shell, .arco-modal, .arco-dropdown) .arco-btn-text.arco-btn-status-danger {
+  color: rgb(var(--danger-6));
+}
+:is(.app-shell, .arco-modal, .arco-dropdown) .arco-btn-text.arco-btn-status-danger:not(:disabled):hover {
+  background: rgba(var(--danger-6), .1);
+  color: rgb(var(--danger-6));
+}
 .app-shell :is(.segmented-tabs, .search-scope-tabs) button {
   min-height: 34px;
   font: 12px/1.35 var(--ui-font);
@@ -1982,7 +2028,7 @@ a:active > .app-icon-vector { transform: scale(.92); }
 }
 .app-shell .reader-content .code-frame .code-toolbar {
   min-height: 38px;
-  padding: 0 10px;
+  padding: 5px 10px;
   font: 600 12px/1.2 var(--ui-font);
   letter-spacing: 0;
 }
@@ -3550,6 +3596,16 @@ body .app-shell.is-editor-studio .reader-layout {
   width: 22px;
   margin: 0;
   padding: 0;
+}
+
+.app-shell .viewer-shell .arco-btn-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.app-shell .viewer-footer-actions .arco-btn-status-danger {
+  color: rgb(var(--danger-6));
 }
 
 .app-shell .global-replace-input {

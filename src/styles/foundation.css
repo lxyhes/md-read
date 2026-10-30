@@ -625,9 +625,8 @@ html, body, #app { background: var(--app-bg, #070d22); }
 .notes-list-empty { padding: 25px 9px; color: var(--muted); font: 10px/1.6 var(--ui-font); text-align: center; }
 .note-editor { display: flex; flex-direction: column; padding: 24px 28px; }
 .note-editor-heading, .note-editor-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.note-title-input { width: 100%; margin-top: 27px; padding: 0 0 13px; border: 0; border-bottom: 1px solid var(--border); outline: 0; background: transparent; color: var(--ink); font: 28px var(--ui-font); }
-.note-title-input::placeholder, .note-body-input::placeholder { color: var(--muted); opacity: .7; }
-.note-body-input { flex: 1; min-height: 300px; margin-top: 20px; resize: vertical; border: 0; outline: 0; background: transparent; color: var(--ink); font: 15px/1.85 var(--ui-font); }
+.app-shell .note-title-input.arco-input-wrapper { width: 100%; margin-top: 24px; padding: 8px 12px; font: 24px/1.5 var(--ui-font); }
+.app-shell .note-body-input.arco-textarea-wrapper { flex: 1; margin: 16px 0; padding: 10px 12px; font: 15px/1.85 var(--ui-font); }
 .note-editor-footer { padding-top: 14px; border-top: 1px solid var(--border); color: var(--muted); font: 10px var(--ui-font); }
 .note-empty { margin: 0; min-height: 100%; }
 @media (max-width: 850px) {

@@ -4873,8 +4873,24 @@ async function requestFullscreen() {
       </section>
 
       <section v-else-if="view === 'notes'" class="page notes-page">
-        <div class="page-heading"><div><p class="section-kicker">我的空间</p><h1>记下此刻，<br /><em>留给以后。</em></h1><p class="collection-intro">个人笔记独立于 Markdown 文件，适合放下灵感、摘录和下一步。</p></div><button class="primary-button" type="button" @click="createPersonalNote"><AppIcon name="plus" :size="14" />新建笔记</button></div>
-        <div class="notes-layout"><aside class="notes-list"><div class="notes-list-heading"><strong>全部笔记</strong><span>{{ personalNotes.length }}</span></div><button v-for="note in sortedPersonalNotes" :key="note.id" class="note-list-item" :class="{ active: note.id === selectedNoteId }" type="button" @click="selectPersonalNote(note)"><strong>{{ note.title }}</strong><small>{{ note.body.trim() || '还没有内容' }}</small><time>{{ new Date(note.updatedAt).toLocaleDateString('zh-CN') }}</time></button><div v-if="!personalNotes.length" class="notes-list-empty">点击右上角新建第一条笔记。</div></aside><section v-if="activePersonalNote" class="note-editor"><div class="note-editor-heading"><span class="section-kicker">正在编辑</span><button class="text-button" type="button" @click="deletePersonalNote"><AppIcon name="trash" :size="13" />删除</button></div><input v-model="noteDraftTitle" class="note-title-input" aria-label="笔记标题" placeholder="笔记标题" /><textarea v-model="noteDraftBody" class="note-body-input" aria-label="笔记内容" placeholder="写下你的想法…" /><div class="note-editor-footer"><span>只保存在本机</span><button class="primary-button" type="button" @click="savePersonalNote"><AppIcon name="check" :size="14" />保存笔记</button></div></section><div v-else class="collection-empty note-empty"><AppIcon name="note" :size="24" /><strong>还没有笔记</strong><span>新建一条，把脑中的想法先放下来。</span><button class="primary-button" type="button" @click="createPersonalNote">新建笔记</button></div></div>
+        <div class="page-heading"><div><p class="section-kicker">我的空间</p><h1>记下此刻，<br /><em>留给以后。</em></h1><p class="collection-intro">个人笔记独立于 Markdown 文件，适合放下灵感、摘录和下一步。</p></div><Button class="primary-button" type="primary" @click="createPersonalNote"><template #icon><AppIcon name="plus" :size="14" /></template>新建笔记</Button></div>
+        <div class="notes-layout">
+          <aside class="notes-list">
+            <div class="notes-list-heading"><strong>全部笔记</strong><span>{{ personalNotes.length }}</span></div>
+            <button v-for="note in sortedPersonalNotes" :key="note.id" class="note-list-item" :class="{ active: note.id === selectedNoteId }" type="button" @click="selectPersonalNote(note)"><strong>{{ note.title }}</strong><small>{{ note.body.trim() || '还没有内容' }}</small><time>{{ new Date(note.updatedAt).toLocaleDateString('zh-CN') }}</time></button>
+            <div v-if="!personalNotes.length" class="notes-list-empty">点击右上角新建第一条笔记。</div>
+          </aside>
+          <section v-if="activePersonalNote" class="note-editor">
+            <div class="note-editor-heading">
+              <span class="section-kicker">正在编辑</span>
+              <Button type="text" status="danger" @click="deletePersonalNote"><template #icon><AppIcon name="trash" :size="13" /></template>删除</Button>
+            </div>
+            <Input v-model="noteDraftTitle" class="note-title-input" placeholder="笔记标题" :input-attrs="{ 'aria-label': '笔记标题' }" />
+            <Textarea v-model="noteDraftBody" class="note-body-input" :auto-size="{ minRows: 12 }" placeholder="写下你的想法…" :textarea-attrs="{ 'aria-label': '笔记内容' }" />
+            <div class="note-editor-footer"><span>只保存在本机</span><Button class="primary-button" type="primary" @click="savePersonalNote"><template #icon><AppIcon name="check" :size="14" /></template>保存笔记</Button></div>
+          </section>
+          <div v-else class="collection-empty note-empty"><AppIcon name="note" :size="24" /><strong>还没有笔记</strong><span>新建一条，把脑中的想法先放下来。</span><Button class="primary-button" type="primary" @click="createPersonalNote">新建笔记</Button></div>
+        </div>
       </section>
 
       <section v-else-if="view === 'reader'" class="reader-page">
@@ -4938,7 +4954,7 @@ async function requestFullscreen() {
             <div class="file-properties-dialog" role="dialog" aria-modal="true" aria-label="文件属性">
               <div class="file-properties-heading"><div><span class="section-kicker">文件信息</span><h2>{{ fileProperties.name }}</h2></div><IconButton icon="close" size="sm" label="关闭文件属性" @click="fileProperties = null" /></div>
               <dl class="file-properties-list"><div><dt>位置</dt><dd>{{ fileProperties.path }}</dd></div><div><dt>类型</dt><dd>{{ fileProperties.isDirectory ? '文件夹' : 'Markdown 文档' }}</dd></div><div><dt>状态</dt><dd>{{ fileStatus(fileProperties) }}</dd></div><div><dt>当前目录</dt><dd>{{ contextDirectoryPath(fileProperties) || '当前工作区' }}</dd></div></dl>
-              <div class="file-properties-actions"><button class="ghost-button" type="button" @click="fileProperties = null">关闭</button><button class="primary-button" type="button" @click="copyFilePropertiesPath"><AppIcon name="copy" :size="13" />复制文件路径</button></div>
+              <div class="file-properties-actions"><Button class="ghost-button" type="secondary" @click="fileProperties = null">关闭</Button><Button class="primary-button" type="primary" @click="copyFilePropertiesPath"><template #icon><AppIcon name="copy" :size="13" /></template>复制文件路径</Button></div>
             </div>
           </div>
         </Teleport>
@@ -4948,7 +4964,7 @@ async function requestFullscreen() {
               <div class="file-properties-heading"><div><span class="section-kicker">移除文件</span><h2 id="delete-file-title">从阅读空间移除？</h2></div><IconButton icon="close" size="sm" label="取消移除" @click="deleteConfirmation = null" /></div>
               <p v-if="deleteConfirmation.files.length === 1" class="file-delete-message">确定从 Moyue 阅读空间移除“{{ deleteConfirmation.files[0].name }}”？不会删除本地文件。</p>
               <p v-else class="file-delete-message">确定从 Moyue 阅读空间移除 {{ deleteConfirmationSummary }}？不会删除本地文件。</p>
-              <div class="file-properties-actions"><button class="ghost-button" type="button" @click="deleteConfirmation = null">取消</button><button class="primary-button file-delete-confirm" type="button" @click="confirmDeleteFile">确认移除</button></div>
+              <div class="file-properties-actions"><Button class="ghost-button" type="secondary" @click="deleteConfirmation = null">取消</Button><Button type="primary" status="danger" @click="confirmDeleteFile">确认移除</Button></div>
             </div>
           </div>
         </Teleport>
@@ -5211,7 +5227,7 @@ async function requestFullscreen() {
         <div v-if="store.mode === 'region-focus'" class="focus-hud" role="status"><span v-if="focusPosition" class="focus-hud-position">{{ focusPosition }}</span><span class="focus-hud-shortcut"><kbd>↑</kbd><kbd>↓</kbd>切换</span><button type="button" @click="clearRegionFocus"><kbd>Esc</kbd>退出聚焦</button></div>
         <div v-if="store.mode === 'clean'" class="clean-mode-hud"><span><AppIcon name="eye" :size="13" />纯净阅读</span><button type="button" @click="toggleCleanMode">退出 <kbd>Esc</kbd></button></div>
         <div v-if="selectionToolbar" class="selection-toolbar"><span class="selection-label">{{ selectionToolbar.text.slice(0, 28) }}{{ selectionToolbar.text.length > 28 ? '…' : '' }}</span><button type="button" @click="highlightSelection">{{ selectionIsHighlighted() ? '取消高亮' : '高亮' }}</button><button type="button" @click="beginAnnotation">批注</button><button type="button" @click="searchSelection">搜索</button><button type="button" @click="assist('translate')">翻译</button><button type="button" @click="copySelectionMarkdown">复制 Markdown</button><button type="button" @click="copySelectionHtml">复制 HTML</button><button type="button" @click="copySelectionMathMl">复制 MathML</button><button type="button" @click="copySelection">复制纯文本</button></div>
-        <div v-if="wordCountOpen && store.currentDocument" class="overlay file-properties-overlay" @click.self="wordCountOpen = false"><div class="file-properties-dialog" role="dialog" aria-modal="true" aria-labelledby="word-count-title"><div class="file-properties-heading"><div><span class="section-kicker">文档统计</span><h2 id="word-count-title">{{ displayTitle(store.currentDocument.title) }}</h2></div><IconButton icon="close" size="sm" label="关闭字数统计" @click="wordCountOpen = false" /></div><dl class="file-properties-list"><div><dt>正文字符</dt><dd>{{ wordCountStats.characters }}</dd></div><div><dt>中英文词</dt><dd>{{ wordCountStats.words }}</dd></div><div><dt>源文件行</dt><dd>{{ wordCountStats.lines }}</dd></div><div><dt>正文块</dt><dd>{{ wordCountStats.blocks }}</dd></div><div><dt>标题</dt><dd>{{ wordCountStats.headings }}</dd></div></dl><div class="file-properties-actions"><button class="ghost-button" type="button" @click="wordCountOpen = false">完成</button></div></div></div>
+        <div v-if="wordCountOpen && store.currentDocument" class="overlay file-properties-overlay" @click.self="wordCountOpen = false"><div class="file-properties-dialog" role="dialog" aria-modal="true" aria-labelledby="word-count-title"><div class="file-properties-heading"><div><span class="section-kicker">文档统计</span><h2 id="word-count-title">{{ displayTitle(store.currentDocument.title) }}</h2></div><IconButton icon="close" size="sm" label="关闭字数统计" @click="wordCountOpen = false" /></div><dl class="file-properties-list"><div><dt>正文字符</dt><dd>{{ wordCountStats.characters }}</dd></div><div><dt>中英文词</dt><dd>{{ wordCountStats.words }}</dd></div><div><dt>源文件行</dt><dd>{{ wordCountStats.lines }}</dd></div><div><dt>正文块</dt><dd>{{ wordCountStats.blocks }}</dd></div><div><dt>标题</dt><dd>{{ wordCountStats.headings }}</dd></div></dl><div class="file-properties-actions"><Button class="ghost-button" type="secondary" @click="wordCountOpen = false">完成</Button></div></div></div>
       </section>
 
       <ThemeCenter v-else-if="view === 'themes'" :themes="store.themes" :active-theme-id="store.activeThemeId" :active-theme="store.activeTheme" @apply="applyReaderTheme" @install="store.installTheme" @notify="notify" />
@@ -5331,11 +5347,11 @@ async function requestFullscreen() {
             <small>{{ viewerSubtitle(viewer.type, viewer.region) }}</small>
           </div>
           <div class="viewer-actions">
-            <button v-if="viewer.type === 'mermaid' && viewerTab === 'preview'" class="viewer-fit-button" type="button" title="适应窗口" @click="fitViewer"><AppIcon name="expand" :size="13" />适应</button>
+            <Button v-if="viewer.type === 'mermaid' && viewerTab === 'preview'" class="viewer-fit-button" type="text" size="small" title="适应窗口" @click="fitViewer"><AppIcon name="expand" :size="13" />适应</Button>
             <div v-if="viewerCanZoom" class="viewer-zoom-group">
               <IconButton icon="minus" size="sm" variant="surface" label="缩小" @click="setViewerZoom(viewerZoom - .1)" />
-              <input v-if="viewerTab === 'preview'" v-model.number="viewerZoom" class="viewer-zoom-slider" type="range" min=".1" max="3" step=".05" :aria-label="viewer.type === 'image' ? '图片缩放' : '图表缩放'" />
-              <button class="viewer-zoom-value" type="button" title="还原到 100%" @click="resetViewerView">{{ Math.round(viewerZoom * 100) }}%</button>
+              <Slider v-if="viewerTab === 'preview'" class="viewer-zoom-slider" :model-value="viewerZoom" :min=".1" :max="3" :step=".05" :format-tooltip="(value: number) => `${Math.round(value * 100)}%`" :aria-label="viewer.type === 'image' ? '图片缩放' : '图表缩放'" @update:model-value="setViewerZoom(Number($event))" />
+              <Button class="viewer-zoom-value" type="text" size="small" title="还原到 100%" @click="resetViewerView">{{ Math.round(viewerZoom * 100) }}%</Button>
               <IconButton icon="plus" size="sm" variant="surface" label="放大" @click="setViewerZoom(viewerZoom + .1)" />
             </div>
             <span class="viewer-action-divider" />
@@ -5344,15 +5360,15 @@ async function requestFullscreen() {
           </div>
         </header>
         <nav v-if="viewer.type === 'mermaid'" class="viewer-tabs" aria-label="图表查看方式">
-          <button type="button" :class="{ active: viewerTab === 'preview' }" @click="viewerTab = 'preview'">图表预览</button>
-          <button type="button" :class="{ active: viewerTab === 'source' }" @click="viewerTab = 'source'">源代码</button>
-          <button type="button" :class="{ active: viewerTab === 'data' }" @click="viewerTab = 'data'">结构</button>
+          <Button type="text" size="small" :class="{ active: viewerTab === 'preview' }" @click="viewerTab = 'preview'">图表预览</Button>
+          <Button type="text" size="small" :class="{ active: viewerTab === 'source' }" @click="viewerTab = 'source'">源代码</Button>
+          <Button type="text" size="small" :class="{ active: viewerTab === 'data' }" @click="viewerTab = 'data'">结构</Button>
         </nav>
         <div ref="viewerStage" class="viewer-stage" :class="{ 'is-pan-enabled': viewerCanPan, 'is-dragging': viewerDragging }" :style="viewerStageStyle" @wheel="onViewerWheel" @pointerdown="onViewerPointerDown" @pointermove="onViewerPointerMove" @pointerup="onViewerPointerUp" @pointercancel="onViewerPointerUp" @dblclick="onViewerDoubleClick">
           <TreeDiagram v-if="viewer.type === 'tree' && activeViewerTree" :node="activeViewerTree" root @open-link="openExternalLink" />
           <MermaidBlock v-else-if="viewer.type === 'mermaid' && viewerTab === 'preview'" :code="String(viewer.region.metadata?.code ?? viewer.region.textContent)" :native-labels="Boolean(viewer.region.metadata?.autoDiagram)" large @rendered="fitViewer" />
           <div v-else-if="viewer.type === 'mermaid' && viewerTab === 'source'" class="viewer-source-panel">
-            <div class="viewer-source-toolbar"><span>Mermaid 源码</span><button type="button" @click="copyViewerSource"><AppIcon name="copy" :size="13" />复制源码</button></div>
+            <div class="viewer-source-toolbar"><span>Mermaid 源码</span><Button type="text" size="small" @click="copyViewerSource"><AppIcon name="copy" :size="13" />复制源码</Button></div>
             <pre class="viewer-source">{{ mermaidSource() }}</pre>
           </div>
           <div v-else-if="viewer.type === 'mermaid'" class="viewer-source-panel">
@@ -5366,14 +5382,14 @@ async function requestFullscreen() {
         <footer class="viewer-footer">
           <div class="viewer-footer-hint"><kbd>ESC</kbd><span>{{ viewerCanPan ? (viewer.type === 'image' ? '滚轮缩放 · 拖动查看 · 双击还原' : '滚轮缩放 · 拖动查看 · 双击还原 · +/- 调整') : '返回正文' }}</span></div>
           <div class="viewer-footer-actions">
-            <button v-if="viewer.type === 'mermaid'" type="button" @click="copyViewerSource"><AppIcon name="copy" :size="14" />复制源码</button>
-            <button v-if="viewer.type === 'mermaid' && viewerTab === 'preview'" type="button" @click="copyViewerHtml"><AppIcon name="copy" :size="14" />复制 HTML</button>
-            <button v-if="viewer.type === 'mermaid'" type="button" @click="exportViewer('svg')"><AppIcon name="download" :size="14" />导出 SVG</button>
-            <button v-if="viewer.type === 'mermaid'" type="button" @click="exportViewer('png')"><AppIcon name="download" :size="14" />导出 PNG</button>
-            <button v-if="viewer.type === 'mermaid'" type="button" @click="copyRegionAsImage(viewer.region)"><AppIcon name="copy" :size="14" />复制为图片</button>
-            <button v-if="viewer.type === 'mermaid'" class="danger-button" type="button" @click="deleteViewerDiagram">删除图表</button>
-            <button v-if="viewer.type === 'code' || viewer.type === 'tree' || viewer.type === 'table'" type="button" @click="exportViewer()"><AppIcon name="download" :size="14" />导出文本</button>
-            <button v-if="viewer.type === 'table'" type="button" @click="openTableEditor(viewer.region)">编辑表格</button>
+            <Button v-if="viewer.type === 'mermaid'" type="text" size="small" @click="copyViewerSource"><AppIcon name="copy" :size="14" />复制源码</Button>
+            <Button v-if="viewer.type === 'mermaid' && viewerTab === 'preview'" type="text" size="small" @click="copyViewerHtml"><AppIcon name="copy" :size="14" />复制 HTML</Button>
+            <Button v-if="viewer.type === 'mermaid'" type="text" size="small" @click="exportViewer('svg')"><AppIcon name="download" :size="14" />导出 SVG</Button>
+            <Button v-if="viewer.type === 'mermaid'" type="text" size="small" @click="exportViewer('png')"><AppIcon name="download" :size="14" />导出 PNG</Button>
+            <Button v-if="viewer.type === 'mermaid'" type="text" size="small" @click="copyRegionAsImage(viewer.region)"><AppIcon name="copy" :size="14" />复制为图片</Button>
+            <Button v-if="viewer.type === 'mermaid'" status="danger" type="text" size="small" @click="deleteViewerDiagram">删除图表</Button>
+            <Button v-if="viewer.type === 'code' || viewer.type === 'tree' || viewer.type === 'table'" type="text" size="small" @click="exportViewer()"><AppIcon name="download" :size="14" />导出文本</Button>
+            <Button v-if="viewer.type === 'table'" type="text" size="small" @click="openTableEditor(viewer.region)">编辑表格</Button>
           </div>
         </footer>
       </div>
