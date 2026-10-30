@@ -519,19 +519,44 @@ fn remote_image_referer(url: &reqwest::Url) -> Option<&'static str> {
     if host.ends_with(".xhscdn.com") || host == "ci.xiaohongshu.com" {
         return Some("https://www.xiaohongshu.com/");
     }
+    if is_quark_image_url(url) {
+        return Some("https://pan.quark.cn/");
+    }
     None
+}
+
+fn is_quark_image_host(host: &str) -> bool {
+    let Some(prefix) = host.strip_suffix(".drive.quark.cn") else { return false };
+    prefix == "img-view"
+        || prefix.strip_prefix("img-view-").is_some_and(|suffix| {
+            !suffix.is_empty() && suffix.chars().all(|character| character.is_ascii_alphanumeric() || character == '-')
+        })
+}
+
+fn is_quark_image_url(url: &reqwest::Url) -> bool {
+    url.host_str().is_some_and(|host| is_quark_image_host(&host.to_ascii_lowercase()))
+}
+
+fn is_supported_remote_image(url: &reqwest::Url) -> bool {
+    let Some(host) = url.host_str() else { return false };
+    let host = host.to_ascii_lowercase();
+    host == "mmbiz.qpic.cn"
+        || host.ends_with(".xhscdn.com")
+        || host == "ci.xiaohongshu.com"
+        || is_quark_image_host(&host)
 }
 
 #[tauri::command]
 async fn read_remote_image(url: String) -> Result<RemoteImage, String> {
     let parsed = reqwest::Url::parse(url.trim()).map_err(|error| format!("图片地址无效：{error}"))?;
-    let referer = remote_image_referer(&parsed).ok_or_else(|| "只允许读取公众号和小红书图片".to_string())?;
-    if !matches!(parsed.scheme(), "http" | "https") {
+    if !matches!(parsed.scheme(), "http" | "https") || !is_supported_remote_image(&parsed) {
         return Err("只允许通过 HTTP 或 HTTPS 读取图片".into());
     }
+    let referer = remote_image_referer(&parsed);
+    let is_quark = is_quark_image_url(&parsed);
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::custom(|attempt| {
-            if remote_image_referer(attempt.url()).is_some() {
+            if is_supported_remote_image(attempt.url()) {
                 attempt.follow()
             } else {
                 attempt.stop()
@@ -541,14 +566,27 @@ async fn read_remote_image(url: String) -> Result<RemoteImage, String> {
         .user_agent("Mozilla/5.0 MoyueReader/0.1")
         .build()
         .map_err(|error| format!("创建图片请求失败：{error}"))?;
-    let response = client
+    let mut request = client
         .get(parsed)
-        .header(reqwest::header::REFERER, referer)
-        .header(reqwest::header::ACCEPT, "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
+        .header(reqwest::header::ACCEPT, "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8");
+    if let Some(referer) = referer {
+        request = request.header(reqwest::header::REFERER, referer);
+    }
+    if is_quark {
+        request = request
+            .header(reqwest::header::ORIGIN, "https://pan.quark.cn")
+            .header("sec-fetch-site", "same-site")
+            .header("sec-fetch-mode", "no-cors")
+            .header("sec-fetch-dest", "image");
+    }
+    let response = request
         .send()
         .await
         .map_err(|error| format!("下载图片失败：{error}"))?;
     if !response.status().is_success() {
+        if matches!(response.status(), reqwest::StatusCode::UNAUTHORIZED | reqwest::StatusCode::FORBIDDEN) {
+            return Err(format!("远程图片链接已过期或无权访问（HTTP {}）", response.status().as_u16()));
+        }
         return Err(format!("图片服务器返回 {}", response.status()));
     }
     if response.content_length().unwrap_or(0) > 20 * 1024 * 1024 {
@@ -853,7 +891,7 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_allowed_external_url, is_image, is_safe_remote_image_url, pandoc_export_format, pandoc_import_extension, remote_image_referer};
+    use super::{is_allowed_external_url, is_image, is_safe_remote_image_url, is_supported_remote_image, pandoc_export_format, pandoc_import_extension, remote_image_referer};
     use std::path::Path;
 
     #[test]
@@ -898,6 +936,9 @@ mod tests {
     fn only_uses_platform_referers_for_remote_images() {
         assert_eq!(remote_image_referer(&reqwest::Url::parse("https://mmbiz.qpic.cn/a.png").unwrap()), Some("https://mp.weixin.qq.com/"));
         assert_eq!(remote_image_referer(&reqwest::Url::parse("https://sns-img-qc.xhscdn.com/a.png").unwrap()), Some("https://www.xiaohongshu.com/"));
+        assert!(is_supported_remote_image(&reqwest::Url::parse("https://img-view-c-sz.drive.quark.cn/a.png").unwrap()));
+        assert!(!is_supported_remote_image(&reqwest::Url::parse("https://img-view.evil.drive.quark.cn/a.png").unwrap()));
+        assert_eq!(remote_image_referer(&reqwest::Url::parse("https://img-view-c-sz.drive.quark.cn/a.png").unwrap()), Some("https://pan.quark.cn/"));
         assert_eq!(remote_image_referer(&reqwest::Url::parse("https://example.com/a.png").unwrap()), None);
     }
 

@@ -3,6 +3,7 @@ import { appDataDir } from '@tauri-apps/api/path'
 import { open, save } from '@tauri-apps/plugin-dialog'
 import { copyFile, mkdir, readDir, readFile, readTextFile, remove, rename, stat, watch, writeFile, writeTextFile } from '@tauri-apps/plugin-fs'
 import { renderMarkdownFragment } from './markdown/fragment'
+import { isQuarkImageUrl } from './markdown/shared'
 import { promoteClipboardImageLinks } from './pasteMarkdown'
 
 const isTauri = () => tauriIsTauri()
@@ -68,6 +69,7 @@ export function resolveMarkdownAssetUrl(markdownPath: string, url: string, brows
   const absolutePath = resolveLocalAssetPath(markdownPath, localPath)
   const loadedUrl = browserAssets?.[assetKey(absolutePath)] ?? browserAssets?.[assetKey(localPath)]
   if (loadedUrl) return `${loadedUrl}${match?.[2] ?? ''}`
+  if (isTauri() && !isLocalMarkdownAssetPath(markdownPath, absolutePath)) return ''
   if (!isTauri()) return url
   return `${convertFileSrc(absolutePath)}${match?.[2] ?? ''}`
 }
@@ -75,11 +77,14 @@ export function resolveMarkdownAssetUrl(markdownPath: string, url: string, brows
 export async function createTauriAssetMap(markdownPath: string, urls: Iterable<string>): Promise<Record<string, string>> {
   const assets: Record<string, string> = {}
   if (!isTauri()) return assets
+  let sessionAssetRoot = ''
+  try { sessionAssetRoot = await appDataDir() } catch { /* Fall back to document-local assets only. */ }
   for (const url of new Set(urls)) {
     const rawPath = url.trim().match(/^([^?#]*)/)?.[1] ?? ''
     const localPath = localAssetPath(decodeUrlPath(rawPath))
     if (!localPath || !isImagePath(localPath)) continue
     const absolutePath = resolveLocalAssetPath(markdownPath, localPath)
+    if (!isLocalMarkdownAssetPath(markdownPath, absolutePath) && !isInternalSessionAssetPath(sessionAssetRoot, absolutePath)) continue
     try {
       const response = await invoke<ArrayBuffer | number[]>('read_local_image', { path: absolutePath })
       const bytes = response instanceof ArrayBuffer ? new Uint8Array(response) : Uint8Array.from(response)
@@ -98,11 +103,15 @@ export async function createRemoteAssetMap(urls: Iterable<string>): Promise<Reco
       const bytes = Uint8Array.from(result.bytes)
       return [url, URL.createObjectURL(new Blob([bytes], { type: result.mime || 'image/jpeg' }))] as const
     } catch (error) {
-      console.warn(`无法缓存远程图片：${url}`, error)
+      console.warn(`无法缓存远程图片（${remoteImageLogTarget(url)}）`, error instanceof Error ? error.message : String(error))
       return null
     }
   }))
   return Object.fromEntries(entries.filter((entry): entry is readonly [string, string] => Boolean(entry)))
+}
+
+export function remoteImageLogTarget(value: string): string {
+  try { return new URL(value).hostname || '未知主机' } catch { return '无效地址' }
 }
 
 export async function authorizeMarkdownAssets(markdownPath: string): Promise<void> {
@@ -623,6 +632,19 @@ function assetKey(path: string) {
   return normalizeLocalPath(path).replace(/^\.\//, '').toLowerCase()
 }
 
+function isInternalSessionAssetPath(root: string, targetPath: string): boolean {
+  if (!root) return false
+  return assetKey(targetPath).startsWith(`${assetKey(root).replace(/[\\/]$/, '')}/.moyue-assets/`)
+}
+
+export function isLocalMarkdownAssetPath(markdownPath: string, targetPath: string): boolean {
+  const directory = dirnameOf(markdownPath).replace(/[\\/]$/, '')
+  if (!directory) return false
+  const root = assetKey(directory)
+  const candidate = assetKey(targetPath)
+  return candidate.startsWith(`${root}/`)
+}
+
 function isImagePath(path: string) {
   return /\.(?:avif|bmp|gif|jiff?|jfif|jpe?g|png|svg|webp)$/i.test(path)
 }
@@ -648,7 +670,8 @@ function isSupportedRemoteImage(url: string) {
   try {
     const parsed = new URL(url)
     const host = parsed.hostname.toLowerCase()
-    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && (host === 'mmbiz.qpic.cn' || host.endsWith('.xhscdn.com') || host === 'ci.xiaohongshu.com')
+    return (parsed.protocol === 'http:' || parsed.protocol === 'https:')
+      && (host === 'mmbiz.qpic.cn' || host.endsWith('.xhscdn.com') || host === 'ci.xiaohongshu.com' || isQuarkImageUrl(url))
   } catch {
     return false
   }

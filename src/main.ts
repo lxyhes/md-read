@@ -2,6 +2,12 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import { startupStylesReady } from './startup'
 
+try {
+  document.documentElement.dataset.moyueTheme = localStorage.getItem('moyue:theme') === 'quiet-moss' ? 'quiet-moss' : 'paper-white'
+} catch {
+  document.documentElement.dataset.moyueTheme = 'paper-white'
+}
+
 void Promise.all([startupStylesReady, import('./App.vue')]).then(([, { default: App }]) => {
   createApp(App).use(createPinia()).mount('#app')
 }).catch((error: unknown) => {

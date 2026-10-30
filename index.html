@@ -6,16 +6,6 @@
     <meta name="theme-color" content="#151311" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>墨阅 · Moyue Reader</title>
-    <script>
-      (() => {
-        try {
-          const saved = localStorage.getItem('moyue:theme')
-          document.documentElement.dataset.moyueTheme = saved === 'quiet-moss' ? saved : 'paper-white'
-        } catch {
-          document.documentElement.dataset.moyueTheme = 'paper-white'
-        }
-      })()
-    </script>
     <style>
       :root { --startup-bg: #eef3f2; --startup-surface: #f8fbfa; --startup-surface-raised: #fff; --startup-text: #1f2a31; --startup-muted: #65747b; --startup-accent: #277f77; --startup-accent-soft: #d8efea; --startup-border: rgba(31, 54, 58, .14); }
       :root[data-moyue-theme="quiet-moss"] { --startup-bg: #ebe8df; --startup-surface: #f4f1e8; --startup-surface-raised: #fffdf7; --startup-text: #27342e; --startup-muted: #718078; --startup-accent: #5f8b73; --startup-accent-soft: #dceadf; --startup-border: rgba(50, 72, 60, .15); }

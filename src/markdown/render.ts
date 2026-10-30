@@ -15,11 +15,18 @@ import {
 
 function sanitizeRawHtml(value: string) {
   if (typeof window === 'undefined') return escapeHtml(value)
-  return DOMPurify.sanitize(value, {
+  const sanitized = DOMPurify.sanitize(value, {
     USE_PROFILES: { html: true },
     FORBID_TAGS: ['style', 'iframe', 'object', 'embed', 'form', 'input', 'button', 'textarea', 'select', 'option'],
-    FORBID_ATTR: ['target'],
+    FORBID_ATTR: ['target', 'style', 'srcset'],
   })
+  const template = document.createElement('template')
+  template.innerHTML = sanitized
+  template.content.querySelectorAll('[style], [srcset]').forEach((element) => {
+    element.removeAttribute('style')
+    element.removeAttribute('srcset')
+  })
+  return template.innerHTML
 }
 
 function autoLinkEnabled() {

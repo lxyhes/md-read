@@ -26,7 +26,7 @@ class PreviewWidget extends WidgetType {
       while (paragraph.firstChild) root.append(paragraph.firstChild)
       paragraph.remove()
     }
-    root.setAttribute('aria-label', '预览内容，双击编辑源码')
+    root.setAttribute('aria-label', '预览内容，双击选中源码进行替换')
     root.addEventListener('dblclick', event => {
       event.preventDefault()
       view.dispatch({ selection: { anchor: this.from, head: this.from + this.source.length }, scrollIntoView: true })
@@ -43,6 +43,10 @@ class PreviewWidget extends WidgetType {
     return root
   }
   ignoreEvent() { return true }
+}
+
+function keepLongImagePreview(source: string) {
+  return source.length >= 320 || /\]\(\s*<?data:image\//i.test(source)
 }
 
 const diagramMounts = new WeakMap<HTMLElement, () => void>()
@@ -284,7 +288,7 @@ export function liveMarkdown(options: LiveOptions) {
           return false
         }
       }
-      if (node.name === 'Image' && !active) {
+      if (node.name === 'Image' && (!active || keepLongImagePreview(raw))) {
         ranges.push(Decoration.replace({ widget: new PreviewWidget(raw, node.from, options, false, `${raw}\n\n${referenceDefinitions}`) }).range(node.from, node.to))
         return false
       }

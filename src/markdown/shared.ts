@@ -44,9 +44,13 @@ export function escapeHtml(value: string): string {
 }
 
 export function safeUrl(value: string): string {
-  const normalized = value.trim().toLowerCase()
-  if (normalized.startsWith('javascript:') || normalized.startsWith('data:') || normalized.startsWith('vbscript:')) return ''
-  return escapeHtml(value)
+  const trimmed = value.trim()
+  if (!trimmed) return ''
+  const normalized = trimmed.replace(/[\u0000-\u001f\u007f-\u009f]/g, '').toLowerCase()
+  const scheme = normalized.match(/^([a-z][a-z\d+.-]*):/)?.[1]
+  if (scheme && !['http', 'https', 'mailto', 'tel', 'blob', 'asset'].includes(scheme)) return ''
+  if (!scheme && /^[a-z]:[\\/]/i.test(trimmed)) return ''
+  return escapeHtml(trimmed)
 }
 
 export function safeImageUrl(value: string): string {

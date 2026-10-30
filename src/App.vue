@@ -47,7 +47,7 @@ import { escapeHtml, isQuarkImageUrl, renderMathMl } from './markdown/shared'
 import { makeImplicitMarkdownHeadingsExplicit, parseMarkdown, renderMarkdownFragment } from './parser'
 import { getDocumentStatistics } from './documentStats'
 import { asciiDiagramToMermaid, asciiTreeToTree, markdownToTree } from './asciiDiagram'
-import { formatClipboardImage, formatClipboardToMarkdown, htmlToMarkdown, normalizeMixedOrderedListSource, suggestPastedMarkdownName } from './pasteMarkdown'
+import { formatClipboardImage, formatClipboardToMarkdown, htmlToMarkdown, normalizeMixedOrderedListSource, promoteClipboardImageLinks, suggestPastedMarkdownName } from './pasteMarkdown'
 import { matchQuickOpen } from './quickOpen'
 import { indentSelection, codeIndentInsertion, isFenceBacktickInput, selectedLineRange, removeSelectedLines, setHeadingLines } from './editorInput'
 import { createEditorHistory, recordEditorHistory, stepEditorHistory } from './editorHistory'
@@ -150,7 +150,7 @@ const KNOWLEDGE_DOCUMENTS_KEY = 'moyue:knowledge-documents'
 const PERSONAL_NOTES_KEY = 'moyue:personal-notes'
 const AI_SETTINGS_KEY = 'moyue:ai-settings'
 const ACTIVE_KNOWLEDGE_CONVERSATION_KEY = 'moyue:knowledge-active-conversation'
-const advancedDefaults: AdvancedSettings = { showReadingProgress: true, defaultExtension: 'md', defaultCodeLanguage: 'text', rememberCodeLanguage: true, emojiAutocomplete: true, autoLink: true, rememberRecent: true, dropBehavior: 'insert', picListEndpoint: 'http://127.0.0.1:36677/upload', picListKey: '', epubChapterDepth: 3, referenceDocx: '', printPageSize: 'A4', printMargin: 18, printHeader: '', printFooter: '', printBackground: true, spellcheck: true, typewriterMode: false, editorAutoSave: false, remoteImagePrivacy: false, relativeImagePathPrefix: false }
+const advancedDefaults: AdvancedSettings = { showReadingProgress: true, defaultExtension: 'md', defaultCodeLanguage: 'text', rememberCodeLanguage: true, emojiAutocomplete: true, autoLink: true, rememberRecent: true, dropBehavior: 'insert', picListEndpoint: 'http://127.0.0.1:36677/upload', picListKey: '', epubChapterDepth: 3, referenceDocx: '', printPageSize: 'A4', printMargin: 18, printHeader: '', printFooter: '', printBackground: true, spellcheck: true, typewriterMode: false, editorAutoSave: false, remoteImagePrivacy: true, relativeImagePathPrefix: false }
 function readAdvancedSettings(): AdvancedSettings {
   try { return { ...advancedDefaults, ...JSON.parse(localStorage.getItem('moyue:advanced-settings') ?? '{}') } }
   catch { return { ...advancedDefaults } }
@@ -1407,16 +1407,16 @@ async function onEditorPaste(event: ClipboardEvent) {
         notify('文档已变化，未插入内容，请重新粘贴')
         return
       }
-      const normalized = normalizeMixedOrderedListSource(formatClipboardToMarkdown(html, plainText))
+      const normalized = normalizeMixedOrderedListSource(promoteClipboardImageLinks(formatClipboardToMarkdown(html, plainText)))
       insertEditorTextAt(normalized.source, start, end)
       return
     }
     if (html) {
       event.preventDefault(); event.stopPropagation()
-      insertEditorTextAt(formatClipboardToMarkdown(html, plainText), element.selectionStart, element.selectionEnd)
+      insertEditorTextAt(promoteClipboardImageLinks(formatClipboardToMarkdown(html, plainText)), element.selectionStart, element.selectionEnd)
       return
     }
-    const formatted = formatClipboardToMarkdown('', plainText)
+    const formatted = promoteClipboardImageLinks(formatClipboardToMarkdown('', plainText))
     const normalized = normalizeMixedOrderedListSource(formatted)
     if (normalized.converted) {
       event.preventDefault()
