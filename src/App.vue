@@ -914,7 +914,7 @@ const editorMenuGroups = computed(() => {
       { label: '下移当前段落', shortcut: 'Alt+↓', disabled, action: () => moveEditorLine(1) },
     ] },
     { label: '段落', items: [
-      ...[1, 2, 3, 4, 5, 6].map(level => ({ label: `${level} 级标题`, disabled, action: () => updateEditor((value, start, end) => setHeadingLines(value, start, end, level)) })),
+      ...[1, 2, 3, 4, 5, 6].map(level => ({ label: `${level} 级标题`, shortcut: `Ctrl+${level}`, disabled, action: () => updateEditor((value, start, end) => setHeadingLines(value, start, end, level)) })),
       { label: '引用', disabled, action: () => prefixEditorLines('> ') },
       { label: '警告框', disabled, action: () => toggleEditorAlert('NOTE') },
       { label: '无序列表', disabled, action: () => prefixEditorLines('- ') },
@@ -1318,6 +1318,12 @@ function onEditorLineClipboard(event: ClipboardEvent, cut: boolean) {
 
 function onEditorKeydown(event: KeyboardEvent) {
   if (event.isComposing || event.keyCode === 229) return
+  if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && /^[1-6]$/.test(event.key)) {
+    event.preventDefault()
+    const level = Number(event.key)
+    updateEditor((value, start, end) => setHeadingLines(value, start, end, level))
+    return
+  }
   if ((event.ctrlKey || event.metaKey) && event.key === '/' && !event.shiftKey && !event.altKey) {
     event.preventDefault()
     setEditorMode(editorMode.value === 'rich' ? 'write' : 'rich')
