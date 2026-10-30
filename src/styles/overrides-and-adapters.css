@@ -4074,3 +4074,74 @@ body .app-shell.is-editor-studio .reader-layout {
     padding: 7px;
   }
 }
+
+/* Wide reader: turn the tab shelf and command rail into one workspace row.
+   The container query keeps the two-row version for narrower windows. */
+@container reader-main (min-width: 1280px) {
+  .app-shell:not(.is-editor-studio) .reader-main-column {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(820px, 1.3fr);
+    grid-template-rows: 52px minmax(0, 1fr);
+  }
+
+  .app-shell:not(.is-editor-studio) .reader-main-column > .reader-tabbar {
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
+    height: 52px;
+    min-height: 52px;
+    padding-inline: 12px !important;
+    border-right: 1px solid var(--border);
+  }
+
+  .app-shell:not(.is-editor-studio) .reader-main-column > .reader-toolbar-slot {
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .app-shell:not(.is-editor-studio) .reader-toolbar-slot > .reader-meta-topbar {
+    height: 52px;
+    min-height: 52px;
+    padding-inline: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .app-shell:not(.is-editor-studio) .reader-toolbar-slot > .reader-meta-topbar .reader-meta-tools {
+    min-width: 0;
+  }
+
+  .app-shell:not(.is-editor-studio) .reader-main-column > .reader-document-panes {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .app-shell:not(.is-editor-studio) .reader-main-column > .reader-tabbar .reader-tab-status {
+    gap: 7px;
+    margin-left: 8px;
+    padding-left: 10px;
+    font-size: 10px;
+  }
+
+  .app-shell:not(.is-editor-studio) .reader-toolbar-slot .reader-meta-topbar .reader-command-trigger {
+    width: clamp(172px, 15vw, 220px);
+    min-width: 172px;
+  }
+}
+
+/* Narrow reader: the command rail becomes two internal rows, so let the
+   header grow with it instead of letting the second row cover the document. */
+@container reader-main (max-width: 1100px) {
+  .app-shell:not(.is-editor-studio) .reader-toolbar-slot > .reader-meta-topbar {
+    height: auto;
+    min-height: 88px;
+  }
+
+  .app-shell:not(.is-editor-studio) .reader-toolbar-slot > .reader-meta-topbar .reader-meta-tools {
+    min-height: 74px;
+    grid-template-rows: 34px 34px;
+  }
+}
