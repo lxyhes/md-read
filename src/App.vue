@@ -2,6 +2,8 @@
 import { computed, defineAsyncComponent, getCurrentInstance, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import Select, { Option } from '@arco-design/web-vue/es/select'
 import '@arco-design/web-vue/es/select/style/css.js'
+import List, { ListItem } from '@arco-design/web-vue/es/list'
+import '@arco-design/web-vue/es/list/style/css.js'
 import Button from '@arco-design/web-vue/es/button'
 import '@arco-design/web-vue/es/button/style/css.js'
 import Input, { InputPassword } from '@arco-design/web-vue/es/input'
@@ -56,7 +58,7 @@ import { parseEditableTable, serializeEditableTable, moveTableRow, moveTableColu
 import { sortFileTreeEntries, type FileTreeSortMode } from './fileTreeSort'
 import { directoryFiles } from './directoryFiles'
 import { reconcileFilesystemEntries } from './filesystemTreeRefresh'
-import { relativeDocumentTreePath } from './filesystemTreeScope'
+import { parentFilesystemPath, relativeDocumentTreePath } from './filesystemTreeScope'
 import { orderRecentFolders, pinRecentFolder, rememberRecentFolder, removeRecentFolder, type RecentFolder } from './recentFolders'
 import { createExportCss, createPortableHtml } from './exportPresentation'
 import { createPrintHtml, printPortableHtml } from './exportPrint'
@@ -2928,6 +2930,11 @@ function canCreateInContext(file: FileTreeEntry) {
   return isTauriRuntime() && hasRealFilesystemPath(contextDirectoryPath(file))
 }
 
+function canShowParentFilesystemDirectory(file: FileTreeEntry) {
+  const parentPath = parentFilesystemPath(file.path)
+  return Boolean(file.isDirectory && parentPath && hasRealFilesystemPath(parentPath))
+}
+
 function canManageMarkdownEntry(file: FileTreeEntry) {
   return isTauriRuntime() && hasRealFilesystemPath(file.path) && isMarkdownEntry(file)
 }
@@ -3065,6 +3072,30 @@ function showDocumentList() {
   fileBrowserMode.value = 'list'
   leftPanelTab.value = 'files'
   notify('已切换到文档列表')
+}
+
+async function showParentFilesystemDirectory() {
+  const file = fileContextMenu.value?.file
+  fileContextMenu.value = null
+  if (!file?.isDirectory) return
+  const parentPath = parentFilesystemPath(file.path)
+  if (!parentPath || filesystemPathKey(parentPath) === filesystemPathKey(file.path)) {
+    notify('已经是最上级目录')
+    return
+  }
+  if (!isTauriRuntime() || !hasRealFilesystemPath(parentPath)) {
+    notify('当前仅支持真实系统目录')
+    return
+  }
+  fileBrowserMode.value = 'tree'
+  leftPanelTab.value = 'files'
+  filesystemTreeScope.value = 'system'
+  filesystemTreeTarget.value = file.path
+  filesystemTree.value = createFilesystemNode(parentPath, folderNameOf(parentPath) || parentPath, true)
+  await revealFilesystemTarget(filesystemTree.value, file.path)
+  const target = filesystemNodeAt(file.path)
+  if (target) await expandFilesystemTree(target)
+  notify(filesystemTree.value.error ? '已显示上级目录，但目录读取受限' : '已显示上级目录')
 }
 
 async function openFilesystemTreeForFile(file: FileTreeEntry) {
@@ -4930,6 +4961,7 @@ async function requestFullscreen() {
             <div class="file-context-title">{{ fileContextMenu.file.isDirectory ? '文件夹 · ' : '' }}{{ fileContextMenu.file.name }}</div>
             <template v-if="fileContextMenu.file.isDirectory">
               <button type="button" role="menuitem" @click="openFileContextEntry"><AppIcon :name="filesystemNodeExpanded(fileContextMenu.file.path) ? 'chevron-down' : 'chevron-right'" :size="13" />{{ filesystemNodeExpanded(fileContextMenu.file.path) ? '收起文件夹' : '展开文件夹' }}</button>
+              <button v-if="canShowParentFilesystemDirectory(fileContextMenu.file)" type="button" role="menuitem" @click="showParentFilesystemDirectory"><AppIcon name="folder" :size="13" />显示上级目录</button>
             </template>
             <template v-else>
               <button type="button" role="menuitem" :disabled="!isMarkdownEntry(fileContextMenu.file)" :title="isMarkdownEntry(fileContextMenu.file) ? undefined : '当前只支持打开 Markdown 文件'" @click="openFileContextEntry"><AppIcon name="reader" :size="13" />打开文件</button>
@@ -5001,14 +5033,14 @@ async function requestFullscreen() {
               <div v-else class="file-list-shell">
                 <div v-if="batchDeletableFiles.length" class="file-list-toolbar">
                   <Checkbox class="file-select-all-arco" :model-value="allFilesSelected" :indeterminate="selectedFiles.length > 0 && !allFilesSelected" aria-label="全选可移除文档" @change="toggleAllFileSelection">全选</Checkbox>
-                  <div class="file-list-actions"><span v-if="selectedFiles.length" class="file-selection-count" aria-live="polite">已选 {{ selectedFiles.length }}</span><button v-if="selectedFiles.length" type="button" class="file-batch-delete" :disabled="busyAction !== null" @click="requestDeleteFiles(selectedFiles)"><AppIcon name="trash" :size="12" />删除</button></div>
+                  <div class="file-list-actions"><span v-if="selectedFiles.length" class="file-selection-count" aria-live="polite">已选 {{ selectedFiles.length }}</span><Button v-if="selectedFiles.length" type="text" status="danger" size="mini" html-type="button" class="file-batch-delete" :disabled="busyAction !== null" @click="requestDeleteFiles(selectedFiles)"><AppIcon name="trash" :size="12" />删除</Button></div>
                 </div>
-                <nav class="file-list" :aria-label="sidebarFilter === 'markdown' ? '当前文件夹中的 Markdown 文件' : '当前文件夹中的文件'">
-                  <div v-for="file in currentDirectoryFiles" :key="file.path" class="file-item" :class="{ active: store.currentDocumentId === file.documentId, selected: isFileSelected(file), 'is-unloaded': !file.documentId }">
+                <List class="file-list" :bordered="false" :split="false" :hoverable="false" :scrollbar="false" :aria-label="sidebarFilter === 'markdown' ? '当前文件夹中的 Markdown 文件' : '当前文件夹中的文件'">
+                  <ListItem v-for="file in currentDirectoryFiles" :key="file.path" class="file-item" :class="{ active: store.currentDocumentId === file.documentId, selected: isFileSelected(file), 'is-unloaded': !file.documentId }">
                     <Checkbox v-if="batchDeletableFiles.length && isBatchDeletableFile(file)" class="file-select-arco" :aria-label="`选择 ${file.name}`" :model-value="isFileSelected(file)" @click.stop @change="toggleFileSelection(file)" /><span v-else-if="batchDeletableFiles.length" class="file-select-spacer" aria-hidden="true" />
-                    <button type="button" class="file-item-open" :aria-label="file.documentId ? `打开 ${file.name}` : `载入 ${file.name}`" :title="file.name" @click="openFileTreeEntry(file)" @contextmenu.prevent="openFileContextMenu($event, file)"><AppIcon name="file" :size="14" /><span class="file-item-copy"><strong>{{ file.name }}</strong><small>{{ fileStatus(file) }}</small></span><i v-if="store.currentDocumentId === file.documentId" class="file-active-mark" /></button><IconButton v-if="isDeletableFile(file)" class="file-delete" icon="trash" size="sm" :label="`删除 ${file.name}`" :disabled="busyAction !== null" @click="deleteFile(file)" />
-                  </div>
-                </nav>
+                    <button type="button" class="file-item-open" :aria-label="file.documentId ? `打开 ${file.name}` : `载入 ${file.name}`" @click="openFileTreeEntry(file)" @contextmenu.prevent="openFileContextMenu($event, file)"><AppIcon name="file" :size="14" /><span class="file-item-copy"><strong>{{ file.name }}</strong><small>{{ fileStatus(file) }}</small></span><i v-if="store.currentDocumentId === file.documentId" class="file-active-mark" /></button><IconButton v-if="isDeletableFile(file)" class="file-delete" icon="trash" size="sm" :label="`删除 ${file.name}`" :disabled="busyAction !== null" @click="deleteFile(file)" />
+                  </ListItem>
+                </List>
               </div>
             </div>
             <div v-else class="outline-view">
@@ -5042,7 +5074,7 @@ async function requestFullscreen() {
               <div v-for="document in store.openDocuments" :key="document.id" class="reader-tab" :class="{ active: store.currentDocumentId === document.id }" role="tab" :aria-selected="store.currentDocumentId === document.id" :aria-label="`打开 ${tabLabel(document)}`" :title="`${tabLabel(document)}\n${document.path}`" tabindex="0" @click="chooseDocument(document.id)" @contextmenu.prevent="openTabContextMenu($event, document.id)" @auxclick="onTabAuxClick($event, document.id)" @keydown.enter="chooseDocument(document.id)" @keydown.space.prevent="chooseDocument(document.id)">
                 <span><AppIcon name="reader" :size="15" /></span>
                 <strong>{{ tabLabel(document) }}</strong>
-                <IconButton icon="close" size="sm" :label="`关闭 ${tabLabel(document)}`" @click.stop="closeDocument(document.id)" />
+                <IconButton icon="close" size="sm" :label="`关闭 ${tabLabel(document)}`" :show-title="false" @click.stop="closeDocument(document.id)" />
               </div>
             </div>
             <div class="reader-tab-actions">

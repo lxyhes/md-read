@@ -77,7 +77,8 @@ export const useReaderStore = defineStore('reader', () => {
     variables['--reader-font'] = readerSettings.value.fontFamily || defaultTokens.reader.fontFamily
     variables['--ui-font'] = readerSettings.value.interfaceFontFamily || interfaceFont
     variables['--shell-font'] = readerSettings.value.interfaceFontFamily || interfaceFont
-    for (const [name, value] of Object.entries(variables)) document.documentElement.style.setProperty(name, value)
+    const themeRoots = [document.documentElement, document.body].filter((element): element is HTMLElement => Boolean(element))
+    for (const root of themeRoots) for (const [name, value] of Object.entries(variables)) root.style.setProperty(name, value)
     let style = document.getElementById(THEME_STYLE_ID) as HTMLStyleElement | null
     if (!style) {
       style = document.createElement('style')

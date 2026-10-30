@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { relativeDocumentTreePath } from './filesystemTreeScope'
+import { parentFilesystemPath, relativeDocumentTreePath } from './filesystemTreeScope'
 
 it('includes only documents inside the current MD directory', () => {
   const current = 'E:\\notes\\project\\current.md'
@@ -19,4 +19,12 @@ it('shows only the active document when its directory is unknown', () => {
 it('handles drive roots and Unix roots', () => {
   expect(relativeDocumentTreePath('C:/notes/a.md', 'C:/current.md')).toBe('notes/a.md')
   expect(relativeDocumentTreePath('/notes/a.md', '/current.md')).toBe('notes/a.md')
+})
+
+it('finds the parent directory without moving above a filesystem root', () => {
+  expect(parentFilesystemPath('E:\\notes\\project')).toBe('E:/notes')
+  expect(parentFilesystemPath('E:/notes')).toBe('E:/')
+  expect(parentFilesystemPath('/notes')).toBe('/')
+  expect(parentFilesystemPath('E:/')).toBeNull()
+  expect(parentFilesystemPath('/')).toBeNull()
 })

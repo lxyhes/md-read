@@ -10,11 +10,13 @@ withDefaults(defineProps<{
   variant?: 'ghost' | 'surface'
   active?: boolean
   disabled?: boolean
+  showTitle?: boolean
 }>(), {
   size: 'md',
   variant: 'ghost',
   active: false,
   disabled: false,
+  showTitle: true,
 })
 </script>
 
@@ -26,7 +28,7 @@ withDefaults(defineProps<{
     shape="square"
     html-type="button"
     :size="size === 'sm' ? 'small' : 'medium'"
-    :title="label"
+    :title="showTitle ? label : undefined"
     :aria-label="label"
     :aria-pressed="active ? true : undefined"
     :disabled="disabled"

@@ -12,6 +12,23 @@ a > .app-icon-vector {
 button:not(:disabled):active > .app-icon-vector,
 a:active > .app-icon-vector { transform: scale(.92); }
 
+.reader-tab .icon-button {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+}
+.reader-tab .icon-button:hover {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  color: var(--accent);
+  box-shadow: none;
+}
+.reader-tab .icon-button:hover::before { display: none; }
+.reader-tab .icon-button:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: -1px;
+}
+
 .icon-button {
   position: relative;
   isolation: isolate;
@@ -1684,6 +1701,32 @@ a:active > .app-icon-vector { transform: scale(.92); }
   background: transparent;
   color: var(--muted);
 }
+.file-properties-dialog .arco-btn {
+  min-height: 34px;
+  border-radius: 6px;
+  font: 12px/1.35 var(--ui-font);
+}
+.file-properties-dialog .arco-btn-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--app-bg);
+}
+.file-properties-dialog .arco-btn-secondary {
+  border-color: var(--border);
+  background: transparent;
+  color: var(--muted);
+}
+.file-properties-dialog .arco-btn.icon-button {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+}
+.file-properties-dialog .arco-btn.icon-button:hover {
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
 
 /* Arco hover and active styles must follow the selected Moyue theme. */
 :is(.app-shell, .arco-modal, .arco-dropdown) .arco-btn.arco-btn-primary:not(.arco-btn-status-danger):not(.arco-btn-status-warning):not(.arco-btn-status-success) {
@@ -1704,6 +1747,16 @@ a:active > .app-icon-vector { transform: scale(.92); }
 }
 :is(.app-shell, .arco-modal, .arco-dropdown) .arco-btn-primary:not(.arco-btn-status-danger):not(.arco-btn-status-warning):not(.arco-btn-status-success):not(:disabled):active {
   background: color-mix(in srgb, var(--accent) 72%, var(--ink));
+}
+:is(.file-properties-dialog) .arco-btn-primary:not(:disabled):hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 85%, var(--ink));
+  color: var(--app-bg);
+}
+:is(.file-properties-dialog) .arco-btn-secondary:not(:disabled):hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 :is(.app-shell, .arco-modal, .arco-dropdown) :is(.arco-btn-secondary, .arco-btn-outline, .arco-btn-dashed, .arco-btn-text):not(.arco-btn-status-danger):not(.arco-btn-status-warning):not(.arco-btn-status-success):not(:disabled):hover {
   border-color: var(--accent);

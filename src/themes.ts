@@ -68,9 +68,24 @@ export function themeCss(theme: MoyueTheme): string {
   return [theme.readerCss, theme.markdownCss, theme.componentsCss, theme.codeCss, theme.mermaidCss].filter(Boolean).join('\n')
 }
 
+function hexRgbTuple(value: string): string | null {
+  const hex = value.trim().match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i)?.[1]
+  if (!hex) return null
+  const expanded = hex.length === 3 ? hex.split('').map((part) => `${part}${part}`).join('') : hex
+  return [0, 2, 4].map((index) => Number.parseInt(expanded.slice(index, index + 2), 16)).join(', ')
+}
+
 export function cssVariables(theme: MoyueTheme): Record<string, string> {
   const { color } = theme.tokens
-  return {
+  const variables: Record<string, string> = {
     '--app-bg': color.appBackground, '--surface': color.surface, '--surface-raised': color.surfaceRaised, '--ink': color.text, '--muted': color.textMuted, '--accent': color.accent, '--accent-soft': color.accentSoft, '--border': color.border, '--code-bg': color.codeBackground, '--reader-width': `${theme.tokens.reader.width}px`, '--reader-size': `${theme.tokens.reader.fontSize}px`, '--reader-leading': String(theme.tokens.reader.lineHeight), '--reader-gap': `${theme.tokens.reader.paragraphGap}px`, '--reader-font': theme.tokens.reader.fontFamily
   }
+  const accentRgb = hexRgbTuple(color.accent)
+  if (accentRgb) {
+    variables['--primary-3'] = accentRgb
+    variables['--primary-5'] = accentRgb
+    variables['--primary-6'] = accentRgb
+    variables['--primary-7'] = accentRgb
+  }
+  return variables
 }
