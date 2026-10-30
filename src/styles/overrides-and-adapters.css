@@ -2925,20 +2925,20 @@ body .app-shell.is-editor-studio .reader-layout {
   box-shadow: none;
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-tabbar {
+.app-shell:not(.is-editor-studio) .reader-tabbar {
   height: 38px;
   flex-basis: 38px;
   padding-inline: 16px;
   background: var(--surface);
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-tab {
+.app-shell:not(.is-editor-studio) .reader-tab {
   padding-inline: 12px;
   border-bottom-color: transparent;
   color: var(--muted);
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-tab.active {
+.app-shell:not(.is-editor-studio) .reader-tab.active {
   border-bottom-color: var(--accent);
   color: var(--ink);
 }
@@ -2982,7 +2982,7 @@ body .app-shell.is-editor-studio .reader-layout {
   font-weight: 650;
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta {
+.app-shell:not(.is-editor-studio) .reader-meta {
   min-height: 42px;
   box-sizing: border-box;
   justify-content: flex-end;
@@ -2991,11 +2991,11 @@ body .app-shell.is-editor-studio .reader-layout {
   background: var(--surface);
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-document {
+.app-shell:not(.is-editor-studio) .reader-meta-document {
   display: none;
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-tools {
+.app-shell:not(.is-editor-studio) .reader-meta-tools {
   width: 100%;
   justify-content: flex-end;
   gap: 8px;
@@ -3043,17 +3043,17 @@ body .app-shell.is-editor-studio .reader-layout {
 
 /* Two-row reader header: title, search, and reading tools on row one; the
    second row is reserved for switching documents. */
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar {
+.app-shell:not(.is-editor-studio) .reader-main-column > .reader-tabbar {
   position: relative;
   z-index: 0;
   padding-right: min(58%, 920px);
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar .reader-tab-actions {
+.app-shell:not(.is-editor-studio) .reader-main-column > .reader-tabbar .reader-tab-actions {
   display: none;
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar .reader-tab-status {
+.app-shell:not(.is-editor-studio) .reader-main-column > .reader-tabbar .reader-tab-status {
   position: absolute;
   top: 0;
   right: 16px;
@@ -3163,12 +3163,12 @@ body .app-shell.is-editor-studio .reader-layout {
   justify-content: flex-end;
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-edit-actions {
+.app-shell:not(.is-editor-studio) .reader-meta-topbar .reader-edit-actions {
   gap: 3px;
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-edit-actions > button,
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-more-menu > button {
+.app-shell:not(.is-editor-studio) .reader-meta-topbar .reader-edit-actions > button,
+.app-shell:not(.is-editor-studio) .reader-meta-topbar .reader-more-menu > button {
   min-height: 28px;
   padding: 4px 7px;
   border-radius: 6px;
@@ -3176,25 +3176,25 @@ body .app-shell.is-editor-studio .reader-layout {
   font-weight: 500;
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-display-switch,
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-navigation {
+.app-shell:not(.is-editor-studio) .reader-meta-topbar .reader-display-switch,
+.app-shell:not(.is-editor-studio) .reader-meta-topbar .reader-navigation {
   padding: 2px;
   border-radius: 7px;
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-display-switch button,
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-navigation button {
+.app-shell:not(.is-editor-studio) .reader-meta-topbar .reader-display-switch button,
+.app-shell:not(.is-editor-studio) .reader-meta-topbar .reader-navigation button {
   min-height: 26px;
   padding: 4px 6px;
   font-size: 12px;
   font-weight: 500;
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-navigation {
+.app-shell:not(.is-editor-studio) .reader-meta-topbar .reader-navigation {
   min-width: 0;
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-progress-label {
+.app-shell:not(.is-editor-studio) .reader-meta-topbar .reader-progress-label {
   display: none;
 }
 
@@ -3213,18 +3213,18 @@ body .app-shell.is-editor-studio .reader-layout {
   gap: 2px;
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar {
+.app-shell:not(.is-editor-studio) .reader-main-column > .reader-tabbar {
   padding-right: 16px !important;
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar .reader-tab-actions {
+.app-shell:not(.is-editor-studio) .reader-main-column > .reader-tabbar .reader-tab-actions {
   display: flex;
   align-items: center;
   gap: 3px;
   margin-left: 8px;
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar .reader-tab-status {
+.app-shell:not(.is-editor-studio) .reader-main-column > .reader-tabbar .reader-tab-status {
   position: static;
   display: flex;
   align-items: center;
@@ -3242,7 +3242,7 @@ body .app-shell.is-editor-studio .reader-layout {
   display: none;
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-toolbar-slot > .reader-meta-topbar {
+.app-shell:not(.is-editor-studio) .reader-toolbar-slot > .reader-meta-topbar {
   position: relative;
   order: -2;
   display: flex;
@@ -3259,11 +3259,11 @@ body .app-shell.is-editor-studio .reader-layout {
   box-shadow: none;
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-toolbar-slot > .reader-meta-topbar .reader-meta-document {
+.app-shell:not(.is-editor-studio) .reader-toolbar-slot > .reader-meta-topbar .reader-meta-document {
   display: none;
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-toolbar-slot > .reader-meta-topbar .reader-meta-tools {
+.app-shell:not(.is-editor-studio) .reader-toolbar-slot > .reader-meta-topbar .reader-meta-tools {
   display: flex;
   width: 100%;
   align-items: center;
@@ -3271,7 +3271,7 @@ body .app-shell.is-editor-studio .reader-layout {
   gap: 12px;
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-command-trigger {
+.app-shell:not(.is-editor-studio) .reader-meta-topbar .reader-command-trigger {
   min-width: 150px;
   max-width: 230px;
   flex: 0 1 210px;
@@ -3279,7 +3279,7 @@ body .app-shell.is-editor-studio .reader-layout {
   padding-block: 7px;
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-top-actions {
+.app-shell:not(.is-editor-studio) .reader-meta-topbar .reader-top-actions {
   display: flex;
   flex: 0 0 auto;
   gap: 2px;
@@ -3325,7 +3325,7 @@ body .app-shell.is-editor-studio .reader-layout {
 
 /* Reading desk chrome: tools form a calm command row; open files sit on a
    separate, tactile tab shelf. */
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column {
+.app-shell:not(.is-editor-studio) .reader-main-column {
   container: reader-main / inline-size;
 }
 
@@ -3333,32 +3333,46 @@ body .app-shell.is-editor-studio .reader-layout {
   flex: 0 0 auto;
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-toolbar-slot > .reader-meta-topbar {
-  min-height: 52px;
+.app-shell:not(.is-editor-studio) .reader-toolbar-slot > .reader-meta-topbar {
+  min-height: 48px;
   height: auto;
   flex-basis: auto;
-  padding: 7px 16px;
-  background: color-mix(in srgb, var(--surface-raised) 42%, var(--surface));
+  padding: 6px 18px;
+  background: var(--surface);
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-toolbar-slot > .reader-meta-topbar .reader-meta-tools {
-  flex-wrap: wrap;
-  justify-content: flex-start;
-  gap: 8px;
+.app-shell:not(.is-editor-studio) .reader-toolbar-slot > .reader-meta-topbar .reader-meta-tools {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 12px;
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-meta-tools > * {
+.app-shell:not(.is-editor-studio) .reader-meta-topbar .reader-meta-tools > * {
   border-left: 0;
   padding-left: 0;
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-edit-actions {
+.app-shell:not(.is-editor-studio) .reader-meta-topbar .reader-edit-actions {
   flex: 0 0 auto;
+  align-items: center;
   flex-wrap: nowrap;
-  margin-right: auto;
+  margin-right: 0;
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-edit-actions .reader-toolbar-font-picker {
+.app-shell:not(.is-editor-studio) .reader-reading-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.app-shell:not(.is-editor-studio) .reader-reading-actions .reader-command-trigger {
+  flex: 0 1 210px;
+}
+
+.app-shell:not(.is-editor-studio) .reader-edit-actions .reader-toolbar-font-picker {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
@@ -3368,36 +3382,46 @@ body .app-shell.is-editor-studio .reader-layout {
   border-left: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-edit-actions .reader-toolbar-font-picker .font-select-label {
+.app-shell:not(.is-editor-studio) .reader-edit-actions .reader-toolbar-font-picker .font-select-label {
   gap: 6px;
   color: var(--muted);
   font-size: 11px;
   white-space: nowrap;
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-edit-actions .reader-toolbar-font-picker .arco-select {
+.app-shell:not(.is-editor-studio) .reader-edit-actions .reader-toolbar-font-picker .arco-select {
   width: 122px;
   min-width: 122px;
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar :is(.reader-display-switch, .reader-navigation) {
+.app-shell:not(.is-editor-studio) .reader-meta-topbar :is(.reader-display-switch, .reader-navigation) {
   border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
   background: var(--surface);
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-command-trigger {
+.app-shell:not(.is-editor-studio) .reader-meta-topbar .reader-command-trigger {
   height: 32px;
   border-radius: 8px;
-  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+  background: var(--surface-raised);
+  color: var(--muted);
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-top-actions {
-  margin-left: 2px;
+.app-shell .reader-meta-topbar .reader-command-trigger {
+  height: 32px;
+  border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--muted);
+}
+
+.app-shell:not(.is-editor-studio) .reader-meta-topbar .reader-top-actions {
+  margin-left: 0;
   padding-left: 8px;
   border-left: 1px solid var(--border);
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar {
+.app-shell:not(.is-editor-studio) .reader-main-column > .reader-tabbar {
   height: 42px;
   flex-basis: 42px;
   align-items: stretch;
@@ -3406,12 +3430,12 @@ body .app-shell.is-editor-studio .reader-layout {
   background: color-mix(in srgb, var(--surface-raised) 62%, var(--surface));
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar .reader-tab-scroll {
+.app-shell:not(.is-editor-studio) .reader-main-column > .reader-tabbar .reader-tab-scroll {
   gap: 3px;
   padding-top: 5px;
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar .reader-tab {
+.app-shell:not(.is-editor-studio) .reader-main-column > .reader-tabbar .reader-tab {
   min-width: 136px;
   max-width: 240px;
   height: 37px;
@@ -3425,12 +3449,12 @@ body .app-shell.is-editor-studio .reader-layout {
   box-shadow: none;
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar .reader-tab:hover {
+.app-shell:not(.is-editor-studio) .reader-main-column > .reader-tabbar .reader-tab:hover {
   background: color-mix(in srgb, var(--surface) 62%, transparent);
   color: var(--ink);
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar .reader-tab[aria-selected="true"] {
+.app-shell:not(.is-editor-studio) .reader-main-column > .reader-tabbar .reader-tab[aria-selected="true"] {
   border-color: var(--border);
   border-bottom-color: var(--surface);
   background: var(--surface);
@@ -3438,35 +3462,35 @@ body .app-shell.is-editor-studio .reader-layout {
   box-shadow: inset 0 2px 0 var(--accent);
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar .reader-tab strong {
+.app-shell:not(.is-editor-studio) .reader-main-column > .reader-tabbar .reader-tab strong {
   font-size: 12px;
   font-weight: 540;
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar .reader-tab[aria-selected="true"] strong {
+.app-shell:not(.is-editor-studio) .reader-main-column > .reader-tabbar .reader-tab[aria-selected="true"] strong {
   font-weight: 650;
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar .reader-tab-actions {
+.app-shell:not(.is-editor-studio) .reader-main-column > .reader-tabbar .reader-tab-actions {
   gap: 4px;
   margin-left: 10px;
   padding-left: 10px;
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar .dual-document-toggle {
+.app-shell:not(.is-editor-studio) .reader-main-column > .reader-tabbar .dual-document-toggle {
   min-height: 28px;
   padding: 4px 9px;
   border: 1px solid transparent;
   border-radius: 7px;
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar .dual-document-toggle:hover,
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar .dual-document-toggle[aria-pressed="true"] {
+.app-shell:not(.is-editor-studio) .reader-main-column > .reader-tabbar .dual-document-toggle:hover,
+.app-shell:not(.is-editor-studio) .reader-main-column > .reader-tabbar .dual-document-toggle[aria-pressed="true"] {
   border-color: var(--border);
   background: var(--surface);
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar .reader-tab-status {
+.app-shell:not(.is-editor-studio) .reader-main-column > .reader-tabbar .reader-tab-status {
   gap: 10px;
   margin-left: 10px;
   padding: 0 10px;
@@ -3476,19 +3500,51 @@ body .app-shell.is-editor-studio .reader-layout {
 }
 
 @container reader-main (max-width: 1100px) {
-  .app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-command-trigger {
+  .app-shell:not(.is-editor-studio) .reader-meta-topbar .reader-command-trigger {
     min-width: 34px;
     width: 34px;
     flex-basis: 34px;
     padding: 7px;
   }
 
-  .app-shell:not(.is-editor-studio):not(.is-focus) .reader-meta-topbar .reader-command-trigger > :is(span, kbd) {
+  .app-shell:not(.is-editor-studio) .reader-meta-topbar .reader-command-trigger > :is(span, kbd) {
     display: none;
   }
 
-  .app-shell:not(.is-editor-studio):not(.is-focus) .reader-main-column > .reader-tabbar .reader-tab-status > span:first-child {
+  .app-shell:not(.is-editor-studio) .reader-main-column > .reader-tabbar .reader-tab-status > span:first-child {
     display: none;
+  }
+}
+
+/* The progress rail is useful feedback, but it should not read as a divider. */
+.app-shell:not(.is-editor-studio) .reader-toolbar-slot .reader-progress-track {
+  right: 18px;
+  bottom: 0;
+  left: 18px;
+  height: 1px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border) 72%, transparent);
+  opacity: .72;
+}
+
+.app-shell:not(.is-editor-studio) .reader-toolbar-slot .reader-progress-track span {
+  background: color-mix(in srgb, var(--accent) 64%, var(--surface));
+}
+
+/* Reading priority: document actions left, reading controls centered, shell actions right. */
+.app-shell:not(.is-editor-studio) .reader-meta-tools > .reader-top-actions {
+  margin-left: 0;
+}
+
+@container reader-main (max-width: 1100px) {
+  .app-shell:not(.is-editor-studio) .reader-toolbar-slot > .reader-meta-topbar .reader-meta-tools {
+    grid-template-columns: minmax(0, 1fr) max-content;
+  }
+
+  .app-shell:not(.is-editor-studio) .reader-reading-actions {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-content: flex-start;
   }
 }
 

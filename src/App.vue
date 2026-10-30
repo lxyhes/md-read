@@ -36,6 +36,7 @@ import AppDialog from './components/AppDialog.vue'
 import KnowledgeComposer from './components/KnowledgeComposer.vue'
 import IconButton from './components/IconButton.vue'
 import FontPicker from './components/FontPicker.vue'
+import ReaderHeader from './components/ReaderHeader.vue'
 import type MarkdownEditorComponent from './components/MarkdownEditor.vue'
 import EditorMenuBar from './components/EditorMenuBar.vue'
 import ArcoDropdown from './components/ArcoDropdown.vue'
@@ -5063,94 +5064,99 @@ async function requestFullscreen() {
             </template>
           </aside>
           <div class="reader-main-column">
-          <div id="reader-toolbar-slot" class="reader-toolbar-slot" />
           <EditorMenuBar v-if="editorOpen" :groups="editorMenuGroups">
             <Button type="text" size="small" :aria-expanded="editorOutlineOpen" aria-controls="editor-draft-outline" @click="editorOutlineOpen = !editorOutlineOpen"><template #icon><AppIcon name="reader" :size="14" /></template>{{ editorOutlineOpen ? '隐藏大纲' : '显示大纲' }}</Button>
             <span>{{ editorDirty ? '未保存' : '已保存' }}</span>
             <button class="editor-return-button" type="button" @click="closeEditor">返回阅读</button>
           </EditorMenuBar>
-          <div class="reader-tabbar" aria-label="已打开文档">
-            <div class="reader-tab-scroll" role="tablist" aria-label="已打开文档">
-              <div v-for="document in store.openDocuments" :key="document.id" class="reader-tab" :class="{ active: store.currentDocumentId === document.id }" role="tab" :aria-selected="store.currentDocumentId === document.id" :aria-label="`打开 ${tabLabel(document)}`" :title="`${tabLabel(document)}\n${document.path}`" tabindex="0" @click="chooseDocument(document.id)" @contextmenu.prevent="openTabContextMenu($event, document.id)" @auxclick="onTabAuxClick($event, document.id)" @keydown.enter="chooseDocument(document.id)" @keydown.space.prevent="chooseDocument(document.id)">
-                <span><AppIcon name="reader" :size="15" /></span>
-                <strong>{{ tabLabel(document) }}</strong>
-                <IconButton icon="close" size="sm" :label="`关闭 ${tabLabel(document)}`" :show-title="false" @click.stop="closeDocument(document.id)" />
+          <ReaderHeader>
+            <template #tabs>
+              <div class="reader-tabbar" aria-label="已打开文档">
+                <div class="reader-tab-scroll" role="tablist" aria-label="已打开文档">
+                  <div v-for="document in store.openDocuments" :key="document.id" class="reader-tab" :class="{ active: store.currentDocumentId === document.id }" role="tab" :aria-selected="store.currentDocumentId === document.id" :aria-label="`打开 ${tabLabel(document)}`" :title="`${tabLabel(document)}\n${document.path}`" tabindex="0" @click="chooseDocument(document.id)" @contextmenu.prevent="openTabContextMenu($event, document.id)" @auxclick="onTabAuxClick($event, document.id)" @keydown.enter="chooseDocument(document.id)" @keydown.space.prevent="chooseDocument(document.id)">
+                    <span><AppIcon name="reader" :size="15" /></span>
+                    <strong>{{ tabLabel(document) }}</strong>
+                    <IconButton icon="close" size="sm" :label="`关闭 ${tabLabel(document)}`" :show-title="false" @click.stop="closeDocument(document.id)" />
+                  </div>
               </div>
-            </div>
-            <div class="reader-tab-actions">
-              <button class="text-button dual-document-toggle" type="button" :aria-pressed="dualDocumentMode" :disabled="store.openDocuments.length < 2" :title="store.openDocuments.length < 2 ? '先打开两篇 Markdown 文档' : '并排阅读两篇 Markdown 文档'" @click="dualDocumentMode = !dualDocumentMode">{{ dualDocumentMode ? '单文档' : '双文档' }}</button>
-              <IconButton class="reader-new-tab" icon="plus" size="sm" label="打开新文档" :disabled="busyAction !== null" @click="openFile" />
-              <div ref="tabListTrigger" class="reader-tab-list-wrap">
-                <IconButton class="reader-tab-list-trigger" icon="chevron-down" size="sm" :active="tabListOpen" :label="`查看全部标签（${store.openDocuments.length}）`" :aria-expanded="tabListOpen" @click.stop="toggleTabList" />
+                <div class="reader-tab-actions">
+                  <button class="text-button dual-document-toggle" type="button" :aria-pressed="dualDocumentMode" :disabled="store.openDocuments.length < 2" :title="store.openDocuments.length < 2 ? '先打开两篇 Markdown 文档' : '并排阅读两篇 Markdown 文档'" @click="dualDocumentMode = !dualDocumentMode">{{ dualDocumentMode ? '单文档' : '双文档' }}</button>
+                  <IconButton class="reader-new-tab" icon="plus" size="sm" label="打开新文档" :disabled="busyAction !== null" @click="openFile" />
+                  <div ref="tabListTrigger" class="reader-tab-list-wrap">
+                    <IconButton class="reader-tab-list-trigger" icon="chevron-down" size="sm" :active="tabListOpen" :label="`查看全部标签（${store.openDocuments.length}）`" :aria-expanded="tabListOpen" @click.stop="toggleTabList" />
+                  </div>
+                </div>
+                <div class="reader-tab-status" :class="{ 'is-error': saveFailed || fileSyncState === 'error', 'is-syncing': fileSyncState === 'syncing' }"><span><AppIcon :name="saveFailed || fileSyncState === 'error' ? 'info' : fileSyncState === 'updated' ? 'check' : 'sync'" :size="13" /></span><span>{{ store.currentDocument?.wordCount }} 字</span><span><AppIcon name="history" :size="13" /> {{ fileSyncState === 'syncing' ? '正在同步' : fileSyncState === 'updated' ? '已自动更新' : saveFailed ? '保存失败' : '自动保存' }}</span></div>
               </div>
-            </div>
-            <div class="reader-tab-status" :class="{ 'is-error': saveFailed || fileSyncState === 'error', 'is-syncing': fileSyncState === 'syncing' }"><span><AppIcon :name="saveFailed || fileSyncState === 'error' ? 'info' : fileSyncState === 'updated' ? 'check' : 'sync'" :size="13" /></span><span>{{ store.currentDocument?.wordCount }} 字</span><span><AppIcon name="history" :size="13" /> {{ fileSyncState === 'syncing' ? '正在同步' : fileSyncState === 'updated' ? '已自动更新' : saveFailed ? '保存失败' : '自动保存' }}</span></div>
-          </div>
+            </template>
+            <template #toolbar>
+              <div v-if="!editorOpen" class="reader-meta reader-meta-topbar">
+                <div class="reader-meta-document">
+                  <span class="section-kicker reader-path" :title="store.currentDocument?.path"><AppIcon name="file" :size="13" /><span class="reader-path-value">{{ currentDocumentFileName }}</span></span>
+                  <span class="reader-stat">{{ editorOpen && editorPreviewResult.failed ? '正文解析失败' : `${(editorOpen ? editorPreviewDocument : store.currentDocument)?.wordCount ?? 0} 字 · 约 ${(editorOpen ? editorPreviewDocument : store.currentDocument)?.estimatedReadMinutes ?? 0} 分钟` }}</span>
+                </div>
+                <div v-if="!editorOpen" class="reader-meta-tools">
+                  <div class="reader-edit-actions">
+                    <button type="button" :class="{ active: editorOpen }" @click="editorOpen ? closeEditor() : openEditor()">{{ editorOpen ? '阅读' : '编辑' }}</button>
+                    <button v-if="!isRealDocumentPath(store.currentDocument?.path ?? '')" class="save-pasted-button" type="button" :disabled="savingDocument" @click="saveCurrentDocument">{{ savingDocument ? '保存中…' : '保存 Markdown' }}</button>
+                    <ArcoDropdown class="reader-more-menu">
+                      <button type="button">更多</button>
+                      <template #menu>
+                        <button type="button" @click="toggleCleanMode">纯净阅读</button>
+                        <button type="button" :class="{ active: contextPanelOpen }" @click="contextPanelOpen = !contextPanelOpen">{{ contextPanelOpen ? '收起阅读信息' : '查看阅读信息' }}</button>
+                        <button type="button" @click="wordCountOpen = true">字数统计</button>
+                        <button type="button" @click="exportDocument('markdown')">导出 Markdown</button>
+                        <button type="button" @click="exportDocument('html')">导出 HTML</button>
+                        <button type="button" @click="exportDocument('html-clean')">导出无样式 HTML</button>
+                        <button type="button" @click="copyDocumentHtml">复制整篇 HTML</button>
+                        <button type="button" @click="copyDocumentPlain">复制整篇纯文本</button>
+                        <button type="button" @click="exportDocument('image')">导出 PNG 长图</button>
+                        <button type="button" @click="exportDocument('docx')">导出 DOCX</button>
+                        <button type="button" @click="exportDocument('epub')">导出 EPUB</button>
+                        <button type="button" @click="exportDocument('latex')">导出 LaTeX</button>
+                        <button type="button" @click="exportDocument('odt')">导出 ODT</button>
+                        <button type="button" @click="exportDocument('rtf')">导出 RTF</button>
+                        <button type="button" @click="exportDocument('mediawiki')">导出 MediaWiki</button>
+                        <button type="button" @click="exportPdfDocument()">导出 PDF</button>
+                        <button type="button" @click="printDocument">打印</button>
+                      </template>
+                    </ArcoDropdown>
+                    <FontPicker class="reader-toolbar-font-picker" compact label="正文字体" :model-value="store.readerSettings.fontFamily" :fallback-family="defaultTokens.reader.fontFamily" @update:model-value="store.updateSettings({ fontFamily: $event })" />
+                  </div>
+                  <div class="reader-reading-actions">
+                    <div class="reader-display-switch" role="tablist" aria-label="阅读视图">
+                      <button type="button" role="tab" :aria-selected="readerDisplayMode === 'markdown'" :class="{ active: readerDisplayMode === 'markdown' }" @click="readerDisplayMode = 'markdown'">Markdown</button>
+                      <button type="button" role="tab" :aria-selected="readerDisplayMode === 'mindmap'" :class="{ active: readerDisplayMode === 'mindmap' }" @click="readerDisplayMode = 'mindmap'">思维导图</button>
+                      <button type="button" role="tab" :aria-selected="readerDisplayMode === 'split'" :class="{ active: readerDisplayMode === 'split' }" @click="readerDisplayMode = 'split'; leftPanelTab = 'outline'">并排</button>
+                    </div>
+                    <div class="reader-navigation" aria-label="阅读位置与跳转">
+                      <span v-if="advancedSettings.showReadingProgress" class="reader-progress-label" aria-live="polite">阅读到 {{ Math.round(readerScrollPercent * 100) }}%</span>
+                      <button class="reader-zoom-button" type="button" :disabled="store.readerSettings.fontSize <= 15" aria-label="缩小正文字号" title="缩小正文字号" @click="changeReaderZoom(-1, false)">A−</button>
+                      <button class="reader-zoom-button" type="button" :disabled="store.readerSettings.fontSize >= 24" aria-label="放大正文字号" title="放大正文字号" @click="changeReaderZoom(1, false)">A+</button>
+                      <button v-if="store.mode === 'clean' && currentHeading" type="button" @click="jumpToCurrentHeading">本章开头</button>
+                      <button type="button" :disabled="readerAtTop" @click="scrollToTop">回到顶部</button>
+                      <button type="button" :disabled="readerAtBottom" @click="scrollToBottom">到文末</button>
+                    </div>
+                    <button class="command-trigger reader-command-trigger" type="button" title="搜索：Ctrl/Cmd + K；快速打开：Ctrl/Cmd + P" @click="openSearch('all')"><AppIcon name="search" :size="16" /><span>搜索文档、标题、内容</span><kbd>⌘ K</kbd></button>
+                  </div>
+                  <div class="top-actions reader-top-actions">
+                    <IconButton icon="focus" label="专注阅读" :active="store.mode === 'focus'" @click="toggleFocusMode" />
+                    <IconButton icon="palette" label="切换主题" @click="view = 'themes'" />
+                    <IconButton icon="fullscreen" :active="fullscreenActive" :label="fullscreenActive ? '退出全屏' : '全屏'" @click="requestFullscreen" />
+                  </div>
+                </div>
+                <div v-else class="reader-editing-meta">
+                  <span class="section-kicker">写作模式</span>
+                  <strong>编辑中</strong>
+                  <span>{{ editorDirty ? '未保存更改' : '已保存' }}</span>
+                  <button type="button" @click="closeEditor">退出编辑</button>
+                </div>
+                <div v-if="!editorOpen && store.currentDocument && advancedSettings.showReadingProgress" class="reader-progress-track" role="progressbar" aria-label="文档阅读进度" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="Math.round(readerScrollPercent * 100)"><span :style="{ transform: `scaleX(${readerScrollPercent})` }" /></div>
+              </div>
+            </template>
+          </ReaderHeader>
           <div class="reader-document-panes" :class="{ 'has-second-document': showSecondDocument }">
           <div class="reader-column">
-            <Teleport to="#reader-toolbar-slot" defer>
-            <div v-if="!editorOpen" class="reader-meta reader-meta-topbar">
-              <div class="reader-meta-document">
-                <span class="section-kicker reader-path" :title="store.currentDocument?.path"><AppIcon name="file" :size="13" /><span class="reader-path-value">{{ currentDocumentFileName }}</span></span>
-                <span class="reader-stat">{{ editorOpen && editorPreviewResult.failed ? '正文解析失败' : `${(editorOpen ? editorPreviewDocument : store.currentDocument)?.wordCount ?? 0} 字 · 约 ${(editorOpen ? editorPreviewDocument : store.currentDocument)?.estimatedReadMinutes ?? 0} 分钟` }}</span>
-              </div>
-              <div v-if="!editorOpen" class="reader-meta-tools">
-                <div class="reader-edit-actions">
-                  <button type="button" :class="{ active: editorOpen }" @click="editorOpen ? closeEditor() : openEditor()">{{ editorOpen ? '阅读' : '编辑' }}</button>
-                  <button v-if="!isRealDocumentPath(store.currentDocument?.path ?? '')" class="save-pasted-button" type="button" :disabled="savingDocument" @click="saveCurrentDocument">{{ savingDocument ? '保存中…' : '保存 Markdown' }}</button>
-                  <ArcoDropdown class="reader-more-menu">
-                    <button type="button">更多</button>
-                    <template #menu>
-                      <button type="button" @click="toggleCleanMode">纯净阅读</button>
-                      <button type="button" :class="{ active: contextPanelOpen }" @click="contextPanelOpen = !contextPanelOpen">{{ contextPanelOpen ? '收起阅读信息' : '查看阅读信息' }}</button>
-                      <button type="button" @click="wordCountOpen = true">字数统计</button>
-                      <button type="button" @click="exportDocument('markdown')">导出 Markdown</button>
-                      <button type="button" @click="exportDocument('html')">导出 HTML</button>
-                      <button type="button" @click="exportDocument('html-clean')">导出无样式 HTML</button>
-                      <button type="button" @click="copyDocumentHtml">复制整篇 HTML</button>
-                      <button type="button" @click="copyDocumentPlain">复制整篇纯文本</button>
-                      <button type="button" @click="exportDocument('image')">导出 PNG 长图</button>
-                      <button type="button" @click="exportDocument('docx')">导出 DOCX</button>
-                      <button type="button" @click="exportDocument('epub')">导出 EPUB</button>
-                      <button type="button" @click="exportDocument('latex')">导出 LaTeX</button>
-                      <button type="button" @click="exportDocument('odt')">导出 ODT</button>
-                      <button type="button" @click="exportDocument('rtf')">导出 RTF</button>
-                      <button type="button" @click="exportDocument('mediawiki')">导出 MediaWiki</button>
-                      <button type="button" @click="exportPdfDocument()">导出 PDF</button>
-                      <button type="button" @click="printDocument">打印</button>
-                    </template>
-                  </ArcoDropdown>
-                  <FontPicker class="reader-toolbar-font-picker" compact label="正文字体" :model-value="store.readerSettings.fontFamily" :fallback-family="defaultTokens.reader.fontFamily" @update:model-value="store.updateSettings({ fontFamily: $event })" />
-                </div>
-                <div class="reader-display-switch" role="tablist" aria-label="阅读视图">
-                  <button type="button" role="tab" :aria-selected="readerDisplayMode === 'markdown'" :class="{ active: readerDisplayMode === 'markdown' }" @click="readerDisplayMode = 'markdown'">Markdown</button>
-                  <button type="button" role="tab" :aria-selected="readerDisplayMode === 'mindmap'" :class="{ active: readerDisplayMode === 'mindmap' }" @click="readerDisplayMode = 'mindmap'">思维导图</button>
-                  <button type="button" role="tab" :aria-selected="readerDisplayMode === 'split'" :class="{ active: readerDisplayMode === 'split' }" @click="readerDisplayMode = 'split'; leftPanelTab = 'outline'">并排</button>
-                </div>
-                <div class="reader-navigation" aria-label="阅读位置与跳转">
-                  <span v-if="advancedSettings.showReadingProgress" class="reader-progress-label" aria-live="polite">阅读到 {{ Math.round(readerScrollPercent * 100) }}%</span>
-                  <button class="reader-zoom-button" type="button" :disabled="store.readerSettings.fontSize <= 15" aria-label="缩小正文字号" title="缩小正文字号" @click="changeReaderZoom(-1, false)">A−</button>
-                  <button class="reader-zoom-button" type="button" :disabled="store.readerSettings.fontSize >= 24" aria-label="放大正文字号" title="放大正文字号" @click="changeReaderZoom(1, false)">A+</button>
-                  <button v-if="store.mode === 'clean' && currentHeading" type="button" @click="jumpToCurrentHeading">本章开头</button>
-                  <button type="button" :disabled="readerAtTop" @click="scrollToTop">回到顶部</button>
-                  <button type="button" :disabled="readerAtBottom" @click="scrollToBottom">到文末</button>
-                </div>
-                <button class="command-trigger reader-command-trigger" type="button" title="搜索：Ctrl/Cmd + K；快速打开：Ctrl/Cmd + P" @click="openSearch('all')"><AppIcon name="search" :size="16" /><span>搜索文档、标题、内容</span><kbd>⌘ K</kbd></button>
-                <div class="top-actions reader-top-actions">
-                  <IconButton icon="focus" label="专注阅读" :active="store.mode === 'focus'" @click="toggleFocusMode" />
-                  <IconButton icon="palette" label="切换主题" @click="view = 'themes'" />
-                  <IconButton icon="fullscreen" :active="fullscreenActive" :label="fullscreenActive ? '退出全屏' : '全屏'" @click="requestFullscreen" />
-                </div>
-              </div>
-              <div v-else class="reader-editing-meta">
-                <span class="section-kicker">写作模式</span>
-                <strong>编辑中</strong>
-                <span>{{ editorDirty ? '未保存更改' : '已保存' }}</span>
-                <button type="button" @click="closeEditor">退出编辑</button>
-              </div>
-              <div v-if="!editorOpen && store.currentDocument && advancedSettings.showReadingProgress" class="reader-progress-track" role="progressbar" aria-label="文档阅读进度" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="Math.round(readerScrollPercent * 100)"><span :style="{ transform: `scaleX(${readerScrollPercent})` }" /></div>
-            </div>
-            </Teleport>
             <div ref="readerViewport" class="reader-viewport" @scroll="onReaderScroll" @wheel="onReaderWheel" @pointerdown="onReaderPointerDown" @mouseup="captureSelection">
               <div v-if="exportError || exporting" class="editor-safety-notice" :role="exportError ? 'alert' : 'status'"><span>{{ exportError || '正在生成完整导出文件…' }}</span><button v-if="exportError" type="button" @click="exportError = ''">关闭</button></div>
               <div v-if="editorOpen" class="editor-surface" :class="{ 'editor-typewriter-mode': advancedSettings.typewriterMode }" @contextmenu="openEditorContextMenu">
