@@ -165,7 +165,7 @@ export function renderVideoNode(video: MdastNode, resolveUrl: MarkdownUrlResolve
   return `<figure class="markdown-video"><video src="${safeMediaUrl(resolveUrl(video.url ?? ''))}"${poster} controls preload="metadata">${track}</video><figcaption>${escapeHtml(caption)}</figcaption></figure>`
 }
 
-function blockHtml(node: MdastNode, resolveUrl: MarkdownUrlResolver = (url) => url, context = createRenderContext(), source?: string, inList = false): string {
+function blockHtml(node: MdastNode, resolveUrl: MarkdownUrlResolver = (url) => url, context = createRenderContext(), source?: string, inList = false, leadingBlankLines = 0): string {
   const children = () => (node.children ?? []).map((child) => blockHtml(child, resolveUrl, context, source, inList || node.type === 'listItem')).join('')
   const inlineChildren = (preserveSoftBreaks = false) => (node.children ?? []).map((child) => inlineHtml(child, preserveSoftBreaks, resolveUrl, context)).join('')
   switch (node.type) {
@@ -192,13 +192,26 @@ function blockHtml(node: MdastNode, resolveUrl: MarkdownUrlResolver = (url) => u
     case 'list': {
       const tag = node.ordered ? 'ol' : 'ul'
       const start = node.ordered && node.start != null && node.start !== 1 ? ` start="${node.start}"` : ''
-      return `<${tag}${start}>${children()}</${tag}>`
+      let previousItem: MdastNode | undefined
+      const items = (node.children ?? []).map((item) => {
+        const previousEnd = previousItem?.position?.end?.offset
+        const itemStart = item.position?.start?.offset
+        const separator = source && previousEnd != null && itemStart != null ? source.slice(previousEnd, itemStart) : ''
+        const lineBreaks = separator.match(/\r\n|\r|\n/g)?.length ?? 0
+        const blankLines = Math.max(0, lineBreaks - 1)
+        previousItem = item
+        return blockHtml(item, resolveUrl, context, source, inList, blankLines)
+      }).join('')
+      return `<${tag}${start}>${items}</${tag}>`
     }
     case 'listItem': {
       const isTask = typeof node.checked === 'boolean'
       const taskClass = isTask ? ` class="task-item ${node.checked ? 'is-checked' : 'is-unchecked'}"` : ''
+      const blankLineMargin = leadingBlankLines
+        ? ` style="margin-block-start: ${leadingBlankLines * 1.72}em; margin-block-start: ${leadingBlankLines}lh"`
+        : ''
       const checkbox = isTask ? `<span class="task-checkbox" role="checkbox" aria-checked="${node.checked}">${node.checked ? '✓' : ''}</span>` : ''
-      return `<li${taskClass}>${checkbox}${children()}</li>`
+      return `<li${taskClass}${blankLineMargin}>${checkbox}${children()}</li>`
     }
     case 'code': return `<pre><code data-language="${escapeHtml(node.lang ?? 'text')}">${escapeHtml(node.value ?? '')}</code></pre>`
     case 'math': return `<div class="math-block">${renderMath(node.value ?? '', true)}</div>`

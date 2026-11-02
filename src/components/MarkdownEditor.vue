@@ -29,6 +29,45 @@ const appearance = new Compartment()
 let view: EditorView | null = null
 let publishing = false
 let lastCell: HTMLTextAreaElement | null = null
+let selectionPointerStart: { x: number; y: number } | null = null
+let selectionDragActive = false
+let selectionDragFrozen = false
+
+function onSelectionMouseDown(event: MouseEvent) {
+  const target = event.target
+  if (event.button !== 0 || !(target instanceof Element) || !target.closest('.cm-content') || target.closest('input, textarea, button, a, .live-preview-widget, .live-table-widget, .live-diagram-widget')) return
+  selectionPointerStart = { x: event.clientX, y: event.clientY }
+  selectionDragActive = false
+  selectionDragFrozen = false
+}
+function onSelectionMouseMove(event: MouseEvent) {
+  if (!selectionPointerStart || event.buttons === 0) return
+  if (selectionDragFrozen) {
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    return
+  }
+  if (Math.hypot(event.clientX - selectionPointerStart.x, event.clientY - selectionPointerStart.y) >= 10) selectionDragActive = true
+}
+function onSelectionMouseUp(event: MouseEvent) {
+  if (!event.isTrusted) return
+  selectionPointerStart = null
+  selectionDragActive = false
+  selectionDragFrozen = false
+}
+function freezeSelectionOnWheel(event: WheelEvent) {
+  if (!selectionDragActive || selectionDragFrozen || !view || view.state.selection.main.empty) return
+  selectionDragFrozen = true
+  document.dispatchEvent(new MouseEvent('mouseup', {
+    bubbles: true,
+    cancelable: true,
+    button: 0,
+    buttons: 0,
+    clientX: event.clientX,
+    clientY: event.clientY,
+  }))
+}
+
 function onFocus(event: FocusEvent) {
   lastCell = event.target instanceof HTMLTextAreaElement && event.target.closest('.live-table-widget') ? event.target : null
 }
@@ -72,6 +111,10 @@ function centerCaret() {
 
 onMounted(() => {
   host.value!.addEventListener('focusin', onFocus)
+  host.value!.addEventListener('mousedown', onSelectionMouseDown, true)
+  host.value!.addEventListener('wheel', freezeSelectionOnWheel, true)
+  document.addEventListener('mousemove', onSelectionMouseMove, true)
+  document.addEventListener('mouseup', onSelectionMouseUp, true)
   const createEditor = () => new EditorView({ parent: host.value!, state: EditorState.create({ doc: props.modelValue, extensions: [
     // Tauri's packaged CSP requires dynamic editor styles to reuse its style nonce.
     EditorView.cspNonce.of(document.querySelector<HTMLStyleElement>('style[nonce]')?.nonce ?? ''),
@@ -88,7 +131,9 @@ onMounted(() => {
       if (update.docChanged || update.selectionSet) {
         emit('caret')
         emit('history', { undo: undoDepth(update.state) > 0, redo: redoDepth(update.state) > 0 })
-        if (props.typewriter) requestAnimationFrame(centerCaret)
+        if (props.typewriter && !update.transactions.some(transaction => transaction.isUserEvent('select.pointer'))) {
+          requestAnimationFrame(centerCaret)
+        }
       }
     }),
   ] }) })
@@ -113,7 +158,15 @@ onMounted(() => {
 watch(() => props.modelValue, value => { if (!publishing && view?.state.doc.toString() !== value) replaceSource(value) })
 watch(() => [props.live, props.spellcheck], () => view?.dispatch({ effects: appearance.reconfigure(extensions()) }))
 watch(() => props.typewriter, centerCaret)
-onBeforeUnmount(() => { host.value?.removeEventListener('focusin', onFocus); view?.destroy(); view = null })
+onBeforeUnmount(() => {
+  host.value?.removeEventListener('focusin', onFocus)
+  host.value?.removeEventListener('mousedown', onSelectionMouseDown, true)
+  host.value?.removeEventListener('wheel', freezeSelectionOnWheel, true)
+  document.removeEventListener('mousemove', onSelectionMouseMove, true)
+  document.removeEventListener('mouseup', onSelectionMouseUp, true)
+  view?.destroy()
+  view = null
+})
 
 defineExpose({
   get selectionStart() { return view?.state.selection.main.from ?? 0 },
