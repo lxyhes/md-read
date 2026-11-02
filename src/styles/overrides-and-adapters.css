@@ -106,7 +106,7 @@ a:active > .app-icon-vector { transform: scale(.92); }
   background: color-mix(in srgb, var(--accent) 24%, transparent);
   color: var(--ink);
 }
-.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)) :is(button, a, input, select, .arco-select-view-single, textarea):focus-visible {
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)) :is(button, a, input:not(.arco-input, .arco-select-view-input), select, textarea:not(.arco-textarea)):focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent) 66%, transparent);
   outline-offset: 3px;
 }
