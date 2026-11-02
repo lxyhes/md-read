@@ -73,6 +73,8 @@ function centerCaret() {
 onMounted(() => {
   host.value!.addEventListener('focusin', onFocus)
   const createEditor = () => new EditorView({ parent: host.value!, state: EditorState.create({ doc: props.modelValue, extensions: [
+    // Tauri's packaged CSP requires dynamic editor styles to reuse its style nonce.
+    EditorView.cspNonce.of(document.querySelector<HTMLStyleElement>('style[nonce]')?.nonce ?? ''),
     EditorState.lineSeparator.of('\n'), ...(fallback.value ? [] : [markdown({ base: markdownLanguage, extensions: [Subscript, Superscript] })]), history(), drawSelection(), dropCursor(), highlightActiveLine(), EditorView.lineWrapping,
     keymap.of([...historyKeymap, ...defaultKeymap]), appearance.of(extensions()),
     EditorView.domEventHandlers({
