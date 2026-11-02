@@ -21,6 +21,7 @@ import '@arco-design/web-vue/es/input/style/css.js'
 import Checkbox from '@arco-design/web-vue/es/checkbox'
 import '@arco-design/web-vue/es/checkbox/style/css.js'
 import { invoke, isTauri as tauriIsTauri } from '@tauri-apps/api/core'
+import { bindNativeFileOpen } from './nativeFileOpen'
 import { readNativeClipboardRichText } from './nativeClipboard'
 import { canScrollFocusedRegion } from './focusWheel'
 import { useReaderStore } from './stores/reader'
@@ -378,6 +379,7 @@ let focusScrollTargetId: string | null = null
 let focusWheelAt = -Infinity
 let readerZoomWheelAt = -Infinity
 let stopNativeFileDrop: (() => void) | null = null
+let stopNativeFileOpen: (() => void) | null = null
 const documentWatchers = new Map<string, () => void>()
 const documentReloadTimers = new Map<string, number>()
 let documentWatchRequest = 0
@@ -3454,6 +3456,9 @@ async function boot() {
       observeReaderLayout()
       restoreScroll()
     }
+    stopNativeFileOpen = await bindNativeFileOpen(openAssociatedMarkdown, error => {
+      notify(error instanceof Error ? error.message : String(error))
+    })
   } catch (error) {
     notify(error instanceof Error ? error.message : '阅读空间初始化失败')
   } finally {
@@ -3485,6 +3490,7 @@ onUnmounted(() => {
   document.removeEventListener('click', onTabOutsideClick)
   stopFocusTimer()
   stopNativeFileDrop?.()
+  stopNativeFileOpen?.()
   stopAllDocumentWatchers()
   directoryWatchRequest++
   if (directoryPathTimer !== null) window.clearInterval(directoryPathTimer)
@@ -3851,6 +3857,20 @@ async function onDrop(event: DragEvent) {
   } catch (error) {
     notify(error instanceof Error ? error.message : '导入文档失败')
   } finally { busyAction.value = null }
+}
+
+async function openAssociatedMarkdown(path: string) {
+  const existing = store.documents.find(document => filePathKey(document.path) === filePathKey(path))
+  if (existing) { await chooseDocument(existing.id); return }
+  const source = await readMarkdownPath(path)
+  if (editorOpen.value) {
+    if (!persistEditorDraft()) throw new Error(editorBackupError.value)
+    editorOpen.value = false
+  }
+  await store.addOpenedFiles([{ path, source }])
+  view.value = 'reader'
+  await nextTick()
+  restoreScroll()
 }
 
 async function bindNativeFileDrop() {

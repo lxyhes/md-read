@@ -40,6 +40,16 @@
     ],
     "targets": "all",
     "resources": [],
+    "fileAssociations": [
+      {
+        "ext": ["md", "markdown", "qmd"],
+        "name": "Markdown document",
+        "description": "Markdown / Quarto 文档",
+        "mimeType": "text/markdown",
+        "role": "Editor",
+        "rank": "Alternate"
+      }
+    ],
     "windows": { "nsis": { "installMode": "currentUser" } }
   }
 }

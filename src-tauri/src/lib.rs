@@ -1,5 +1,6 @@
 use arboard::{Clipboard, ImageData};
 mod web_preview;
+mod file_open;
 #[cfg(target_os = "macos")]
 use objc2_app_kit::NSPasteboard;
 use serde::{Deserialize, Serialize};
@@ -865,6 +866,16 @@ fn export_html_to_pdf(source: String, path: String) -> Result<(), String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(file_open::PendingFileOpens::default())
+        .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+            file_open::queue_files(app, file_open::markdown_paths(args.into_iter().skip(1), Path::new(&cwd)));
+            file_open::focus_main_window(app);
+        }))
+        .setup(|app| {
+            let cwd = std::env::current_dir()?;
+            file_open::queue_files(app.handle(), file_open::markdown_paths(std::env::args().skip(1), &cwd));
+            Ok(())
+        })
         .on_window_event(|window, event| {
             if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
                 // The native close request has already been approved here. Exit the
@@ -884,9 +895,18 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
-        .invoke_handler(tauri::generate_handler![tracked_directory, write_markdown_checked, allow_asset_directory, read_local_image, read_clipboard_image, read_clipboard_snapshot, read_clipboard_rich_text, read_clipboard_signature, write_clipboard_snapshot, read_remote_image, download_remote_image, upload_piclist_image, ai_chat, open_directory, open_external_url, web_preview::web_preview, pandoc_import_document, pandoc_export_document, export_html_to_pdf])
-        .run(tauri::generate_context!())
-        .expect("error while running Moyue application");
+        .invoke_handler(tauri::generate_handler![file_open::take_open_files, tracked_directory, write_markdown_checked, allow_asset_directory, read_local_image, read_clipboard_image, read_clipboard_snapshot, read_clipboard_rich_text, read_clipboard_signature, write_clipboard_snapshot, read_remote_image, download_remote_image, upload_piclist_image, ai_chat, open_directory, open_external_url, web_preview::web_preview, pandoc_import_document, pandoc_export_document, export_html_to_pdf])
+        .build(tauri::generate_context!())
+        .expect("error while building Moyue application")
+        .run(|_app, _event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Opened { urls } = _event {
+                let paths = urls.into_iter().filter_map(|url| url.to_file_path().ok())
+                    .map(|path| path.to_string_lossy().into_owned());
+                file_open::queue_files(_app, file_open::markdown_paths(paths, Path::new("/")));
+                file_open::focus_main_window(_app);
+            }
+        });
 }
 
 #[cfg(test)]
