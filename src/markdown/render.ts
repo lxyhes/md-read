@@ -189,7 +189,11 @@ function blockHtml(node: MdastNode, resolveUrl: MarkdownUrlResolver = (url) => u
       return source ? sourceIndentedHtml(`<p>${content}</p>`, source, node) : `<p>${content}</p>`
     }
     case 'blockquote': return calloutHtml(node, resolveUrl, context, source) ?? `<blockquote>${children()}</blockquote>`
-    case 'list': return `<${node.ordered ? 'ol' : 'ul'}>${children()}</${node.ordered ? 'ol' : 'ul'}>`
+    case 'list': {
+      const tag = node.ordered ? 'ol' : 'ul'
+      const start = node.ordered && node.start != null && node.start !== 1 ? ` start="${node.start}"` : ''
+      return `<${tag}${start}>${children()}</${tag}>`
+    }
     case 'listItem': {
       const isTask = typeof node.checked === 'boolean'
       const taskClass = isTask ? ` class="task-item ${node.checked ? 'is-checked' : 'is-unchecked'}"` : ''

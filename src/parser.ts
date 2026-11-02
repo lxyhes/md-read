@@ -129,17 +129,19 @@ function restoreTimestampedListHeadings(tree: MdastNode) {
     }
     // A fully nested chapter list already expresses its hierarchy in Markdown.
     if (node.children.every((item) => chapterText(item) && item.children?.some((child) => child.type === 'list'))) {
-      restored.push(...node.children.map((item) => ({ ...node, children: [item], position: item.position })))
+      restored.push(...node.children.map((item, index) => ({ ...node, start: node.ordered ? (node.start ?? 1) + index : node.start, children: [item], position: item.position })))
       continue
     }
     let items: MdastNode[] = []
+    let itemsStart = 0
     const flush = () => {
-      if (items.length) restored.push({ ...node, children: items, position: { start: items[0].position?.start, end: items.at(-1)?.position?.end } })
+      if (items.length) restored.push({ ...node, start: node.ordered ? (node.start ?? 1) + itemsStart : node.start, children: items, position: { start: items[0].position?.start, end: items.at(-1)?.position?.end } })
       items = []
     }
-    for (const item of node.children) {
+    for (const [index, item] of node.children.entries()) {
       const chapter = chapterText(item)
       if (!chapter) {
+        if (!items.length) itemsStart = index
         items.push(item)
         continue
       }

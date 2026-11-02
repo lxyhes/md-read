@@ -53,7 +53,7 @@ import { getDocumentStatistics } from './documentStats'
 import { asciiDiagramToMermaid, asciiTreeToTree, markdownToTree } from './asciiDiagram'
 import { formatClipboardImage, formatClipboardToMarkdown, htmlToMarkdown, normalizeMixedOrderedListSource, promoteClipboardImageLinks, suggestPastedMarkdownName } from './pasteMarkdown'
 import { matchQuickOpen } from './quickOpen'
-import { indentSelection, codeIndentInsertion, isFenceBacktickInput, selectedLineRange, removeSelectedLines, setHeadingLines } from './editorInput'
+import { indentSelection, codeIndentInsertion, isFenceBacktickInput, selectedLineRange, removeSelectedLines, setHeadingLines, setOrderedListLines } from './editorInput'
 import { createEditorHistory, recordEditorHistory, stepEditorHistory } from './editorHistory'
 import { findEditorMatches, replaceEditorMatches } from './editorFind'
 import { parseEditableTable, serializeEditableTable, moveTableRow, moveTableColumn, deleteTableRow, deleteTableColumn, pasteTableCells, type TableAlignment } from './tableEditing'
@@ -583,12 +583,7 @@ const editorPreviewHtml = computed(() => {
   }
 })
 const editorHeadings = computed(() => editorPreviewDocument.value?.headings ?? [])
-const readerRegions = computed(() => {
-  const document = store.currentDocument
-  if (!document) return []
-  const first = document.regions[0]
-  return first?.type === 'heading' && first.textContent.trim() === document.title.trim() ? document.regions.slice(1) : document.regions
-})
+const readerRegions = computed(() => store.currentDocument?.regions ?? [])
 const virtualizedReader = computed(() => readerRegions.value.length > virtualRegionThreshold)
 const virtualLayout = computed(() => {
   const regions = readerRegions.value
@@ -1946,12 +1941,16 @@ function insertEditorDivider() {
 }
 
 function prefixEditorLines(prefix: string) {
+  if (prefix === '1. ') {
+    updateEditor(setOrderedListLines)
+    return
+  }
   updateEditor((value, start, end) => {
     const lineStart = value.lastIndexOf('\n', Math.max(0, start - 1)) + 1
     const lineEnd = value.indexOf('\n', end)
     const stop = lineEnd < 0 ? value.length : lineEnd
     const lines = value.slice(lineStart, stop).split('\n').map((line) => {
-      if (prefix !== '- ' && prefix !== '- [ ] ' && prefix !== '1. ') return `${prefix}${line}`
+      if (prefix !== '- ' && prefix !== '- [ ] ') return `${prefix}${line}`
       const content = line.replace(/^(\s*)(?:(?:[-+*]\s+)?\d+[.)]\s+|[-+*]\s+)(?:\[[ xX]\]\s*)?/, '$1')
       return `${prefix}${content}`
     })
@@ -4588,7 +4587,6 @@ async function deleteViewerDiagram() {
 }
 function scrollToHeading(regionId: string) {
   syncActiveHeading(regionId, true)
-  const readerDocument = store.currentDocument
   const element = document.querySelector(`[data-region-id="${regionId}"]`)
   if (element) { element.scrollIntoView({ behavior: 'smooth', block: 'start' }); return }
   if (virtualizedReader.value) {
@@ -4598,8 +4596,6 @@ function scrollToHeading(regionId: string) {
       return
     }
   }
-  const first = readerDocument?.regions[0]
-  if (first?.id === regionId && readerRegions.value[0]?.id !== regionId) readerViewport.value?.scrollTo({ top: 0, behavior: 'smooth' })
 }
 function jumpToCurrentHeading() {
   if (currentHeading.value) scrollToHeading(currentHeading.value.regionId)

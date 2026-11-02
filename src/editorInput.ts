@@ -20,6 +20,38 @@ export function selectedLineRange(value: string, start: number, end: number) {
   return { start: lineStart, end: nextBreak < 0 ? value.length : nextBreak }
 }
 
+export function setOrderedListLines(value: string, start: number, end: number) {
+  const range = selectedLineRange(value, start, end)
+  const original = value.slice(range.start, range.end)
+  const lines = original.split('\n')
+  const levels = new Map<string, { next: number; indent: string; markerWidth: number }>()
+  const replacement = lines.map(line => {
+    if (!line.trim() && (start !== end || lines.length > 1)) return line
+    const indent = line.match(/^[ \t]*/)?.[0] ?? ''
+    const text = line.slice(indent.length)
+    const existing = text.match(/^(?:[-+*][ \t]+)?(\d+)[.)][ \t]+/)
+    const content = text.replace(/^(?:(?:[-+*][ \t]+)?\d+[.)](?:[ \t]+|$)|[-+*](?:[ \t]+|$))(?:\[[ xX]\][ \t]*)?/, '')
+    if (!content.trim() && (start !== end || lines.length > 1)) return indent
+    for (const key of levels.keys()) if (key.length > indent.length) levels.delete(key)
+    let level = levels.get(indent)
+    if (!level) {
+      const parent = [...levels.entries()].filter(([key]) => key.length < indent.length).at(-1)?.[1]
+      level = { next: Number(existing?.[1] ?? 1), indent: parent ? parent.indent + ' '.repeat(parent.markerWidth) : indent, markerWidth: 0 }
+      levels.set(indent, level)
+    }
+    const number = level.next++
+    level.markerWidth = `${number}. `.length
+    return `${level.indent}${number}. ${content}`
+  }).join('\n')
+  const nextValue = value.slice(0, range.start) + replacement + value.slice(range.end)
+  if (start === end) {
+    const prefixLength = replacement.match(/^[ \t]*\d+\. /)?.[0].length ?? 0
+    const cursor = Math.max(range.start + prefixLength, start + replacement.length - original.length)
+    return { value: nextValue, start: cursor, end: cursor }
+  }
+  return { value: nextValue, start: range.start, end: range.start + replacement.length }
+}
+
 export function setHeadingLines(value: string, start: number, end: number, level: number) {
   const range = selectedLineRange(value, start, end)
   const prefix = `${'#'.repeat(level)} `

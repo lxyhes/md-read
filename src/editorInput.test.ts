@@ -1,6 +1,48 @@
 import { describe, expect, it } from 'vitest'
 import { markdownLanguage } from '@codemirror/lang-markdown'
-import { codeIndentInsertion, indentSelection, isFenceBacktickInput, isTopLevelParagraph, selectedLineRange, removeSelectedLines, setHeadingLines } from './editorInput'
+import { codeIndentInsertion, indentSelection, isFenceBacktickInput, isTopLevelParagraph, selectedLineRange, removeSelectedLines, setHeadingLines, setOrderedListLines } from './editorInput'
+
+describe('ordered list menu action', () => {
+  it('numbers all selected items consecutively and keeps blank lines empty', () => {
+    const lines = Array.from({ length: 15 }, (_, index) => `条目${index + 1}`)
+    const source = lines.join('\n\n')
+    const result = setOrderedListLines(source, 0, source.length)
+    expect(result.value).toBe(lines.map((line, index) => `${index + 1}. ${line}`).join('\n\n'))
+    expect(result.value.slice(result.start, result.end)).toBe(result.value)
+  })
+
+  it('renumbers repeated markers without duplicating list or task markers', () => {
+    const source = '1. 第一项\n1. 第二项\n1. \n- [x] 第三项\n- 1. 第四项'
+    expect(setOrderedListLines(source, 0, source.length).value).toBe('1. 第一项\n2. 第二项\n\n3. 第三项\n4. 第四项')
+  })
+
+  it('preserves a selected continuation starting at 22', () => {
+    const source = '22. 第一项\n23. 第二项\n24. 第三项'
+    expect(setOrderedListLines(source, 0, source.length).value).toBe(source)
+  })
+
+  it('does not modify the next line when selection ends at its start', () => {
+    const source = '第一项\n第二项\n保持原样'
+    const end = source.indexOf('保持原样')
+    const result = setOrderedListLines(source, 0, end)
+    expect(result.value).toBe('1. 第一项\n2. 第二项\n保持原样')
+    expect(result.value.slice(result.start, result.end)).toBe('1. 第一项\n2. 第二项')
+  })
+
+  it('keeps nested numbering independent and restarts it under a new parent', () => {
+    const source = '- 第一组\n  - 子项甲\n  - 子项乙\n- 第二组\n  - 子项丙'
+    const result = setOrderedListLines(source, 0, source.length)
+    expect(result.value).toBe('1. 第一组\n   1. 子项甲\n   2. 子项乙\n2. 第二组\n   1. 子项丙')
+    const outer = markdownLanguage.parser.parse(result.value).topNode.getChild('OrderedList')
+    expect(outer?.getChildren('ListItem')).toHaveLength(2)
+    expect(outer?.getChildren('ListItem')[0].getChild('OrderedList')?.getChildren('ListItem')).toHaveLength(2)
+  })
+
+  it('inserts one marker on an empty line and preserves the caret in text', () => {
+    expect(setOrderedListLines('', 0, 0)).toEqual({ value: '1. ', start: 3, end: 3 })
+    expect(setOrderedListLines('内容', 1, 1)).toEqual({ value: '1. 内容', start: 4, end: 4 })
+  })
+})
 
 it('changes heading levels without stacking Markdown markers', () => {
   expect(setHeadingLines('# one\n## two\ntext', 0, 12, 3)).toEqual({ value: '### one\n### two\ntext', start: 0, end: 15 })
