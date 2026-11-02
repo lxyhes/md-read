@@ -31,7 +31,7 @@ function closeAfterAction(event: MouseEvent) {
   >
     <slot />
     <template #content>
-      <div v-if="visible" :class="props.panelClass" @click="closeAfterAction">
+      <div v-if="visible" :class="props.panelClass" :role="props.panelClass.includes('rail-more-popover') ? 'menu' : undefined" @click="closeAfterAction">
         <slot name="menu" />
       </div>
     </template>

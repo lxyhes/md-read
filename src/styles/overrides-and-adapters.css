@@ -652,6 +652,24 @@ a:active > .app-icon-vector { transform: scale(.92); }
   max-height: min(70vh, 520px);
   overflow-y: auto;
 }
+.rail-more-popover button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 34px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font: 12px/1.45 var(--ui-font);
+  text-align: left;
+}
+.rail-more-popover button:hover {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
 .reader-more-popover .font-picker-compact {
   justify-content: space-between;
   margin-bottom: 4px;
@@ -789,38 +807,12 @@ a:active > .app-icon-vector { transform: scale(.92); }
   position: relative;
   overflow: hidden;
 }
-.app-shell:not(.is-focus) .document-card::before {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background: linear-gradient(110deg, transparent 30%, color-mix(in srgb, white 40%, transparent) 50%, transparent 70%);
-  transform: translateX(-120%);
-  transition: transform .7s ease;
-  content: "";
-}
-.app-shell:not(.is-focus) .document-card > * {
-  position: relative;
-  z-index: 1;
-}
-.app-shell:not(.is-focus) .document-card:is(:hover, :focus-visible)::before {
-  transform: translateX(120%);
-}
 .app-shell:not(.is-focus) .document-card:is(:hover, :focus-visible) {
   position: relative;
   z-index: 2;
-  transform: scale(1.02) translateY(-6px);
-  border-color: color-mix(in srgb, var(--accent) 78%, var(--border));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 38%, transparent), 0 16px 30px color-mix(in srgb, var(--app-bg) 22%, transparent), 0 0 16px color-mix(in srgb, var(--accent) 20%, transparent);
-  animation: document-card-glow 2.2s ease-in-out infinite;
-}
-@keyframes document-card-glow {
-  0%, 100% {
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 32%, transparent), 0 16px 30px color-mix(in srgb, var(--app-bg) 22%, transparent), 0 0 12px color-mix(in srgb, var(--accent) 14%, transparent);
-  }
-  50% {
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 52%, transparent), 0 18px 34px color-mix(in srgb, var(--app-bg) 26%, transparent), 0 0 18px color-mix(in srgb, var(--accent) 24%, transparent);
-  }
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--accent) 44%, var(--border));
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--app-bg) 22%, transparent);
 }
 .app-shell:not(.is-focus) .library-note {
   margin-top: 30px;
@@ -841,21 +833,55 @@ a:active > .app-icon-vector { transform: scale(.92); }
 
 @media (max-width: 980px) {
   .app-shell:not(.is-focus) .library-hero {
-    grid-template-columns: 1fr;
+    min-height: 0;
+    flex-direction: column;
+    align-items: flex-start;
     gap: 28px;
   }
+  .app-shell:not(.is-focus) .hero-continue {
+    width: min(100%, 420px);
+  }
   .app-shell:not(.is-focus) .page-toolbar {
-    align-items: flex-end;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .app-shell:not(.is-focus) .library-toolbar-heading {
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .app-shell:not(.is-focus) .library-search {
+    width: 100%;
+    min-width: 0;
+  }
+  .app-shell:not(.is-focus) .document-grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(235px, 100%), 1fr));
   }
   .app-shell:not(.is-focus) .toolbar-actions {
     flex-wrap: wrap;
-    justify-content: flex-end;
+    justify-content: flex-start;
   }
   .app-shell:not(.is-focus) .reader-layout.context-open:not(.focus-layout):not(.clean-layout) {
     grid-template-columns: var(--outline-panel-width, 180px) minmax(0, 1fr);
   }
   .app-shell:not(.is-focus) .reader-layout.context-open .context-panel {
     display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .app-shell:not(.is-focus) .page {
+    padding-inline: 20px;
+  }
+  .app-shell:not(.is-focus) .topbar {
+    padding-inline: 16px;
+  }
+  .app-shell:not(.is-focus) .command-trigger span {
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 

@@ -399,6 +399,16 @@
   max-width: none;
   margin: 0 auto 54px;
 }
+/* Reading controls first, typography second, service setup after the reader's core preferences. */
+.app-shell:not(.is-focus) .settings-grid > :nth-child(9) { order: 1; grid-column: 1 / -1; }
+.app-shell:not(.is-focus) .settings-grid > :nth-child(2) { order: 2; }
+.app-shell:not(.is-focus) .settings-grid > :nth-child(10) { order: 3; }
+.app-shell:not(.is-focus) .settings-grid > :nth-child(1) { order: 4; grid-column: 1 / -1; }
+.app-shell:not(.is-focus) .settings-save-note {
+  align-self: center;
+  color: var(--muted);
+  font: 12px var(--ui-font);
+}
 .app-shell:not(.is-focus) .settings-card {
   min-height: 0;
   padding: 27px 2px 31px;
@@ -631,31 +641,7 @@
   color: var(--preview-accent, var(--accent));
 }
 
-/* Four papers, four reading grammars. */
-.app-shell:not(*) .reader-content .region-content blockquote {
-  padding-block: 17px;
-  border-block: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
-  background: transparent;
-  box-shadow: none;
-}
-.app-shell:not(*) .reader-content .region-content blockquote {
-  padding: 16px 20px;
-  border: 0;
-  border-block: 1px solid rgba(232, 228, 216, .18);
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-.app-shell:not(*) .reader-content .region-content blockquote::before {
-  content: none;
-}
-.app-shell:not(*) .reader-content .code-frame {
-  border-left: 2px solid #b7ad91;
-  border-radius: 0 8px 8px 0;
-}
-.app-shell:not(*) .reader-content .region-content :is(h2, h3) {
-  letter-spacing: .025em;
-}
+/* Bamboo-shadow reading grammar. */
 .app-shell.theme-bamboo-shadow .reader-content .region-content blockquote {
   margin-left: 0;
   padding: 14px 20px;
@@ -679,32 +665,6 @@
 .app-shell.theme-bamboo-shadow .reader-content .code-frame {
   border-radius: 0 14px 0 14px;
 }
-.app-shell:not(*) .reader-content {
-  max-width: 760px;
-}
-.app-shell:not(*) .reader-content .region-content blockquote {
-  position: relative;
-  padding: 18px 22px;
-  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
-  border-radius: 2px;
-  background: color-mix(in srgb, var(--accent) 4%, transparent);
-  box-shadow: none;
-}
-.app-shell:not(*) .reader-content .region-content blockquote::before {
-  position: absolute;
-  top: -10px;
-  right: 14px;
-  padding: 2px 5px;
-  background: var(--surface-raised);
-  color: var(--accent);
-  content: "摘";
-  font: 10px var(--ink-serif);
-}
-.app-shell:not(*) .reader-content .region-content th {
-  border-bottom-color: color-mix(in srgb, var(--accent) 42%, transparent);
-  color: var(--accent);
-}
-
 /* Ink themes keep quiet type readable instead of shrinking it into decoration. */
 .app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)) :is(.section-kicker, .reader-meta-tools button, .reader-meta-tools summary, .reader-progress-label, .theme-card-meta, .theme-page-lede, .editor-subtitle, .editor-fields label, .outline-list button) {
   font-size: 11px;
@@ -860,65 +820,6 @@
   box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent) 74%, transparent);
 }
 
-/* 淡墨宣纸: a wet-to-dry title stroke and one restrained cinnabar seal. */
-.app-shell:not(*):not(.is-focus) .reader-rule {
-  position: relative;
-  width: min(100%, 720px);
-  height: 9px;
-  margin-top: 30px;
-  background:
-    radial-gradient(ellipse at 3% 50%, rgba(41, 43, 40, .74) 0 2px, transparent 5px),
-    linear-gradient(90deg, rgba(41, 43, 40, .76), rgba(83, 102, 91, .3) 56%, transparent 92%);
-  clip-path: polygon(0 39%, 8% 31%, 18% 43%, 31% 34%, 47% 44%, 64% 38%, 82% 47%, 100% 51%, 82% 60%, 63% 53%, 43% 62%, 21% 54%, 0 65%);
-}
-.app-shell:not(*):not(.is-focus) .reader-content .region-content h2::before,
-.app-shell:not(*):not(.is-focus) .reader-content .region-content h3::before {
-  background: #53665b;
-  box-shadow: 0 0 0 4px rgba(83, 102, 91, .09);
-}
-.app-shell:not(*):not(.is-focus) .reader-content .code-frame {
-  border-radius: 4px 12px 12px 4px;
-  box-shadow: 0 13px 32px rgba(55, 49, 39, .07);
-}
-
-/* 已移除主题样式 */
-.app-shell:not(*):not(.is-focus) {
-  background: #0f1110;
-}
-.app-shell:not(*):not(.is-focus)::before {
-  opacity: .5;
-  background:
-    radial-gradient(circle at 74% 12%, rgba(183, 173, 145, .075), transparent 26%),
-    radial-gradient(ellipse at 16% 92%, rgba(230, 226, 214, .035), transparent 34%);
-}
-.app-shell:not(*):not(.is-focus) .global-nav {
-  background: linear-gradient(180deg, #171916, #0f1110);
-  border-right-color: rgba(232, 228, 216, .1);
-  box-shadow: 12px 0 38px rgba(0, 0, 0, .28);
-}
-.app-shell:not(*):not(.is-focus) .topbar,
-.app-shell:not(*):not(.is-focus) .reader-tabbar {
-  background: rgba(18, 20, 17, .88);
-  border-color: rgba(232, 228, 216, .1);
-  backdrop-filter: blur(18px);
-}
-.app-shell:not(*):not(.is-focus) .reader-page {
-  background: radial-gradient(ellipse at 50% -8%, rgba(183, 173, 145, .07), transparent 36%), #121411;
-}
-.app-shell:not(*):not(.is-focus) .reader-title {
-  color: #efebdf;
-  text-shadow: 0 10px 40px rgba(0, 0, 0, .48);
-}
-.app-shell:not(*):not(.is-focus) .reader-rule {
-  height: 2px;
-  background: linear-gradient(90deg, #b7ad91, rgba(183, 173, 145, .18) 58%, transparent);
-  box-shadow: 0 4px 18px rgba(183, 173, 145, .08);
-}
-.app-shell:not(*):not(.is-focus) .reader-content .region-content blockquote {
-  border-left-color: #b7ad91;
-  background: linear-gradient(90deg, rgba(183, 173, 145, .095), transparent);
-}
-
 /* 烟雨竹影: a pale rain wash with two abstract bamboo stems at the margin. */
 .app-shell.theme-bamboo-shadow:not(.is-focus) .reader-page::before {
   opacity: .72;
@@ -938,35 +839,6 @@
   background: linear-gradient(90deg, #526b5c, rgba(82, 107, 92, .26) 50%, transparent);
 }
 
-/* 已移除主题样式 */
-.app-shell:not(*):not(.is-focus) .reader-page {
-  background: #f8f0e5;
-}
-.app-shell:not(*):not(.is-focus) .reader-content {
-  position: relative;
-}
-.app-shell:not(*):not(.is-focus) .reader-content::before {
-  position: absolute;
-  top: 44px;
-  bottom: 70px;
-  left: -26px;
-  width: 1px;
-  background: rgba(150, 58, 47, .22);
-  content: "";
-}
-.app-shell:not(*):not(.is-focus) .reader-title {
-  color: #342f2b;
-}
-.app-shell:not(*):not(.is-focus) .reader-rule {
-  height: 2px;
-  background: linear-gradient(90deg, #963a2f 0 12%, rgba(150, 58, 47, .18) 12% 64%, transparent);
-}
-.app-shell:not(*):not(.is-focus) .reader-content .region-content h2::before,
-.app-shell:not(*):not(.is-focus) .reader-content .region-content h3::before {
-  border-radius: 1px;
-  background: #963a2f;
-}
-
 /* Theme cards preview the material, not just the palette. */
 .theme-card:is(:not(*), .theme-card-bamboo-shadow, :not(*)) .theme-swatch::before {
   background:
@@ -974,20 +846,10 @@
     radial-gradient(ellipse at 82% 18%, color-mix(in srgb, var(--theme-accent) 24%, transparent), transparent 24%),
     linear-gradient(150deg, var(--theme-bg), var(--theme-surface));
 }
-.theme-card:not(*) .theme-card-mark,
-.theme-card:not(*) .theme-card-mark {
-  border-radius: 2px;
-  background: #963a2f;
-  color: #f7eadc;
-  transform: rotate(-5deg);
-}
 .theme-card.theme-card-bamboo-shadow .theme-swatch::before {
   background:
     linear-gradient(93deg, transparent 0 82%, rgba(50, 80, 61, .14) 82.3% 82.8%, transparent 83%),
     radial-gradient(ellipse at 80% 22%, rgba(50, 80, 61, .2), transparent 18%),
     linear-gradient(150deg, var(--theme-bg), var(--theme-surface));
-}
-.theme-card:not(*) .theme-swatch::before {
-  background: radial-gradient(circle at 72% 25%, rgba(183, 173, 145, .16), transparent 27%), linear-gradient(145deg, #0d0f0d, #252822);
 }
 

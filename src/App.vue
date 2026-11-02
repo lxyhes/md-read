@@ -106,14 +106,18 @@ const outlinePanelToggleButton = ref<HTMLButtonElement | null>(null)
 const outlinePanelResizing = ref(false)
 let outlineResizeStart: { x: number; width: number; handle: HTMLElement } | null = null
 const readerViewport = ref<HTMLElement | null>(null)
+type SearchModal = 'search' | 'quick-open'
 const searchOpen = ref(false)
+const searchDialog = ref<HTMLElement | null>(null)
 const query = ref('')
 const searchNeedle = ref('')
 const searchIndex = ref(0)
 const searchScope = ref<SearchScope>('all')
 const quickOpenOpen = ref(false)
+const quickOpenDialog = ref<HTMLElement | null>(null)
 const quickOpenQuery = ref('')
 const quickOpenIndex = ref(0)
+let modalRestoreFocus: HTMLElement | null = null
 const searchRegex = ref(false)
 const replaceOpen = ref(false)
 const replaceValue = ref('')
@@ -819,15 +823,69 @@ function setOutlineExpansion(expanded: boolean) {
   collapsedOutlineHeadingIds.value = new Set()
 }
 
+function rememberModalFocus() {
+  const active = document.activeElement
+  modalRestoreFocus = active instanceof HTMLElement ? active : null
+}
+
+function focusModalControl(kind: SearchModal) {
+  void nextTick(() => {
+    const dialog = kind === 'search' ? searchDialog.value : quickOpenDialog.value
+    dialog?.querySelector<HTMLElement>('input, textarea, button:not(:disabled)')?.focus()
+  })
+}
+
+function restoreModalFocus() {
+  const target = modalRestoreFocus
+  modalRestoreFocus = null
+  if (!target?.isConnected) return
+  void nextTick(() => target.focus())
+}
+
+function closeSearch() {
+  if (!searchOpen.value) return
+  searchOpen.value = false
+  restoreModalFocus()
+}
+
+function closeQuickOpen() {
+  if (!quickOpenOpen.value) return
+  quickOpenOpen.value = false
+  restoreModalFocus()
+}
+
+function onModalKeydown(event: KeyboardEvent, kind: SearchModal) {
+  if (event.key !== 'Tab') return
+  const dialog = kind === 'search' ? searchDialog.value : quickOpenDialog.value
+  if (!dialog) return
+  const focusables = Array.from(dialog.querySelectorAll<HTMLElement>('input:not([disabled]), textarea:not([disabled]), button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])')).filter((element) => element.offsetParent !== null)
+  if (!focusables.length) {
+    event.preventDefault()
+    dialog.focus()
+    return
+  }
+  const first = focusables[0]
+  const last = focusables[focusables.length - 1]
+  const active = document.activeElement
+  if (event.shiftKey ? active === first || !dialog.contains(active) : active === last || !dialog.contains(active)) {
+    event.preventDefault()
+    ;(event.shiftKey ? last : first).focus()
+  }
+}
+
 function openSearch(scope: SearchScope = 'all') {
   searchScope.value = scope
   searchIndex.value = 0
+  rememberModalFocus()
   searchOpen.value = true
+  focusModalControl('search')
 }
 function openQuickOpen() {
   quickOpenQuery.value = ''
   quickOpenIndex.value = 0
+  rememberModalFocus()
   quickOpenOpen.value = true
+  focusModalControl('quick-open')
 }
 
 async function openEditor() {
@@ -3582,7 +3640,7 @@ function onKeydown(event: KeyboardEvent) {
     }
   }
   if (quickOpenOpen.value) {
-    if (event.key === 'Escape') { event.preventDefault(); quickOpenOpen.value = false; return }
+    if (event.key === 'Escape') { event.preventDefault(); closeQuickOpen(); return }
     if (['ArrowDown', 'ArrowUp', 'Enter'].includes(event.key)) {
       event.preventDefault()
       if (event.key === 'ArrowDown') quickOpenIndex.value = Math.min(Math.max(0, quickOpenResults.value.length - 1), quickOpenIndex.value + 1)
@@ -3592,7 +3650,7 @@ function onKeydown(event: KeyboardEvent) {
     return
   }
   if (searchOpen.value) {
-    if (event.key === 'Escape') { event.preventDefault(); searchOpen.value = false; return }
+    if (event.key === 'Escape') { event.preventDefault(); closeSearch(); return }
     if (['ArrowDown', 'ArrowUp', 'Enter'].includes(event.key)) {
       event.preventDefault()
       if (event.key === 'ArrowDown') searchIndex.value = Math.min(Math.max(0, searchResults.value.length - 1), searchIndex.value + 1)
@@ -3830,14 +3888,14 @@ async function chooseDocument(id: string) {
 }
 async function chooseSearchResult(documentId: string, regionId: string) {
   await chooseDocument(documentId)
-  searchOpen.value = false
+  closeSearch()
   leftPanelTab.value = 'outline'
   store.activeRegionId = regionId
   await nextTick()
   scrollToHeading(regionId)
 }
 async function chooseQuickOpenResult(file: FileTreeEntry) {
-  quickOpenOpen.value = false
+  closeQuickOpen()
   await openFileTreeEntry(file)
 }
 async function refreshFileTree() {
@@ -4776,13 +4834,17 @@ async function requestFullscreen() {
         <button class="rail-item" :class="{ active: view === 'reader' }" type="button" title="当前阅读" aria-label="当前阅读" @click="view = 'reader'"><AppIcon name="reader" :size="20" /><span>阅读</span></button>
         <button class="rail-item" type="button" title="搜索文档" aria-label="搜索文档" @click="openSearch('all')"><AppIcon name="search" :size="20" /><span>搜索</span></button>
         <div class="rail-divider" />
-        <button class="rail-item" :class="{ active: view === 'clipboard' }" type="button" title="剪贴板" aria-label="剪贴板" @click="view = 'clipboard'"><AppIcon name="clipboard" :size="20" /><span>剪贴板</span></button>
         <button class="rail-item" :class="{ active: view === 'favorites' }" type="button" title="收藏夹" aria-label="收藏夹" @click="openFavorites"><AppIcon name="star" :size="20" /><span>收藏</span></button>
-        <button class="rail-item" :class="{ active: view === 'knowledge' }" type="button" title="AI 知识库" aria-label="AI 知识库" @click="openKnowledge"><AppIcon name="library" :size="20" /><span>AI 知识库</span></button>
-        <button class="rail-item" :class="{ active: view === 'notes' }" type="button" title="个人笔记" aria-label="个人笔记" @click="openNotes"><AppIcon name="edit" :size="20" /><span>笔记</span></button>
-        <div class="rail-divider rail-divider-secondary" />
-        <button class="rail-item" :class="{ active: view === 'themes' }" type="button" title="主题中心" aria-label="主题中心" @click="view = 'themes'"><AppIcon name="palette" :size="20" /><span>主题</span></button>
-        <button class="rail-item" type="button" title="插件中心（即将上线）" aria-label="插件中心（即将上线）" @click="notify('插件市场将在下一阶段接入')"><AppIcon name="plugin" :size="20" /><span>插件</span></button>
+        <ArcoDropdown panel-class="reader-more-popover rail-more-popover">
+          <button class="rail-item" :class="{ active: ['clipboard', 'knowledge', 'notes', 'themes'].includes(view) }" type="button" title="更多工具" aria-label="更多工具" aria-haspopup="menu"><AppIcon name="more" :size="20" /><span>更多</span></button>
+          <template #menu>
+            <button type="button" role="menuitem" @click="view = 'clipboard'"><AppIcon name="clipboard" :size="15" />剪贴板</button>
+            <button type="button" role="menuitem" @click="openKnowledge"><AppIcon name="library" :size="15" />AI 知识库</button>
+            <button type="button" role="menuitem" @click="openNotes"><AppIcon name="edit" :size="15" />笔记</button>
+            <button type="button" role="menuitem" @click="view = 'themes'"><AppIcon name="palette" :size="15" />主题</button>
+            <button type="button" role="menuitem" @click="notify('插件市场将在下一阶段接入')"><AppIcon name="plugin" :size="15" />插件（即将上线）</button>
+          </template>
+        </ArcoDropdown>
         <div class="rail-spacer" />
         <button class="rail-item" :class="{ active: view === 'settings' }" type="button" title="设置" aria-label="设置" @click="view = 'settings'"><AppIcon name="settings" :size="20" /><span>设置</span></button>
       </div>
@@ -5276,7 +5338,20 @@ async function requestFullscreen() {
 
       <ThemeCenter v-else-if="view === 'themes'" :themes="store.themes" :active-theme-id="store.activeThemeId" :active-theme="store.activeTheme" @apply="applyReaderTheme" @install="store.installTheme" @notify="notify" />
 
-        <section v-else-if="view === 'settings'" class="page settings-page"><div class="page-heading"><div><p class="section-kicker">偏好设置</p><h1>把阅读，调成<br /><em>自己的样子。</em></h1></div><Button class="ghost-button" type="secondary" @click="notify('设置已保存在本地')"><AppIcon name="check" :size="14" />保存设置</Button></div><div class="settings-tabs"><Button :class="{ active: settingsTab === 'reading' }" type="secondary" @click="settingsTab = 'reading'">阅读偏好</Button><Button :class="{ active: settingsTab === 'editing' }" type="secondary" @click="settingsTab = 'editing'">编辑与导出</Button><Button :class="{ active: settingsTab === 'shortcuts' }" type="secondary" @click="settingsTab = 'shortcuts'">快捷键</Button><Button :class="{ active: settingsTab === 'extensions' }" type="secondary" @click="settingsTab = 'extensions'">插件扩展</Button><Button type="secondary" @click="notify('文件关联设置将在桌面端接入')">文件关联</Button><Button type="secondary" @click="notify('同步与备份暂不启用')">同步与备份</Button></div><div class="settings-grid">
+        <section v-else-if="view === 'settings'" class="page settings-page">
+          <div class="page-heading">
+            <div><p class="section-kicker">偏好设置</p><h1>把阅读，调成<br /><em>自己的样子。</em></h1></div>
+            <span class="settings-save-note">阅读偏好会自动保存</span>
+          </div>
+          <div class="settings-tabs">
+            <Button :class="{ active: settingsTab === 'reading' }" type="secondary" @click="settingsTab = 'reading'">阅读偏好</Button>
+            <Button :class="{ active: settingsTab === 'editing' }" type="secondary" @click="settingsTab = 'editing'">编辑与导出</Button>
+            <Button :class="{ active: settingsTab === 'shortcuts' }" type="secondary" @click="settingsTab = 'shortcuts'">快捷键</Button>
+            <Button :class="{ active: settingsTab === 'extensions' }" type="secondary" @click="settingsTab = 'extensions'">插件扩展</Button>
+            <Button type="secondary" @click="notify('文件关联设置将在桌面端接入')">文件关联</Button>
+            <Button type="secondary" @click="notify('同步与备份暂不启用')">同步与备份</Button>
+          </div>
+          <div class="settings-grid">
         <div v-show="settingsTab === 'reading'" class="settings-card ai-settings-card"><span class="section-kicker">AI 能力</span><h2>连接 AI 服务</h2><p class="muted-copy">支持本地 Ollama，也支持 OpenAI-compatible 接口。API Key 只保留在当前会话，不写入本地配置。</p><div class="setting-input"><span>服务类型</span><Select v-model="aiSettings.provider" aria-label="服务类型"><Option value="ollama">Ollama（本地）</Option><Option value="openai-compatible">OpenAI-compatible</Option></Select></div><label class="setting-input">服务地址<Input v-model="aiSettings.baseUrl" spellcheck="false" placeholder="http://127.0.0.1:11434" /></label><label class="setting-input">模型名称<Input v-model="aiSettings.model" spellcheck="false" placeholder="qwen2.5:7b" /></label><label v-if="aiSettings.provider === 'openai-compatible'" class="setting-input">API Key（可选）<InputPassword v-model="aiSettings.apiKey" autocomplete="off" placeholder="仅当前会话使用" /></label><Checkbox class="setting-check" v-model="aiSettings.enabled">在知识库问答中启用 AI 生成</Checkbox><div class="ai-settings-actions"><Button class="ghost-button" type="secondary" @click="saveAiSettings"><AppIcon name="check" :size="14" />保存配置</Button><Button class="primary-button" type="primary" :disabled="aiBusy" @click="testAiConnection">{{ aiBusy ? '连接中…' : '测试连接' }}</Button></div><p v-if="aiStatus === 'connected'" class="ai-status-success">AI 服务已连接</p><p v-if="aiError" class="ai-status-error" role="alert">{{ aiError }}</p></div>
         <div v-show="settingsTab === 'reading'" class="settings-card font-settings-card">
           <div class="font-settings-heading"><div><span class="section-kicker">阅读偏好</span><h2>字体与排版</h2></div><span>自动保存</span></div>
@@ -5297,11 +5372,11 @@ async function requestFullscreen() {
     </main>
     <WebPreviewPanel v-if="webPreviewUrl && view === 'reader'" :url="webPreviewUrl" @close="webPreviewUrl = ''" @navigate="webPreviewUrl = $event" @external="openPreviewInBrowser" />
 
-    <div v-if="quickOpenOpen" class="overlay search-overlay" @click.self="quickOpenOpen = false">
-      <div class="search-dialog quick-open-dialog" role="dialog" aria-modal="true" aria-label="快速打开文件">
+    <div v-if="quickOpenOpen" class="overlay search-overlay" @click.self="closeQuickOpen">
+      <div ref="quickOpenDialog" class="search-dialog quick-open-dialog" role="dialog" aria-modal="true" aria-label="快速打开文件" tabindex="-1" @keydown="onModalKeydown($event, 'quick-open')">
         <div class="search-input-row">
           <AppIcon name="search" :size="17" />
-          <Input v-model="quickOpenQuery" class="quick-open-input" allow-clear :input-attrs="{ autofocus: true, 'aria-label': '按文件名或路径快速打开' }" placeholder="按文件名或文件夹路径快速打开…" @keydown.esc="quickOpenOpen = false" />
+          <Input v-model="quickOpenQuery" class="quick-open-input" allow-clear :input-attrs="{ autofocus: true, 'aria-label': '按文件名或路径快速打开' }" placeholder="按文件名或文件夹路径快速打开…" @keydown.esc="closeQuickOpen" />
           <kbd>ESC</kbd>
         </div>
         <div class="search-scope-row quick-open-meta">
@@ -5320,11 +5395,11 @@ async function requestFullscreen() {
       </div>
     </div>
 
-    <div v-if="searchOpen" class="overlay search-overlay" @click.self="searchOpen = false">
-      <div class="search-dialog global-search-dialog" role="dialog" aria-modal="true" aria-label="搜索文档">
+    <div v-if="searchOpen" class="overlay search-overlay" @click.self="closeSearch">
+      <div ref="searchDialog" class="search-dialog global-search-dialog" role="dialog" aria-modal="true" aria-label="搜索文档" tabindex="-1" @keydown="onModalKeydown($event, 'search')">
         <div class="search-input-row">
           <AppIcon name="search" :size="17" />
-          <Input v-model="query" class="global-search-input" allow-clear :input-attrs="{ autofocus: true, 'aria-label': '搜索内容' }" :placeholder="searchScope === 'current' ? '搜索当前文档…' : '搜索文档、标题、内容…'" @keydown.esc="searchOpen = false" />
+          <Input v-model="query" class="global-search-input" allow-clear :input-attrs="{ autofocus: true, 'aria-label': '搜索内容' }" :placeholder="searchScope === 'current' ? '搜索当前文档…' : '搜索文档、标题、内容…'" @keydown.esc="closeSearch" />
           <kbd>ESC</kbd>
         </div>
         <div class="search-scope-row">
