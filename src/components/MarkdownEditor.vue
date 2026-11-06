@@ -177,6 +177,30 @@ defineExpose({
   focus: () => view?.focus(),
   setSelectionRange: (start: number, end: number) => view?.dispatch({ selection: { anchor: Math.min(start, view.state.doc.length), head: Math.min(end, view.state.doc.length) }, scrollIntoView: true }),
   replaceSource,
+  imageAt(event: MouseEvent) {
+    if (!view || !host.value?.contains(event.target as Node)) return null
+    const target = event.target as HTMLElement
+    const widget = target.closest('img')?.closest<HTMLElement>('[data-image-offset]')
+    const position = widget ? Number(widget.dataset.imageOffset) : view.posAtCoords({ x: event.clientX, y: event.clientY })
+    if (position === null) return null
+    const selection = view.state.selection.main
+    const tree = syntaxTree(view.state)
+    for (const offset of [position, ...(!selection.empty && position >= selection.from && position <= selection.to ? [selection.from] : [])]) {
+      let node = tree.resolveInner(offset, 1)
+      while (node.parent && !['Image', 'HTMLTag', 'HTMLBlock'].includes(node.name)) node = node.parent
+      const source = view.state.sliceDoc(node.from, node.to)
+      if (node.name === 'Image') {
+        const url = node.getChild('URL')
+        if (url) return { from: node.from, to: node.to, source, url: view.state.sliceDoc(url.from, url.to).replace(/^<|>$/g, ''), alt: source.slice(2, source.lastIndexOf('](')), html: false }
+      }
+      if (/^<img\s[^<>]*>\s*$/i.test(source)) {
+        const image = new DOMParser().parseFromString(source, 'text/html').querySelector('img')
+        const url = image?.getAttribute('src')
+        if (url) return { from: node.from, to: node.to, source, url, alt: image?.alt ?? '', html: true }
+      }
+    }
+    return null
+  },
   undo: () => view && undo(view),
   redo: () => view && redo(view),
   scrollTo: (options: ScrollToOptions) => view?.scrollDOM.scrollTo(options),

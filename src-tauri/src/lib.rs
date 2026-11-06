@@ -629,6 +629,32 @@ fn open_directory(path: String) -> Result<(), String> {
     result.map(|_| ()).map_err(|error| format!("打开目录失败：{error}"))
 }
 
+#[tauri::command]
+fn reveal_file(path: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    let path = path.replace('/', "\\");
+    let file = Path::new(&path);
+    if !file.is_absolute() || !file.is_file() {
+        return Err(format!("找不到可定位的文件：{path}"));
+    }
+
+    #[cfg(target_os = "windows")]
+    let result = {
+        use std::os::windows::process::CommandExt;
+        Command::new("explorer.exe")
+            .raw_arg(format!("/select,\"{path}\""))
+            .spawn()
+    };
+    #[cfg(target_os = "macos")]
+    let result = Command::new("open").arg("-R").arg(file).spawn();
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let result = Command::new("xdg-open")
+        .arg(file.parent().ok_or("文件没有可用的上级目录")?)
+        .spawn();
+
+    result.map(|_| ()).map_err(|error| format!("定位文件失败：{error}"))
+}
+
 fn is_allowed_external_url(url: &str) -> bool {
     let normalized = url.trim().to_ascii_lowercase();
     !normalized.contains('\0') && (normalized.starts_with("https://")
@@ -895,7 +921,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
-        .invoke_handler(tauri::generate_handler![file_open::take_open_files, tracked_directory, write_markdown_checked, allow_asset_directory, read_local_image, read_clipboard_image, read_clipboard_snapshot, read_clipboard_rich_text, read_clipboard_signature, write_clipboard_snapshot, read_remote_image, download_remote_image, upload_piclist_image, ai_chat, open_directory, open_external_url, web_preview::web_preview, pandoc_import_document, pandoc_export_document, export_html_to_pdf])
+        .invoke_handler(tauri::generate_handler![file_open::take_open_files, tracked_directory, write_markdown_checked, allow_asset_directory, read_local_image, read_clipboard_image, read_clipboard_snapshot, read_clipboard_rich_text, read_clipboard_signature, write_clipboard_snapshot, read_remote_image, download_remote_image, upload_piclist_image, ai_chat, open_directory, reveal_file, open_external_url, web_preview::web_preview, pandoc_import_document, pandoc_export_document, export_html_to_pdf])
         .build(tauri::generate_context!())
         .expect("error while building Moyue application")
         .run(|_app, _event| {

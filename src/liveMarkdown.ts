@@ -15,11 +15,12 @@ export function selectionTouches(state: EditorState, from: number, to: number) {
 }
 
 class PreviewWidget extends WidgetType {
-  constructor(readonly source: string, readonly from: number, readonly options: LiveOptions, readonly block = false, readonly previewSource = source) { super() }
-  eq(other: PreviewWidget) { return this.source === other.source && this.previewSource === other.previewSource && this.from === other.from }
+  constructor(readonly source: string, readonly from: number, readonly options: LiveOptions, readonly block = false, readonly previewSource = source, readonly image = false) { super() }
+  eq(other: PreviewWidget) { return this.source === other.source && this.previewSource === other.previewSource && this.from === other.from && this.image === other.image }
   toDOM(view: EditorView) {
     const root = document.createElement(this.block ? 'div' : 'span')
     root.className = 'live-preview-widget'
+    if (this.image) root.dataset.imageOffset = String(this.from)
     root.innerHTML = renderMarkdownFragment(this.previewSource, this.options.resolveUrl)
     if (!this.block && root.children.length === 1 && root.firstElementChild?.tagName === 'P') {
       const paragraph = root.firstElementChild
@@ -288,8 +289,10 @@ export function liveMarkdown(options: LiveOptions) {
           return false
         }
       }
-      if (node.name === 'Image' && (!active || keepLongImagePreview(raw))) {
-        ranges.push(Decoration.replace({ widget: new PreviewWidget(raw, node.from, options, false, `${raw}\n\n${referenceDefinitions}`) }).range(node.from, node.to))
+      const htmlImage = (node.name === 'HTMLTag' || node.name === 'HTMLBlock') && /^<img\s[^<>]*>\s*$/i.test(raw)
+      if ((node.name === 'Image' || htmlImage) && (!active || keepLongImagePreview(raw))) {
+        const block = node.name === 'HTMLBlock'
+        ranges.push(Decoration.replace({ widget: new PreviewWidget(raw, node.from, options, block, `${raw}\n\n${referenceDefinitions}`, true), block }).range(node.from, node.to))
         return false
       }
       if (node.name === 'TaskMarker' && !active) {

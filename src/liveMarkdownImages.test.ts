@@ -6,8 +6,8 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { liveMarkdown } from './liveMarkdown'
 
 describe('live image previews', () => {
-  it('uses the resolved image URL without rewriting source', () => {
-    const source = '![cover](./cover.png)\n\ntext'
+  it.each(['![cover](./cover.png)', '<img src="./cover.png" alt="cover" width="50%">'])('uses the resolved URL without rewriting %s', (reference) => {
+    const source = `${reference}\n\ntext`
     const view = new EditorView({ parent: document.body, state: EditorState.create({
       doc: source,
       selection: { anchor: source.length },
@@ -16,6 +16,7 @@ describe('live image previews', () => {
     const image = view.dom.querySelector('.live-preview-widget img')
     expect(image?.getAttribute('src')).toBe('blob:reader-image')
     expect(image?.getAttribute('alt')).toBe('cover')
+    expect(image?.closest('[data-image-offset]')?.getAttribute('data-image-offset')).toBe('0')
     expect(view.state.doc.toString()).toBe(source)
     view.destroy()
   })

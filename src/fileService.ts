@@ -1,5 +1,5 @@
 import { convertFileSrc, invoke, isTauri as tauriIsTauri } from '@tauri-apps/api/core'
-import { appDataDir } from '@tauri-apps/api/path'
+import { appDataDir, configDir } from '@tauri-apps/api/path'
 import { open, save } from '@tauri-apps/plugin-dialog'
 import { copyFile, mkdir, readDir, readFile, readTextFile, remove, rename, stat, watch, writeFile, writeTextFile } from '@tauri-apps/plugin-fs'
 import { renderMarkdownFragment } from './markdown/fragment'
@@ -79,12 +79,14 @@ export async function createTauriAssetMap(markdownPath: string, urls: Iterable<s
   if (!isTauri()) return assets
   let sessionAssetRoot = ''
   try { sessionAssetRoot = await appDataDir() } catch { /* Fall back to document-local assets only. */ }
+  const typoraAssetRoot = await configDir().then((root) => `${root}/Typora/typora-user-images`, () => '')
   for (const url of new Set(urls)) {
     const rawPath = url.trim().match(/^([^?#]*)/)?.[1] ?? ''
     const localPath = localAssetPath(decodeUrlPath(rawPath))
     if (!localPath || !isImagePath(localPath)) continue
     const absolutePath = resolveLocalAssetPath(markdownPath, localPath)
-    if (!isLocalMarkdownAssetPath(markdownPath, absolutePath) && !isInternalSessionAssetPath(sessionAssetRoot, absolutePath)) continue
+    const isTyporaImage = isAssetInsideDirectory(typoraAssetRoot, absolutePath)
+    if (!isLocalMarkdownAssetPath(markdownPath, absolutePath) && !isInternalSessionAssetPath(sessionAssetRoot, absolutePath) && !isTyporaImage) continue
     try {
       const response = await invoke<ArrayBuffer | number[]>('read_local_image', { path: absolutePath })
       const bytes = response instanceof ArrayBuffer ? new Uint8Array(response) : Uint8Array.from(response)
@@ -390,11 +392,16 @@ export async function importMarkdownAssetFromPath(markdownPath: string, kind: 'i
   return withRelativePathPrefix(`.moyue-assets/${fileName}`, relativePathPrefix)
 }
 
-export async function uploadMarkdownImage(endpoint: string, key = ''): Promise<string | null> {
+export async function uploadMarkdownImage(endpoint: string, key = '', imagePath?: string): Promise<string | null> {
   if (!isTauri()) throw new Error('PicList 上传需要桌面端')
-  const selected = await open({ multiple: false, filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'jif', 'jfif', 'jiff', 'gif', 'webp', 'avif', 'bmp', 'svg'] }] })
+  const selected = imagePath ?? await open({ multiple: false, filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'jif', 'jfif', 'jiff', 'gif', 'webp', 'avif', 'bmp', 'svg'] }] })
   if (!selected || Array.isArray(selected)) return null
   return invoke<string>('upload_piclist_image', { path: selected, endpoint, key: key || null })
+}
+
+export function localEditorImagePath(markdownPath: string, url: string): string | null {
+  const local = localAssetPath(decodeUrlPath(url.split(/[?#]/, 1)[0]))
+  return local ? resolveLocalAssetPath(markdownPath, local) : null
 }
 
 function imageExtension(url: string, mime: string) {
@@ -633,16 +640,16 @@ function assetKey(path: string) {
 }
 
 function isInternalSessionAssetPath(root: string, targetPath: string): boolean {
-  if (!root) return false
-  return assetKey(targetPath).startsWith(`${assetKey(root).replace(/[\\/]$/, '')}/.moyue-assets/`)
+  return Boolean(root) && isAssetInsideDirectory(`${root}/.moyue-assets`, targetPath)
 }
 
 export function isLocalMarkdownAssetPath(markdownPath: string, targetPath: string): boolean {
-  const directory = dirnameOf(markdownPath).replace(/[\\/]$/, '')
-  if (!directory) return false
-  const root = assetKey(directory)
-  const candidate = assetKey(targetPath)
-  return candidate.startsWith(`${root}/`)
+  return isAssetInsideDirectory(dirnameOf(markdownPath), targetPath)
+}
+
+function isAssetInsideDirectory(directory: string, targetPath: string): boolean {
+  const root = directory.replace(/[\\/]$/, '')
+  return Boolean(root) && assetKey(targetPath).startsWith(`${assetKey(root).replace(/\/$/, '')}/`)
 }
 
 function isImagePath(path: string) {

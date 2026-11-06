@@ -13,8 +13,16 @@ import {
   type RenderContext,
 } from './shared'
 
-function sanitizeRawHtml(value: string) {
+function sanitizeRawHtml(value: string, resolveUrl: MarkdownUrlResolver) {
   if (typeof window === 'undefined') return escapeHtml(value)
+  if (/^<img\s[^<>]*>\s*$/i.test(value)) {
+    const image = new DOMParser().parseFromString(value, 'text/html').querySelector('img')
+    const url = resolveUrl(image?.getAttribute('src') ?? '')
+    const width = image?.getAttribute('width') ?? ''
+    const height = image?.getAttribute('height') ?? ''
+    const title = image?.getAttribute('title')
+    return `<img src="${safeImageUrl(url)}" alt="${escapeHtml(image?.alt ?? '')}"${/^\d+%?$/.test(width) ? ` width="${width}"` : ''}${/^\d+%?$/.test(height) ? ` height="${height}"` : ''}${title ? ` title="${escapeHtml(title)}"` : ''}${imageReferrerPolicyAttribute(url)}>`
+  }
   const sanitized = DOMPurify.sanitize(value, {
     USE_PROFILES: { html: true },
     FORBID_TAGS: ['style', 'iframe', 'object', 'embed', 'form', 'input', 'button', 'textarea', 'select', 'option'],
@@ -25,6 +33,12 @@ function sanitizeRawHtml(value: string) {
   template.content.querySelectorAll('[style], [srcset]').forEach((element) => {
     element.removeAttribute('style')
     element.removeAttribute('srcset')
+  })
+  template.content.querySelectorAll('img[src]').forEach((image) => {
+    const url = resolveUrl(image.getAttribute('src') ?? '')
+    if (safeImageUrl(url)) image.setAttribute('src', url)
+    else image.removeAttribute('src')
+    if (imageReferrerPolicyAttribute(url)) image.setAttribute('referrerpolicy', 'no-referrer')
   })
   return template.innerHTML
 }
@@ -73,7 +87,7 @@ function inlineHtml(node: MdastNode, preserveSoftBreaks = false, resolveUrl: Mar
       context.footnoteReferences.set(identifier, occurrence)
       return `<sup class="footnote-ref"><a href="#footnote-${index + 1}" id="footnote-ref-${index + 1}${occurrence > 1 ? `-${occurrence}` : ''}">[${index + 1}]</a></sup>`
     }
-    case 'html': return sanitizeRawHtml(node.value ?? '')
+    case 'html': return sanitizeRawHtml(node.value ?? '', resolveUrl)
     default: return children()
   }
 }
@@ -226,7 +240,7 @@ function blockHtml(node: MdastNode, resolveUrl: MarkdownUrlResolver = (url) => u
       const [header, ...body] = rows
       return `<div class="table-scroll"><table>${header ? `<thead>${renderRow(header, 'th')}</thead>` : ''}${body.length ? `<tbody>${body.map((row) => renderRow(row, 'td')).join('')}</tbody>` : ''}</table></div>`
     }
-    case 'html': return sanitizeRawHtml(node.value ?? '')
+    case 'html': return sanitizeRawHtml(node.value ?? '', resolveUrl)
     case 'footnoteDefinition': return ''
     case 'yaml':
     case 'toml': return ''

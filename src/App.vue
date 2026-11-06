@@ -61,6 +61,7 @@ import { sortFileTreeEntries, type FileTreeSortMode } from './fileTreeSort'
 import { directoryFiles } from './directoryFiles'
 import { reconcileFilesystemEntries } from './filesystemTreeRefresh'
 import { parentFilesystemPath, relativeDocumentTreePath } from './filesystemTreeScope'
+import { localEditorImagePath } from './fileService'
 import { orderRecentFolders, pinRecentFolder, rememberRecentFolder, removeRecentFolder, type RecentFolder } from './recentFolders'
 import { createExportCss, createPortableHtml } from './exportPresentation'
 import { createPrintHtml, printPortableHtml } from './exportPrint'
@@ -305,7 +306,8 @@ const editorDocumentId = ref('')
 const editorBackupError = ref('')
 const editorConflict = ref(false)
 let editorAutoSaveTimer: number | null = null
-const editorContextMenu = ref<{ x: number; y: number } | null>(null)
+type EditorImageTarget = NonNullable<ReturnType<InstanceType<typeof MarkdownEditorComponent>['imageAt']>>
+const editorContextMenu = ref<{ x: number; y: number; image?: EditorImageTarget; local?: string; managed?: boolean } | null>(null)
 const editorContextMenuElement = ref<HTMLElement | null>(null)
 const imageManagerOpen = ref(false)
 const tableBuilderOpen = ref(false)
@@ -2032,15 +2034,86 @@ function moveEditorLine(delta: number) {
   })
 }
 
+async function runImageMenu(action: 'location' | 'reveal' | 'rename' | 'upload' | 'delete' | 'copy' | 'source' | 'cut' | 'save' | 'remove' | 'syntax' | number) {
+  const menu = editorContextMenu.value
+  const image = menu?.image
+  const path = editorDocumentPath.value
+  const editor = editorTextarea.value
+  const original = editorSource.value
+  closeEditorContextMenu()
+  if (!image) return
+
+  function replaceImage(next: string) {
+    if (!editorOpen.value || editorTextarea.value !== editor || editorDocumentPath.value !== path || editorSource.value !== original) {
+      throw new Error('草稿已变更，请重新选中图片')
+    }
+    applyEditorChange(original.slice(0, image!.from) + next + original.slice(image!.to), image!.from, image!.from + next.length)
+  }
+
+  const markdown = (url: string) => `![${image.alt.replace(/[\\[\]]/g, '\\$&')}](<${url.replace(/>/g, '%3E').replace(/[\r\n]/g, '')}>)`
+  try {
+    if (action === 'location' && menu.local) return await openMarkdownDirectory(menu.local)
+    if (action === 'reveal' && menu.local) return await invoke('reveal_file', { path: menu.local })
+    if (action === 'rename') return await renameEditorImage(image.url)
+    if (action === 'delete') return await deleteEditorImage(image.url)
+    if (action === 'source' || action === 'cut') {
+      await writeTextToClipboard(image.source)
+      if (action === 'cut') replaceImage('')
+      return notify(action === 'cut' ? '已剪切图片引用' : '已复制图片源码')
+    }
+    if (action === 'remove') return replaceImage('')
+    if (action === 'syntax' && image.html) return replaceImage(markdown(image.url))
+    if (action === 'syntax' || typeof action === 'number') {
+      const width = typeof action === 'number' ? ` width="${action}%"` : ''
+      return replaceImage(`<img src="${escapeHtml(image.url)}" alt="${escapeHtml(image.alt)}"${width}>`)
+    }
+    if (action === 'upload' && menu.local) {
+      const url = await uploadMarkdownImage(advancedSettings.value.picListEndpoint, advancedSettings.value.picListKey, menu.local)
+      if (url) replaceImage(markdown(url))
+      return
+    }
+    const url = resolveEditorAssetUrl(path, image.url)
+    if (!url) throw new Error('图片无法读取')
+    const response = await fetch(url)
+    if (!response.ok) throw new Error('图片无法读取')
+    const blob = await response.blob()
+    if (action === 'save') {
+      const name = image.url.split(/[?#]/, 1)[0].split(/[/\\\\]/).pop() ?? ''
+      const extension = name.match(/\.([a-z0-9]+)$/i)?.[1] ?? (/^image\/([a-z0-9]+)/i.exec(blob.type)?.[1] || 'png').replace('svg+xml', 'svg')
+      await saveBinaryExportFile(new Uint8Array(await blob.arrayBuffer()), name.replace(/\.[^.]+$/, '').slice(0, 100) || '图片', extension, '图片', blob.type)
+      return
+    }
+    const bitmap = await createImageBitmap(blob)
+    const canvas = document.createElement('canvas')
+    canvas.width = bitmap.width
+    canvas.height = bitmap.height
+    const context = canvas.getContext('2d')
+    context?.drawImage(bitmap, 0, 0)
+    bitmap.close()
+    if (!context) throw new Error('图片无法转换')
+    const png = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'))
+    if (!png) throw new Error('图片无法转换')
+    if (isTauriRuntime()) await invoke('write_clipboard_snapshot', { kind: 'image', text: null, bytes: [...new Uint8Array(await png.arrayBuffer())] })
+    else await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })])
+    notify('已复制图片')
+  } catch (error) {
+    notify(error instanceof Error ? error.message : '图片操作失败')
+  }
+}
+
 function openEditorContextMenu(event: MouseEvent) {
   event.preventDefault()
-  const position = { x: event.clientX, y: event.clientY }
+  const image = editorTextarea.value?.imageAt(event) ?? undefined
+  const path = editorDocumentPath.value
+  const local = image && isRealDocumentPath(path) ? localEditorImagePath(path, image.url) : null
+  const managed = Boolean(local && image && /^(?:\.\/)?\.moyue-assets\/[^/?#]+$/.test(image.url) && !image.html && image.source.endsWith(`](${image.url})`))
+  const position = { x: event.clientX, y: event.clientY, image, local: local ?? undefined, managed }
   editorContextMenu.value = position
   void nextTick(() => {
     const menu = editorContextMenuElement.value
     if (!menu || editorContextMenu.value?.x !== position.x || editorContextMenu.value?.y !== position.y) return
     const bounds = menu.getBoundingClientRect()
-    editorContextMenu.value = { x: Math.max(8, Math.min(position.x, window.innerWidth - bounds.width - 8)), y: Math.max(8, Math.min(position.y, window.innerHeight - bounds.height - 8)) }
+    editorContextMenu.value = { ...position, x: Math.max(8, Math.min(position.x, window.innerWidth - bounds.width - 8)), y: Math.max(8, Math.min(position.y, window.innerHeight - bounds.height - 8)) }
   })
 }
 
@@ -3368,22 +3441,22 @@ async function reloadFileContextEntry() {
   }
 }
 
-async function openFileContextDirectory() {
+async function openFileContextDirectory(reveal = false) {
   const file = fileContextMenu.value?.file
   if (!file) return
   fileContextMenu.value = null
   try {
-    if (file.isDirectory) {
+    if (reveal) {
+      await invoke('reveal_file', { path: file.path })
+    } else if (file.isDirectory) {
       await openFileSystemDirectory(file.path)
       notify('已打开文件夹')
     } else {
-      const path = store.currentDocument?.path
-      if (!path || !hasRealFilesystemPath(path)) throw new Error('当前 MD 没有本地文件路径')
-      await openMarkdownDirectory(path)
-      notify('已打开当前 MD 所在目录')
+      await openMarkdownDirectory(file.path)
+      notify('已打开文件所在目录')
     }
   } catch (error) {
-    notify(error instanceof Error ? error.message : '打开目录失败')
+    notify(typeof error === 'string' ? error : error instanceof Error ? error.message : reveal ? '定位文件失败' : '打开目录失败')
   }
 }
 
@@ -5058,7 +5131,10 @@ async function requestFullscreen() {
             <button v-if="canManageMarkdownEntry(fileContextMenu.file)" type="button" role="menuitem" @click="renameFileContextEntry"><AppIcon name="edit" :size="13" />重命名</button>
             <button v-if="canManageMarkdownEntry(fileContextMenu.file)" type="button" role="menuitem" @click="moveFileContextEntry"><AppIcon name="folder" :size="13" />移动到目录</button>
             <button v-if="canManageMarkdownEntry(fileContextMenu.file)" type="button" role="menuitem" @click="duplicateFileContextEntry"><AppIcon name="copy" :size="13" />创建副本</button>
-            <button v-if="isTauriRuntime() && hasRealFilesystemPath(fileContextMenu.file.path)" type="button" role="menuitem" @click="openFileContextDirectory"><AppIcon name="folder" :size="13" />{{ fileContextMenu.file.isDirectory ? '打开文件夹' : '打开所在目录' }}</button>
+            <template v-if="isTauriRuntime() && hasRealFilesystemPath(fileContextMenu.file.path)">
+              <button type="button" role="menuitem" @click="openFileContextDirectory()"><AppIcon name="folder" :size="13" />{{ fileContextMenu.file.isDirectory ? '打开文件夹' : '打开所在目录' }}</button>
+              <button v-if="!fileContextMenu.file.isDirectory" type="button" role="menuitem" @click="openFileContextDirectory(true)"><AppIcon name="external" :size="13" />打开文件所在位置</button>
+            </template>
             <button type="button" role="menuitem" @click="copyFileContextValue('name')"><AppIcon name="copy" :size="13" />复制名称</button>
             <button type="button" role="menuitem" @click="copyFileContextValue('file')"><AppIcon name="copy" :size="13" />复制路径</button>
             <button type="button" role="menuitem" :disabled="!hasRealFilesystemPath(contextDirectoryPath(fileContextMenu.file))" title="只对真实系统目录提供目录路径" @click="copyFileContextValue('directory')"><AppIcon name="copy" :size="13" />复制目录路径</button>
@@ -5318,6 +5394,21 @@ async function requestFullscreen() {
           </div>
           <Teleport to="body">
             <div v-if="editorContextMenu" ref="editorContextMenuElement" class="editor-context-menu" :style="{ top: `${editorContextMenu.y}px`, left: `${editorContextMenu.x}px` }" role="menu">
+              <template v-if="editorContextMenu.image">
+                <button v-if="editorContextMenu.local" type="button" role="menuitem" @click="runImageMenu('location')">打开图片所在目录</button>
+                <button v-if="editorContextMenu.local" type="button" role="menuitem" @click="runImageMenu('reveal')">打开图片所在位置</button>
+                <button v-if="editorContextMenu.managed" type="button" role="menuitem" @click="runImageMenu('rename')">重命名图片…</button>
+                <button v-if="editorContextMenu.managed" type="button" role="menuitem" @click="runImageMenu('upload')">上传图片到 PicList</button>
+                <button type="button" role="menuitem" @click="runImageMenu('copy')">复制图片</button>
+                <button type="button" role="menuitem" @click="runImageMenu('source')">复制图片源码</button>
+                <button type="button" role="menuitem" @click="runImageMenu('cut')">剪切图片引用</button>
+                <button type="button" role="menuitem" @click="runImageMenu('save')">将图片另存为…</button>
+                <button v-for="width in [25, 50, 75, 100]" :key="width" type="button" role="menuitem" @click="runImageMenu(width)">缩放图片至 {{ width }}%</button>
+                <button type="button" role="menuitem" @click="runImageMenu('syntax')">转换为 {{ editorContextMenu.image.html ? 'Markdown' : 'HTML' }} 图片</button>
+                <button type="button" role="menuitem" @click="runImageMenu('remove')">移除图片引用</button>
+                <button v-if="editorContextMenu.managed" type="button" role="menuitem" @click="runImageMenu('delete')">删除图片文件…</button>
+              </template>
+              <template v-else>
               <button type="button" role="menuitem" @click="wrapEditorSelection('**', '**', '粗体'); closeEditorContextMenu()">粗体</button>
               <button type="button" role="menuitem" @click="wrapEditorSelection('*', '*', '斜体'); closeEditorContextMenu()">斜体</button>
               <button type="button" role="menuitem" @click="wrapEditorSelection('~~', '~~', '删除线'); closeEditorContextMenu()">删除线</button>
@@ -5336,6 +5427,7 @@ async function requestFullscreen() {
               <button type="button" role="menuitem" @click="selectEditorLine(); closeEditorContextMenu()">选中当前行</button>
               <button type="button" role="menuitem" @click="cutEditorLine(); closeEditorContextMenu()">剪切当前行</button>
               <button type="button" role="menuitem" @click="deleteEditorLine(); closeEditorContextMenu()">删除当前行</button>
+              </template>
             </div>
           </Teleport>
         <aside v-if="contextPanelOpen && store.mode !== 'focus' && store.mode !== 'clean'" class="context-panel">
