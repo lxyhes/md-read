@@ -15,6 +15,44 @@ function termsFor(query: string) {
   return [...new Set([...words, ...chineseTerms].filter((term) => term.length > 1))]
 }
 
+type SearchIndex = {
+  content: string[]
+  headings: string[]
+  byTerm: Map<string, Set<number>>
+}
+
+const indexes = new WeakMap<ReaderDocument, SearchIndex>()
+
+function indexFor(document: ReaderDocument) {
+  const saved = indexes.get(document)
+  if (saved) return saved
+  const headingByRegion = new Map(document.headings.map((heading) => [heading.regionId, heading.text.toLowerCase()]))
+  const content: string[] = []
+  const headings: string[] = []
+  const byTerm = new Map<string, Set<number>>()
+  let currentHeading = ''
+  document.regions.forEach((region, index) => {
+    currentHeading = headingByRegion.get(region.id) ?? currentHeading
+    const normalized = region.textContent.replace(/\s+/g, ' ').toLowerCase()
+    content.push(normalized)
+    headings.push(currentHeading)
+    const indexedTerms = headingByRegion.has(region.id) ? [...termsFor(normalized), ...termsFor(currentHeading)] : termsFor(normalized)
+    for (const term of new Set(indexedTerms)) {
+      const matches = byTerm.get(term)
+      if (matches) matches.add(index)
+      else byTerm.set(term, new Set([index]))
+    }
+  })
+  const created = { content, headings, byTerm }
+  indexes.set(document, created)
+  return created
+}
+
+function sampledRegionIndexes(length: number, limit: number) {
+  if (length <= limit) return Array.from({ length }, (_, index) => index)
+  return Array.from({ length: limit }, (_, index) => Math.round(index * (length - 1) / Math.max(1, limit - 1)))
+}
+
 function excerpt(text: string, query: string, terms: string[]) {
   const normalized = text.replace(/\s+/g, ' ').trim()
   const lower = normalized.toLowerCase()
@@ -28,16 +66,22 @@ export function searchKnowledge(documents: ReaderDocument[], query: string, limi
   const phrase = query.trim().toLowerCase()
   if (!phrase || limit <= 0) return []
   const terms = termsFor(phrase)
+  const asksForOverview = /(?:总结|概括|摘要|核心|要点|讲了什么|全文|overview|summar(?:y|ize))/i.test(phrase)
   const ranked = documents.flatMap((document) => {
-    const headingByRegion = new Map(document.headings.map((heading) => [heading.regionId, heading.text.toLowerCase()]))
-    let currentHeading = ''
-    return document.regions.flatMap((region) => {
-      currentHeading = headingByRegion.get(region.id) ?? currentHeading
-      const content = region.textContent.replace(/\s+/g, ' ').toLowerCase()
-      const title = document.title.toLowerCase()
-      const path = document.path.toLowerCase()
+    const index = indexFor(document)
+    const title = document.title.toLowerCase()
+    const path = document.path.toLowerCase()
+    const titleTerms = terms.filter((term) => title.includes(term) || path.includes(term))
+    const candidateIndexes = new Set(terms.flatMap((term) => [...(index.byTerm.get(term) ?? [])]))
+    if (titleTerms.length && (asksForOverview || !candidateIndexes.size)) {
+      for (const regionIndex of sampledRegionIndexes(document.regions.length, limit)) candidateIndexes.add(regionIndex)
+    }
+    return [...candidateIndexes].flatMap((regionIndex) => {
+      const region = document.regions[regionIndex]
+      if (!region) return []
+      const content = index.content[regionIndex] ?? ''
+      const currentHeading = index.headings[regionIndex] ?? ''
       const contentTerms = terms.filter((term) => content.includes(term))
-      const titleTerms = terms.filter((term) => title.includes(term) || path.includes(term))
       const headingTerms = terms.filter((term) => currentHeading.includes(term))
       const phraseScore = content.includes(phrase) ? 8 : 0
       if (!phraseScore && !contentTerms.length && !titleTerms.length && !headingTerms.length) return []
@@ -61,7 +105,7 @@ export function searchKnowledge(documents: ReaderDocument[], query: string, limi
       const intersection = [...termsInSnippet].filter((term) => existing.has(term)).length
       return intersection / Math.max(1, new Set([...termsInSnippet, ...existing]).size) >= 0.82
     })
-    if (duplicate) continue
+    if (!asksForOverview && duplicate) continue
     prior.add(termsInSnippet)
     signatures.set(key, prior)
     counts.set(key, count + 1)

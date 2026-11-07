@@ -46,4 +46,13 @@ describe('knowledge search', () => {
     const document = parseMarkdown('repeat.md', '# 说明\n\n知识库支持跨文档检索和原文引用。\n\n知识库支持跨文档检索和原文引用。')
     expect(searchKnowledge([document], '知识库')).toHaveLength(1)
   })
+
+  it('samples the whole document when a title-matched question asks for an overview', () => {
+    const sections = Array.from({ length: 14 }, (_, index) => `第 ${index + 1} 章的独立内容 ${String.fromCharCode(65 + index)}。`)
+    sections[13] += ' 最终结论在这里。'
+    const document = parseMarkdown('deploy.md', `# 部署指南\n\n${sections.join('\n\n')}`)
+    const matches = searchKnowledge([document], '总结部署指南的核心要点', 8)
+    expect(matches).toHaveLength(8)
+    expect(matches.some((match) => match.snippet.includes('最终结论'))).toBe(true)
+  })
 })

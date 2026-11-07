@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { availableKnowledgeSourceIds, citationState, createKnowledgeMessage, filterKnowledgeConversations, knowledgeRetrievalQuery, localDayKey, recentKnowledgeContext, summarizeKnowledgeActivity, type KnowledgeCitation, type KnowledgeMessage, type KnowledgeConversation } from './knowledgeConversations'
+import { availableKnowledgeSourceIds, citationRegionId, citationState, createKnowledgeMessage, filterKnowledgeConversations, knowledgeRetrievalQuery, localDayKey, messagesForKnowledgeQuestion, migrateKnowledgeDocument, recentKnowledgeContext, summarizeKnowledgeActivity, validatedKnowledgeAnswer, type KnowledgeCitation, type KnowledgeMessage, type KnowledgeConversation } from './knowledgeConversations'
 import { parseMarkdown } from './parser'
 
 describe('knowledge conversation helpers', () => {
@@ -46,6 +46,19 @@ describe('knowledge conversation helpers', () => {
     expect(context.reduce((size, message) => size + message.content.length, 0)).toBeLessThanOrEqual(8000)
   })
 
+  it('retries a failed question without duplicating the user message', () => {
+    const question = createKnowledgeMessage('user', '如何部署？')
+    const failure = createKnowledgeMessage('assistant', 'AI 服务暂时不可用：timeout')
+    expect(messagesForKnowledgeQuestion([question, failure], '如何部署？')).toEqual([question])
+    expect(messagesForKnowledgeQuestion([question], '如何部署？')).toEqual([question])
+    expect(messagesForKnowledgeQuestion([question], '如何回滚？').at(-1)?.content).toBe('如何回滚？')
+  })
+
+  it('keeps only valid citations actually used by an AI answer', () => {
+    const citations = [1, 2].map((index) => ({ index, documentId: 'doc', documentTitle: 'Doc', documentPath: 'doc.md', regionId: `region-${index}`, excerpt: 'Excerpt', sourceHash: 'hash' }))
+    expect(validatedKnowledgeAnswer('First [1], invalid [9].', citations)).toEqual({ content: 'First [1], invalid .', citations: [citations[0]] })
+  })
+
   it('keeps only available unique sources for a new conversation', () => {
     expect(availableKnowledgeSourceIds(['a', 'missing', 'a', 'b'], ['a', 'b', 'c'])).toEqual(['a', 'b'])
   })
@@ -64,7 +77,22 @@ describe('knowledge conversation helpers', () => {
     const citation: KnowledgeCitation = { index: 1, documentId: document.id, documentTitle: document.title, documentPath: document.path, regionId: region.id, excerpt: 'Source passage.', sourceHash: document.sourceHash }
     expect(citationState(citation, [document])).toBe('current')
     expect(citationState({ ...citation, sourceHash: 'older-hash' }, [document])).toBe('updated')
-    expect(citationState({ ...citation, regionId: 'missing-region' }, [document])).toBe('position-missing')
+    expect(citationState({ ...citation, regionId: 'missing-region', excerpt: '不存在的原文' }, [document])).toBe('position-missing')
     expect(citationState(citation, [])).toBe('removed')
+  })
+
+  it('relocates citations after earlier text changes and migrates them after a rename', () => {
+    const previous = parseMarkdown('guide.md', '# Guide\n\nSource passage.')
+    const region = previous.regions.find((item) => item.type === 'paragraph')!
+    const citation: KnowledgeCitation = { index: 1, documentId: previous.id, documentTitle: previous.title, documentPath: previous.path, regionId: region.id, excerpt: 'Source passage.', sourceHash: previous.sourceHash }
+    const edited = parseMarkdown('guide.md', '# Guide\n\nNew introduction.\n\nSource passage.')
+    expect(citationRegionId(citation, [edited])).toBe(edited.regions.at(-1)?.id)
+    expect(citationState(citation, [edited])).toBe('updated')
+
+    const renamed = parseMarkdown('renamed.md', previous.source)
+    const conversation: KnowledgeConversation = { id: 'conversation', title: 'Guide', sourceIds: [previous.id], createdAt: 1, updatedAt: 1, messages: [{ id: 'answer', role: 'assistant', content: 'Answer', createdAt: 1, citations: [citation] }] }
+    const migrated = migrateKnowledgeDocument(conversation, previous, renamed)
+    expect(migrated.sourceIds).toEqual([renamed.id])
+    expect(migrated.messages[0]?.citations[0]).toMatchObject({ documentId: renamed.id, documentPath: 'renamed.md', regionId: renamed.regions[1]?.id })
   })
 })

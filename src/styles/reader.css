@@ -1361,7 +1361,7 @@ button:focus-visible,
   .viewer-actions {
     gap: 4px;
   }
-  .viewer-zoom-slider {
+  .viewer-zoom-group .viewer-zoom-slider {
     display: none;
   }
   .viewer-stage {
@@ -2461,14 +2461,16 @@ button:focus-visible,
   gap: 16px;
 }
 .viewer-zoom-slider {
-  width: clamp(64px, 8vw, 104px);
-  flex: 0 0 clamp(64px, 8vw, 104px);
-  margin-inline: 8px;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
 }
 .viewer-zoom-group {
-  display: flex;
+  display: grid;
+  grid-template-columns: 28px clamp(64px, 8vw, 104px) 50px 28px;
+  flex: 0 0 auto;
   align-items: center;
-  gap: 3px;
+  gap: 8px;
   padding: 3px;
   border: 1px solid var(--border);
   border-radius: 9px;
@@ -2479,6 +2481,13 @@ button:focus-visible,
 }
 .viewer-zoom-group .icon-button:hover {
   background: color-mix(in srgb, var(--accent-soft) 70%, transparent);
+}
+.viewer-actions .icon-button.icon-button-sm {
+  flex: 0 0 28px;
+  width: 28px;
+  min-height: 28px;
+  height: 28px;
+  padding: 0;
 }
 .viewer-action-divider {
   width: 1px;
@@ -2592,6 +2601,9 @@ button:focus-visible,
   }
   .viewer-action-divider {
     display: none;
+  }
+  .viewer-zoom-group {
+    grid-template-columns: 28px 50px 28px;
   }
   .viewer-tabs {
     padding-inline: 12px;

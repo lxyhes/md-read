@@ -40,6 +40,29 @@ export function createKnowledgeMessage(role: KnowledgeMessage['role'], content: 
   return { id: createKnowledgeId(), role, content, citations, createdAt }
 }
 
+const AI_FAILURE_PREFIX = 'AI 服务暂时不可用：'
+
+export function messagesForKnowledgeQuestion(messages: KnowledgeMessage[], question: string) {
+  const latest = messages.at(-1)
+  const previous = messages.at(-2)
+  if (latest?.role === 'assistant' && latest.content.startsWith(AI_FAILURE_PREFIX)
+    && previous?.role === 'user' && previous.content === question) return messages.slice(0, -1)
+  if (latest?.role === 'user' && latest.content === question) return messages
+  return [...messages, createKnowledgeMessage('user', question)]
+}
+
+export function validatedKnowledgeAnswer(content: string, citations: KnowledgeCitation[]) {
+  const valid = new Set(citations.map((citation) => citation.index))
+  const used = new Set<number>()
+  const safeContent = content.replace(/\[(\d+)\]/g, (marker, value: string) => {
+    const index = Number(value)
+    if (!valid.has(index)) return ''
+    used.add(index)
+    return marker
+  })
+  return { content: safeContent, citations: citations.filter((citation) => used.has(citation.index)) }
+}
+
 export function titleForKnowledgeQuestion(question: string) {
   const title = question.replace(/\s+/g, ' ').trim()
   return title.length > 42 ? `${title.slice(0, 41)}…` : title || '新对话'
@@ -98,6 +121,38 @@ export function recentKnowledgeContext(messages: KnowledgeMessage[], limit = 4, 
   return bounded
 }
 
+function normalizedCitationText(value: string) {
+  return value.replace(/…/g, '').replace(/\s+/g, ' ').trim()
+}
+
+export function citationRegionId(citation: KnowledgeCitation, documents: ReaderDocument[]) {
+  const document = documents.find((item) => item.id === citation.documentId)
+  if (!document) return null
+  if (document.regions.some((region) => region.id === citation.regionId)) return citation.regionId
+  const excerpt = normalizedCitationText(citation.excerpt)
+  if (!excerpt) return null
+  return document.regions.find((region) => normalizedCitationText(region.textContent).includes(excerpt))?.id ?? null
+}
+
+export function migrateKnowledgeDocument(conversation: KnowledgeConversation, previous: ReaderDocument, next: ReaderDocument) {
+  if (previous.id === next.id) return conversation
+  const regionIds = new Map(previous.regions.map((region, index) => [region.id, next.regions[index]?.id]))
+  const sourceIds = [...new Set(conversation.sourceIds.map((id) => id === previous.id ? next.id : id))]
+  const messages = conversation.messages.map((message) => ({
+    ...message,
+    citations: message.citations.map((citation) => citation.documentId !== previous.id ? citation : {
+      ...citation,
+      documentId: next.id,
+      documentTitle: next.title,
+      documentPath: next.path,
+      regionId: regionIds.get(citation.regionId) ?? citation.regionId,
+    }),
+  }))
+  const changed = sourceIds.some((id, index) => id !== conversation.sourceIds[index])
+    || messages.some((message, index) => message.citations.some((citation, citationIndex) => citation !== conversation.messages[index]?.citations[citationIndex]))
+  return changed ? { ...conversation, sourceIds, messages, updatedAt: Date.now() } : conversation
+}
+
 export function localDayKey(date = new Date()) {
   const pad = (value: number) => String(value).padStart(2, '0')
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
@@ -118,6 +173,6 @@ export function summarizeKnowledgeActivity(activity: KnowledgeActivity, now = ne
 export function citationState(citation: KnowledgeCitation, documents: ReaderDocument[]): CitationState {
   const document = documents.find((item) => item.id === citation.documentId)
   if (!document) return 'removed'
-  if (!document.regions.some((region) => region.id === citation.regionId)) return 'position-missing'
+  if (!citationRegionId(citation, documents)) return 'position-missing'
   return document.sourceHash === citation.sourceHash ? 'current' : 'updated'
 }

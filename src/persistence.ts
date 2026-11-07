@@ -8,6 +8,7 @@ const LEGACY_SNAPSHOT_KEY = 'moyue:documents:full'
 const snapshotKey = (documentId: string) => `moyue:document-snapshot:${documentId}`
 const BROWSER_SNAPSHOT_DB = 'moyue-reader'
 const BROWSER_SNAPSHOT_STORE = 'document-snapshots'
+const BROWSER_KNOWLEDGE_STORE = 'knowledge-conversations'
 const KNOWLEDGE_CONVERSATIONS_KEY = 'moyue:knowledge-conversations'
 const KNOWLEDGE_ACTIVITY_KEY = 'moyue:knowledge-activity'
 type DatabaseConnection = Awaited<ReturnType<typeof import('@tauri-apps/plugin-sql')['default']['load']>>
@@ -19,8 +20,11 @@ function openBrowserSnapshotDatabase(): Promise<IDBDatabase | null> {
   if (typeof indexedDB === 'undefined') return Promise.resolve(null)
   return browserSnapshotDatabase ??= new Promise((resolve) => {
     try {
-      const request = indexedDB.open(BROWSER_SNAPSHOT_DB, 1)
-      request.onupgradeneeded = () => request.result.createObjectStore(BROWSER_SNAPSHOT_STORE, { keyPath: 'id' })
+      const request = indexedDB.open(BROWSER_SNAPSHOT_DB, 2)
+      request.onupgradeneeded = () => {
+        if (!request.result.objectStoreNames.contains(BROWSER_SNAPSHOT_STORE)) request.result.createObjectStore(BROWSER_SNAPSHOT_STORE, { keyPath: 'id' })
+        if (!request.result.objectStoreNames.contains(BROWSER_KNOWLEDGE_STORE)) request.result.createObjectStore(BROWSER_KNOWLEDGE_STORE, { keyPath: 'id' })
+      }
       request.onsuccess = () => resolve(request.result)
       request.onerror = () => resolve(null)
       request.onblocked = () => resolve(null)
@@ -63,6 +67,33 @@ async function deleteBrowserSnapshot(documentId: string): Promise<void> {
   if (!database) return
   try { await browserSnapshotRequest(database.transaction(BROWSER_SNAPSHOT_STORE, 'readwrite').objectStore(BROWSER_SNAPSHOT_STORE).delete(documentId)) }
   catch { /* Local storage cleanup below remains best effort. */ }
+}
+
+async function readBrowserKnowledgeConversations(): Promise<KnowledgeConversation[]> {
+  const database = await openBrowserSnapshotDatabase()
+  if (!database) return []
+  try {
+    const values = await browserSnapshotRequest<unknown[]>(database.transaction(BROWSER_KNOWLEDGE_STORE, 'readonly').objectStore(BROWSER_KNOWLEDGE_STORE).getAll())
+    return validKnowledgeConversations(values)
+  } catch { return [] }
+}
+
+async function writeBrowserKnowledgeConversation(conversation: KnowledgeConversation): Promise<boolean> {
+  const database = await openBrowserSnapshotDatabase()
+  if (!database) return false
+  try {
+    await browserSnapshotRequest(database.transaction(BROWSER_KNOWLEDGE_STORE, 'readwrite').objectStore(BROWSER_KNOWLEDGE_STORE).put(conversation))
+    return true
+  } catch { return false }
+}
+
+async function deleteBrowserKnowledgeConversation(conversationId: string): Promise<boolean> {
+  const database = await openBrowserSnapshotDatabase()
+  if (!database) return false
+  try {
+    await browserSnapshotRequest(database.transaction(BROWSER_KNOWLEDGE_STORE, 'readwrite').objectStore(BROWSER_KNOWLEDGE_STORE).delete(conversationId))
+    return true
+  } catch { return false }
 }
 
 async function getDatabase() {
@@ -149,36 +180,49 @@ async function writeKnowledgeConversationToDatabase(database: NonNullable<Databa
 export async function loadKnowledgeConversations(): Promise<KnowledgeConversation[]> {
   const local = readKnowledgeConversations()
   const database = await getDatabase()
-  if (!database) return local
-  const rows = await database.select<Array<{ id: string; title: string; sourceIds: string; messages: string; createdAt: number; updatedAt: number }>>('SELECT id, title, source_ids as sourceIds, messages, created_at as createdAt, updated_at as updatedAt FROM knowledge_conversations')
-  const saved = rows.flatMap((row) => {
-    try {
-      const conversation = { ...row, sourceIds: JSON.parse(row.sourceIds), messages: JSON.parse(row.messages) }
-      return validKnowledgeConversations([conversation])
-    } catch { return [] }
-  })
+  const saved = database
+    ? (await database.select<Array<{ id: string; title: string; sourceIds: string; messages: string; createdAt: number; updatedAt: number }>>('SELECT id, title, source_ids as sourceIds, messages, created_at as createdAt, updated_at as updatedAt FROM knowledge_conversations')).flatMap((row) => {
+      try {
+        const conversation = { ...row, sourceIds: JSON.parse(row.sourceIds), messages: JSON.parse(row.messages) }
+        return validKnowledgeConversations([conversation])
+      } catch { return [] }
+    })
+    : await readBrowserKnowledgeConversations()
   const merged = new Map(local.map((conversation) => [conversation.id, conversation]))
   for (const conversation of saved) {
     const previous = merged.get(conversation.id)
     if (!previous || previous.updatedAt < conversation.updatedAt) merged.set(conversation.id, conversation)
   }
   const conversations = [...merged.values()].sort((a, b) => b.updatedAt - a.updatedAt)
-  writeJson(KNOWLEDGE_CONVERSATIONS_KEY, conversations)
-  if (conversations.length !== saved.length) await Promise.all(conversations.map((conversation) => writeKnowledgeConversationToDatabase(database, conversation)))
+  try { writeJson(KNOWLEDGE_CONVERSATIONS_KEY, conversations) } catch { /* The durable store remains authoritative. */ }
+  const savedById = new Map(saved.map((conversation) => [conversation.id, conversation.updatedAt]))
+  const unsynced = conversations.filter((conversation) => (savedById.get(conversation.id) ?? -1) < conversation.updatedAt)
+  if (unsynced.length) {
+    if (database) await Promise.all(unsynced.map((conversation) => writeKnowledgeConversationToDatabase(database, conversation)))
+    else await Promise.all(unsynced.map(writeBrowserKnowledgeConversation))
+  }
   return conversations
 }
 
 export async function saveKnowledgeConversation(conversation: KnowledgeConversation): Promise<void> {
   const conversations = readKnowledgeConversations()
-  writeJson(KNOWLEDGE_CONVERSATIONS_KEY, [conversation, ...conversations.filter((item) => item.id !== conversation.id)])
   const database = await getDatabase()
   if (database) await writeKnowledgeConversationToDatabase(database, conversation)
+  else if (!(await writeBrowserKnowledgeConversation(conversation))) {
+    writeJson(KNOWLEDGE_CONVERSATIONS_KEY, [conversation, ...conversations.filter((item) => item.id !== conversation.id)])
+    return
+  }
+  try { writeJson(KNOWLEDGE_CONVERSATIONS_KEY, [conversation, ...conversations.filter((item) => item.id !== conversation.id)]) } catch { /* The durable store already has it. */ }
 }
 
 export async function deleteKnowledgeConversation(conversationId: string): Promise<void> {
-  writeJson(KNOWLEDGE_CONVERSATIONS_KEY, readKnowledgeConversations().filter((item) => item.id !== conversationId))
   const database = await getDatabase()
-  await database?.execute('DELETE FROM knowledge_conversations WHERE id = ?', [conversationId])
+  if (database) await database.execute('DELETE FROM knowledge_conversations WHERE id = ?', [conversationId])
+  else if (!(await deleteBrowserKnowledgeConversation(conversationId))) {
+    writeJson(KNOWLEDGE_CONVERSATIONS_KEY, readKnowledgeConversations().filter((item) => item.id !== conversationId))
+    return
+  }
+  try { writeJson(KNOWLEDGE_CONVERSATIONS_KEY, readKnowledgeConversations().filter((item) => item.id !== conversationId)) } catch { /* The durable store already deleted it. */ }
 }
 
 export async function loadKnowledgeActivity(): Promise<KnowledgeActivity> {
