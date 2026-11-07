@@ -7,6 +7,7 @@ import '@arco-design/web-vue/es/button/style/css.js'
 import '@arco-design/web-vue/es/input/style/css.js'
 import AppIcon from './AppIcon.vue'
 import { confirmAppAction } from '../appDialog'
+import { loadDurableData, saveDurableData } from '../persistence'
 
 type ClipboardKind = 'text' | 'image'
 type ClipboardFilter = 'all' | ClipboardKind
@@ -45,14 +46,9 @@ const MAX_IMAGE_BYTES = 6 * 1024 * 1024
 const POLL_INTERVAL = 2000
 const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
-function readStoredItems(): ClipboardRecord[] {
-  if (typeof localStorage === 'undefined') return []
-  try {
-    const value = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]') as ClipboardRecord[]
-    return Array.isArray(value) ? value.filter((item) => item && (item.kind === 'text' || item.kind === 'image')) : []
-  } catch {
-    return []
-  }
+function validStoredItems(value: unknown): ClipboardRecord[] | null {
+  if (!Array.isArray(value)) return null
+  return value.filter((item): item is ClipboardRecord => Boolean(item && typeof item === 'object' && (item.kind === 'text' || item.kind === 'image')))
 }
 
 function hashText(value: string) {
@@ -84,7 +80,7 @@ function dataUrlToBytes(dataUrl: string) {
   return bytes
 }
 
-const items = ref<ClipboardRecord[]>(readStoredItems())
+const items = ref<ClipboardRecord[]>([])
 const query = ref('')
 const filter = ref<ClipboardFilter>('all')
 const captureEnabled = ref(typeof localStorage === 'undefined' || localStorage.getItem(CAPTURE_KEY) !== 'false')
@@ -99,6 +95,7 @@ let lastClipboardMarker = ''
 let lastSignature = items.value[0]?.signature ?? ''
 let statusTimer: number | null = null
 let persistTimer: number | null = null
+let persistChain = Promise.resolve()
 
 const platformLabel = computed(() => {
   const agent = typeof navigator === 'undefined' ? '' : navigator.userAgent
@@ -124,9 +121,11 @@ const captureStatus = computed(() => captureEnabled.value ? '正在监测系统�
 function persistNow() {
   const ordered = [...items.value].sort((left, right) => Number(right.pinned) - Number(left.pinned) || right.createdAt - left.createdAt)
   items.value = ordered.slice(0, MAX_ITEMS)
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(items.value)) } catch {
-    errorMessage.value = '历史保存空间不足，图片条目可能无法保留'
-  }
+  const snapshot = [...items.value]
+  persistChain = persistChain.then(() => saveDurableData(STORAGE_KEY, snapshot)).catch(() => {
+    errorMessage.value = '剪贴板历史保存失败，请检查应用存储空间'
+  })
+  return persistChain
 }
 
 function persist() {
@@ -216,7 +215,7 @@ function startPolling() {
 
 function toggleCapture() {
   captureEnabled.value = !captureEnabled.value
-  localStorage.setItem(CAPTURE_KEY, String(captureEnabled.value))
+  try { localStorage.setItem(CAPTURE_KEY, String(captureEnabled.value)) } catch { /* A full preference store must not disable capture controls. */ }
   if (captureEnabled.value) {
     startPolling()
     flash('已恢复监测系统剪贴板')
@@ -291,13 +290,18 @@ function formatTime(timestamp: number) {
   return new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(timestamp)
 }
 
-onMounted(() => startPolling())
+onMounted(async () => {
+  items.value = (await loadDurableData(STORAGE_KEY, validStoredItems)) ?? []
+  selectedId.value = items.value[0]?.id ?? null
+  lastSignature = items.value[0]?.signature ?? ''
+  startPolling()
+})
 onUnmounted(() => {
   stopPolling()
   if (statusTimer !== null) window.clearTimeout(statusTimer)
   if (persistTimer !== null) {
     window.clearTimeout(persistTimer)
-    persistNow()
+    void persistNow()
   }
 })
 </script>

@@ -9,6 +9,7 @@ const snapshotKey = (documentId: string) => `moyue:document-snapshot:${documentI
 const BROWSER_SNAPSHOT_DB = 'moyue-reader'
 const BROWSER_SNAPSHOT_STORE = 'document-snapshots'
 const BROWSER_KNOWLEDGE_STORE = 'knowledge-conversations'
+const BROWSER_APP_DATA_STORE = 'app-data'
 const KNOWLEDGE_CONVERSATIONS_KEY = 'moyue:knowledge-conversations'
 const KNOWLEDGE_ACTIVITY_KEY = 'moyue:knowledge-activity'
 type DatabaseConnection = Awaited<ReturnType<typeof import('@tauri-apps/plugin-sql')['default']['load']>>
@@ -20,10 +21,11 @@ function openBrowserSnapshotDatabase(): Promise<IDBDatabase | null> {
   if (typeof indexedDB === 'undefined') return Promise.resolve(null)
   return browserSnapshotDatabase ??= new Promise((resolve) => {
     try {
-      const request = indexedDB.open(BROWSER_SNAPSHOT_DB, 2)
+      const request = indexedDB.open(BROWSER_SNAPSHOT_DB, 3)
       request.onupgradeneeded = () => {
         if (!request.result.objectStoreNames.contains(BROWSER_SNAPSHOT_STORE)) request.result.createObjectStore(BROWSER_SNAPSHOT_STORE, { keyPath: 'id' })
         if (!request.result.objectStoreNames.contains(BROWSER_KNOWLEDGE_STORE)) request.result.createObjectStore(BROWSER_KNOWLEDGE_STORE, { keyPath: 'id' })
+        if (!request.result.objectStoreNames.contains(BROWSER_APP_DATA_STORE)) request.result.createObjectStore(BROWSER_APP_DATA_STORE, { keyPath: 'key' })
       }
       request.onsuccess = () => resolve(request.result)
       request.onerror = () => resolve(null)
@@ -102,7 +104,7 @@ async function getDatabase() {
   return databasePromise ??= (async () => {
     const { default: Database } = await import('@tauri-apps/plugin-sql')
     const connection = await Database.load('sqlite:moyue.db')
-    await connection.execute(`CREATE TABLE IF NOT EXISTS documents (id TEXT PRIMARY KEY, path TEXT NOT NULL, title TEXT NOT NULL, source_hash TEXT NOT NULL, source TEXT, updated_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS progress (document_id TEXT PRIMARY KEY, region_id TEXT, heading_id TEXT, scroll_percent REAL NOT NULL, reading_time INTEGER NOT NULL, updated_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS annotations (id TEXT PRIMARY KEY, document_id TEXT NOT NULL, region_id TEXT NOT NULL, selected_text TEXT NOT NULL, color TEXT NOT NULL, note TEXT NOT NULL, created_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS knowledge_conversations (id TEXT PRIMARY KEY, title TEXT NOT NULL, source_ids TEXT NOT NULL, messages TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS knowledge_activity (day TEXT PRIMARY KEY, answer_count INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);`)
+    await connection.execute(`CREATE TABLE IF NOT EXISTS documents (id TEXT PRIMARY KEY, path TEXT NOT NULL, title TEXT NOT NULL, source_hash TEXT NOT NULL, source TEXT, updated_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS progress (document_id TEXT PRIMARY KEY, region_id TEXT, heading_id TEXT, scroll_percent REAL NOT NULL, reading_time INTEGER NOT NULL, updated_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS annotations (id TEXT PRIMARY KEY, document_id TEXT NOT NULL, region_id TEXT NOT NULL, selected_text TEXT NOT NULL, color TEXT NOT NULL, note TEXT NOT NULL, created_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS knowledge_conversations (id TEXT PRIMARY KEY, title TEXT NOT NULL, source_ids TEXT NOT NULL, messages TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS knowledge_activity (day TEXT PRIMARY KEY, answer_count INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS app_data (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at INTEGER NOT NULL);`)
     database = connection
     return connection
   })().catch((error: unknown) => {
@@ -138,6 +140,74 @@ export async function saveAppSetting(key: string, value: unknown): Promise<void>
   }
   await database.execute('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)', [key, serialized])
   try { localStorage.setItem(key, serialized) } catch { /* SQLite remains authoritative when WebView storage is full. */ }
+}
+
+async function readBrowserAppData(key: string): Promise<string | null> {
+  const database = await openBrowserSnapshotDatabase()
+  if (!database) return null
+  try {
+    const row = await browserSnapshotRequest<{ key: string; value: string } | undefined>(database.transaction(BROWSER_APP_DATA_STORE, 'readonly').objectStore(BROWSER_APP_DATA_STORE).get(key))
+    return row?.value ?? null
+  } catch { return null }
+}
+
+async function writeBrowserAppData(key: string, value: string): Promise<boolean> {
+  const database = await openBrowserSnapshotDatabase()
+  if (!database) return false
+  try {
+    await browserSnapshotRequest(database.transaction(BROWSER_APP_DATA_STORE, 'readwrite').objectStore(BROWSER_APP_DATA_STORE).put({ key, value }))
+    return true
+  } catch { return false }
+}
+
+async function deleteBrowserAppData(key: string): Promise<boolean> {
+  const database = await openBrowserSnapshotDatabase()
+  if (!database) return false
+  try {
+    await browserSnapshotRequest(database.transaction(BROWSER_APP_DATA_STORE, 'readwrite').objectStore(BROWSER_APP_DATA_STORE).delete(key))
+    return true
+  } catch { return false }
+}
+
+// Large, user-created state belongs in SQLite/IndexedDB. A legacy localStorage
+// value is removed only after the durable copy has been written successfully.
+export async function loadDurableData<T>(key: string, validate: (value: unknown) => T | null): Promise<T | null> {
+  const database = await getDatabase().catch(() => null)
+  const stored = database
+    ? (await database.select<Array<{ value: string }>>('SELECT value FROM app_data WHERE key = ?', [key]))[0]?.value ?? null
+    : await readBrowserAppData(key)
+  if (stored !== null) {
+    try { return validate(JSON.parse(stored)) } catch { return null }
+  }
+  const legacy = typeof localStorage === 'undefined' ? null : localStorage.getItem(key)
+  if (legacy === null) return null
+  let value: T | null = null
+  try { value = validate(JSON.parse(legacy)) } catch { return null }
+  if (value === null) return null
+  const serialized = JSON.stringify(value)
+  const saved = database
+    ? Boolean(await database.execute('INSERT OR REPLACE INTO app_data (key, value, updated_at) VALUES (?, ?, ?)', [key, serialized, Date.now()]))
+    : await writeBrowserAppData(key, serialized)
+  if (saved) localStorage.removeItem(key)
+  return value
+}
+
+export async function saveDurableData(key: string, value: unknown): Promise<void> {
+  const serialized = JSON.stringify(value)
+  const database = await getDatabase().catch(() => null)
+  if (database) await database.execute('INSERT OR REPLACE INTO app_data (key, value, updated_at) VALUES (?, ?, ?)', [key, serialized, Date.now()])
+  else if (!(await writeBrowserAppData(key, serialized))) {
+    localStorage.setItem(key, serialized)
+    return
+  }
+  try { localStorage.removeItem(key) } catch { /* Durable copy is authoritative. */ }
+}
+
+export async function deleteDurableData(key: string): Promise<void> {
+  const database = await getDatabase().catch(() => null)
+  if (database) await database.execute('DELETE FROM app_data WHERE key = ?', [key])
+  else await deleteBrowserAppData(key)
+  try { localStorage.removeItem(key) } catch { /* Durable copy is already deleted. */ }
 }
 
 function snapshotIndex() {

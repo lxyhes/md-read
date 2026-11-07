@@ -67,13 +67,13 @@ import { createExportCss, createPortableHtml } from './exportPresentation'
 import { createPrintHtml, printPortableHtml } from './exportPrint'
 import { embedExportImages, rasterizeExportImages } from './exportImages'
 import { normalizeLatexDelimiters } from './markdown/fragment'
-import { readEditorDraft, saveEditorDraft, removeEditorDraft, hasSaveConflict, editorAssetMap } from './editorDrafts'
+import { readEditorDraft, saveEditorDraft, removeEditorDraft, migrateEditorDrafts, hasSaveConflict, editorAssetMap } from './editorDrafts'
 import { startupStylesReady } from './startup'
 import { confirmAppAction, promptAppText } from './appDialog'
 import { searchKnowledge } from './knowledgeSearch'
 import { aiEndpoint, aiPayload, aiResponseText, defaultAiSettings, ollamaModelNames, ollamaTagsEndpoint, type AiMessage, type AiSettings } from './aiProvider'
 import { availableKnowledgeSourceIds, citationRegionId, citationState, citationsForMatches, createKnowledgeId, createKnowledgeMessage, filterKnowledgeConversations, knowledgeRetrievalQuery, localDayKey, messagesForKnowledgeQuestion, migrateKnowledgeDocument, recentKnowledgeContext, summarizeKnowledgeActivity, titleForKnowledgeQuestion, validatedKnowledgeAnswer, type KnowledgeActivity, type KnowledgeCitation, type KnowledgeConversation, type KnowledgeMessage } from './knowledgeConversations'
-import { deleteKnowledgeConversation, loadAppSetting, loadKnowledgeActivity, loadKnowledgeConversations, recordKnowledgeAnswer, saveAppSetting, saveKnowledgeConversation } from './persistence'
+import { deleteKnowledgeConversation, loadAppSetting, loadDurableData, loadKnowledgeActivity, loadKnowledgeConversations, recordKnowledgeAnswer, saveAppSetting, saveDurableData, saveKnowledgeConversation } from './persistence'
 import logoAsset from './assets/moyue-logo-256.png'
 
 const FocusAmbiencePicker = defineAsyncComponent(() => import('./components/FocusAmbiencePicker.vue'))
@@ -183,18 +183,19 @@ function readStoredIds(key: string) {
     return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
   } catch { return [] }
 }
+function validPersonalNotes(value: unknown): PersonalNote[] | null {
+  if (!Array.isArray(value)) return null
+  return value.flatMap((item) => {
+    if (!item || typeof item !== 'object') return []
+    const note = item as Partial<PersonalNote>
+    return typeof note.id === 'string' && typeof note.title === 'string' && typeof note.body === 'string' && typeof note.updatedAt === 'number'
+      ? [{ id: note.id, title: note.title, body: note.body, updatedAt: note.updatedAt }]
+      : []
+  })
+}
 function readPersonalNotes(): PersonalNote[] {
-  try {
-    const value: unknown = JSON.parse(localStorage.getItem(PERSONAL_NOTES_KEY) ?? '[]')
-    if (!Array.isArray(value)) return []
-    return value.flatMap((item) => {
-      if (!item || typeof item !== 'object') return []
-      const note = item as Partial<PersonalNote>
-      return typeof note.id === 'string' && typeof note.title === 'string' && typeof note.body === 'string' && typeof note.updatedAt === 'number'
-        ? [{ id: note.id, title: note.title, body: note.body, updatedAt: note.updatedAt }]
-        : []
-    })
-  } catch { return [] }
+  try { return validPersonalNotes(JSON.parse(localStorage.getItem(PERSONAL_NOTES_KEY) ?? '[]')) ?? [] }
+  catch { return [] }
 }
 function saveStoredIds(key: string, ids: string[]) { localStorage.setItem(key, JSON.stringify([...new Set(ids)])) }
 function readAiSettings(): AiSettings {
@@ -309,6 +310,8 @@ const editorDocumentId = ref('')
 const editorBackupError = ref('')
 const editorConflict = ref(false)
 let editorAutoSaveTimer: number | null = null
+let editorDraftTimer: number | null = null
+let editorDraftPending = false
 type EditorImageTarget = NonNullable<ReturnType<InstanceType<typeof MarkdownEditorComponent>['imageAt']>>
 const editorContextMenu = ref<{ x: number; y: number; image?: EditorImageTarget; local?: string; managed?: boolean } | null>(null)
 const editorContextMenuElement = ref<HTMLElement | null>(null)
@@ -900,7 +903,7 @@ async function openEditor() {
     if (store.currentDocumentId !== document.id) return
     if (originalSource !== document.source) await store.replaceDocumentSource(document.id, originalSource)
   }
-  const recovered = readEditorDraft(document.path)
+  const recovered = await readEditorDraft(document.path)
   const realPath = isRealDocumentPath(store.currentDocument.path)
   let migrated = { source: originalSource, count: 0 }
   let migrationMode: 'file' | 'memory' | 'none' = 'none'
@@ -940,12 +943,12 @@ async function openEditor() {
       : `已将 ${migrated.count} 张内嵌图片收纳为短引用`)
   }
   if (recovered) notify(editorConflict.value ? '已恢复草稿；磁盘原文有变更，请另存副本后合并' : '已恢复上次未保存的草稿')
-  persistEditorDraft()
+  void persistEditorDraft()
   void nextTick(mountRichEditor)
 }
 
-function closeEditor() {
-  if (editorDirty.value && !persistEditorDraft()) { notify('草稿备份失败，请先保存或另存副本再退出'); return }
+async function closeEditor() {
+  if (editorDirty.value && !(await persistEditorDraft())) { notify('草稿备份失败，请先保存或另存副本再退出'); return }
   editorOpen.value = false
   editorFindOpen.value = false
   editorContextMenu.value = null
@@ -1017,21 +1020,33 @@ const editorMenuGroups = computed(() => {
   ]
 })
 
-function persistEditorDraft() {
+async function persistEditorDraft() {
+  if (editorDraftTimer !== null) {
+    window.clearTimeout(editorDraftTimer)
+    editorDraftTimer = null
+  }
   if (!editorOpen.value || !editorDocumentPath.value) return true
+  editorDraftPending = true
   try {
-    if (editorDirty.value) saveEditorDraft({ path: editorDocumentPath.value, source: editorSourceForSave.value, baseSource: editorOriginalSource.value, updatedAt: Date.now() })
-    else removeEditorDraft(editorDocumentPath.value)
+    if (editorDirty.value) await saveEditorDraft({ path: editorDocumentPath.value, source: editorSourceForSave.value, baseSource: editorOriginalSource.value, updatedAt: Date.now() })
+    else await removeEditorDraft(editorDocumentPath.value)
     editorBackupError.value = ''
     return true
   } catch {
-    editorBackupError.value = '草稿备份失败（存储空间不足或不可用），请立即保存或另存副本'
+    editorBackupError.value = '草稿备份失败（应用存储不可用），请立即保存或另存副本'
     return false
-  }
+  } finally { editorDraftPending = false }
+}
+
+function scheduleEditorDraft() {
+  if (editorDraftTimer !== null) window.clearTimeout(editorDraftTimer)
+  editorDraftTimer = window.setTimeout(() => { void persistEditorDraft() }, 120)
 }
 
 function protectUnsavedEditor(event: BeforeUnloadEvent) {
-  if (editorDirty.value && !persistEditorDraft()) { event.preventDefault(); event.returnValue = '' }
+  if (!editorDirty.value) return
+  void persistEditorDraft()
+  if (editorDraftTimer !== null || editorDraftPending || editorBackupError.value) { event.preventDefault(); event.returnValue = '' }
 }
 
 async function saveEditorCopy() {
@@ -1206,17 +1221,17 @@ async function saveEditor() {
     if (editorDocumentId.value === documentId) {
       editorOriginalSource.value = sourceToSave
       editorConflict.value = false
-      persistEditorDraft()
+      await persistEditorDraft()
     } else {
-      const draft = readEditorDraft(document.path)
-      if (draft?.source === sourceToSave) removeEditorDraft(document.path)
-      else if (draft) saveEditorDraft({ ...draft, baseSource: sourceToSave })
+      const draft = await readEditorDraft(document.path)
+      if (draft?.source === sourceToSave) await removeEditorDraft(document.path)
+      else if (draft) await saveEditorDraft({ ...draft, baseSource: sourceToSave })
     }
     notify('Markdown 已保存')
   } catch (error) {
     if (editorDocumentId.value === documentId) {
       editorConflict.value = String(error).includes('其他程序修改')
-      persistEditorDraft()
+      await persistEditorDraft()
     }
     notify(String(error instanceof Error ? error.message : error))
   } finally { editorSaving.value = false }
@@ -2603,7 +2618,11 @@ function syncPersonalNoteDraft() {
   noteDraftTitle.value = note?.title ?? ''
   noteDraftBody.value = note?.body ?? ''
 }
-function openNotes() {
+async function loadPersonalNotes() {
+  personalNotes.value = (await loadDurableData(PERSONAL_NOTES_KEY, validPersonalNotes)) ?? personalNotes.value
+}
+async function openNotes() {
+  await loadPersonalNotes()
   view.value = 'notes'
   if (!selectedNoteId.value) selectedNoteId.value = sortedPersonalNotes.value[0]?.id ?? null
   syncPersonalNoteDraft()
@@ -2612,27 +2631,33 @@ function selectPersonalNote(note: PersonalNote) {
   selectedNoteId.value = note.id
   syncPersonalNoteDraft()
 }
-function createPersonalNote() {
+async function createPersonalNote() {
   const note: PersonalNote = { id: `note-${Date.now()}`, title: '未命名笔记', body: '', updatedAt: Date.now() }
-  personalNotes.value = [note, ...personalNotes.value]
-  localStorage.setItem(PERSONAL_NOTES_KEY, JSON.stringify(personalNotes.value))
+  const next = [note, ...personalNotes.value]
+  try { await saveDurableData(PERSONAL_NOTES_KEY, next) }
+  catch { notify('笔记创建失败，请检查应用存储空间'); return }
+  personalNotes.value = next
   selectedNoteId.value = note.id
   syncPersonalNoteDraft()
 }
-function savePersonalNote() {
+async function savePersonalNote() {
   const note = activePersonalNote.value
   if (!note) return
   const updated = { ...note, title: noteDraftTitle.value.trim() || '未命名笔记', body: noteDraftBody.value, updatedAt: Date.now() }
-  personalNotes.value = personalNotes.value.map((item) => item.id === note.id ? updated : item)
-  localStorage.setItem(PERSONAL_NOTES_KEY, JSON.stringify(personalNotes.value))
+  const next = personalNotes.value.map((item) => item.id === note.id ? updated : item)
+  try { await saveDurableData(PERSONAL_NOTES_KEY, next) }
+  catch { notify('笔记保存失败，请检查应用存储空间'); return }
+  personalNotes.value = next
   syncPersonalNoteDraft()
   notify('笔记已保存')
 }
 async function deletePersonalNote() {
   const note = activePersonalNote.value
   if (!note || !(await confirmAppAction({ title: `删除「${note.title}」？`, confirmLabel: '删除', destructive: true }))) return
-  personalNotes.value = personalNotes.value.filter((item) => item.id !== note.id)
-  localStorage.setItem(PERSONAL_NOTES_KEY, JSON.stringify(personalNotes.value))
+  const next = personalNotes.value.filter((item) => item.id !== note.id)
+  try { await saveDurableData(PERSONAL_NOTES_KEY, next) }
+  catch { notify('笔记删除失败，请检查应用存储空间'); return }
+  personalNotes.value = next
   selectedNoteId.value = sortedPersonalNotes.value[0]?.id ?? null
   syncPersonalNoteDraft()
   notify('笔记已删除')
@@ -3593,8 +3618,11 @@ async function boot() {
 }
 onMounted(() => {
   void boot()
+  void migrateEditorDrafts()
+  void loadDurableData('moyue:clipboard-history', value => Array.isArray(value) ? value : null)
   void loadPersistedAiSettings()
   void loadKnowledgeWorkspace()
+  void loadPersonalNotes()
   void bindNativeFileDrop()
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('paste', onPaste)
@@ -3606,7 +3634,7 @@ onMounted(() => {
   document.addEventListener('click', onTabOutsideClick)
 })
 onUnmounted(() => {
-  persistEditorDraft()
+  void persistEditorDraft()
   if (!isTauriRuntime()) window.removeEventListener('beforeunload', protectUnsavedEditor)
   if (editorAutoSaveTimer !== null) window.clearInterval(editorAutoSaveTimer)
   stopOutlinePanelResize()
@@ -3631,7 +3659,7 @@ onUnmounted(() => {
   regionMeasurementObserver?.disconnect()
   viewportResizeObserver?.disconnect()
 })
-watch(editorSource, () => { persistEditorDraft() }, { flush: 'sync' })
+watch(editorSource, scheduleEditorDraft, { flush: 'sync' })
 watch(editorFocusMode, value => localStorage.setItem('moyue:editor-focus', String(value)))
 watch(editorOutlineOpen, value => localStorage.setItem('moyue:editor-outline-open', String(value)))
 watch(editorMode, value => localStorage.setItem('moyue:editor-mode', value))
@@ -3992,7 +4020,7 @@ async function openAssociatedMarkdown(path: string) {
   if (existing) { await chooseDocument(existing.id); return }
   const source = await readMarkdownPath(path)
   if (editorOpen.value) {
-    if (!persistEditorDraft()) throw new Error(editorBackupError.value)
+    if (!(await persistEditorDraft())) throw new Error(editorBackupError.value)
     editorOpen.value = false
   }
   await store.addOpenedFiles([{ path, source }])
@@ -4021,7 +4049,7 @@ async function bindNativeFileDrop() {
 async function chooseDocument(id: string) {
   const continueEditing = editorOpen.value && id !== editorDocumentId.value
   if (continueEditing) {
-    if (!persistEditorDraft()) { notify(editorBackupError.value); return }
+    if (!(await persistEditorDraft())) { notify(editorBackupError.value); return }
     editorOpen.value = false
   }
   const keepFocusMode = store.mode === 'focus'
@@ -4262,7 +4290,7 @@ async function confirmDeleteFile() {
 }
 async function closeDocument(id: string) {
   if (editorOpen.value && editorDocumentId.value === id) {
-    if (!persistEditorDraft()) { notify(editorBackupError.value); return }
+    if (!(await persistEditorDraft())) { notify(editorBackupError.value); return }
     editorOpen.value = false
     clearEditorInlineAssets()
   }

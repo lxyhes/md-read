@@ -5,8 +5,9 @@ import { invoke } from '@tauri-apps/api/core'
 import ClipboardManager from './components/ClipboardManager.vue'
 import { formatClipboardToMarkdown } from './pasteMarkdown'
 import { parseMarkdown } from './parser'
+import { loadDurableData } from './persistence'
 
-vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
+vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(), isTauri: () => false }))
 let app: App | undefined
 afterEach(() => {
   app?.unmount()
@@ -51,7 +52,8 @@ it('stores HTML in desktop clipboard history and restores it on copy', async () 
   app = createApp(ClipboardManager)
   app.mount(container)
   await vi.advanceTimersByTimeAsync(200)
-  expect(JSON.parse(localStorage.getItem('moyue:clipboard-history') ?? '[]')[0]?.html).toBe(html)
+  const stored = await loadDurableData<unknown[]>('moyue:clipboard-history', value => Array.isArray(value) ? value : null)
+  expect((stored?.[0] as { html?: string })?.html).toBe(html)
   const button = container.querySelector<HTMLButtonElement>('.clipboard-copy-button')!
   button.click()
   expect(invoke).toHaveBeenCalledWith('write_clipboard_snapshot', { kind: 'text', text, html, bytes: null })
