@@ -3638,9 +3638,11 @@ watch(() => store.currentDocumentId, () => {
   collapsedOutlineHeadingIds.value = new Set()
   outlineExpansionOverride.value = null
   virtualMeasuredHeights.value = new Map()
+  // Do not render the new document at the previous document's virtual offset.
+  virtualScrollTop.value = 0
   nextTick(() => {
     document.querySelector<HTMLElement>('.reader-tab[aria-selected="true"]')?.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'nearest' })
-    syncVirtualViewport()
+    restoreScroll()
     observeReaderLayout()
   })
 })

@@ -384,9 +384,8 @@
   overscroll-behavior: contain;
   scroll-padding-block: 34px;
 }
-/* Focus navigation is discrete: never let CSS smooth scrolling queue steps. */
-.app-shell.is-region-focus .reader-viewport,
-.app-shell.is-focus .reader-viewport {
+/* Restore document positions immediately; navigation opts into smooth scrolling. */
+.reader-viewport {
   scroll-behavior: auto;
 }
 .region-block {
@@ -1205,6 +1204,10 @@
 .reader-content .region-block {
   content-visibility: auto;
   contain-intrinsic-size: auto 150px;
+}
+/* Virtualization already limits mounted blocks; measure and paint them immediately. */
+.reader-content .regions-stack.virtualized .region-block {
+  content-visibility: visible;
 }
 .reader-tab[aria-selected="true"] {
   box-shadow: inset 0 -2px 0 var(--accent);
