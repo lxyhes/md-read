@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { aiEndpoint, aiPayload, aiResponseText } from './aiProvider'
+import { aiEndpoint, aiPayload, aiResponseText, ollamaModelNames, ollamaTagsEndpoint } from './aiProvider'
 
 describe('AI provider adapters', () => {
   it('builds Ollama and OpenAI-compatible requests', () => {
@@ -11,5 +11,11 @@ describe('AI provider adapters', () => {
   it('reads both response shapes', () => {
     expect(aiResponseText('ollama', { message: { content: '本地回答' } })).toBe('本地回答')
     expect(aiResponseText('openai-compatible', { choices: [{ message: { content: '接口回答' } }] })).toBe('接口回答')
+  })
+
+  it('reads installed Ollama models', () => {
+    expect(ollamaTagsEndpoint('http://127.0.0.1:11434/api/chat')).toBe('http://127.0.0.1:11434/api/tags')
+    expect(ollamaModelNames({ models: [{ name: 'qwen2.5:7b' }, { name: 'llama3.2:latest' }, { name: 3 }] })).toEqual(['qwen2.5:7b', 'llama3.2:latest'])
+    expect(ollamaModelNames({ error: 'offline' })).toEqual([])
   })
 })

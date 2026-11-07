@@ -455,6 +455,30 @@ struct AiChatResponse {
     provider: String,
 }
 
+fn parse_ollama_models(body: &str) -> Result<Vec<String>, String> {
+    let payload: serde_json::Value = serde_json::from_str(body).map_err(|error| format!("Ollama 响应不是有效 JSON：{error}"))?;
+    Ok(payload.get("models").and_then(serde_json::Value::as_array).ok_or("Ollama 没有返回模型列表")?
+        .iter().filter_map(|model| model.get("name").and_then(serde_json::Value::as_str))
+        .map(str::trim).filter(|name| !name.is_empty()).map(str::to_string).collect())
+}
+
+#[tauri::command]
+async fn ollama_models(base_url: String) -> Result<Vec<String>, String> {
+    let mut url = reqwest::Url::parse(base_url.trim()).map_err(|error| format!("Ollama 服务地址无效：{error}"))?;
+    if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none() || !url.username().is_empty() {
+        return Err("Ollama 服务地址必须是 HTTP 或 HTTPS 地址，且不能包含用户名密码".into());
+    }
+    let base_path = url.path().trim_end_matches('/').trim_end_matches("/api/chat").trim_end_matches("/api/tags");
+    url.set_path(&format!("{base_path}/api/tags"));
+    let response = reqwest::Client::builder().timeout(std::time::Duration::from_secs(10)).build()
+        .map_err(|error| format!("创建 Ollama 请求失败：{error}"))?
+        .get(url).send().await.map_err(|error| format!("连接 Ollama 失败：{error}"))?;
+    let status = response.status();
+    let body = response.text().await.map_err(|error| format!("读取 Ollama 响应失败：{error}"))?;
+    if !status.is_success() { return Err(format!("Ollama 服务返回 {status}")); }
+    parse_ollama_models(&body)
+}
+
 #[tauri::command]
 async fn ai_chat(request: AiChatRequest) -> Result<AiChatResponse, String> {
     let provider = request.provider.trim().to_ascii_lowercase();
@@ -921,7 +945,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
-        .invoke_handler(tauri::generate_handler![file_open::take_open_files, tracked_directory, write_markdown_checked, allow_asset_directory, read_local_image, read_clipboard_image, read_clipboard_snapshot, read_clipboard_rich_text, read_clipboard_signature, write_clipboard_snapshot, read_remote_image, download_remote_image, upload_piclist_image, ai_chat, open_directory, reveal_file, open_external_url, web_preview::web_preview, pandoc_import_document, pandoc_export_document, export_html_to_pdf])
+        .invoke_handler(tauri::generate_handler![file_open::take_open_files, tracked_directory, write_markdown_checked, allow_asset_directory, read_local_image, read_clipboard_image, read_clipboard_snapshot, read_clipboard_rich_text, read_clipboard_signature, write_clipboard_snapshot, read_remote_image, download_remote_image, upload_piclist_image, ollama_models, ai_chat, open_directory, reveal_file, open_external_url, web_preview::web_preview, pandoc_import_document, pandoc_export_document, export_html_to_pdf])
         .build(tauri::generate_context!())
         .expect("error while building Moyue application")
         .run(|_app, _event| {
@@ -937,7 +961,13 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_allowed_external_url, is_image, is_safe_remote_image_url, is_supported_remote_image, pandoc_export_format, pandoc_import_extension, remote_image_referer};
+    use super::{is_allowed_external_url, is_image, is_safe_remote_image_url, is_supported_remote_image, pandoc_export_format, pandoc_import_extension, parse_ollama_models, remote_image_referer};
+
+    #[test]
+    fn reads_ollama_model_names() {
+        assert_eq!(parse_ollama_models(r#"{"models":[{"name":"qwen2.5:7b"},{"name":"llama3.2:latest"}]}"#).unwrap(), vec!["qwen2.5:7b", "llama3.2:latest"]);
+        assert!(parse_ollama_models(r#"{"error":"offline"}"#).is_err());
+    }
     use std::path::Path;
 
     #[test]

@@ -24,6 +24,18 @@ export function aiEndpoint(settings: Pick<AiSettings, 'provider' | 'baseUrl'>) {
   return /\/chat\/completions$/i.test(base) ? base : `${base}/chat/completions`
 }
 
+export function ollamaTagsEndpoint(baseUrl: string) {
+  const base = baseUrl.trim().replace(/\/+$/, '').replace(/\/api\/(?:chat|tags)$/i, '')
+  return `${base}/api/tags`
+}
+
+export function ollamaModelNames(payload: unknown) {
+  if (!payload || typeof payload !== 'object' || !Array.isArray((payload as { models?: unknown }).models)) return []
+  return (payload as { models: Array<{ name?: unknown }> }).models
+    .map((model) => typeof model?.name === 'string' ? model.name.trim() : '')
+    .filter(Boolean)
+}
+
 export function aiPayload(settings: Pick<AiSettings, 'provider' | 'model'>, messages: AiMessage[]) {
   return settings.provider === 'ollama'
     ? { model: settings.model.trim(), messages, stream: false, options: { temperature: 0.2 } }

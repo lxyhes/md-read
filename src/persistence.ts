@@ -102,7 +102,7 @@ async function getDatabase() {
   return databasePromise ??= (async () => {
     const { default: Database } = await import('@tauri-apps/plugin-sql')
     const connection = await Database.load('sqlite:moyue.db')
-    await connection.execute(`CREATE TABLE IF NOT EXISTS documents (id TEXT PRIMARY KEY, path TEXT NOT NULL, title TEXT NOT NULL, source_hash TEXT NOT NULL, source TEXT, updated_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS progress (document_id TEXT PRIMARY KEY, region_id TEXT, heading_id TEXT, scroll_percent REAL NOT NULL, reading_time INTEGER NOT NULL, updated_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS annotations (id TEXT PRIMARY KEY, document_id TEXT NOT NULL, region_id TEXT NOT NULL, selected_text TEXT NOT NULL, color TEXT NOT NULL, note TEXT NOT NULL, created_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS knowledge_conversations (id TEXT PRIMARY KEY, title TEXT NOT NULL, source_ids TEXT NOT NULL, messages TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS knowledge_activity (day TEXT PRIMARY KEY, answer_count INTEGER NOT NULL);`)
+    await connection.execute(`CREATE TABLE IF NOT EXISTS documents (id TEXT PRIMARY KEY, path TEXT NOT NULL, title TEXT NOT NULL, source_hash TEXT NOT NULL, source TEXT, updated_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS progress (document_id TEXT PRIMARY KEY, region_id TEXT, heading_id TEXT, scroll_percent REAL NOT NULL, reading_time INTEGER NOT NULL, updated_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS annotations (id TEXT PRIMARY KEY, document_id TEXT NOT NULL, region_id TEXT NOT NULL, selected_text TEXT NOT NULL, color TEXT NOT NULL, note TEXT NOT NULL, created_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS knowledge_conversations (id TEXT PRIMARY KEY, title TEXT NOT NULL, source_ids TEXT NOT NULL, messages TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS knowledge_activity (day TEXT PRIMARY KEY, answer_count INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);`)
     database = connection
     return connection
   })().catch((error: unknown) => {
@@ -116,6 +116,29 @@ function readJson<T>(key: string, fallback: T): T {
 }
 
 function writeJson(key: string, value: unknown) { localStorage.setItem(key, JSON.stringify(value)) }
+
+export async function loadAppSetting<T>(key: string): Promise<T | null> {
+  const local = readJson<T | null>(key, null)
+  const database = await getDatabase()
+  if (!database) return local
+  const rows = await database.select<Array<{ value: string }>>('SELECT value FROM app_settings WHERE key = ?', [key])
+  if (rows[0]?.value) {
+    try { return JSON.parse(rows[0].value) as T } catch { return local }
+  }
+  if (local !== null) await database.execute('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)', [key, JSON.stringify(local)])
+  return local
+}
+
+export async function saveAppSetting(key: string, value: unknown): Promise<void> {
+  const serialized = JSON.stringify(value)
+  const database = await getDatabase()
+  if (!database) {
+    localStorage.setItem(key, serialized)
+    return
+  }
+  await database.execute('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)', [key, serialized])
+  try { localStorage.setItem(key, serialized) } catch { /* SQLite remains authoritative when WebView storage is full. */ }
+}
 
 function snapshotIndex() {
   const saved = readJson<string[]>(SNAPSHOT_INDEX_KEY, [])

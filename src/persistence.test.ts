@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { deleteDocument, deleteKnowledgeConversation, loadDocumentSnapshots, loadKnowledgeActivity, loadKnowledgeConversations, recordKnowledgeAnswer, saveDocumentSnapshot, saveKnowledgeConversation } from './persistence'
+import { deleteDocument, deleteKnowledgeConversation, loadAppSetting, loadDocumentSnapshots, loadKnowledgeActivity, loadKnowledgeConversations, recordKnowledgeAnswer, saveAppSetting, saveDocumentSnapshot, saveKnowledgeConversation } from './persistence'
 import type { KnowledgeConversation } from './knowledgeConversations'
 import type { ReaderDocument } from './types'
 
@@ -56,6 +56,15 @@ describe('document snapshot persistence', () => {
     await deleteDocument('first')
 
     expect(loadDocumentSnapshots().map((document) => document.id)).toEqual(['second'])
+  })
+})
+
+describe('app settings persistence', () => {
+  beforeEach(() => memoryStorage.clear())
+
+  it('saves and restores a setting in the browser fallback', async () => {
+    await saveAppSetting('moyue:ai-settings', { model: 'qwen3.5:9b', enabled: true })
+    await expect(loadAppSetting('moyue:ai-settings')).resolves.toEqual({ model: 'qwen3.5:9b', enabled: true })
   })
 })
 

@@ -71,9 +71,9 @@ import { readEditorDraft, saveEditorDraft, removeEditorDraft, hasSaveConflict, e
 import { startupStylesReady } from './startup'
 import { confirmAppAction, promptAppText } from './appDialog'
 import { searchKnowledge } from './knowledgeSearch'
-import { aiEndpoint, aiPayload, aiResponseText, defaultAiSettings, type AiMessage, type AiSettings } from './aiProvider'
+import { aiEndpoint, aiPayload, aiResponseText, defaultAiSettings, ollamaModelNames, ollamaTagsEndpoint, type AiMessage, type AiSettings } from './aiProvider'
 import { availableKnowledgeSourceIds, citationRegionId, citationState, citationsForMatches, createKnowledgeId, createKnowledgeMessage, filterKnowledgeConversations, knowledgeRetrievalQuery, localDayKey, messagesForKnowledgeQuestion, migrateKnowledgeDocument, recentKnowledgeContext, summarizeKnowledgeActivity, titleForKnowledgeQuestion, validatedKnowledgeAnswer, type KnowledgeActivity, type KnowledgeCitation, type KnowledgeConversation, type KnowledgeMessage } from './knowledgeConversations'
-import { deleteKnowledgeConversation, loadKnowledgeActivity, loadKnowledgeConversations, recordKnowledgeAnswer, saveKnowledgeConversation } from './persistence'
+import { deleteKnowledgeConversation, loadAppSetting, loadKnowledgeActivity, loadKnowledgeConversations, recordKnowledgeAnswer, saveAppSetting, saveKnowledgeConversation } from './persistence'
 import logoAsset from './assets/moyue-logo-256.png'
 
 const FocusAmbiencePicker = defineAsyncComponent(() => import('./components/FocusAmbiencePicker.vue'))
@@ -203,9 +203,10 @@ function readAiSettings(): AiSettings {
     return { ...defaultAiSettings, ...saved, apiKey: '' }
   } catch { return { ...defaultAiSettings } }
 }
-function persistAiSettings(settings: AiSettings) {
+async function persistAiSettings(settings: AiSettings) {
   const { apiKey: _apiKey, ...safeSettings } = settings
-  localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(safeSettings))
+  try { await saveAppSetting(AI_SETTINGS_KEY, safeSettings); return true }
+  catch { return false }
 }
 const advancedSettings = ref(readAdvancedSettings())
 const recentFolders = ref<RecentFolder[]>(advancedSettings.value.rememberRecent ? readRecentFolders() : [])
@@ -229,7 +230,9 @@ const knowledgeSourceFilter = ref<'all' | 'included'>('all')
 const selectedKnowledgeSourceIds = ref<string[]>([])
 const aiSettings = ref(readAiSettings())
 const aiBusy = ref(false)
-const aiStatus = ref<'idle' | 'checking' | 'connected' | 'error'>('idle')
+const aiModelsBusy = ref(false)
+const ollamaModels = ref<string[]>([])
+const aiStatus = ref<'idle' | 'checking' | 'connected' | 'saved' | 'error'>('idle')
 const aiError = ref('')
 const orderedRecentFolders = computed(() => orderRecentFolders(recentFolders.value))
 const viewer = ref<{ type: ViewerType; region: ReaderRegion } | null>(null)
@@ -2449,6 +2452,28 @@ async function requestAi(messages: AiMessage[]) {
   if (!text) throw new Error('AI 服务没有返回文本内容')
   return { text, model: settings.model, provider: settings.provider }
 }
+async function loadOllamaModels(reportError = true) {
+  if (aiSettings.value.provider !== 'ollama' || aiModelsBusy.value || !aiSettings.value.baseUrl.trim()) return
+  aiModelsBusy.value = true
+  if (reportError) aiError.value = ''
+  try {
+    if (isTauriRuntime()) ollamaModels.value = await invoke<string[]>('ollama_models', { baseUrl: aiSettings.value.baseUrl })
+    else {
+      const response = await fetch(ollamaTagsEndpoint(aiSettings.value.baseUrl), { signal: AbortSignal.timeout(10000) })
+      const body = await response.json()
+      if (!response.ok) throw new Error(`Ollama 服务返回 ${response.status}`)
+      ollamaModels.value = ollamaModelNames(body)
+    }
+    if (!ollamaModels.value.length) throw new Error('Ollama 中还没有已安装的模型')
+    if (!aiSettings.value.model.trim()) aiSettings.value.model = ollamaModels.value[0]
+  } catch (error) {
+    ollamaModels.value = []
+    if (reportError) aiError.value = error instanceof Error ? error.message : '读取 Ollama 模型失败'
+  } finally { aiModelsBusy.value = false }
+}
+watch([view, settingsTab, () => aiSettings.value.provider], ([currentView, currentTab, provider]) => {
+  if (currentView === 'settings' && currentTab === 'reading' && provider === 'ollama') void loadOllamaModels(false)
+})
 async function testAiConnection() {
   if (aiBusy.value) return
   aiBusy.value = true
@@ -2464,10 +2489,21 @@ async function testAiConnection() {
     notify(aiError.value)
   } finally { aiBusy.value = false }
 }
-function saveAiSettings() {
-  persistAiSettings(aiSettings.value)
-  aiStatus.value = 'idle'
+async function loadPersistedAiSettings() {
+  try {
+    const saved = await loadAppSetting<Partial<AiSettings>>(AI_SETTINGS_KEY)
+    if (saved) aiSettings.value = { ...defaultAiSettings, ...saved, apiKey: '' }
+  } catch { /* The synchronous local fallback is already active. */ }
+}
+async function saveAiSettings() {
   aiError.value = ''
+  if (!(await persistAiSettings(aiSettings.value))) {
+    aiStatus.value = 'error'
+    aiError.value = 'AI 服务配置保存失败，请检查应用存储权限'
+    notify(aiError.value)
+    return
+  }
+  aiStatus.value = 'saved'
   notify('AI 服务配置已保存')
 }
 async function askKnowledge() {
@@ -2666,8 +2702,7 @@ function onOutlinePanelResizeKeydown(event: KeyboardEvent) {
   }
 }
 function isTypingTarget(target: EventTarget | null) {
-  const element = target as HTMLElement | null
-  return !!element && (element.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(element.tagName))
+  return target instanceof Element && Boolean(target.closest('input, textarea, select, [contenteditable="true"], [role="combobox"], [role="listbox"], .arco-select'))
 }
 
 function blobToDataUrl(blob: Blob): Promise<string> {
@@ -3558,6 +3593,7 @@ async function boot() {
 }
 onMounted(() => {
   void boot()
+  void loadPersistedAiSettings()
   void loadKnowledgeWorkspace()
   void bindNativeFileDrop()
   window.addEventListener('keydown', onKeydown)
@@ -3619,7 +3655,6 @@ watch(query, () => {
   if (searchTimer !== null) window.clearTimeout(searchTimer)
   searchTimer = window.setTimeout(() => { searchNeedle.value = query.value.trim(); searchTimer = null }, 90)
 })
-watch(aiSettings, (settings) => { persistAiSettings(settings) }, { deep: true })
 watch(advancedSettings, (settings) => {
   localStorage.setItem('moyue:advanced-settings', JSON.stringify(settings))
   if (!settings.rememberRecent) {
@@ -5481,7 +5516,7 @@ async function requestFullscreen() {
             <Button type="secondary" @click="notify('同步与备份暂不启用')">同步与备份</Button>
           </div>
           <div class="settings-grid">
-        <div v-show="settingsTab === 'reading'" class="settings-card ai-settings-card"><span class="section-kicker">AI 能力</span><h2>连接 AI 服务</h2><p class="muted-copy">支持本地 Ollama，也支持 OpenAI-compatible 接口。API Key 只保留在当前会话，不写入本地配置。</p><div class="setting-input"><span>服务类型</span><Select v-model="aiSettings.provider" aria-label="服务类型"><Option value="ollama">Ollama（本地）</Option><Option value="openai-compatible">OpenAI-compatible</Option></Select></div><label class="setting-input">服务地址<Input v-model="aiSettings.baseUrl" spellcheck="false" placeholder="http://127.0.0.1:11434" /></label><label class="setting-input">模型名称<Input v-model="aiSettings.model" spellcheck="false" placeholder="qwen2.5:7b" /></label><label v-if="aiSettings.provider === 'openai-compatible'" class="setting-input">API Key（可选）<InputPassword v-model="aiSettings.apiKey" autocomplete="off" placeholder="仅当前会话使用" /></label><Checkbox class="setting-check" v-model="aiSettings.enabled">在知识库问答中启用 AI 生成</Checkbox><div class="ai-settings-actions"><Button class="ghost-button" type="secondary" @click="saveAiSettings"><AppIcon name="check" :size="14" />保存配置</Button><Button class="primary-button" type="primary" :disabled="aiBusy" @click="testAiConnection">{{ aiBusy ? '连接中…' : '测试连接' }}</Button></div><p v-if="aiStatus === 'connected'" class="ai-status-success">AI 服务已连接</p><p v-if="aiError" class="ai-status-error" role="alert">{{ aiError }}</p></div>
+        <div v-show="settingsTab === 'reading'" class="settings-card ai-settings-card"><span class="section-kicker">AI 能力</span><h2>连接 AI 服务</h2><p class="muted-copy">支持本地 Ollama，也支持 OpenAI-compatible 接口。API Key 只保留在当前会话，不写入本地配置。</p><div class="setting-input"><span>服务类型</span><Select v-model="aiSettings.provider" aria-label="服务类型"><Option value="ollama">Ollama（本地）</Option><Option value="openai-compatible">OpenAI-compatible</Option></Select></div><label class="setting-input">服务地址<Input v-model="aiSettings.baseUrl" spellcheck="false" placeholder="http://127.0.0.1:11434" /></label><div v-if="aiSettings.provider === 'ollama'" class="setting-input"><span>模型名称</span><div class="ai-model-picker"><Select v-model="aiSettings.model" :options="ollamaModels" allow-search :loading="aiModelsBusy" :trigger-props="{ contentClass: 'ai-model-dropdown' }" aria-label="Ollama 模型" @popup-visible-change="$event && loadOllamaModels(false)" /><Button class="ghost-button" type="secondary" :disabled="aiModelsBusy" @click="loadOllamaModels()">{{ aiModelsBusy ? '读取中…' : '读取模型' }}</Button></div></div><label v-else class="setting-input">模型名称<Input v-model="aiSettings.model" spellcheck="false" placeholder="模型名称" /></label><label v-if="aiSettings.provider === 'openai-compatible'" class="setting-input">API Key（可选）<InputPassword v-model="aiSettings.apiKey" autocomplete="off" placeholder="仅当前会话使用" /></label><Checkbox class="setting-check" v-model="aiSettings.enabled">在知识库问答中启用 AI 生成</Checkbox><div class="ai-settings-actions"><Button class="ghost-button" type="secondary" @click="saveAiSettings"><AppIcon name="check" :size="14" />保存配置</Button><Button class="primary-button" type="primary" :disabled="aiBusy" @click="testAiConnection">{{ aiBusy ? '连接中…' : '测试连接' }}</Button></div><p v-if="aiStatus === 'saved'" class="ai-status-success" role="status">AI 服务配置已保存</p><p v-else-if="aiStatus === 'connected'" class="ai-status-success">AI 服务已连接，模型 {{ aiSettings.model }} 可用</p><p v-if="aiError" class="ai-status-error" role="alert">{{ aiError }}</p></div>
         <div v-show="settingsTab === 'reading'" class="settings-card font-settings-card">
           <div class="font-settings-heading"><div><span class="section-kicker">阅读偏好</span><h2>字体与排版</h2></div><span>自动保存</span></div>
           <FontPicker label="正文字体" :model-value="store.readerSettings.fontFamily" :fallback-family="defaultTokens.reader.fontFamily" @update:model-value="store.updateSettings({ fontFamily: $event })" />
