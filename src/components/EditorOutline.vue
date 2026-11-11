@@ -30,12 +30,13 @@ const activeId = computed(() => {
 
 <style scoped>
 .editor-draft-outline { min-width: 0; height: 100%; min-height: 0; overflow: hidden; border-right: 1px solid var(--border); padding-right: 10px; }
+.editor-draft-outline[open] { display: flex; flex-direction: column; }
 summary { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 56px; padding: 6px 0; color: var(--ink); font: 12px/1.5 var(--ui-font); cursor: pointer; list-style: none; }
 summary::-webkit-details-marker { display: none; }
 summary small { order: 1; flex-basis: 100%; color: var(--muted); font-size: 11px; }
 summary > .app-icon:last-child { margin-left: auto; transform: rotate(-90deg); }
 [open] summary > .app-icon:last-child { transform: none; }
-nav { display: flex; flex-direction: column; height: calc(100% - 56px); overflow: auto; padding-bottom: 6px; scrollbar-width: thin; }
+nav { display: flex; min-height: 0; flex: 1; flex-direction: column; overflow-y: auto; overscroll-behavior: contain; padding-bottom: 6px; scrollbar-width: thin; }
 .editor-draft-outline:not([open]) { padding: 0; }
 .editor-draft-outline:not([open]) { display: none; }
 .editor-draft-outline:not([open]) summary { flex-direction: column; padding: 8px 0; }
