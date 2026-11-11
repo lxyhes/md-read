@@ -2874,6 +2874,7 @@ html:has(.reader-page), body:has(.reader-page), #app:has(.reader-page) { min-wid
 }
 
 .app-shell.is-editor-studio .editor-draft-outline nav {
+  top: 46px;
   padding-top: 12px;
 }
 
@@ -2916,8 +2917,13 @@ body .app-shell.is-editor-studio .reader-layout {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .app-shell.is-editor-studio .editor-draft-outline {
-    display: none;
+  .app-shell.is-editor-studio .editor-draft-layout:has(.editor-draft-outline[open]) {
+    grid-template-rows: minmax(180px, 40%) minmax(0, 1fr);
+  }
+
+  .app-shell.is-editor-studio .editor-draft-outline[open] {
+    display: block;
+    height: auto;
   }
 }
 
