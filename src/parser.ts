@@ -34,12 +34,6 @@ function frontMatterTitle(source: string): string {
   return value.replace(/^(?:"(.*)"|'(.*)')$/, '$1$2').trim()
 }
 
-function standaloneStrongText(node: MdastNode): string | null {
-  if (node.type !== 'paragraph' || node.children?.length !== 1 || node.children[0]?.type !== 'strong') return null
-  const text = nodeText(node).trim()
-  return text || null
-}
-
 function imageNode(node: MdastNode): MdastNode | null {
   if (node.type === 'image') return node
   if (node.type === 'paragraph' && node.children?.length === 1 && node.children[0]?.type === 'image') return node.children[0]
@@ -223,12 +217,11 @@ export function parseMarkdown(path: string, source: string, resolveUrl: Markdown
       html, metadata
     }
     regions.push(region)
-    const boldSection = standaloneStrongText(node)
     if (type === 'heading') {
       if (!documentTitle) documentTitle = textContent
       headings.push({ id: `heading_${hashText(`${id}:${textContent}`)}`, text: textContent, depth: node.depth ?? 1, regionId: id })
-    } else if (boldSection) {
-      headings.push({ id: `heading_${hashText(`${id}:${boldSection}`)}`, text: boldSection, depth: 2, regionId: id })
+    } else if (node.children?.length === 1 && node.children[0]?.type === 'strong' && isTimestampedParagraph(node)) {
+      headings.push({ id: `heading_${hashText(`${id}:${textContent}`)}`, text: textContent, depth: 2, regionId: id })
     }
   })
 

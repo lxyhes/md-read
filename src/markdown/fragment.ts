@@ -160,8 +160,7 @@ export function makeImplicitMarkdownHeadingsExplicit(source: string): { source: 
     const line = source.slice(lineStart, lineEnd < 0 ? source.length : lineEnd)
     if (!line.trim() || line.trimStart() !== line || line.trimStart().startsWith('#')) continue
 
-    const standaloneStrong = node.children?.length === 1 && node.children[0]?.type === 'strong'
-    if (isTimestampedParagraph(node) || standaloneStrong) insertOffsets.push(lineStart)
+    if (isTimestampedParagraph(node)) insertOffsets.push(lineStart)
   }
 
   if (!insertOffsets.length) return { source, converted: 0, insertedOffsets: [] }

@@ -120,11 +120,16 @@ $$`)
     expect(document.regions[2].textContent).toContain('**代码里的标记**')
   })
 
-  it('includes standalone bold sections in the outline without replacing the document title', () => {
-    const document = parseMarkdown('notes/article.md', '引导正文\n\n**内容层：选题和情绪设计**\n\n章节内容')
-    expect(document.title).toBe('article.md')
-    expect(document.headings.map(({ text, depth }) => ({ text, depth }))).toEqual([{ text: '内容层：选题和情绪设计', depth: 2 }])
+  it('keeps standalone bold paragraphs out of the outline while preserving their formatting', () => {
+    const document = parseMarkdown('notes/article.md', '# 回去问自己三个问题\n\n**有代价，说明它值得被认真解决**\n\n__普通加粗__\n\n## **别掉进这三个坑**')
+    expect(document.title).toBe('回去问自己三个问题')
+    expect(document.headings.map(({ text, depth }) => ({ text, depth }))).toEqual([
+      { text: '回去问自己三个问题', depth: 1 },
+      { text: '别掉进这三个坑', depth: 2 },
+    ])
     expect(document.regions[1]?.type).toBe('paragraph')
+    expect(document.regions[1]?.html).toContain('<strong>有代价，说明它值得被认真解决</strong>')
+    expect(document.regions[2]?.html).toContain('<strong>普通加粗</strong>')
   })
 
   it('preserves leading spaces that exist in the source paragraph', () => {
@@ -535,13 +540,14 @@ $$`)
   })
 
   it('can make legacy implicit headings explicit in the Markdown source', () => {
-    const source = '课程主旨与IP四维模型 00:02\n\n普通正文。\n\n**平台规则与起心动念 03:02**\n\n```text\n不要改动 04:00\n```'
+    const source = '课程主旨与IP四维模型 00:02\n\n**普通加粗正文**\n\n**平台规则与起心动念 03:02**\n\n```text\n不要改动 04:00\n```'
     const result = makeImplicitMarkdownHeadingsExplicit(source)
     expect(result.converted).toBe(2)
     expect(result.source).toContain('## 课程主旨与IP四维模型 00:02')
     expect(result.source).toContain('## **平台规则与起心动念 03:02**')
     expect(result.source).toContain('不要改动 04:00')
-    expect(result.source).toContain('普通正文。')
+    expect(result.source.split('\n')).toContain('**普通加粗正文**')
+    expect(parseMarkdown('course.md', source).headings.map(({ text }) => text)).toEqual(['课程主旨与IP四维模型 00:02', '平台规则与起心动念 03:02'])
   })
 
   it('re-parses saved plain prose blocks as Markdown', () => {
