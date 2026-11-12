@@ -74,6 +74,7 @@ import { startupStylesReady } from './startup'
 import { confirmAppAction, promptAppText } from './appDialog'
 import { searchKnowledge } from './knowledgeSearch'
 import { aiEndpoint, aiPayload, aiResponseText, defaultAiSettings, ollamaModelNames, ollamaTagsEndpoint, type AiMessage, type AiSettings } from './aiProvider'
+import { domesticAiWebModels } from './aiWebModels'
 import { availableKnowledgeSourceIds, citationRegionId, citationState, citationsForMatches, createKnowledgeId, createKnowledgeMessage, filterKnowledgeConversations, knowledgeRetrievalQuery, localDayKey, messagesForKnowledgeQuestion, migrateKnowledgeDocument, recentKnowledgeContext, summarizeKnowledgeActivity, titleForKnowledgeQuestion, validatedKnowledgeAnswer, type KnowledgeActivity, type KnowledgeCitation, type KnowledgeConversation, type KnowledgeMessage } from './knowledgeConversations'
 import { deleteKnowledgeConversation, loadAppSetting, loadDurableData, loadKnowledgeActivity, loadKnowledgeConversations, recordKnowledgeAnswer, saveAppSetting, saveDurableData, saveKnowledgeConversation } from './persistence'
 import logoAsset from './assets/moyue-logo-256.png'
@@ -95,7 +96,9 @@ const store = useReaderStore()
 const exportAppContext = getCurrentInstance()!.appContext
 const view = ref<View>('library')
 const webPreviewUrl = ref('')
-watch(view, (next) => { if (next !== 'reader') webPreviewUrl.value = '' })
+watch(view, (next) => { if (next !== 'reader' && next !== 'settings') webPreviewUrl.value = '' })
+const aiWebModel = ref(localStorage.getItem('moyue:ai-web-model') ?? domesticAiWebModels[0].id)
+watch(aiWebModel, (value) => localStorage.setItem('moyue:ai-web-model', value))
 const libraryTab = ref<'home' | 'all'>('all')
 const librarySearchQuery = ref('')
 const navCollapsed = ref(localStorage.getItem('moyue:nav-collapsed') === 'true')
@@ -570,7 +573,12 @@ const outlineRows = computed(() => {
 const readerScrollPercent = ref(0)
 const readerAtTop = computed(() => readerScrollPercent.value <= 0.01)
 const readerAtBottom = computed(() => readerScrollPercent.value >= 0.99)
-const readerDisplayMode = ref<'markdown' | 'mindmap' | 'split'>('markdown')
+const readerDisplayMode = ref<'markdown' | 'mindmap' | 'split' | 'html'>('markdown')
+const readerHtmlPreview = ref('')
+const readerHtmlPreviewError = ref('')
+const readerHtmlPreviewLoading = ref(false)
+const readerHtmlReturnScrollPercent = ref(0)
+let readerHtmlPreviewRequest = 0
 function hasCourseOutline(document: ReaderDocument | null | undefined) {
   return (document?.headings.filter(heading => /\d{1,2}:\d{2}/.test(heading.text)).length ?? 0) >= 2
 }
@@ -694,6 +702,10 @@ function normalizedPath(path: string) { return path.replace(/\\/g, '/') }
 async function openPreviewInBrowser(url: string) {
   if (isTauriRuntime()) await invoke('open_external_url', { url }).catch(() => notify('链接打开失败，请检查链接地址'))
   else window.open(url, '_blank', 'noopener,noreferrer')
+}
+function openAiWebModel() {
+  const model = domesticAiWebModels.find(({ id }) => id === aiWebModel.value)
+  if (model) webPreviewUrl.value = model.url
 }
 function directoryOf(path: string) {
   const normalized = normalizedPath(path)
@@ -2728,6 +2740,31 @@ async function exportHtmlSource(document: ReaderDocument, styled = true) {
   return createPortableHtml(document.title, source, assets, styled ? createExportCss(store.activeTheme, store.readerSettings) : '')
 }
 
+async function showReaderHtmlPreview() {
+  const document = store.currentDocument
+  if (!document) return
+  const request = ++readerHtmlPreviewRequest
+  if (readerDisplayMode.value !== 'html') readerHtmlReturnScrollPercent.value = currentViewportPercent()
+  readerDisplayMode.value = 'html'
+  readerHtmlPreview.value = ''
+  readerHtmlPreviewError.value = ''
+  readerHtmlPreviewLoading.value = true
+  try {
+    const html = await exportHtmlSource(document)
+    if (request === readerHtmlPreviewRequest && store.currentDocumentId === document.id && readerDisplayMode.value === 'html') readerHtmlPreview.value = html
+  } catch (error) {
+    if (request === readerHtmlPreviewRequest && store.currentDocumentId === document.id) readerHtmlPreviewError.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    if (request === readerHtmlPreviewRequest) readerHtmlPreviewLoading.value = false
+  }
+}
+
+function setReaderDisplayMode(mode: 'markdown' | 'mindmap' | 'split') {
+  const leavingHtmlPreview = readerDisplayMode.value === 'html'
+  readerDisplayMode.value = mode
+  if (leavingHtmlPreview) restoreViewportPercent(readerHtmlReturnScrollPercent.value)
+}
+
 async function renderDocumentPng(document: ReaderDocument) {
   const { createDocumentPng } = await import('./exportPng')
   return createDocumentPng(await exportHtmlSource(document), Math.min(1400, Math.max(720, store.readerSettings.width + 96)))
@@ -4294,6 +4331,7 @@ watch(() => store.currentDocumentId, () => {
   collapsedOutlineHeadingIds.value = new Set()
   outlineExpansionOverride.value = null
   virtualMeasuredHeights.value = new Map()
+  if (readerDisplayMode.value === 'html') void showReaderHtmlPreview()
   // Do not render the new document at the previous document's virtual offset.
   virtualScrollTop.value = 0
   nextTick(() => {
@@ -4305,6 +4343,9 @@ watch(() => store.currentDocumentId, () => {
 watch(() => [store.mode, store.activeThemeId, store.readerSettings.fontSize, store.readerSettings.lineHeight, store.readerSettings.width], () => {
   virtualMeasuredHeights.value = new Map()
   nextTick(() => { syncVirtualViewport(); observeReaderLayout() })
+})
+watch(() => [store.activeThemeId, store.readerSettings.fontSize, store.readerSettings.lineHeight, store.readerSettings.width, store.readerSettings.fontFamily], () => {
+  if (readerDisplayMode.value === 'html') void showReaderHtmlPreview()
 })
 watch(() => [virtualizedReader.value, virtualRange.value.start, virtualRange.value.end], () => { void nextTick(observeRenderedRegionSizes) })
 watch(() => store.openDocuments.map((document) => document.path).join('\n'), () => { void syncDocumentWatchers() }, { immediate: true })
@@ -5957,11 +5998,12 @@ async function requestFullscreen() {
                   </div>
                   <div class="reader-reading-actions">
                     <div class="reader-display-switch" role="tablist" aria-label="阅读视图">
-                      <button type="button" role="tab" :aria-selected="readerDisplayMode === 'markdown'" :class="{ active: readerDisplayMode === 'markdown' }" @click="readerDisplayMode = 'markdown'">Markdown</button>
-                      <button type="button" role="tab" :aria-selected="readerDisplayMode === 'mindmap'" :class="{ active: readerDisplayMode === 'mindmap' }" @click="readerDisplayMode = 'mindmap'">思维导图</button>
-                      <button type="button" role="tab" :aria-selected="readerDisplayMode === 'split'" :class="{ active: readerDisplayMode === 'split' }" @click="readerDisplayMode = 'split'; leftPanelTab = 'outline'">并排</button>
+                      <button type="button" role="tab" :aria-selected="readerDisplayMode === 'markdown'" :class="{ active: readerDisplayMode === 'markdown' }" @click="setReaderDisplayMode('markdown')">Markdown</button>
+                      <button type="button" role="tab" :aria-selected="readerDisplayMode === 'mindmap'" :class="{ active: readerDisplayMode === 'mindmap' }" @click="setReaderDisplayMode('mindmap')">思维导图</button>
+                      <button type="button" role="tab" :aria-selected="readerDisplayMode === 'split'" :class="{ active: readerDisplayMode === 'split' }" @click="setReaderDisplayMode('split'); leftPanelTab = 'outline'">并排</button>
+                      <button type="button" role="tab" :aria-selected="readerDisplayMode === 'html'" :class="{ active: readerDisplayMode === 'html' }" :disabled="readerHtmlPreviewLoading" @click="showReaderHtmlPreview">HTML</button>
                     </div>
-                    <div class="reader-navigation" aria-label="阅读位置与跳转">
+                    <div v-if="readerDisplayMode !== 'html'" class="reader-navigation" aria-label="阅读位置与跳转">
                       <span v-if="advancedSettings.showReadingProgress" class="reader-progress-label" aria-live="polite">阅读到 {{ Math.round(readerScrollPercent * 100) }}%</span>
                       <button class="reader-zoom-button" type="button" :disabled="store.readerSettings.fontSize <= 15" aria-label="缩小正文字号" title="缩小正文字号" @click="changeReaderZoom(-1, false)">A−</button>
                       <button class="reader-zoom-button" type="button" :disabled="store.readerSettings.fontSize >= 24" aria-label="放大正文字号" title="放大正文字号" @click="changeReaderZoom(1, false)">A+</button>
@@ -6056,7 +6098,12 @@ async function requestFullscreen() {
               </div>
               <nav v-if="!editorOpen && store.mode === 'clean' && (store.currentDocument?.headings.length ?? 0) > 0" class="reading-progress-rail" aria-label="阅读进度导航"><span class="reading-progress-rail-caption">{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}%</span><div class="reading-progress-rail-track"><span class="reading-progress-rail-fill" :style="{ height: `${(currentProgress?.scrollPercent ?? 0) * 100}%` }" /><button v-for="(heading, index) in store.currentDocument?.headings" :key="heading.id" type="button" class="reading-progress-marker" :class="{ active: store.activeHeadingId === heading.id }" :style="{ top: headingRailPosition(index) }" :aria-label="`跳转到 ${heading.text}`" :title="heading.text" @click.stop="scrollToHeading(heading.regionId)"><i /><span>{{ heading.text }}</span></button></div></nav>
               <div v-if="!editorOpen" class="reader-content" :class="[`reader-display-${readerDisplayMode}`, { 'is-course-outline': compactCourseOutline }]">
-                <div v-if="readerDisplayMode !== 'mindmap'" class="reader-markdown">
+                <div v-if="readerDisplayMode === 'html'" class="reader-html-preview">
+                  <p v-if="readerHtmlPreviewLoading" class="reader-html-preview-status" role="status">正在生成网页预览…</p>
+                  <div v-else-if="readerHtmlPreviewError" class="reader-html-preview-status" role="alert"><span>{{ readerHtmlPreviewError }}</span><button type="button" @click="showReaderHtmlPreview">重试</button></div>
+                  <iframe v-else-if="readerHtmlPreview" :srcdoc="readerHtmlPreview" title="HTML 网页预览" sandbox="" />
+                </div>
+                <div v-if="readerDisplayMode === 'markdown' || readerDisplayMode === 'split'" class="reader-markdown">
                 <div class="regions-stack" :class="{ virtualized: virtualizedReader }">
                 <div v-if="virtualRange.before" class="virtual-spacer" :style="{ height: `${virtualRange.before}px` }" aria-hidden="true" />
                 <div class="virtual-regions">
@@ -6064,7 +6111,7 @@ async function requestFullscreen() {
                 </div>
                 <div v-if="virtualRange.after" class="virtual-spacer" :style="{ height: `${virtualRange.after}px` }" aria-hidden="true" />
                 </div></div>
-                <div v-if="readerDisplayMode !== 'markdown'" class="reader-mindmap">
+                <div v-if="readerDisplayMode === 'mindmap' || readerDisplayMode === 'split'" class="reader-mindmap">
                   <div class="reader-mindmap-heading"><span class="section-kicker">文章结构</span><strong>章节脉络</strong><small>{{ currentMindmap ? (readerDisplayMode === 'split' ? '章节默认收起；点击 + 查看摘要，点击时间跳转视频' : '章节卡片默认展开，深层分支默认收起；点击 − / + 查看下一层') : '这篇文档还没有可识别的标题' }}</small></div>
                   <TreeDiagram v-if="currentMindmap" :node="currentMindmap" root :compact="readerDisplayMode === 'split'" @open-link="openExternalLink" />
                   <p v-else class="reader-mindmap-empty">请使用 Markdown 标题或独立加粗小标题来生成思维导图。</p>
@@ -6127,6 +6174,7 @@ async function requestFullscreen() {
           </div>
           <div class="settings-grid">
         <div v-show="settingsTab === 'reading'" class="settings-card ai-settings-card"><span class="section-kicker">AI 能力</span><h2>连接 AI 服务</h2><p class="muted-copy">支持本地 Ollama，也支持 OpenAI-compatible 接口。API Key 只保留在当前会话，不写入本地配置。</p><div class="setting-input"><span>服务类型</span><Select v-model="aiSettings.provider" aria-label="服务类型"><Option value="ollama">Ollama（本地）</Option><Option value="openai-compatible">OpenAI-compatible</Option></Select></div><label class="setting-input">服务地址<Input v-model="aiSettings.baseUrl" spellcheck="false" placeholder="http://127.0.0.1:11434" /></label><div v-if="aiSettings.provider === 'ollama'" class="setting-input"><span>模型名称</span><div class="ai-model-picker"><Select v-model="aiSettings.model" :options="ollamaModels" allow-search :loading="aiModelsBusy" :trigger-props="{ contentClass: 'ai-model-dropdown' }" aria-label="Ollama 模型" @popup-visible-change="$event && loadOllamaModels(false)" /><Button class="ghost-button" type="secondary" :disabled="aiModelsBusy" @click="loadOllamaModels()">{{ aiModelsBusy ? '读取中…' : '读取模型' }}</Button></div></div><label v-else class="setting-input">模型名称<Input v-model="aiSettings.model" spellcheck="false" placeholder="模型名称" /></label><label v-if="aiSettings.provider === 'openai-compatible'" class="setting-input">API Key（可选）<InputPassword v-model="aiSettings.apiKey" autocomplete="off" placeholder="仅当前会话使用" /></label><Checkbox class="setting-check" v-model="aiSettings.enabled">在知识库问答中启用 AI 生成</Checkbox><div class="ai-settings-actions"><Button class="ghost-button" type="secondary" @click="saveAiSettings"><AppIcon name="check" :size="14" />保存配置</Button><Button class="primary-button" type="primary" :disabled="aiBusy" @click="testAiConnection">{{ aiBusy ? '连接中…' : '测试连接' }}</Button></div><p v-if="aiStatus === 'saved'" class="ai-status-success" role="status">AI 服务配置已保存</p><p v-else-if="aiStatus === 'connected'" class="ai-status-success">AI 服务已连接，模型 {{ aiSettings.model }} 可用</p><p v-if="aiError" class="ai-status-error" role="alert">{{ aiError }}</p></div>
+        <div v-show="settingsTab === 'reading'" class="settings-card ai-web-model-card"><span class="section-kicker">网页入口</span><h2>国产大模型</h2><p class="muted-copy">选择平台后，在右侧内嵌打开官网；登录由对应平台处理。</p><div class="setting-input"><span>模型平台</span><div class="ai-model-picker"><Select v-model="aiWebModel" aria-label="国产大模型网页"><Option v-for="model in domesticAiWebModels" :key="model.id" :value="model.id">{{ model.name }}</Option></Select><Button class="primary-button" type="primary" @click="openAiWebModel"><AppIcon name="external" :size="14" />打开网页</Button></div></div></div>
         <div v-show="settingsTab === 'reading'" class="settings-card font-settings-card">
           <div class="font-settings-heading"><div><span class="section-kicker">阅读偏好</span><h2>字体与排版</h2></div><span>自动保存</span></div>
           <FontPicker label="正文字体" :model-value="store.readerSettings.fontFamily" :fallback-family="defaultTokens.reader.fontFamily" @update:model-value="store.updateSettings({ fontFamily: $event })" />
@@ -6144,7 +6192,7 @@ async function requestFullscreen() {
         <div v-show="settingsTab === 'reading'" class="settings-card"><span class="section-kicker">阅读</span><h2>阅读偏好</h2><label class="setting-row"><span>正文宽度 <b>{{ store.readerSettings.width }}px</b></span><Slider :model-value="store.readerSettings.width" :min="620" :max="1280" :step="10" @update:model-value="changeSetting('width', Number($event))" /></label><label class="setting-row"><span>字号 <b>{{ store.readerSettings.fontSize }}px</b></span><Slider :model-value="store.readerSettings.fontSize" :min="15" :max="24" :step="1" @update:model-value="changeSetting('fontSize', Number($event))" /></label><label class="setting-row"><span>行距 <b>{{ store.readerSettings.lineHeight }}</b></span><Slider :model-value="store.readerSettings.lineHeight" :min="1.4" :max="2.2" :step=".05" @update:model-value="changeSetting('lineHeight', Number($event))" /></label><div class="setting-toggle-row"><span>显示阅读进度</span><Switch v-model="advancedSettings.showReadingProgress" aria-label="显示阅读进度" /></div><div class="setting-toggle-row"><span>专注阅读</span><Switch :model-value="store.mode === 'focus'" :disabled="!store.currentDocument" aria-label="专注阅读" @change="toggleFocusMode" /></div></div><div v-show="settingsTab === 'reading'" class="settings-card"><span class="section-kicker">辅助功能</span><h2>翻译与解释</h2><p class="muted-copy">使用适配器连接你自己的翻译或解释服务；配置后可从划词工具栏调用。</p><label class="setting-input">服务标识<Input v-model="customProvider" placeholder="例如：local-llm / my-translator" /></label><Button class="primary-button" type="primary" @click="notify(customProvider ? '适配器标识已保存' : '保持未配置状态')"><AppIcon name="check" :size="14" />保存配置</Button></div><div v-show="settingsTab === 'shortcuts'" class="settings-card shortcuts-card"><span class="section-kicker">快捷操作</span><h2>快捷键</h2><div class="shortcut-row"><span>全局搜索</span><kbd>Ctrl / Cmd + K</kbd></div><div class="shortcut-row"><span>当前文档搜索</span><kbd>Ctrl / Cmd + F</kbd></div><div class="shortcut-row"><span>阅读缩放</span><kbd>Ctrl / Cmd + + / -</kbd></div><div class="shortcut-row"><span>专注模式</span><kbd>F</kbd></div><div class="shortcut-row"><span>退出聚焦</span><kbd>Esc</kbd></div><div class="shortcut-row"><span>切换区域</span><kbd>↑ ↓</kbd></div></div><div v-show="settingsTab === 'extensions'" class="settings-card extensions-card"><div class="extensions-head"><div><span class="section-kicker">插件中心</span><h2>插件扩展</h2></div><Button class="ghost-button" type="secondary" @click="notify('插件运行时将在后续版本启用')"><AppIcon name="plugin" :size="14" />打开插件目录</Button></div><div class="extension-filter"><AppIcon name="search" :size="14" /><span>按需扩展阅读能力</span></div><div class="extension-list"><div class="extension-item"><span class="extension-icon purple"><AppIcon name="sparkle" :size="17" /></span><span><b>AI 阅读助手</b><small>总结、解释与问答适配器</small></span><Button type="secondary" @click="notify('请先在翻译与解释中配置服务')">配置</Button></div><div class="extension-item"><span class="extension-icon green"><AppIcon name="download" :size="17" /></span><span><b>导出增强</b><small>为阅读内容准备更多导出格式</small></span><Button type="secondary" @click="notify('导出增强将在下一阶段接入')">安装</Button></div><div class="extension-item"><span class="extension-icon pink"><AppIcon name="components" :size="17" /></span><span><b>思维导图</b><small>把长文转换为结构化视图</small></span><Button type="secondary" @click="notify('插件运行时暂未启用')">安装</Button></div></div></div></div></section>
       <ClipboardManager v-show="view === 'clipboard'" @notify="notify" />
     </main>
-    <WebPreviewPanel v-if="webPreviewUrl && view === 'reader'" :url="webPreviewUrl" @close="webPreviewUrl = ''" @navigate="webPreviewUrl = $event" @external="openPreviewInBrowser" />
+    <WebPreviewPanel v-if="webPreviewUrl && (view === 'reader' || view === 'settings')" :url="webPreviewUrl" @close="webPreviewUrl = ''" @navigate="webPreviewUrl = $event" @external="openPreviewInBrowser" />
 
     <div v-if="quickOpenOpen" class="overlay search-overlay" @click.self="closeQuickOpen">
       <div ref="quickOpenDialog" class="search-dialog quick-open-dialog" role="dialog" aria-modal="true" aria-label="快速打开文件" tabindex="-1" @keydown="onModalKeydown($event, 'quick-open')">
