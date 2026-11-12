@@ -177,6 +177,12 @@ defineExpose({
   focus: () => view?.focus(),
   setSelectionRange: (start: number, end: number) => view?.dispatch({ selection: { anchor: Math.min(start, view.state.doc.length), head: Math.min(end, view.state.doc.length) }, scrollIntoView: true }),
   replaceSource,
+  placeContextCaret(event: MouseEvent) {
+    if (!view || !(event.target instanceof Element) || !view.contentDOM.contains(event.target)) return
+    const position = view.posAtCoords({ x: event.clientX, y: event.clientY })
+    const { from, to } = view.state.selection.main
+    if (position !== null && (position < from || position > to)) view.dispatch({ selection: { anchor: position } })
+  },
   imageAt(event: MouseEvent) {
     if (!view || !host.value?.contains(event.target as Node)) return null
     const target = event.target as HTMLElement

@@ -40,6 +40,8 @@ import FontPicker from './components/FontPicker.vue'
 import ReaderHeader from './components/ReaderHeader.vue'
 import type MarkdownEditorComponent from './components/MarkdownEditor.vue'
 import EditorMenuBar from './components/EditorMenuBar.vue'
+import EditorContextActions, { type ContextAction } from './components/EditorContextActions.vue'
+import { IconBold, IconCheckCircle, IconCode, IconCopy, IconDelete, IconItalic, IconLink, IconOrderedList, IconPaste, IconQuote, IconScissor, IconUnorderedList } from '@arco-design/web-vue/es/icon'
 import ArcoDropdown from './components/ArcoDropdown.vue'
 import { interfaceFont } from './fonts'
 import { defaultTokens } from './themes'
@@ -313,7 +315,7 @@ let editorAutoSaveTimer: number | null = null
 let editorDraftTimer: number | null = null
 let editorDraftPending = false
 type EditorImageTarget = NonNullable<ReturnType<InstanceType<typeof MarkdownEditorComponent>['imageAt']>>
-const editorContextMenu = ref<{ x: number; y: number; image?: EditorImageTarget; local?: string; managed?: boolean } | null>(null)
+const editorContextMenu = ref<{ x: number; y: number; image?: EditorImageTarget; local?: string; managed?: boolean; hasSelection: boolean } | null>(null)
 const editorContextMenuElement = ref<HTMLElement | null>(null)
 const imageManagerOpen = ref(false)
 const tableBuilderOpen = ref(false)
@@ -2113,22 +2115,115 @@ async function runImageMenu(action: 'location' | 'reveal' | 'rename' | 'upload' 
 }
 
 function openEditorContextMenu(event: MouseEvent) {
-  event.preventDefault()
   const image = editorTextarea.value?.imageAt(event) ?? undefined
+  if (!image && (editorMode.value === 'preview' || !(event.target instanceof Element) || !event.target.closest('.markdown-editor'))) return
+  event.preventDefault()
+  if (!image) editorTextarea.value?.placeContextCaret(event)
   const path = editorDocumentPath.value
   const local = image && isRealDocumentPath(path) ? localEditorImagePath(path, image.url) : null
   const managed = Boolean(local && image && /^(?:\.\/)?\.moyue-assets\/[^/?#]+$/.test(image.url) && !image.html && image.source.endsWith(`](${image.url})`))
-  const position = { x: event.clientX, y: event.clientY, image, local: local ?? undefined, managed }
+  const element = editorTextarea.value
+  const position = { x: event.clientX, y: event.clientY, image, local: local ?? undefined, managed, hasSelection: Boolean(element && element.selectionStart !== element.selectionEnd) }
   editorContextMenu.value = position
   void nextTick(() => {
     const menu = editorContextMenuElement.value
     if (!menu || editorContextMenu.value?.x !== position.x || editorContextMenu.value?.y !== position.y) return
     const bounds = menu.getBoundingClientRect()
     editorContextMenu.value = { ...position, x: Math.max(8, Math.min(position.x, window.innerWidth - bounds.width - 8)), y: Math.max(8, Math.min(position.y, window.innerHeight - bounds.height - 8)) }
+    if (!image) menu.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus({ preventScroll: true })
   })
 }
 
 function closeEditorContextMenu() { editorContextMenu.value = null }
+
+function finishEditorContextMenu() {
+  closeEditorContextMenu()
+  editorTextarea.value?.focus()
+}
+
+async function copyEditorSelection(cut = false) {
+  const editor = editorTextarea.value
+  if (!editor || editor.selectionStart === editor.selectionEnd) return
+  const { selectionStart: start, selectionEnd: end } = editor
+  const source = editorSource.value
+  const documentId = editorDocumentId.value
+  try {
+    await writeTextToClipboard(source.slice(start, end))
+    if (!cut) return
+    if (!editorOpen.value || editorMode.value === 'preview' || editorDocumentId.value !== documentId || editorSource.value !== source) {
+      notify('已复制选区；文档发生变化，未删除内容')
+      return
+    }
+    applyEditorChange(source.slice(0, start) + source.slice(end), start)
+  } catch { notify('无法写入剪贴板，原文已保留') }
+}
+
+async function pasteIntoEditor(plain = false) {
+  const editor = editorTextarea.value
+  if (!editor) return
+  const { selectionStart: start, selectionEnd: end } = editor
+  const source = editorSource.value
+  const documentId = editorDocumentId.value
+  try {
+    const { text, html, image } = await readClipboardContent()
+    if (!editorOpen.value || editorMode.value === 'preview' || editorDocumentId.value !== documentId || editorSource.value !== source || editor.selectionStart !== start || editor.selectionEnd !== end) {
+      notify('编辑位置已变化，请重新粘贴')
+      return
+    }
+    if (plain) {
+      if (text) insertEditorTextAt(text.replace(/\r\n?/g, '\n'), start, end)
+      else notify('剪贴板中没有纯文本')
+      return
+    }
+    const clipboard = new DataTransfer()
+    if (text) clipboard.setData('text/plain', text)
+    if (html) clipboard.setData('text/html', html)
+    if (image) clipboard.items.add(new File([image], 'clipboard-image', { type: image.type }))
+    const event = new ClipboardEvent('paste', { clipboardData: clipboard, cancelable: true })
+    await onEditorPaste(event)
+    if (!event.defaultPrevented && text) insertEditorTextAt(text.replace(/\r\n?/g, '\n'), start, end)
+  } catch { notify('无法读取剪贴板，请直接按 Ctrl/Cmd+V') }
+}
+
+const editorContextClipboard = computed<ContextAction[]>(() => [
+  { label: '剪切', icon: IconScissor, disabled: !editorContextMenu.value?.hasSelection, action: () => copyEditorSelection(true) },
+  { label: '复制', icon: IconCopy, disabled: !editorContextMenu.value?.hasSelection, action: () => copyEditorSelection() },
+  { label: '粘贴', icon: IconPaste, action: () => pasteIntoEditor() },
+  { label: '删除当前行', icon: IconDelete, action: deleteEditorLine },
+])
+const editorContextFormat: ContextAction[] = [
+  { label: '粗体', icon: IconBold, shortcut: 'Ctrl+B', action: () => wrapEditorSelection('**', '**', '粗体') },
+  { label: '斜体', icon: IconItalic, shortcut: 'Ctrl+I', action: () => wrapEditorSelection('*', '*', '斜体') },
+  { label: '行内代码', icon: IconCode, action: () => wrapEditorSelection('`', '`', '代码') },
+  { label: '链接', icon: IconLink, shortcut: 'Ctrl+K', action: insertEditorLink },
+  { label: '引用', icon: IconQuote, action: () => prefixEditorLines('> ') },
+  { label: '有序列表', icon: IconOrderedList, action: () => prefixEditorLines('1. ') },
+  { label: '无序列表', icon: IconUnorderedList, action: () => prefixEditorLines('- ') },
+  { label: '任务列表', icon: IconCheckCircle, action: () => prefixEditorLines('- [ ] ') },
+]
+const editorContextGroups = [
+  { label: '剪贴板', items: [
+    { label: '粘贴为纯文本', action: () => pasteIntoEditor(true) },
+    { label: '选中当前行', action: selectEditorLine },
+    { label: '剪切当前行', action: cutEditorLine },
+  ] },
+  { label: '格式', items: [
+    { label: '删除线', action: () => wrapEditorSelection('~~', '~~', '删除线') },
+    { label: '高亮', action: () => wrapEditorSelection('==', '==', '高亮') },
+    { label: '下标', action: () => wrapEditorSelection('~', '~', '下标') },
+    { label: '上标', action: () => wrapEditorSelection('^', '^', '上标') },
+  ] },
+  { label: '段落', items: [
+    ...[1, 2, 3, 4, 5, 6].map(level => ({ label: `${level} 级标题`, shortcut: `Ctrl+${level}`, action: () => updateEditor((value, start, end) => setHeadingLines(value, start, end, level)) })),
+    { label: '警告框', action: () => toggleEditorAlert('NOTE') },
+  ] },
+  { label: '插入', items: [
+    { label: '代码块', action: insertEditorCodeBlock },
+    { label: '表格', action: insertEditorTable },
+    { label: '图片', action: insertEditorImage },
+    { label: '分隔线', action: insertEditorDivider },
+  ] },
+]
 
 function exportSnapshot() {
   const document = store.currentDocument
@@ -2867,29 +2962,32 @@ function onPaste(event: ClipboardEvent) {
   void importClipboardContent(html, text, false, image)
 }
 
+async function readClipboardContent(): Promise<{ text: string; html: string; image: Blob | null }> {
+  const native = await readNativeClipboardRichText()
+  if (native) return { ...native, image: null }
+  const clipboard = navigator.clipboard
+  if (isTauriRuntime()) {
+    const image = await readNativeClipboardImage()
+    if (image) return { text: '', html: '', image }
+  }
+  if (clipboard && typeof clipboard.read === 'function') {
+    const [item] = await clipboard.read()
+    if (item) {
+      const htmlBlob = item.types.includes('text/html') ? await item.getType('text/html') : null
+      const textBlob = item.types.includes('text/plain') ? await item.getType('text/plain') : null
+      const imageType = item.types.find((type) => /^image\//i.test(type))
+      return { html: await htmlBlob?.text() ?? '', text: await textBlob?.text() ?? '', image: imageType ? await item.getType(imageType) : null }
+    }
+  }
+  if (!clipboard) throw new Error('clipboard-unavailable')
+  return { text: await clipboard.readText(), html: '', image: null }
+}
+
 async function pasteFromClipboard(saveToFile = false) {
   if (busyAction.value) return
   try {
-    const native = await readNativeClipboardRichText()
-    if (native) {
-      await importClipboardContent(native.html, native.text, saveToFile)
-      return
-    }
-    const clipboard = navigator.clipboard
-    if (clipboard && typeof clipboard.read === 'function') {
-      const items = await clipboard.read()
-      const item = items[0]
-      if (item) {
-        const htmlBlob = item.types.includes('text/html') ? await item.getType('text/html') : null
-        const textBlob = item.types.includes('text/plain') ? await item.getType('text/plain') : null
-        const imageType = item.types.find((type) => /^image\//i.test(type))
-        const image = imageType ? await item.getType(imageType) : null
-        await importClipboardContent(htmlBlob ? await htmlBlob.text() : '', textBlob ? await textBlob.text() : '', saveToFile, image)
-        return
-      }
-    }
-    if (!clipboard) throw new Error('clipboard-unavailable')
-    await importClipboardContent('', await clipboard.readText(), saveToFile)
+    const { text, html, image } = await readClipboardContent()
+    await importClipboardContent(html, text, saveToFile, image)
   } catch (error) {
     notify(error instanceof Error ? '无法读取剪贴板，请直接按 Ctrl/Cmd+V' : '无法读取剪贴板')
   }
@@ -3790,7 +3888,8 @@ function onKeydown(event: KeyboardEvent) {
     }
     if (event.key === 'Escape') {
       event.preventDefault()
-      closeEditorContextMenu()
+      if (editorContextMenu.value && !editorContextMenu.value.image) finishEditorContextMenu()
+      else closeEditorContextMenu()
       return
     }
   }
@@ -5480,7 +5579,7 @@ async function requestFullscreen() {
           </div>
           </div>
           <Teleport to="body">
-            <div v-if="editorContextMenu" ref="editorContextMenuElement" class="editor-context-menu" :style="{ top: `${editorContextMenu.y}px`, left: `${editorContextMenu.x}px` }" role="menu">
+            <div v-if="editorContextMenu" ref="editorContextMenuElement" class="editor-context-menu" :class="{ 'editor-context-compact': !editorContextMenu.image }" :style="{ top: `${editorContextMenu.y}px`, left: `${editorContextMenu.x}px` }" role="menu" :aria-label="editorContextMenu.image ? '图片操作' : '编辑操作'">
               <template v-if="editorContextMenu.image">
                 <button v-if="editorContextMenu.local" type="button" role="menuitem" @click="runImageMenu('location')">打开图片所在目录</button>
                 <button v-if="editorContextMenu.local" type="button" role="menuitem" @click="runImageMenu('reveal')">打开图片所在位置</button>
@@ -5495,26 +5594,7 @@ async function requestFullscreen() {
                 <button type="button" role="menuitem" @click="runImageMenu('remove')">移除图片引用</button>
                 <button v-if="editorContextMenu.managed" type="button" role="menuitem" @click="runImageMenu('delete')">删除图片文件…</button>
               </template>
-              <template v-else>
-              <button type="button" role="menuitem" @click="wrapEditorSelection('**', '**', '粗体'); closeEditorContextMenu()">粗体</button>
-              <button type="button" role="menuitem" @click="wrapEditorSelection('*', '*', '斜体'); closeEditorContextMenu()">斜体</button>
-              <button type="button" role="menuitem" @click="wrapEditorSelection('~~', '~~', '删除线'); closeEditorContextMenu()">删除线</button>
-              <button type="button" role="menuitem" @click="wrapEditorSelection('`', '`', '代码'); closeEditorContextMenu()">行内代码</button>
-              <button type="button" role="menuitem" @click="wrapEditorSelection('==', '==', '高亮'); closeEditorContextMenu()">高亮</button>
-              <button type="button" role="menuitem" @click="wrapEditorSelection('~', '~', '下标'); closeEditorContextMenu()">下标</button>
-              <button type="button" role="menuitem" @click="wrapEditorSelection('^', '^', '上标'); closeEditorContextMenu()">上标</button>
-              <button type="button" role="menuitem" @click="insertEditorLink(); closeEditorContextMenu()">链接</button>
-              <button type="button" role="menuitem" @click="prefixEditorLines('# '); closeEditorContextMenu()">一级标题</button>
-              <button type="button" role="menuitem" @click="prefixEditorLines('- '); closeEditorContextMenu()">无序列表</button>
-              <button type="button" role="menuitem" @click="prefixEditorLines('1. '); closeEditorContextMenu()">有序列表</button>
-              <button type="button" role="menuitem" @click="prefixEditorLines('- [ ] '); closeEditorContextMenu()">任务列表</button>
-              <button type="button" role="menuitem" @click="prefixEditorLines('> '); closeEditorContextMenu()">引用</button>
-              <button type="button" role="menuitem" @click="insertEditorCodeBlock(); closeEditorContextMenu()">代码块</button>
-              <button type="button" role="menuitem" @click="toggleEditorAlert('NOTE'); closeEditorContextMenu()">警告框</button>
-              <button type="button" role="menuitem" @click="selectEditorLine(); closeEditorContextMenu()">选中当前行</button>
-              <button type="button" role="menuitem" @click="cutEditorLine(); closeEditorContextMenu()">剪切当前行</button>
-              <button type="button" role="menuitem" @click="deleteEditorLine(); closeEditorContextMenu()">删除当前行</button>
-              </template>
+              <EditorContextActions v-else :clipboard="editorContextClipboard" :format="editorContextFormat" :groups="editorContextGroups" @close="finishEditorContextMenu" />
             </div>
           </Teleport>
         <aside v-if="contextPanelOpen && store.mode !== 'focus' && store.mode !== 'clean'" class="context-panel">
