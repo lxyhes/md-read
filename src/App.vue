@@ -55,7 +55,7 @@ import { getDocumentStatistics } from './documentStats'
 import { asciiDiagramToMermaid, asciiTreeToTree, markdownToTree } from './asciiDiagram'
 import { formatClipboardImage, formatClipboardToMarkdown, htmlToMarkdown, normalizeMixedOrderedListSource, promoteClipboardImageLinks, suggestPastedMarkdownName } from './pasteMarkdown'
 import { matchQuickOpen } from './quickOpen'
-import { indentSelection, codeIndentInsertion, isFenceBacktickInput, selectedLineRange, removeSelectedLines, setHeadingLines, setOrderedListLines } from './editorInput'
+import { indentSelection, codeIndentInsertion, isFenceBacktickInput, selectedLineRange, removeSelectedLines, setHeadingLines, setOrderedListLines, toggleHeadingLines, toggleInlineMarkup } from './editorInput'
 import { createEditorHistory, recordEditorHistory, stepEditorHistory } from './editorHistory'
 import { findEditorMatches, replaceEditorMatches } from './editorFind'
 import { parseEditableTable, serializeEditableTable, moveTableRow, moveTableColumn, deleteTableRow, deleteTableColumn, pasteTableCells, type TableAlignment } from './tableEditing'
@@ -976,7 +976,7 @@ const editorMenuGroups = computed(() => {
       { label: '下移当前段落', shortcut: 'Alt+↓', disabled, action: () => moveEditorLine(1) },
     ] },
     { label: '段落', items: [
-      ...[1, 2, 3, 4, 5, 6].map(level => ({ label: `${level} 级标题`, shortcut: `Ctrl+${level}`, disabled, action: () => updateEditor((value, start, end) => setHeadingLines(value, start, end, level)) })),
+      ...[1, 2, 3, 4, 5, 6].map(level => ({ label: `${level} 级标题`, shortcut: `Ctrl+${level}`, disabled, action: () => updateEditor((value, start, end) => toggleHeadingLines(value, start, end, level)) })),
       { label: '引用', disabled, action: () => prefixEditorLines('> ') },
       { label: '警告框', disabled, action: () => toggleEditorAlert('NOTE') },
       { label: '无序列表', disabled, action: () => prefixEditorLines('- ') },
@@ -1394,7 +1394,7 @@ function onEditorKeydown(event: KeyboardEvent) {
   if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && /^[1-6]$/.test(event.key)) {
     event.preventDefault()
     const level = Number(event.key)
-    updateEditor((value, start, end) => setHeadingLines(value, start, end, level))
+    updateEditor((value, start, end) => toggleHeadingLines(value, start, end, level))
     return
   }
   if ((event.ctrlKey || event.metaKey) && event.key === '/' && !event.shiftKey && !event.altKey) {
@@ -1543,13 +1543,7 @@ async function onEditorPaste(event: ClipboardEvent) {
 
 function wrapEditorSelection(before: string, after: string, placeholder: string) {
   if (editorTextarea.value?.wrapInlineCell(before, after, placeholder)) return
-  updateEditor((value, start, end) => {
-    const selected = value.slice(start, end) || placeholder
-    if (start >= before.length && value.slice(start - before.length, start) === before && value.slice(end, end + after.length) === after) {
-      return { value: value.slice(0, start - before.length) + selected + value.slice(end + after.length), start: start - before.length, end: end - before.length }
-    }
-    return { value: value.slice(0, start) + before + selected + after + value.slice(end), start: start + before.length, end: start + before.length + selected.length }
-  })
+  updateEditor((value, start, end) => toggleInlineMarkup(value, start, end, before, after, placeholder))
 }
 
 function insertEditorToc() {
@@ -2214,7 +2208,7 @@ const editorContextGroups = [
     { label: '上标', action: () => wrapEditorSelection('^', '^', '上标') },
   ] },
   { label: '段落', items: [
-    ...[1, 2, 3, 4, 5, 6].map(level => ({ label: `${level} 级标题`, shortcut: `Ctrl+${level}`, action: () => updateEditor((value, start, end) => setHeadingLines(value, start, end, level)) })),
+    ...[1, 2, 3, 4, 5, 6].map(level => ({ label: `${level} 级标题`, shortcut: `Ctrl+${level}`, action: () => updateEditor((value, start, end) => toggleHeadingLines(value, start, end, level)) })),
     { label: '警告框', action: () => toggleEditorAlert('NOTE') },
   ] },
   { label: '插入', items: [

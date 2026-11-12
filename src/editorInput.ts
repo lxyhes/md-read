@@ -9,6 +9,18 @@ export function isTopLevelParagraph(tree: Tree, start: number, end: number) {
   return false
 }
 
+export function toggleInlineMarkup(value: string, start: number, end: number, before: string, after: string, placeholder: string) {
+  if (start >= before.length && value.slice(start - before.length, start) === before && value.slice(end, end + after.length) === after) {
+    return { value: value.slice(0, start - before.length) + value.slice(start, end) + value.slice(end + after.length), start: start - before.length, end: end - before.length }
+  }
+  const selected = value.slice(start, end) || placeholder
+  if (selected.startsWith(before) && selected.endsWith(after) && selected.length >= before.length + after.length) {
+    const content = selected.slice(before.length, -after.length)
+    return { value: value.slice(0, start) + content + value.slice(end), start, end: start + content.length }
+  }
+  return { value: value.slice(0, start) + before + selected + after + value.slice(end), start: start + before.length, end: start + before.length + selected.length }
+}
+
 export function isFenceBacktickInput(value: string, cursor: number) {
   const lineStart = cursor === 0 ? 0 : value.lastIndexOf('\n', cursor - 1) + 1
   return /^ {0,3}`{2,}$/.test(value.slice(lineStart, cursor)) && value[cursor] !== '`'
@@ -55,7 +67,17 @@ export function setOrderedListLines(value: string, start: number, end: number) {
 export function setHeadingLines(value: string, start: number, end: number, level: number) {
   const range = selectedLineRange(value, start, end)
   const prefix = `${'#'.repeat(level)} `
-  const replacement = value.slice(range.start, range.end).split('\n').map(line => prefix + line.replace(/^ {0,3}#{1,6}(?:[ \t]+|$)/, '')).join('\n')
+  const replacement = value.slice(range.start, range.end).split('\n').map(line => line.trim() ? prefix + line.replace(/^ {0,3}#{1,6}(?:[ \t]+|$)/, '') : line).join('\n')
+  return { value: value.slice(0, range.start) + replacement + value.slice(range.end), start: range.start, end: range.start + replacement.length }
+}
+
+export function toggleHeadingLines(value: string, start: number, end: number, level: number) {
+  const range = selectedLineRange(value, start, end)
+  const lines = value.slice(range.start, range.end).split('\n')
+  const content = lines.filter(line => line.trim())
+  const isCurrentLevel = new RegExp(`^ {0,3}#{${level}}(?:[ \\t]+|$)`)
+  if (!content.length || content.some(line => !isCurrentLevel.test(line))) return setHeadingLines(value, start, end, level)
+  const replacement = lines.map(line => line.trim() ? line.replace(/^ {0,3}#{1,6}(?:[ \t]+|$)/, '') : line).join('\n')
   return { value: value.slice(0, range.start) + replacement + value.slice(range.end), start: range.start, end: range.start + replacement.length }
 }
 

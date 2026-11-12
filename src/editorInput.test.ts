@@ -1,8 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import { markdownLanguage } from '@codemirror/lang-markdown'
-import { codeIndentInsertion, indentSelection, isFenceBacktickInput, isTopLevelParagraph, selectedLineRange, removeSelectedLines, setHeadingLines, setOrderedListLines } from './editorInput'
+import { codeIndentInsertion, indentSelection, isFenceBacktickInput, isTopLevelParagraph, selectedLineRange, removeSelectedLines, setHeadingLines, setOrderedListLines, toggleHeadingLines, toggleInlineMarkup } from './editorInput'
 
 describe('ordered list menu action', () => {
+  it('toggles inline formatting on and off while preserving the selection', () => {
+    const source = '普通文本'
+    const applied = toggleInlineMarkup(source, 0, source.length, '**', '**', '粗体')
+    expect(applied.value).toBe('**普通文本**')
+    expect(toggleInlineMarkup(applied.value, applied.start, applied.end, '**', '**', '粗体')).toEqual({ value: source, start: 0, end: source.length })
+  })
+
+  it('removes formatting when the selection includes its markers', () => {
+    expect(toggleInlineMarkup('**文本**', 0, 6, '**', '**', '粗体')).toEqual({ value: '文本', start: 0, end: 2 })
+  })
+
   it('numbers all selected items consecutively and keeps blank lines empty', () => {
     const lines = Array.from({ length: 15 }, (_, index) => `条目${index + 1}`)
     const source = lines.join('\n\n')
@@ -46,6 +57,16 @@ describe('ordered list menu action', () => {
 
 it('changes heading levels without stacking Markdown markers', () => {
   expect(setHeadingLines('# one\n## two\ntext', 0, 12, 3)).toEqual({ value: '### one\n### two\ntext', start: 0, end: 15 })
+})
+
+it('toggles the selected heading level back to paragraphs', () => {
+  const heading = toggleHeadingLines('标题\n\n子标题', 0, 7, 2)
+  expect(heading.value).toBe('## 标题\n\n## 子标题')
+  expect(toggleHeadingLines(heading.value, heading.start, heading.end, 2)).toEqual({ value: '标题\n\n子标题', start: 0, end: 7 })
+})
+
+it('changes headings to a different level instead of removing them', () => {
+  expect(toggleHeadingLines('# 标题', 0, 4, 2).value).toBe('## 标题')
 })
 
 describe('paragraph editing', () => {
