@@ -938,22 +938,30 @@
 }
 
 .app-shell:not(.is-focus) .reader-content .region-content h1,
-.app-shell.is-focus .reader-content .region-content h1 {
+.app-shell.is-focus .reader-content .region-content h1,
+.app-shell .editor-surface .editor-preview h1,
+.app-shell .markdown-editor.is-live .cm-line.live-h1 {
   font-size: clamp(29px, calc(var(--reader-size) * 2.1), 48px);
 }
 
 .app-shell:not(.is-focus) .reader-content .region-content h2,
-.app-shell.is-focus .reader-content .region-content h2 {
+.app-shell.is-focus .reader-content .region-content h2,
+.app-shell .editor-surface .editor-preview h2,
+.app-shell .markdown-editor.is-live .cm-line.live-h2 {
   font-size: clamp(24px, calc(var(--reader-size) * 1.72), 38px);
 }
 
 .app-shell:not(.is-focus) .reader-content .region-content h3,
-.app-shell.is-focus .reader-content .region-content h3 {
+.app-shell.is-focus .reader-content .region-content h3,
+.app-shell .editor-surface .editor-preview h3,
+.app-shell .markdown-editor.is-live .cm-line.live-h3 {
   font-size: clamp(20px, calc(var(--reader-size) * 1.4), 30px);
 }
 
 .app-shell:not(.is-focus) .reader-content .region-content h4,
-.app-shell.is-focus .reader-content .region-content h4 {
+.app-shell.is-focus .reader-content .region-content h4,
+.app-shell .editor-surface .editor-preview h4,
+.app-shell .markdown-editor.is-live .cm-line.live-h4 {
   font-size: clamp(18px, calc(var(--reader-size) * 1.1), 24px);
 }
 

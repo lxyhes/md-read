@@ -35,18 +35,24 @@ export function normalizeLatexDelimiters(source: string): string {
   }).join('\n')
 }
 
-function splitArticleStrongText(node: MdastNode): MdastNode[] {
-  if (node.type !== 'text' || !node.value || !/(?:\*{2,4}|_{2,4}).+(?:\*{2,4}|_{2,4})/.test(node.value)) return [node]
-  const result: MdastNode[] = []
-  const pattern = /(\*{2,4}|_{2,4})([^\n]*?)\1/g
-  let cursor = 0
-  let match: RegExpExecArray | null
-  while ((match = pattern.exec(node.value)) !== null) {
+export function* articleStrongSpans(source: string) {
+  for (const match of source.matchAll(/(\*{2,4}|_{2,4})([^\n]*?)\1/g)) {
     const content = match[2].trim()
     if (!content) continue
-    if (match.index > cursor) result.push({ ...node, value: node.value.slice(cursor, match.index) })
+    const from = match.index
+    const contentFrom = from + match[1].length + match[2].length - match[2].trimStart().length
+    yield { from, to: from + match[0].length, contentFrom, contentTo: contentFrom + content.length, content }
+  }
+}
+
+function splitArticleStrongText(node: MdastNode): MdastNode[] {
+  if (node.type !== 'text' || !node.value) return [node]
+  const result: MdastNode[] = []
+  let cursor = 0
+  for (const { from, to, content } of articleStrongSpans(node.value)) {
+    if (from > cursor) result.push({ ...node, value: node.value.slice(cursor, from) })
     result.push({ type: 'strong', children: [{ type: 'text', value: content }] })
-    cursor = match.index + match[0].length
+    cursor = to
   }
   if (!result.length) return [node]
   if (cursor < node.value.length) result.push({ ...node, value: node.value.slice(cursor) })

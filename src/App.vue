@@ -48,7 +48,7 @@ import ClipboardManager from './components/ClipboardManager.vue'
 import { cachePastedRemoteImages, copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, downloadMarkdownImages, exportDocumentWithPandoc, importDocumentWithPandoc, importMarkdownAsset, importMarkdownAssetFromPath, listDirectoryFiles, listFileSystemEntries, markdownPathExists, openFileSystemDirectory, openMarkdownDirectory, openMarkdownFile, openMarkdownFolderAt, organizeMarkdownAssets, readMarkdownExportAssets, readMarkdownPath, removeMarkdownAsset, renameMarkdownAsset, renameMarkdownPath, resolveMarkdownAssetUrl, resolveMarkdownPath, saveBinaryExportFile, saveClipboardImage, saveExportFile, saveMarkdownFile, savePdfExportFile, selectDocxReference, selectFileSystemDirectory, selectMarkdownFolder, splitMarkdownLinkTarget, uploadMarkdownImage, watchDirectoryPath, watchMarkdownPath, writeMarkdownFile, type PandocExportFormat, type WorkspaceFile } from './fileService'
 import type { Annotation, ReaderDocument, ReaderRegion, ViewerType } from './types'
 import { escapeHtml, isQuarkImageUrl, renderMathMl } from './markdown/shared'
-import { makeImplicitMarkdownHeadingsExplicit, parseMarkdown, renderMarkdownFragment } from './parser'
+import { makeImplicitMarkdownHeadingsExplicit, parseMarkdown } from './parser'
 import { getDocumentStatistics } from './documentStats'
 import { asciiDiagramToMermaid, asciiTreeToTree, markdownToTree } from './asciiDiagram'
 import { formatClipboardImage, formatClipboardToMarkdown, htmlToMarkdown, normalizeMixedOrderedListSource, promoteClipboardImageLinks, suggestPastedMarkdownName } from './pasteMarkdown'
@@ -564,7 +564,10 @@ const readerScrollPercent = ref(0)
 const readerAtTop = computed(() => readerScrollPercent.value <= 0.01)
 const readerAtBottom = computed(() => readerScrollPercent.value >= 0.99)
 const readerDisplayMode = ref<'markdown' | 'mindmap' | 'split'>('markdown')
-const compactCourseOutline = computed(() => (store.currentDocument?.headings.filter((heading) => /\d{1,2}:\d{2}/.test(heading.text)).length ?? 0) >= 2)
+function hasCourseOutline(document: ReaderDocument | null | undefined) {
+  return (document?.headings.filter(heading => /\d{1,2}:\d{2}/.test(heading.text)).length ?? 0) >= 2
+}
+const compactCourseOutline = computed(() => hasCourseOutline(store.currentDocument))
 const currentMindmap = computed(() => {
   const document = store.currentDocument
   return document ? markdownToTree(document.source, document.title) : null
@@ -580,16 +583,7 @@ const editorPreviewResult = computed(() => {
   }
 })
 const editorPreviewDocument = computed(() => editorPreviewResult.value.document)
-const editorPreviewHtml = computed(() => {
-  if (!editorSource.value.trim()) return '<p class="editor-preview-empty">从左侧开始写作，右侧会实时出现阅读效果。</p>'
-  try {
-    const path = store.currentDocument?.path ?? ''
-    const html = renderMarkdownFragment(editorSource.value, (url) => resolveEditorAssetUrl(path, url))
-    return html.replace(/<p><strong>([\s\S]*?)<\/strong><\/p>/g, '<h2 class="editor-semantic-heading">$1</h2>')
-  } catch {
-    return '<p class="editor-preview-error">预览暂时无法解析，请检查 Markdown 语法。</p>'
-  }
-})
+const editorCourseOutline = computed(() => hasCourseOutline(editorPreviewDocument.value))
 const editorHeadings = computed(() => editorPreviewDocument.value?.headings ?? [])
 const readerRegions = computed(() => store.currentDocument?.regions ?? [])
 const virtualizedReader = computed(() => readerRegions.value.length > virtualRegionThreshold)
@@ -1200,8 +1194,7 @@ function jumpToEditorHeading(index: number) {
     editorTextarea.value?.focus()
     editorTextarea.value?.setSelectionRange(region.sourceStart, region.sourceStart)
   }
-  const heading = editorPreview.value?.querySelectorAll('h1, h2, h3, h4, h5, h6, .editor-semantic-heading').item(index)
-  heading?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  if (region) editorPreview.value?.querySelector(`[data-editor-region-id="${region.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 function isRealDocumentPath(path: string) {
@@ -5302,11 +5295,15 @@ async function requestFullscreen() {
             </template>
           </aside>
           <div class="reader-main-column">
-          <EditorMenuBar v-if="editorOpen" :groups="editorMenuGroups">
-            <Button type="text" size="small" :aria-expanded="editorOutlineOpen" aria-controls="editor-draft-outline" @click="editorOutlineOpen = !editorOutlineOpen"><template #icon><AppIcon name="reader" :size="14" /></template>{{ editorOutlineOpen ? '隐藏大纲' : '显示大纲' }}</Button>
-            <span>{{ editorDirty ? '未保存' : '已保存' }}</span>
-            <button class="editor-return-button" type="button" @click="closeEditor">返回阅读</button>
-          </EditorMenuBar>
+          <EditorMenuBar v-if="editorOpen" :groups="editorMenuGroups" />
+          <div v-if="editorOpen" class="editor-document-actions" role="group" aria-label="编辑文档操作">
+            <Button type="outline" @click="closeEditor"><template #icon><AppIcon name="chevron-left" :size="16" /></template>返回阅读</Button>
+            <Button v-if="editorPreviewDocument?.headings.length" type="secondary" :aria-expanded="editorOutlineOpen" aria-controls="editor-draft-outline" @click="editorOutlineOpen = !editorOutlineOpen"><template #icon><AppIcon name="reader" :size="16" /></template>{{ editorOutlineOpen ? '隐藏大纲' : '显示大纲' }}</Button>
+            <span class="editor-save-state" role="status">
+              <AppIcon :name="editorSaving ? 'sync' : editorDirty ? 'edit' : 'check'" :size="14" />
+              {{ editorSaving ? '保存中…' : editorDirty ? '未保存' : '已保存' }}
+            </span>
+          </div>
           <ReaderHeader>
             <template #tabs>
               <div class="reader-tabbar" aria-label="已打开文档">
@@ -5397,7 +5394,7 @@ async function requestFullscreen() {
           <div class="reader-column">
             <div ref="readerViewport" class="reader-viewport" @scroll="onReaderScroll" @wheel="onReaderWheel" @pointerdown="onReaderPointerDown" @mouseup="captureSelection">
               <div v-if="exportError || exporting" class="editor-safety-notice" :role="exportError ? 'alert' : 'status'"><span>{{ exportError || '正在生成完整导出文件…' }}</span><button v-if="exportError" type="button" @click="exportError = ''">关闭</button></div>
-              <div v-if="editorOpen" class="editor-surface" :class="{ 'editor-typewriter-mode': advancedSettings.typewriterMode }" @contextmenu="openEditorContextMenu">
+              <div v-if="editorOpen" class="editor-surface" :class="{ 'editor-typewriter-mode': advancedSettings.typewriterMode, 'is-course-outline': editorCourseOutline }" @contextmenu="openEditorContextMenu">
                 <div v-if="editorPreviewResult.failed" class="editor-safety-notice" role="alert">正文解析失败，草稿仍保留；请切换源码查看并重新打开文档。</div>
                 <div v-if="editorBackupError || editorConflict" class="editor-safety-notice" role="alert"><span>{{ editorBackupError || '原文件有外部修改：草稿已保留，不会直接覆盖' }}</span><button type="button" @click="saveEditorCopy">另存草稿副本</button></div>
                 <section v-if="editorFindOpen" class="editor-find-panel" aria-label="草稿查找替换" @keydown.esc.prevent.stop="closeEditorFind">
@@ -5439,7 +5436,13 @@ async function requestFullscreen() {
                       </span>
                     </div>
                     <div ref="editorPreview" class="editor-preview-scroll">
-                      <article class="editor-preview" v-html="editorPreviewHtml" @click="openEditorPreviewImage" />
+                      <article class="editor-preview" @click="openEditorPreviewImage">
+                        <p v-if="editorPreviewResult.failed" class="editor-preview-error">预览暂时无法解析，请检查 Markdown 语法。</p>
+                        <p v-else-if="!editorPreviewDocument" class="editor-preview-empty">从左侧开始写作，右侧会实时出现阅读效果。</p>
+                        <template v-else>
+                          <div v-for="region in editorPreviewDocument.regions" :key="region.id" :data-editor-region-id="region.id" v-html="region.html" />
+                        </template>
+                      </article>
                     </div>
                   </section>
                 </div>

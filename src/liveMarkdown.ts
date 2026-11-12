@@ -4,7 +4,7 @@ import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemir
 import { syntaxTree } from '@codemirror/language'
 import { undo, redo } from '@codemirror/commands'
 import { renderMarkdownFragment } from './parser'
-import { markdownProcessor } from './markdown/fragment'
+import { articleStrongSpans, markdownProcessor } from './markdown/fragment'
 import { nodeText, type MdastNode } from './markdown/shared'
 import { parseEditableTable, serializeEditableTable, moveTableRow, moveTableColumn, deleteTableRow, deleteTableColumn, pasteTableCells, type EditableTable } from './tableEditing'
 
@@ -89,7 +89,13 @@ class TaskWidget extends WidgetType {
 class BulletWidget extends WidgetType {
   constructor(readonly depth: number) { super() }
   eq(other: BulletWidget) { return this.depth === other.depth }
-  toDOM() { const marker = document.createElement('span'); marker.className = 'live-list-bullet'; marker.textContent = this.depth % 2 ? '•' : '◦'; return marker }
+  toDOM() {
+    const marker = document.createElement('span')
+    marker.className = 'live-list-bullet'
+    if (this.depth % 2 === 0) marker.classList.add('live-list-bullet-hollow')
+    else marker.textContent = '•'
+    return marker
+  }
   ignoreEvent() { return false }
 }
 
@@ -299,20 +305,46 @@ export function liveMarkdown(options: LiveOptions) {
         ranges.push(Decoration.replace({ widget: new TaskWidget(/x/i.test(raw), node.from) }).range(node.from, node.to))
         return false
       }
+      if (node.name === 'Blockquote' && node.node.parent?.name !== 'Blockquote') {
+        const first = state.doc.lineAt(node.from).number, last = state.doc.lineAt(node.to).number
+        for (let number = first; number <= last; number++) {
+          const className = ['live-quote-line', number === first ? 'live-quote-start' : '', number === last ? 'live-quote-end' : ''].filter(Boolean).join(' ')
+          ranges.push(Decoration.line({ class: className }).range(state.doc.line(number).from))
+        }
+      }
+      if (node.name === 'QuoteMark' || node.name === 'HardBreak') {
+        const line = state.doc.lineAt(node.from)
+        if (!selectionTouches(state, line.from, line.to)) {
+          const followingSpace = node.name === 'QuoteMark' && state.doc.sliceString(node.to, node.to + 1) === ' '
+          replace(node.from, Math.min(line.to, node.to + Number(followingSpace)))
+        }
+      }
       if (node.name === 'ListMark' && node.node.parent) {
         const line = state.doc.lineAt(node.from)
-        const prefix = line.text.match(/^[ \t]*(?:[-+*]|\d+[.)])[ \t]+(?:\[[ xX]\][ \t]+)?/)?.[0]
-        if (prefix) ranges.push(Decoration.line({ class: 'live-list-line', attributes: { style: `--live-list-indent: ${prefix.replace(/\t/g, '    ').length}ch` } }).range(line.from))
-        if (selectionTouches(state, node.node.parent.from, node.node.parent.to)) return
-        if (node.node.parent.getChild('Task')) replace(node.from, node.to)
-        else if (/^[-+*]$/.test(raw)) {
+        const editing = selectionTouches(state, node.node.parent.from, node.node.parent.to)
+        const task = node.node.parent.getChild('Task')
+        const bullet = !editing && !task && /^[-+*]$/.test(raw)
+        const prefix = line.text.match(/^([ \t]*)(?:[-+*]|\d+[.)])[ \t]+/)
+        const startsLine = prefix && line.from + prefix[1].length === node.from
+        if (bullet) {
           let depth = 0
           let ancestor: SyntaxNode | null = node.node.parent
           while (ancestor) {
             if (ancestor.name === 'BulletList' || ancestor.name === 'OrderedList') depth += 1
             ancestor = ancestor.parent
           }
-          ranges.push(Decoration.replace({ widget: new BulletWidget(Math.max(depth, 1)) }).range(node.from, node.to))
+          if (startsLine) {
+            ranges.push(Decoration.line({ class: 'live-list-line live-bullet-line', attributes: { style: `--live-list-depth: ${depth}` } }).range(line.from))
+          }
+          const from = startsLine ? line.from : node.from
+          const to = startsLine ? line.from + prefix[0].length : node.to
+          ranges.push(Decoration.replace({ widget: new BulletWidget(depth) }).range(from, to))
+        } else {
+          if (startsLine) {
+            const indent = task ? line.text.match(/^[ \t]*(?:[-+*]|\d+[.)])[ \t]+\[[ xX]\][ \t]+/)?.[0] ?? prefix[0] : prefix[0]
+            ranges.push(Decoration.line({ class: 'live-list-line', attributes: { style: `--live-list-indent: ${indent.replace(/\t/g, '    ').length}ch` } }).range(line.from))
+          }
+          if (!editing && task) replace(node.from, node.to)
         }
       }
       if (node.name === 'FencedCode' && !active) {
@@ -324,7 +356,7 @@ export function liveMarkdown(options: LiveOptions) {
       }
       const heading = node.name.match(/^(?:ATX|Setext)Heading([1-6])$/)
       if (heading) ranges.push(Decoration.line({ class: `live-heading live-h${heading[1]}` }).range(state.doc.lineAt(node.from).from))
-      const classes: Record<string, string> = { StrongEmphasis: 'live-strong', Emphasis: 'live-emphasis', Strikethrough: 'live-strike', InlineCode: 'live-code', Link: 'live-link', Blockquote: 'live-quote', Subscript: 'live-sub', Superscript: 'live-sup' }
+      const classes: Record<string, string> = { StrongEmphasis: 'live-strong', Emphasis: 'live-emphasis', Strikethrough: 'live-strike', InlineCode: 'live-code', Link: 'live-link', Subscript: 'live-sub', Superscript: 'live-sup' }
       if (classes[node.name]) ranges.push(Decoration.mark({ class: classes[node.name] }).range(node.from, node.to))
       if (node.name === 'FencedCode') {
         const first = state.doc.lineAt(node.from).number, last = state.doc.lineAt(node.to).number
@@ -375,6 +407,27 @@ export function liveMarkdown(options: LiveOptions) {
             if (!selectionTouches(state, from, to)) { replace(from, from + 2); replace(to - 2, to) }
           }
         }
+      }
+      if ((node.name === 'Paragraph' || heading) && (raw.includes('**') || raw.includes('__'))) {
+        // Only scan text gaps so native emphasis, escapes and inline code keep their own syntax.
+        const decorateText = (from: number, to: number) => {
+          for (const span of articleStrongSpans(state.doc.sliceString(from, to))) {
+            const start = from + span.from, end = from + span.to
+            const contentStart = from + span.contentFrom, contentEnd = from + span.contentTo
+            if (ranges.some(range => range.value.spec.widget && (range.from < contentStart && range.to > start || range.from < end && range.to > contentEnd))) continue
+            ranges.push(Decoration.mark({ class: 'live-strong' }).range(contentStart, contentEnd))
+            if (!selectionTouches(state, start, end)) {
+              replace(start, contentStart)
+              replace(contentEnd, end)
+            }
+          }
+        }
+        let from = node.from
+        for (let child = node.node.firstChild; child; child = child.nextSibling) {
+          decorateText(from, child.from)
+          from = child.to
+        }
+        decorateText(from, node.to)
       }
     } })
     return Decoration.set(ranges, true)

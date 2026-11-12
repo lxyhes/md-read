@@ -1,4 +1,5 @@
 /* Editorial Markdown layer: preserve the document's structure instead of rendering a flat text column. */
+:is(.reader-content, .editor-surface) { --document-leading: 1.58; }
 .reader-content .region-content {
   color: color-mix(in srgb, var(--ink) 94%, var(--accent));
   font-weight: 500;
@@ -1767,7 +1768,7 @@ button:focus-visible,
   }
   .app-shell:not(.is-focus) .reader-content .region-content p {
     margin-bottom: 8px;
-    line-height: 1.58;
+    line-height: var(--document-leading);
   }
   .app-shell:not(.is-focus) .reader-content .region-content ul,
   .app-shell:not(.is-focus) .reader-content .region-content ol {

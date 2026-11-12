@@ -31,14 +31,12 @@ function select(item: Item) { item.action() }
         </template>
       </ArcoDropdown>
     </div>
-    <div class="editor-menu-actions"><slot /></div>
   </nav>
 </template>
 
 <style scoped>
 .editor-menu-bar { position: relative; z-index: 50; display: flex; flex: none; flex-wrap: wrap; gap: 2px; padding-inline: 12px; border-bottom: 1px solid var(--border); background: var(--surface); }
 .editor-menu-group { position: relative; }
-.editor-menu-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; padding-inline: 8px; color: var(--muted); font: 12px var(--ui-font); }
 .editor-menu-trigger { padding: 7px 12px; border-radius: 5px; background: transparent; color: var(--ink); font: 13px var(--ui-font); }
 .editor-menu-trigger:hover, .editor-menu-trigger[aria-expanded='true'] { background: var(--accent-soft); }
 .editor-menu-popover { position: absolute; z-index: 30; top: 100%; left: 0; min-width: 200px; max-height: min(65vh, 540px); overflow-y: auto; padding: 5px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); box-shadow: 0 10px 28px #0003; }

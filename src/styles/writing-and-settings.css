@@ -72,7 +72,6 @@
 .editor-preview h3, .editor-preview h4 { margin: 22px 0 8px; font-size: 17px; }
 .editor-preview h5, .editor-preview h6 { margin: 18px 0 7px; font-size: 15px; }
 .editor-preview p { margin: 0 0 15px; }
-.editor-preview .editor-semantic-heading { margin: 28px 0 10px; color: var(--ink); font: 650 19px/1.35 var(--ui-font); letter-spacing: -.02em; }
 .editor-preview strong { color: var(--ink); font-weight: 700; }
 .editor-preview em { color: color-mix(in srgb, var(--ink) 84%, var(--editor-accent)); }
 .reader-content mark:not(.reader-highlight), .editor-preview mark, .editor-rich-content mark { padding: .05em .18em; border-radius: .18em; background: color-mix(in srgb, #e6bd58 36%, transparent); color: inherit; }
@@ -90,8 +89,7 @@
 .editor-preview a { color: var(--editor-accent); }
 .editor-preview blockquote { margin: 18px 0; padding: 5px 17px; border-left: 3px solid var(--editor-accent); background: color-mix(in srgb, var(--editor-accent) 7%, transparent); color: var(--editor-ink-soft); }
 .editor-preview ul, .editor-preview ol { margin: 8px 0 17px; padding-left: 28px; }
-.editor-preview li { padding-left: 4px; }
-.editor-preview li + li { margin-top: 4px; }
+.editor-preview li + li { margin-top: 2px; }
 .editor-preview li > p { margin-bottom: 6px; }
 .editor-preview input[type="checkbox"] { width: 13px; height: 13px; margin: 0 7px 0 0; accent-color: var(--editor-accent); vertical-align: -1px; }
 .editor-preview code { padding: 2px 5px; border-radius: 5px; background: color-mix(in srgb, var(--editor-accent) 9%, var(--surface)); color: var(--editor-accent); font: .86em/1.4 var(--mono); }
