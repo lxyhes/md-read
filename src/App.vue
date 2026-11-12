@@ -284,6 +284,10 @@ const fileContextMenu = ref<{ file: FileTreeEntry; x: number; y: number } | null
 const fileContextMenuElement = ref<HTMLElement | null>(null)
 const fileProperties = ref<FileTreeEntry | null>(null)
 const editorOpen = ref(false)
+const editorToolbarVisible = ref(true)
+const editorStatusbarVisible = ref(true)
+const editorEmojiPickerOpen = ref(false)
+const editorAlwaysOnTop = ref(false)
 watch([editorOpen, searchOpen, quickOpenOpen, viewer, wordCountOpen], (values) => {
   if (values.some(Boolean)) webPreviewUrl.value = ''
 })
@@ -350,9 +354,10 @@ const editorSourceStats = computed(() => {
     lines: source ? source.split(/\r?\n/).length : 1,
   }
 })
-const wordCountStats = computed(() => getDocumentStatistics(store.currentDocument))
+const wordCountStats = computed(() => getDocumentStatistics(editorOpen.value ? editorPreviewDocument.value : store.currentDocument))
 const editorImages = computed(() => [...editorSource.value.matchAll(/!\[([^\]\n]*)\]\((<[^>\n]+>|[^)\n]+)\)/g)].map((match, index) => ({ index, alt: match[1] || `图片 ${index + 1}`, url: match[2].replace(/^<|>$/g, ''), remote: /^https?:\/\//i.test(match[2].replace(/^<|>$/g, '')) })))
 const emojiChoices = [{ code: 'smile', value: '😊' }, { code: 'joy', value: '😂' }, { code: 'heart', value: '❤️' }, { code: 'thumbsup', value: '👍' }, { code: 'warning', value: '⚠️' }, { code: 'check', value: '✅' }, { code: 'bulb', value: '💡' }, { code: 'rocket', value: '🚀' }]
+const editorSymbolChoices = ['😊', '😂', '❤️', '👍', '🎉', '💡', '⚠️', '✅', '❌', '⭐', '→', '←', '↑', '↓', '©', '®', '™', '°', '±', '×', '÷', '≤', '≥', '≠', '∞', '√', '∑', 'π', '∫', '∴']
 const editorEmojiSuggestions = computed(() => {
   if (!advancedSettings.value.emojiAutocomplete || editorMode.value === 'rich') return []
   const position = editorTextarea.value?.selectionStart ?? 0
@@ -951,8 +956,12 @@ async function closeEditor() {
   clearEditorInlineAssets()
 }
 
-const editorMenuGroups = computed(() => {
+type EditorMenuItem = { label?: string; shortcut?: string; disabled?: boolean; separator?: boolean; checkable?: boolean; checked?: boolean; action?: () => void; children?: EditorMenuItem[] }
+type EditorMenuGroup = { label: string; items: EditorMenuItem[] }
+
+const editorMenuGroups = computed<EditorMenuGroup[]>(() => {
   const disabled = editorMode.value === 'preview'
+  const separator: EditorMenuItem = { separator: true }
   return [
     { label: '文件', items: [
       { label: '保存', shortcut: 'Ctrl+S', disabled: !editorDirty.value || editorSaving.value, action: () => void saveEditor() },
@@ -969,24 +978,105 @@ const editorMenuGroups = computed(() => {
     { label: '编辑', items: [
       { label: '撤销', shortcut: 'Ctrl+Z', disabled: !editorUndoAvailable.value, action: () => restoreEditorHistory(-1) },
       { label: '重做', shortcut: 'Ctrl+Y', disabled: !editorRedoAvailable.value, action: () => restoreEditorHistory(1) },
-      { label: '查找与替换', shortcut: 'Ctrl+F', action: openEditorFind },
-      { label: '选中当前行', disabled, action: selectEditorLine },
-      { label: '删除当前行', disabled, action: deleteEditorLine },
-      { label: '上移当前段落', shortcut: 'Alt+↑', disabled, action: () => moveEditorLine(-1) },
-      { label: '下移当前段落', shortcut: 'Alt+↓', disabled, action: () => moveEditorLine(1) },
+      separator,
+      { label: '剪切', shortcut: 'Ctrl+X', disabled, action: () => void runEditorClipboard('cut') },
+      { label: '复制', shortcut: 'Ctrl+C', disabled, action: () => void runEditorClipboard('copy') },
+      { label: '复制图片', disabled, action: () => void copyEditorImage() },
+      { label: '粘贴', shortcut: 'Ctrl+V', disabled, action: () => void pasteIntoEditor() },
+      separator,
+      { label: '复制为…', children: [
+        { label: '纯文本', disabled, action: () => void copyEditorAs('plain') },
+        { label: 'Markdown', shortcut: 'Ctrl+Shift+C', disabled, action: () => void copyEditorAs('markdown') },
+        { label: 'HTML', disabled, action: () => void copyEditorAs('html') },
+        { label: '简化格式', disabled, action: () => void copyEditorAs('plain') },
+      ] },
+      { label: '粘贴为…', children: [
+        { label: '纯文本', shortcut: 'Ctrl+Shift+V', disabled, action: () => void pasteIntoEditor(true) },
+      ] },
+      separator,
+      { label: '查找与替换', shortcut: 'Ctrl+F / H', action: openEditorFind },
+      { label: '选择', children: [
+        { label: '全选', shortcut: 'Ctrl+A', disabled, action: selectEditorAll },
+        { label: '当前段落', disabled, action: selectEditorParagraph },
+        { label: '当前行', disabled, action: selectEditorLine },
+        { label: '当前单词', disabled, action: selectEditorWord },
+      ] },
+      { label: '移动当前段落', children: [
+        { label: '上移', shortcut: 'Alt+↑', disabled, action: () => moveEditorLine(-1) },
+        { label: '下移', shortcut: 'Alt+↓', disabled, action: () => moveEditorLine(1) },
+      ] },
+      { label: '删除范围', children: [
+        { label: '选中内容', disabled, action: deleteEditorSelection },
+        { label: '当前行', disabled, action: deleteEditorLine },
+        { label: '当前段落', disabled, action: deleteEditorParagraph },
+        { label: '到行首', disabled, action: () => deleteEditorToLineBoundary(false) },
+        { label: '到行尾', disabled, action: () => deleteEditorToLineBoundary(true) },
+      ] },
+      { label: '数学工具', children: [
+        { label: '插入行内公式', disabled, action: () => wrapEditorSelection('$', '$', '公式') },
+        { label: '插入块级公式', shortcut: 'Ctrl+Shift+M', disabled, action: insertEditorMathBlock },
+        { label: '复制选中公式为 MathML', disabled, action: () => void copyEditorMathMl() },
+      ] },
+      { label: '智能标点', children: [
+        { label: '转换为中文引号', disabled, action: () => transformEditorSelection(text => text.replace(/"([^"]+)"/g, '“$1”').replace(/'([^']+)'/g, '‘$1’')) },
+        { label: '转换为直引号', disabled, action: () => transformEditorSelection(text => text.replace(/[“”]/g, '"').replace(/[‘’]/g, "'")) },
+        { label: '转换省略号与破折号', disabled, action: () => transformEditorSelection(text => text.replace(/\.\.\./g, '…').replace(/--/g, '—')) },
+      ] },
+      { label: '换行符', children: [
+        { label: '插入硬换行', disabled, action: insertEditorHardBreak },
+        { label: '插入段落换行', disabled, action: () => insertEditorTextAt('\n\n', editorTextarea.value?.selectionStart ?? 0, editorTextarea.value?.selectionEnd ?? 0) },
+      ] },
+      { label: '空格与换行', children: [
+        { label: '清理当前行空格', disabled, action: trimEditorCurrentLine },
+        { label: '压缩选区多余空行', disabled, action: normalizeEditorBlankLines },
+      ] },
+      { label: '检查当前表格', disabled, action: checkEditorTable },
+      { label: advancedSettings.value.spellcheck ? '关闭拼写检查' : '开启拼写检查', checkable: true, checked: advancedSettings.value.spellcheck, action: () => { advancedSettings.value.spellcheck = !advancedSettings.value.spellcheck } },
+      { label: '表情与符号…', disabled, action: () => { editorEmojiPickerOpen.value = !editorEmojiPickerOpen.value } },
     ] },
     { label: '段落', items: [
       ...[1, 2, 3, 4, 5, 6].map(level => ({ label: `${level} 级标题`, shortcut: `Ctrl+${level}`, disabled, action: () => updateEditor((value, start, end) => toggleHeadingLines(value, start, end, level)) })),
+      { label: '普通段落', shortcut: 'Ctrl+0', disabled, action: setEditorParagraph },
+      { label: '提升标题级别', shortcut: 'Ctrl+=', disabled, action: () => changeEditorHeadingLevel(-1) },
+      { label: '降低标题级别', shortcut: 'Ctrl+-', disabled, action: () => changeEditorHeadingLevel(1) },
+      separator,
+      { label: '表格', children: [
+        { label: '插入表格', disabled, action: insertEditorTable },
+        { label: '编辑当前表格', disabled, action: openDraftTableEditor },
+      ] },
+      { label: '公式', children: [
+        { label: '插入行内公式', disabled, action: () => wrapEditorSelection('$', '$', '公式') },
+        { label: '插入块级公式', shortcut: 'Ctrl+Shift+M', disabled, action: insertEditorMathBlock },
+      ] },
+      { label: '代码工具', children: [
+        { label: '代码块', shortcut: 'Ctrl+Shift+K', disabled, action: insertEditorCodeBlock },
+        { label: '设置代码块语言…', disabled, action: () => void chooseEditorCodeLanguage() },
+        { label: '行内代码', disabled, action: () => wrapEditorSelection('`', '`', '代码') },
+        { label: '增加缩进', disabled, action: () => indentEditorSelection(false) },
+        { label: '减少缩进', disabled, action: () => indentEditorSelection(true) },
+      ] },
+      { label: '提示框', children: (['NOTE', 'TIP', 'IMPORTANT', 'WARNING', 'CAUTION'] as const).map(kind => ({ label: `插入 ${kind}`, disabled, action: () => insertEditorAlert(kind) })) },
       { label: '引用', disabled, action: () => prefixEditorLines('> ') },
-      { label: '警告框', disabled, action: () => toggleEditorAlert('NOTE') },
-      { label: '无序列表', disabled, action: () => prefixEditorLines('- ') },
-      { label: '有序列表', disabled, action: () => prefixEditorLines('1. ') },
-      { label: '任务列表', disabled, action: () => prefixEditorLines('- [ ] ') },
-      { label: '代码块', disabled, action: insertEditorCodeBlock },
-      { label: '表格', disabled, action: insertEditorTable },
-      { label: '编辑表格', disabled, action: openDraftTableEditor },
+      { label: '列表', children: [
+        { label: '无序列表', shortcut: 'Ctrl+Shift+]', disabled, action: () => prefixEditorLines('- ') },
+        { label: '有序列表', shortcut: 'Ctrl+Shift+[', disabled, action: () => prefixEditorLines('1. ') },
+        { label: '任务列表', shortcut: 'Ctrl+Shift+X', disabled, action: () => prefixEditorLines('- [ ] ') },
+        { label: '标记任务为未完成', disabled, action: () => setEditorTaskState(false) },
+        { label: '标记任务为已完成', disabled, action: () => setEditorTaskState(true) },
+        { label: '增加缩进', disabled, action: () => indentEditorSelection(false) },
+        { label: '减少缩进', disabled, action: () => indentEditorSelection(true) },
+      ] },
+      { label: '插入段落', children: [
+        { label: '在上方插入段落', disabled, action: () => insertEditorParagraph(-1) },
+        { label: '在下方插入段落', disabled, action: () => insertEditorParagraph(1) },
+      ] },
+      { label: '引用', children: [
+        { label: '插入链接引用', disabled, action: insertEditorLinkReference },
+        { label: '插入脚注', disabled, action: insertEditorFootnote },
+      ] },
       { label: '分隔线', disabled, action: insertEditorDivider },
       { label: '目录', disabled, action: insertEditorToc },
+      { label: 'YAML Front Matter', disabled, action: insertEditorFrontMatter },
     ] },
     { label: '格式', items: [
       { label: '粗体', shortcut: 'Ctrl+B', disabled, action: () => wrapEditorSelection('**', '**', '粗体') },
@@ -1005,13 +1095,41 @@ const editorMenuGroups = computed(() => {
       { label: '插入视频', disabled, action: insertEditorVideo },
     ] },
     { label: '视图', items: [
-      { label: '所见即所得', action: () => setEditorMode('rich') },
-      { label: '源码', shortcut: 'Ctrl+/', action: () => setEditorMode('write') },
-      { label: '并排预览', action: () => setEditorMode('split') },
-      { label: '阅读预览', action: () => setEditorMode('preview') },
-      { label: editorOutlineOpen.value ? '隐藏大纲' : '显示大纲', action: () => { editorOutlineOpen.value = !editorOutlineOpen.value } },
-      { label: editorFocusMode.value ? '关闭专注' : '专注模式', action: () => { editorFocusMode.value = !editorFocusMode.value } },
-      { label: advancedSettings.value.typewriterMode ? '关闭打字机模式' : '打字机模式', action: toggleTypewriterMode },
+      { label: store.mode === 'focus' || store.mode === 'clean' || outlinePanelCollapsed.value ? '显示侧边栏' : '隐藏侧边栏', shortcut: 'Ctrl+Shift+L', checkable: true, checked: store.mode !== 'focus' && store.mode !== 'clean' && !outlinePanelCollapsed.value, action: toggleEditorSidebar },
+      { label: '侧边栏内容', children: [
+        { label: editorOutlineOpen.value ? '隐藏大纲' : '显示大纲', shortcut: 'Ctrl+Shift+1', checkable: true, checked: editorOutlineOpen.value, action: () => { editorOutlineOpen.value = !editorOutlineOpen.value } },
+        { label: '文档列表', shortcut: 'Ctrl+Shift+2', checkable: true, checked: leftPanelTab.value === 'files' && fileBrowserMode.value === 'list', action: () => openEditorFilePanel('list') },
+        { label: '文件树', shortcut: 'Ctrl+Shift+3', checkable: true, checked: leftPanelTab.value === 'files' && fileBrowserMode.value === 'tree', action: () => openEditorFilePanel('tree') },
+        { label: '搜索', shortcut: 'Ctrl+Shift+F', action: () => openSearch('all') },
+      ] },
+      separator,
+      { label: '编辑模式', children: [
+        { label: '所见即所得', checkable: true, checked: editorMode.value === 'rich', action: () => setEditorMode('rich') },
+        { label: '源码', shortcut: 'Ctrl+/', checkable: true, checked: editorMode.value === 'write', action: () => setEditorMode('write') },
+        { label: '并排预览', checkable: true, checked: editorMode.value === 'split', action: () => setEditorMode('split') },
+        { label: editorMode.value === 'preview' ? '退出只读模式' : '只读模式', checkable: true, checked: editorMode.value === 'preview', action: () => setEditorMode(editorMode.value === 'preview' ? 'rich' : 'preview') },
+      ] },
+      { label: editorFocusMode.value ? '关闭专注模式' : '专注模式', shortcut: 'F8', checkable: true, checked: editorFocusMode.value, action: () => { editorFocusMode.value = !editorFocusMode.value } },
+      { label: advancedSettings.value.typewriterMode ? '关闭打字机模式' : '打字机模式', shortcut: 'F9', checkable: true, checked: advancedSettings.value.typewriterMode, action: toggleTypewriterMode },
+      separator,
+      { label: editorStatusbarVisible.value ? '隐藏状态栏' : '显示状态栏', checkable: true, checked: editorStatusbarVisible.value, action: () => { editorStatusbarVisible.value = !editorStatusbarVisible.value } },
+      { label: editorToolbarVisible.value ? '隐藏工具栏' : '显示工具栏', checkable: true, checked: editorToolbarVisible.value, action: () => { editorToolbarVisible.value = !editorToolbarVisible.value } },
+      { label: '字数统计', action: () => { wordCountOpen.value = true } },
+      separator,
+      { label: '窗口', children: [
+        { label: '切换全屏', shortcut: 'F11', action: () => void requestFullscreen() },
+        { label: editorAlwaysOnTop.value ? '取消窗口置顶' : '保持窗口最前', disabled: !isTauriRuntime(), checkable: true, checked: editorAlwaysOnTop.value, action: () => void toggleEditorAlwaysOnTop() },
+        { label: '开发者工具', shortcut: 'Shift+F12', disabled: !isTauriRuntime(), action: () => void toggleEditorDevtools() },
+      ] },
+      { label: '缩放', children: [
+        { label: '实际大小', shortcut: 'Ctrl+Shift+9', action: resetEditorZoom },
+        { label: '放大', shortcut: 'Ctrl+Shift+=', action: () => changeReaderZoom(1) },
+        { label: '缩小', shortcut: 'Ctrl+Shift+-', action: () => changeReaderZoom(-1) },
+      ] },
+      { label: '切换文档', children: [
+        { label: '下一篇文档', shortcut: 'Ctrl+Tab', disabled: store.openDocuments.length < 2, action: () => switchDocument(1) },
+        { label: '上一篇文档', shortcut: 'Ctrl+Shift+Tab', disabled: store.openDocuments.length < 2, action: () => switchDocument(-1) },
+      ] },
     ] },
   ]
 })
@@ -1344,6 +1462,218 @@ function editorLineRange() {
   return selectedLineRange(editorSource.value, element.selectionStart, element.selectionEnd)
 }
 
+function editorParagraphRange() {
+  const value = editorSource.value
+  const position = editorTextarea.value?.selectionStart ?? 0
+  const lines = value.split('\n')
+  let line = value.slice(0, position).split('\n').length - 1
+  if (line >= lines.length) line = lines.length - 1
+  let first = line
+  let last = line
+  while (first > 0 && lines[first - 1]?.trim()) first--
+  while (last + 1 < lines.length && lines[last + 1]?.trim()) last++
+  const start = lines.slice(0, first).reduce((offset, item) => offset + item.length + 1, 0)
+  const end = start + lines.slice(first, last + 1).join('\n').length
+  return { start, end }
+}
+
+function selectEditorAll() {
+  editorTextarea.value?.setSelectionRange(0, editorSource.value.length)
+  editorTextarea.value?.focus()
+}
+
+function selectEditorParagraph() {
+  const range = editorParagraphRange()
+  editorTextarea.value?.focus()
+  editorTextarea.value?.setSelectionRange(range.start, range.end)
+}
+
+function selectEditorWord() {
+  const element = editorTextarea.value
+  if (!element) return
+  const position = element.selectionStart
+  const value = editorSource.value
+  const matcher = /[\p{L}\p{N}_]+/gu
+  let match: RegExpExecArray | null
+  while ((match = matcher.exec(value)) !== null) {
+    if (match.index <= position && matcher.lastIndex >= position) {
+      element.setSelectionRange(match.index, matcher.lastIndex)
+      element.focus()
+      return
+    }
+  }
+  element.setSelectionRange(position, position)
+  element.focus()
+}
+
+function deleteEditorSelection() {
+  const element = editorTextarea.value
+  if (!element || element.selectionStart === element.selectionEnd) return
+  applyEditorChange(`${editorSource.value.slice(0, element.selectionStart)}${editorSource.value.slice(element.selectionEnd)}`, element.selectionStart)
+}
+
+function deleteEditorParagraph() {
+  const { start, end } = editorParagraphRange()
+  let removeStart = start
+  let removeEnd = end
+  if (removeEnd < editorSource.value.length) removeEnd++
+  else if (removeStart > 0) removeStart--
+  applyEditorChange(`${editorSource.value.slice(0, removeStart)}${editorSource.value.slice(removeEnd)}`, removeStart)
+}
+
+function deleteEditorToLineBoundary(toEnd: boolean) {
+  const element = editorTextarea.value
+  if (!element) return
+  const start = element.selectionStart
+  const end = element.selectionEnd
+  if (start !== end) {
+    deleteEditorSelection()
+    return
+  }
+  const lineStart = editorSource.value.lastIndexOf('\n', Math.max(0, start - 1)) + 1
+  const lineEnd = editorSource.value.indexOf('\n', start)
+  const from = toEnd ? start : lineStart
+  const to = toEnd ? (lineEnd < 0 ? editorSource.value.length : lineEnd) : start
+  applyEditorChange(editorSource.value.slice(0, from) + editorSource.value.slice(to), from)
+}
+
+async function copyEditorLine() {
+  const range = editorLineRange()
+  if (!range) return
+  const end = range.end < editorSource.value.length ? range.end + 1 : range.end
+  try { await writeTextToClipboard(editorSource.value.slice(range.start, end)) }
+  catch { notify('复制失败，请检查剪贴板权限') }
+}
+
+function runEditorClipboard(action: 'copy' | 'cut') {
+  const element = editorTextarea.value
+  if (!element) return
+  if (element.selectionStart === element.selectionEnd) {
+    if (action === 'cut') return void cutEditorLine()
+    return void copyEditorLine()
+  }
+  void copyEditorSelection(action === 'cut')
+}
+
+async function copyEditorAs(kind: 'plain' | 'markdown' | 'html') {
+  const element = editorTextarea.value
+  if (!element) return
+  const start = element.selectionStart
+  const end = element.selectionEnd
+  const range = start === end ? editorParagraphRange() : { start, end }
+  const markdown = editorSource.value.slice(range.start, range.end)
+  const plain = markdown
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/^\s{0,3}#{1,6}\s+/gm, '')
+    .replace(/^\s{0,3}>\s?/gm, '')
+    .replace(/\*\*|__|~~|==|[*_`]/g, '')
+  try {
+    if (kind !== 'html' || typeof ClipboardItem === 'undefined' || !navigator.clipboard?.write) {
+      await writeTextToClipboard(kind === 'plain' ? plain : markdown)
+      if (kind === 'html') notify('此环境无法复制 HTML，已复制 Markdown')
+      return
+    }
+    const html = parseMarkdown('clipboard.md', markdown).regions.map(region => region.html).join('\n')
+    await navigator.clipboard.write([new ClipboardItem({
+      'text/html': new Blob([html], { type: 'text/html' }),
+      'text/plain': new Blob([plain], { type: 'text/plain' }),
+    })])
+  } catch { notify('复制失败，请检查剪贴板权限') }
+}
+
+async function copyEditorImage() {
+  const element = editorTextarea.value
+  if (!element) return
+  const range = element.selectionStart === element.selectionEnd ? editorLineRange() : { start: element.selectionStart, end: element.selectionEnd }
+  if (!range) return
+  const source = editorSource.value.slice(range.start, range.end)
+  const match = source.match(/!\[[^\]\n]*\]\((<[^>\n]+>|[^)\n]+)\)/)
+  const htmlMatch = source.match(/<img\b[^>]*\bsrc=["']([^"']+)["']/i)
+  const imageUrl = match?.[1] ?? htmlMatch?.[1]
+  if (!imageUrl) { notify('先选中或将光标放在图片引用所在行'); return }
+  const url = imageUrl.startsWith('<') && imageUrl.endsWith('>') ? imageUrl.slice(1, -1) : imageUrl.split(/[ \t]+["']/)[0]
+  try {
+    const resolved = resolveEditorAssetUrl(editorDocumentPath.value, url)
+    if (!resolved) throw new Error('图片无法读取')
+    const response = await fetch(resolved)
+    if (!response.ok) throw new Error('图片无法读取')
+    const bitmap = await createImageBitmap(await response.blob())
+    const canvas = document.createElement('canvas')
+    canvas.width = bitmap.width
+    canvas.height = bitmap.height
+    const context = canvas.getContext('2d')
+    context?.drawImage(bitmap, 0, 0)
+    bitmap.close()
+    if (!context) throw new Error('图片无法转换')
+    const png = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'))
+    if (!png) throw new Error('图片无法转换')
+    if (isTauriRuntime()) await invoke('write_clipboard_snapshot', { kind: 'image', text: null, bytes: [...new Uint8Array(await png.arrayBuffer())] })
+    else await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })])
+    notify('已复制图片')
+  } catch (error) { notify(error instanceof Error ? error.message : '复制图片失败') }
+}
+
+function transformEditorSelection(transform: (text: string) => string) {
+  const element = editorTextarea.value
+  if (!element) return
+  const start = element.selectionStart
+  const end = element.selectionEnd
+  if (start === end) { notify('先选中要转换的文字'); return }
+  const selected = editorSource.value.slice(start, end)
+  const replacement = transform(selected)
+  if (replacement !== selected) applyEditorChange(editorSource.value.slice(0, start) + replacement + editorSource.value.slice(end), start, start + replacement.length)
+}
+
+function insertEditorHardBreak() {
+  const element = editorTextarea.value
+  if (element) insertEditorTextAt('  \n', element.selectionStart, element.selectionEnd)
+}
+
+function trimEditorCurrentLine() {
+  const element = editorTextarea.value
+  if (!element) return
+  const value = editorSource.value
+  const lineStart = value.lastIndexOf('\n', Math.max(0, element.selectionStart - 1)) + 1
+  const lineEndIndex = value.indexOf('\n', element.selectionStart)
+  const lineEnd = lineEndIndex < 0 ? value.length : lineEndIndex
+  const line = value.slice(lineStart, lineEnd)
+  const replacement = line.replace(/[\t ]+$/g, '')
+  if (line !== replacement) applyEditorChange(value.slice(0, lineStart) + replacement + value.slice(lineEnd), Math.min(element.selectionStart, lineStart + replacement.length))
+}
+
+function normalizeEditorBlankLines() {
+  const element = editorTextarea.value
+  if (!element || element.selectionStart === element.selectionEnd) { notify('先选中要整理的段落'); return }
+  const start = element.selectionStart
+  const end = element.selectionEnd
+  const selected = editorSource.value.slice(start, end)
+  const replacement = selected.replace(/\n(?:[ \t]*\n){2,}/g, '\n\n')
+  if (replacement !== selected) applyEditorChange(editorSource.value.slice(0, start) + replacement + editorSource.value.slice(end), start, start + replacement.length)
+}
+
+function checkEditorTable() {
+  const range = editorParagraphRange()
+  const table = parseEditableTable(editorSource.value.slice(range.start, range.end))
+  notify(table ? `表格结构有效：${table.rows.length} 行，${table.alignments.length} 列` : '当前段落未找到有效的 Markdown 表格')
+}
+
+function setEditorTaskState(checked: boolean) {
+  const element = editorTextarea.value
+  if (!element) return
+  const range = element.selectionStart === element.selectionEnd ? editorLineRange() : selectedLineRange(editorSource.value, element.selectionStart, element.selectionEnd)
+  if (!range) return
+  const source = editorSource.value.slice(range.start, range.end)
+  let changed = false
+  const replacement = source.split('\n').map(line => {
+    if (!/^\s*[-+*]\s+\[[ xX]\]/.test(line)) return line
+    changed = true
+    return line.replace(/^(\s*[-+*]\s+\[)[ xX](\])/, `$1${checked ? 'x' : ' '}$2`)
+  }).join('\n')
+  if (changed) applyEditorChange(editorSource.value.slice(0, range.start) + replacement + editorSource.value.slice(range.end), range.start, range.start + replacement.length)
+  else notify('当前选区没有任务列表项')
+}
+
 function selectEditorLine() {
   const range = editorLineRange()
   const element = editorTextarea.value
@@ -1366,8 +1696,7 @@ async function cutEditorLine() {
   const documentId = store.currentDocumentId
   const line = source.slice(range.start, range.end < source.length ? range.end + 1 : range.end)
   try {
-    if (!navigator.clipboard) throw new Error('Clipboard unavailable')
-    await navigator.clipboard.writeText(line)
+    await writeTextToClipboard(line)
     if (!editorOpen.value || editorMode.value === 'preview' || store.currentDocumentId !== documentId || editorSource.value !== source) {
       notify('已复制原行；文档发生变化，未删除内容')
       return
@@ -1391,6 +1720,17 @@ function onEditorLineClipboard(event: ClipboardEvent, cut: boolean) {
 
 function onEditorKeydown(event: KeyboardEvent) {
   if (event.isComposing || event.keyCode === 229) return
+  if ((event.ctrlKey || event.metaKey) && event.key === '0' && !event.shiftKey) { event.preventDefault(); setEditorParagraph(); return }
+  if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key === '=' && !event.altKey) { event.preventDefault(); changeEditorHeadingLevel(-1); return }
+  if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key === '-' && !event.altKey) { event.preventDefault(); changeEditorHeadingLevel(1); return }
+  if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'm') { event.preventDefault(); insertEditorMathBlock(); return }
+  if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'k') { event.preventDefault(); insertEditorCodeBlock(); return }
+  if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'q') { event.preventDefault(); prefixEditorLines('> '); return }
+  if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'x') { event.preventDefault(); prefixEditorLines('- [ ] '); return }
+  if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.code === 'BracketLeft') { event.preventDefault(); prefixEditorLines('1. '); return }
+  if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.code === 'BracketRight') { event.preventDefault(); prefixEditorLines('- '); return }
+  if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'c') { event.preventDefault(); void copyEditorAs('markdown'); return }
+  if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'v') { event.preventDefault(); void pasteIntoEditor(true); return }
   if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && /^[1-6]$/.test(event.key)) {
     event.preventDefault()
     const level = Number(event.key)
@@ -1405,11 +1745,6 @@ function onEditorKeydown(event: KeyboardEvent) {
   if ((event.ctrlKey || event.metaKey) && ['z', 'y'].includes(event.key.toLowerCase()) && !event.altKey) {
     event.preventDefault()
     restoreEditorHistory(event.key.toLowerCase() === 'y' || event.shiftKey ? 1 : -1)
-    return
-  }
-  if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'k') {
-    event.preventDefault()
-    deleteEditorLine()
     return
   }
   if (event.key === 'Tab') {
@@ -1549,6 +1884,144 @@ function wrapEditorSelection(before: string, after: string, placeholder: string)
 function insertEditorToc() {
   const element = editorTextarea.value
   if (element) insertEditorTextAt('[toc]', element.selectionStart, element.selectionEnd, true)
+}
+
+function insertEditorMathBlock() {
+  wrapEditorSelection('$$\n', '\n$$', '公式')
+}
+
+async function copyEditorMathMl() {
+  const element = editorTextarea.value
+  if (!element || element.selectionStart === element.selectionEnd) { notify('先选中要复制的公式'); return }
+  let source = editorSource.value.slice(element.selectionStart, element.selectionEnd).trim()
+  const display = source.startsWith('$$') && source.endsWith('$$')
+  source = display ? source.slice(2, -2).trim() : source.replace(/^\$(.+)\$$/s, '$1')
+  try { await writeTextToClipboard(renderMathMl(source, display)); notify('MathML 已复制') }
+  catch { notify('复制 MathML 失败，请检查剪贴板权限') }
+}
+
+function setEditorParagraph() {
+  updateEditor((value, start, end) => {
+    const range = selectedLineRange(value, start, end)
+    const replacement = value.slice(range.start, range.end).split('\n').map(line => line.replace(/^ {0,3}#{1,6}(?:[ \t]+|$)/, '')).join('\n')
+    return { value: value.slice(0, range.start) + replacement + value.slice(range.end), start: range.start, end: range.start + replacement.length }
+  })
+}
+
+function changeEditorHeadingLevel(delta: -1 | 1) {
+  updateEditor((value, start, end) => {
+    const range = selectedLineRange(value, start, end)
+    let changed = false
+    const replacement = value.slice(range.start, range.end).split('\n').map(line => line.replace(/^( {0,3})(#{1,6})(?=[ \t]|$)(.*)$/, (_all, indent: string, hashes: string, rest: string) => {
+      changed = true
+      return `${indent}${'#'.repeat(Math.min(6, Math.max(1, hashes.length + delta)))}${rest}`
+    })).join('\n')
+    if (!changed) return { value, start, end }
+    return { value: value.slice(0, range.start) + replacement + value.slice(range.end), start: range.start, end: range.start + replacement.length }
+  })
+}
+
+function insertEditorParagraph(direction: -1 | 1) {
+  const range = editorParagraphRange()
+  const source = editorSource.value
+  const atStart = direction < 0
+  const position = atStart ? range.start : range.end
+  const insertion = atStart ? (position === 0 ? '\n\n' : '\n') : (position === source.length ? '\n\n' : '\n')
+  const caret = atStart && position > 0 ? position : position + 1
+  applyEditorChange(source.slice(0, position) + insertion + source.slice(position), caret)
+}
+
+function insertEditorLinkReference() {
+  updateEditor((value, start, end) => {
+    const selected = value.slice(start, end) || '链接文字'
+    const used = new Set([...value.matchAll(/^\[ref-(\d+)\]:/gm)].map(match => Number(match[1])))
+    let index = 1
+    while (used.has(index)) index++
+    const id = `ref-${index}`
+    const reference = `[${selected}][${id}]`
+    const next = `${value.slice(0, start)}${reference}${value.slice(end)}`
+    const separator = next ? (next.endsWith('\n\n') ? '' : next.endsWith('\n') ? '\n' : '\n\n') : ''
+    const definition = `[${id}]: https://`
+    const full = `${next}${separator}${definition}\n`
+    const urlStart = full.length - 'https://\n'.length
+    return { value: full, start: urlStart, end: urlStart + 'https://'.length }
+  })
+}
+
+function insertEditorFootnote() {
+  updateEditor((value, start, end) => {
+    const used = new Set([...value.matchAll(/\[\^(\d+)\]/g)].map(match => Number(match[1])))
+    let index = 1
+    while (used.has(index)) index++
+    const marker = `[^${index}]`
+    const reference = `${value.slice(0, start)}${value.slice(start, end)}${marker}${value.slice(end)}`
+    const prefix = reference ? (reference.endsWith('\n\n') ? '' : reference.endsWith('\n') ? '\n' : '\n\n') : ''
+    const definition = `${prefix}[^${index}]: `
+    const full = `${reference}${definition}`
+    return { value: full, start: full.length, end: full.length }
+  })
+}
+
+function insertEditorFrontMatter() {
+  const source = editorSource.value
+  const existing = source.match(/^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/)
+  if (existing) {
+    const titleStart = source.indexOf('title:')
+    const position = titleStart >= 0 && titleStart < existing[0].length ? titleStart + 7 : source.indexOf('\n') + 1
+    applyEditorChange(source, Math.max(0, position))
+    return
+  }
+  const bom = source.startsWith('\uFEFF') ? '\uFEFF' : ''
+  const prefix = `${bom}---\ntitle: \n---\n\n`
+  applyEditorChange(prefix + (bom ? source.slice(1) : source), prefix.length - 7)
+}
+
+function openEditorFilePanel(mode: 'list' | 'tree') {
+  if (store.mode === 'focus') exitFocusMode()
+  else if (store.mode === 'clean') toggleCleanMode()
+  setEditorSidebarVisible()
+  leftPanelTab.value = 'files'
+  if (mode === 'list') showDocumentList()
+  else void showDocumentTree()
+}
+
+function setEditorSidebarVisible() {
+  outlinePanelCollapsed.value = false
+  localStorage.setItem('moyue:outline-panel-collapsed', 'false')
+}
+
+function toggleEditorSidebar() {
+  if (store.mode === 'focus') {
+    exitFocusMode()
+    setEditorSidebarVisible()
+    return
+  }
+  if (store.mode === 'clean') {
+    toggleCleanMode()
+    setEditorSidebarVisible()
+    return
+  }
+  toggleOutlinePanel()
+}
+
+function resetEditorZoom() {
+  changeSetting('fontSize', store.activeTheme?.tokens.reader.fontSize ?? 18)
+}
+
+async function toggleEditorAlwaysOnTop() {
+  if (!isTauriRuntime()) return
+  try {
+    const window = (await import('@tauri-apps/api/window')).getCurrentWindow()
+    const next = !await window.isAlwaysOnTop()
+    await window.setAlwaysOnTop(next)
+    editorAlwaysOnTop.value = next
+  } catch { notify('切换窗口置顶失败') }
+}
+
+async function toggleEditorDevtools() {
+  if (!isTauriRuntime()) return
+  try { await invoke('plugin:webview|internal_toggle_devtools') }
+  catch { notify('开发者工具不可用') }
 }
 
 function insertEditorLink() {
@@ -1931,6 +2404,13 @@ function insertEditorCodeBlock() {
   wrapEditorSelection(`\`\`\`${language}\n`, '\n```', '代码')
 }
 
+async function chooseEditorCodeLanguage() {
+  const language = await promptAppText({ title: '代码块语言', description: '为后续插入的代码块设置语言标记。', inputLabel: '语言', defaultValue: editorCodeLanguage.value, confirmLabel: '应用' })
+  if (language === null) return
+  editorCodeLanguage.value = language.trim() || 'text'
+  if (advancedSettings.value.rememberCodeLanguage) advancedSettings.value.defaultCodeLanguage = editorCodeLanguage.value
+}
+
 function insertEditorEmoji(value: string) {
   const element = editorTextarea.value
   if (!element) return
@@ -1939,6 +2419,14 @@ function insertEditorEmoji(value: string) {
   const start = before.search(/:[a-z0-9_+-]{0,16}$/i)
   if (start < 0) return
   applyEditorChange(`${editorSource.value.slice(0, start)}${value}${editorSource.value.slice(position)}`, start + value.length)
+}
+
+function insertEditorSymbol(value: string) {
+  const element = editorTextarea.value
+  if (!element) return
+  const start = element.selectionStart
+  const end = element.selectionEnd
+  applyEditorChange(`${editorSource.value.slice(0, start)}${value}${editorSource.value.slice(end)}`, start + value.length)
 }
 
 function insertEditorDivider() {
@@ -3703,6 +4191,7 @@ async function boot() {
 }
 onMounted(() => {
   void boot()
+  if (isTauriRuntime()) void import('@tauri-apps/api/window').then(({ getCurrentWindow }) => getCurrentWindow().isAlwaysOnTop()).then(value => { editorAlwaysOnTop.value = value }).catch(() => {})
   void migrateEditorDrafts()
   void loadDurableData('moyue:clipboard-history', value => Array.isArray(value) ? value : null)
   void loadPersistedAiSettings()
@@ -3852,6 +4341,20 @@ function onKeydown(event: KeyboardEvent) {
     return
   }
   if (editorOpen.value && !quickOpenOpen.value && !searchOpen.value) {
+    const mod = event.ctrlKey || event.metaKey
+    if (mod && event.shiftKey && !event.altKey && event.code === 'Digit9') { event.preventDefault(); resetEditorZoom(); return }
+    if (mod && event.shiftKey && !event.altKey && (event.key === '=' || event.key === '+' || event.code === 'Equal')) { event.preventDefault(); changeReaderZoom(1); return }
+    if (mod && event.shiftKey && !event.altKey && (event.key === '-' || event.key === '_' || event.code === 'Minus')) { event.preventDefault(); changeReaderZoom(-1); return }
+    if (mod && event.shiftKey && event.key.toLowerCase() === 'l') { event.preventDefault(); toggleEditorSidebar(); return }
+    if (mod && event.shiftKey && event.code === 'Digit1') { event.preventDefault(); editorOutlineOpen.value = !editorOutlineOpen.value; return }
+    if (mod && event.shiftKey && event.code === 'Digit2') { event.preventDefault(); openEditorFilePanel('list'); return }
+    if (mod && event.shiftKey && event.code === 'Digit3') { event.preventDefault(); openEditorFilePanel('tree'); return }
+    if (mod && event.shiftKey && event.key.toLowerCase() === 'f') { event.preventDefault(); openSearch('all'); return }
+    if (mod && event.key === '/') { event.preventDefault(); setEditorMode(editorMode.value === 'rich' ? 'write' : 'rich'); return }
+    if (event.key === 'F8') { event.preventDefault(); editorFocusMode.value = !editorFocusMode.value; return }
+    if (event.key === 'F9') { event.preventDefault(); toggleTypewriterMode(); return }
+    if (event.key === 'F11') { event.preventDefault(); void requestFullscreen(); return }
+    if (event.shiftKey && event.key === 'F12') { event.preventDefault(); void toggleEditorDevtools(); return }
     if ((event.ctrlKey || event.metaKey) && ['f', 'h'].includes(event.key.toLowerCase())) {
       event.preventDefault()
       openEditorFind()
@@ -3882,7 +4385,8 @@ function onKeydown(event: KeyboardEvent) {
     }
     if (event.key === 'Escape') {
       event.preventDefault()
-      if (editorContextMenu.value && !editorContextMenu.value.image) finishEditorContextMenu()
+      if (editorEmojiPickerOpen.value) editorEmojiPickerOpen.value = false
+      else if (editorContextMenu.value && !editorContextMenu.value.image) finishEditorContextMenu()
       else closeEditorContextMenu()
       return
     }
@@ -5389,7 +5893,7 @@ async function requestFullscreen() {
           </aside>
           <div class="reader-main-column">
           <EditorMenuBar v-if="editorOpen" :groups="editorMenuGroups" />
-          <div v-if="editorOpen" class="editor-document-actions" role="group" aria-label="编辑文档操作">
+          <div v-if="editorOpen && editorToolbarVisible" class="editor-document-actions" role="group" aria-label="编辑文档操作">
             <Button type="outline" @click="closeEditor"><template #icon><AppIcon name="chevron-left" :size="16" /></template>返回阅读</Button>
             <Button v-if="editorPreviewDocument?.headings.length" type="secondary" :aria-expanded="editorOutlineOpen" aria-controls="editor-draft-outline" @click="editorOutlineOpen = !editorOutlineOpen"><template #icon><AppIcon name="reader" :size="16" /></template>{{ editorOutlineOpen ? '隐藏大纲' : '显示大纲' }}</Button>
             <span class="editor-save-state" role="status">
@@ -5518,6 +6022,7 @@ async function requestFullscreen() {
                   <section v-show="editorMode !== 'preview'" class="editor-main-pane" :class="editorMode === 'rich' ? 'editor-rich-pane' : 'editor-source-pane'">
                     <MarkdownEditor ref="editorTextarea" v-model="editorSource" :live="editorMode === 'rich'" :spellcheck="advancedSettings.spellcheck" :typewriter="advancedSettings.typewriterMode" :focus-mode="editorFocusMode" :resolve-url="url => resolveEditorAssetUrl(editorDocumentPath, url)" @keydown="onEditorKeydown" @paste="onEditorPaste" @copy="onEditorLineClipboard($event, false)" @cut="onEditorLineClipboard($event, true)" @caret="updateEditorCursor" @history="editorUndoAvailable = $event.undo; editorRedoAvailable = $event.redo" @message="notify" @link="openExternalLink" />
                     <div v-if="editorEmojiSuggestions.length" class="editor-emoji-menu" role="listbox" aria-label="Emoji 建议"><button v-for="emoji in editorEmojiSuggestions" :key="emoji.code" type="button" @click="insertEditorEmoji(emoji.value)"><span>{{ emoji.value }}</span>:{{ emoji.code }}:</button></div>
+                    <div v-if="editorEmojiPickerOpen" class="editor-emoji-menu editor-symbol-menu" role="dialog" aria-label="表情与符号"><div class="editor-symbol-heading"><strong>表情与符号</strong><button type="button" aria-label="关闭表情与符号" @click="editorEmojiPickerOpen = false">×</button></div><div class="editor-symbol-grid"><button v-for="symbol in editorSymbolChoices" :key="symbol" type="button" :aria-label="`插入 ${symbol}`" @click="insertEditorSymbol(symbol)">{{ symbol }}</button></div></div>
                   </section>
                   <div v-if="editorMode === 'split'" class="editor-split-divider" role="separator" tabindex="0" aria-orientation="vertical" :aria-valuemin="36" :aria-valuemax="70" :aria-valuenow="Math.round(editorSplitRatio)" aria-label="调整源码与预览宽度" @pointerdown="startEditorSplitResize" @keydown="onEditorSplitResizeKeydown"><span /></div>
                   <section v-if="editorMode === 'split' || editorMode === 'preview'" class="editor-preview-pane" aria-label="实时阅读预览">
@@ -5540,7 +6045,7 @@ async function requestFullscreen() {
                   </section>
                 </div>
                 </div>
-                <div class="editor-statusbar">
+                <div v-if="editorStatusbarVisible" class="editor-statusbar">
                   <span>{{ editorMode === 'write' ? '源码写作' : editorMode === 'rich' ? '所见即所得' : editorMode === 'preview' ? '阅读预览' : '边写边读' }}</span>
                   <span :class="{ 'editor-dirty': editorDirty }">{{ editorBackupError ? '备份失败' : editorDirty ? '草稿已备份 · 未写入文件' : '已保存' }}</span>
                   <span>Ln {{ editorCursor.line }}, Col {{ editorCursor.column }}</span>

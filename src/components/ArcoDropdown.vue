@@ -15,8 +15,11 @@ function setVisible(next: boolean) {
 }
 
 function closeAfterAction(event: MouseEvent) {
-  if ((event.target as HTMLElement).closest('button')) setVisible(false)
+  const button = (event.target as HTMLElement).closest('button')
+  if (button && button.dataset.submenuTrigger !== 'true') setVisible(false)
 }
+
+defineExpose({ close: () => setVisible(false) })
 </script>
 
 <template>
