@@ -131,7 +131,7 @@ onMounted(() => {
       if (update.docChanged || update.selectionSet) {
         emit('caret')
         emit('history', { undo: undoDepth(update.state) > 0, redo: redoDepth(update.state) > 0 })
-        if (props.typewriter && !update.transactions.some(transaction => transaction.isUserEvent('select.pointer'))) {
+        if (props.typewriter && !update.transactions.some(transaction => transaction.isUserEvent('select.pointer') || transaction.isUserEvent('select.outline'))) {
           requestAnimationFrame(centerCaret)
         }
       }
@@ -175,7 +175,19 @@ defineExpose({
   set scrollTop(value: number) { if (view) view.scrollDOM.scrollTop = value },
   get clientHeight() { return view?.scrollDOM.clientHeight ?? 0 },
   focus: () => view?.focus(),
-  setSelectionRange: (start: number, end: number) => view?.dispatch({ selection: { anchor: Math.min(start, view.state.doc.length), head: Math.min(end, view.state.doc.length) }, scrollIntoView: true }),
+  setSelectionRange(start: number, end: number, align: 'nearest' | 'start' = 'nearest') {
+    if (!view) return
+    const anchor = Math.min(start, view.state.doc.length)
+    view.dispatch({ selection: { anchor, head: Math.min(end, view.state.doc.length) }, ...(align === 'start' ? { userEvent: 'select.outline' } : { scrollIntoView: true }) })
+    if (align === 'start') {
+      view.scrollDOM.scrollTop = Math.max(0, view.lineBlockAt(anchor).top)
+      requestAnimationFrame(() => {
+        if (!view || view.state.selection.main.anchor !== anchor) return
+        const coords = view.coordsAtPos(anchor)
+        if (coords) view.scrollDOM.scrollTop += coords.top - view.scrollDOM.getBoundingClientRect().top - 16
+      })
+    }
+  },
   replaceSource,
   placeContextCaret(event: MouseEvent) {
     if (!view || !(event.target instanceof Element) || !view.contentDOM.contains(event.target)) return

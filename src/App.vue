@@ -48,7 +48,7 @@ import { defaultTokens } from './themes'
 import type { FileSystemTreeNode } from './components/FileSystemTree.vue'
 import ClipboardManager from './components/ClipboardManager.vue'
 import { cachePastedRemoteImages, copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, downloadMarkdownImages, exportDocumentWithPandoc, importDocumentWithPandoc, importMarkdownAsset, importMarkdownAssetFromPath, listDirectoryFiles, listFileSystemEntries, markdownPathExists, openFileSystemDirectory, openMarkdownDirectory, openMarkdownFile, openMarkdownFolderAt, organizeMarkdownAssets, readMarkdownExportAssets, readMarkdownPath, removeMarkdownAsset, renameMarkdownAsset, renameMarkdownPath, resolveMarkdownAssetUrl, resolveMarkdownPath, saveBinaryExportFile, saveClipboardImage, saveExportFile, saveMarkdownFile, savePdfExportFile, selectDocxReference, selectFileSystemDirectory, selectMarkdownFolder, splitMarkdownLinkTarget, uploadMarkdownImage, watchDirectoryPath, watchMarkdownPath, writeMarkdownFile, type PandocExportFormat, type WorkspaceFile } from './fileService'
-import type { Annotation, ReaderDocument, ReaderRegion, ViewerType } from './types'
+import type { Annotation, HeadingItem, ReaderDocument, ReaderRegion, ViewerType } from './types'
 import { escapeHtml, isQuarkImageUrl, renderMathMl } from './markdown/shared'
 import { makeImplicitMarkdownHeadingsExplicit, parseMarkdown } from './parser'
 import { getDocumentStatistics } from './documentStats'
@@ -1318,13 +1318,15 @@ function openEditorPreviewImage(event: MouseEvent) {
   openViewer({ ...region, metadata: { ...(region.metadata ?? {}), url: source } })
 }
 
-function jumpToEditorHeading(index: number) {
-  const item = editorHeadings.value[index]
-  const region = editorPreviewDocument.value?.regions.find(region => region.id === item?.regionId)
-  if (region) editorCursorOffset.value = region.sourceStart
+function jumpToEditorHeading(item: HeadingItem) {
+  const region = editorPreviewDocument.value?.regions.find(region => region.id === item.regionId)
+  const source = editorSource.value
+  const headingOffset = source.search(new RegExp(`^#{1,6}[ \\t]+${escapeRegExp(item.text)}[ \\t]*\\r?$`, 'm'))
+  const offset = headingOffset >= 0 ? headingOffset : region?.sourceStart
+  if (offset !== undefined) editorCursorOffset.value = offset
   if (region && editorMode.value !== 'preview') {
     editorTextarea.value?.focus()
-    editorTextarea.value?.setSelectionRange(region.sourceStart, region.sourceStart)
+    editorTextarea.value?.setSelectionRange(offset ?? region.sourceStart, offset ?? region.sourceStart, 'start')
   }
   if (region) editorPreview.value?.querySelector(`[data-editor-region-id="${region.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }

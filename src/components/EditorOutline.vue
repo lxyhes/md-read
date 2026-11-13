@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { ReaderDocument } from '../types'
+import type { HeadingItem, ReaderDocument } from '../types'
 import AppIcon from './AppIcon.vue'
 
 const props = withDefaults(defineProps<{ document: ReaderDocument | null; cursor: number; open?: boolean }>(), { open: true })
-const emit = defineEmits<{ jump: [index: number]; toggle: [open: boolean] }>()
+const emit = defineEmits<{ jump: [heading: HeadingItem]; toggle: [open: boolean] }>()
 const headings = computed(() => props.document?.headings ?? [])
 const minDepth = computed(() => Math.min(6, ...headings.value.map(heading => heading.depth)))
 const activeId = computed(() => {
@@ -22,7 +22,7 @@ const activeId = computed(() => {
   <details class="editor-draft-outline" :open="props.open" @toggle="emit('toggle', ($event.currentTarget as HTMLDetailsElement).open)">
     <summary><AppIcon name="reader" :size="14" /><span>大纲</span><small>{{ headings.length }} 个章节 · 当前草稿</small><AppIcon name="chevron-down" :size="13" /></summary>
     <nav v-if="headings.length" aria-label="编辑中的文档大纲">
-      <button v-for="(heading, index) in headings" :key="heading.id" type="button" :style="{ paddingInlineStart: `${12 + (heading.depth - minDepth) * 12}px` }" :aria-current="activeId === heading.id ? 'location' : undefined" @click="emit('jump', index)">{{ heading.text }}</button>
+      <button v-for="heading in headings" :key="heading.id" type="button" :style="{ paddingInlineStart: `${12 + (heading.depth - minDepth) * 12}px` }" :aria-current="activeId === heading.id ? 'location' : undefined" @click="emit('jump', heading)">{{ heading.text }}</button>
     </nav>
     <p v-else>添加 Markdown 标题后，章节会显示在这里。</p>
   </details>

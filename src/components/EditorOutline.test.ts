@@ -18,7 +18,7 @@ it('tracks draft headings and the caret, emits the chosen section, and handles a
     expect(buttons[1].style.paddingInlineStart).toBe('24px')
     expect(buttons[0].getAttribute('aria-current')).toBe('location')
     buttons[1].click()
-    expect(onJump).toHaveBeenCalledWith(1)
+    expect(onJump).toHaveBeenCalledWith(initial.headings[1])
     state.cursor = initial.source.indexOf('## Second')
     await nextTick()
     expect(buttons[1].getAttribute('aria-current')).toBe('location')
