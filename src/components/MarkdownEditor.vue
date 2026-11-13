@@ -175,10 +175,14 @@ defineExpose({
   set scrollTop(value: number) { if (view) view.scrollDOM.scrollTop = value },
   get clientHeight() { return view?.scrollDOM.clientHeight ?? 0 },
   focus: () => view?.focus(),
-  setSelectionRange(start: number, end: number, align: 'nearest' | 'start' = 'nearest') {
+  setSelectionRange(start: number, end: number, align: 'nearest' | 'start' | 'center' = 'nearest') {
     if (!view) return
     const anchor = Math.min(start, view.state.doc.length)
-    view.dispatch({ selection: { anchor, head: Math.min(end, view.state.doc.length) }, ...(align === 'start' ? { userEvent: 'select.outline' } : { scrollIntoView: true }) })
+    view.dispatch({
+      selection: { anchor, head: Math.min(end, view.state.doc.length) },
+      ...(align === 'nearest' ? { scrollIntoView: true } : { userEvent: 'select.outline' }),
+      ...(align === 'center' ? { effects: EditorView.scrollIntoView(anchor, { y: 'center' }) } : {}),
+    })
     if (align === 'start') {
       view.scrollDOM.scrollTop = Math.max(0, view.lineBlockAt(anchor).top)
       requestAnimationFrame(() => {

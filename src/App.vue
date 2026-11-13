@@ -1326,7 +1326,11 @@ function jumpToEditorHeading(item: HeadingItem) {
   if (offset !== undefined) editorCursorOffset.value = offset
   if (region && editorMode.value !== 'preview') {
     editorTextarea.value?.focus()
-    editorTextarea.value?.setSelectionRange(offset ?? region.sourceStart, offset ?? region.sourceStart, 'start')
+    editorTextarea.value?.setSelectionRange(
+      offset ?? region.sourceStart,
+      offset ?? region.sourceStart,
+      advancedSettings.value.typewriterMode ? 'center' : 'start',
+    )
   }
   if (region) editorPreview.value?.querySelector(`[data-editor-region-id="${region.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
