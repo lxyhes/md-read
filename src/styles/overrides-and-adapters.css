@@ -3600,6 +3600,38 @@ body .app-shell.is-editor-studio .reader-layout {
   }
 }
 
+/* Preserve the reader card; only restore the comparison content's columns. */
+.app-shell .reader-content .region-content .reader-comparison-layout {
+  display: grid;
+  grid-template-columns: max-content auto max-content;
+  column-gap: 28px;
+  box-sizing: border-box;
+  width: fit-content;
+  max-width: 100%;
+  margin-inline: 0 auto !important;
+  align-items: start;
+}
+.app-shell .reader-content .reader-comparison-column {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  color: var(--ink);
+  line-height: 1.45;
+}
+.app-shell .reader-content .reader-comparison-column strong {
+  font-weight: 700;
+}
+.app-shell .reader-content .reader-comparison-operator {
+  padding-top: 1px;
+  color: var(--ink);
+  font-weight: 700;
+}
+@media (max-width: 720px) {
+  .app-shell .reader-content .region-content .reader-comparison-layout {
+    column-gap: 12px;
+  }
+}
+
 /* The progress rail is useful feedback, but it should not read as a divider. */
 .app-shell:not(.is-editor-studio) .reader-toolbar-slot .reader-progress-track {
   right: 18px;

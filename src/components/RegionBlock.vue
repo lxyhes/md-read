@@ -6,6 +6,7 @@ import TreeDiagram from './TreeDiagram.vue'
 import AppIcon from './AppIcon.vue'
 import IconButton from './IconButton.vue'
 import { asciiDiagramToMermaid, asciiTreeToTree } from '../asciiDiagram'
+import { parseComparisonLayout } from '../comparisonLayout'
 import { renderMathMl } from '../markdown/shared'
 
 const props = defineProps<{ region: ReaderRegion; annotations?: Annotation[]; focused: boolean; active: boolean; focusDistance?: number; themeMode?: ThemeManifest['mode']; themeKey?: string }>()
@@ -25,6 +26,7 @@ const isDiagramLike = computed(() => Boolean(asciiTree.value || asciiDiagramCode
 const codeLineCount = computed(() => Math.max(1, props.region.textContent.split(/\r?\n/).length))
 const focusDistanceClass = computed(() => `focus-distance-${Math.min(3, Math.max(0, props.focusDistance ?? 0))}`)
 const regionAnnotations = computed(() => props.annotations?.filter((annotation) => annotation.regionId === props.region.id) ?? [])
+const comparisonLayout = computed(() => ['paragraph', 'blockquote'].includes(props.region.type) ? parseComparisonLayout(props.region.textContent) : null)
 const regionRoot = ref<HTMLElement | null>(null)
 const codeVisible = ref(false)
 let codeVisibilityObserver: IntersectionObserver | null = null
@@ -183,6 +185,13 @@ function handleContentClick(event: MouseEvent) {
       <div v-html="highlighted" />
     </div>
     <div v-else-if="region.type === 'video'" class="region-content video-region" @click.stop v-html="renderedHtml" />
+    <div v-else-if="comparisonLayout" class="region-content">
+      <component :is="region.type === 'blockquote' ? 'blockquote' : 'div'" class="reader-comparison-layout">
+        <div class="reader-comparison-column"><strong>{{ comparisonLayout.left.title }}</strong><span v-for="row in comparisonLayout.left.rows" :key="row">{{ row }}</span></div>
+        <span class="reader-comparison-operator" aria-hidden="true">+</span>
+        <div class="reader-comparison-column"><strong>{{ comparisonLayout.right.title }}</strong><span v-for="row in comparisonLayout.right.rows" :key="row">{{ row }}</span></div>
+      </component>
+    </div>
       <div v-else-if="region.type === 'code' && asciiTree" class="region-content auto-tree-region" @click.stop>
       <TreeDiagram :node="asciiTree" root @open-link="emit('open-link', $event)" />
     </div>
