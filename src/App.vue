@@ -53,7 +53,7 @@ import { escapeHtml, isQuarkImageUrl, renderMathMl } from './markdown/shared'
 import { makeImplicitMarkdownHeadingsExplicit, parseMarkdown } from './parser'
 import { getDocumentStatistics } from './documentStats'
 import { asciiDiagramToMermaid, asciiTreeToTree, markdownToTree } from './asciiDiagram'
-import { formatClipboardImage, formatClipboardToMarkdown, htmlToMarkdown, normalizeMixedOrderedListSource, promoteClipboardImageLinks, suggestPastedMarkdownName } from './pasteMarkdown'
+import { formatClipboardImage, formatClipboardToMarkdown, htmlToMarkdown, normalizeMixedOrderedListSource, promoteClipboardImageLinks, suggestPastedMarkdownName, type ClipboardFormat } from './pasteMarkdown'
 import { matchQuickOpen } from './quickOpen'
 import { indentSelection, codeIndentInsertion, isFenceBacktickInput, selectedLineRange, removeSelectedLines, setHeadingLines, setOrderedListLines, toggleHeadingLines, toggleInlineMarkup } from './editorInput'
 import { createEditorHistory, recordEditorHistory, stepEditorHistory } from './editorHistory'
@@ -3427,10 +3427,10 @@ async function readNativeClipboardImage(): Promise<Blob | null> {
   }
 }
 
-async function importClipboardContent(html: string, text: string, saveToFile = false, image: Blob | null = null, action: BusyAction = null) {
+async function importClipboardContent(html: string, text: string, saveToFile = false, image: Blob | null = null, action: BusyAction = null, format: ClipboardFormat = 'default') {
   if (busyAction.value) return
   if (!html && text) html = (await readNativeClipboardRichText(text))?.html ?? ''
-  let source = formatClipboardToMarkdown(html, text)
+  let source = formatClipboardToMarkdown(html, text, format)
   if (!source && !image) image = await readNativeClipboardImage()
   if (!source && image) source = formatClipboardImage(await blobToDataUrl(image))
   if (!source) {
@@ -3502,11 +3502,11 @@ async function readClipboardContent(): Promise<{ text: string; html: string; ima
   return { text: await clipboard.readText(), html: '', image: null }
 }
 
-async function pasteFromClipboard(saveToFile = false) {
+async function pasteFromClipboard(saveToFile = false, format: ClipboardFormat = 'default') {
   if (busyAction.value) return
   try {
     const { text, html, image } = await readClipboardContent()
-    await importClipboardContent(html, text, saveToFile, image)
+    await importClipboardContent(html, text, saveToFile, image, null, format)
   } catch (error) {
     notify(error instanceof Error ? '无法读取剪贴板，请直接按 Ctrl/Cmd+V' : '无法读取剪贴板')
   }
@@ -5676,6 +5676,8 @@ async function requestFullscreen() {
             <template #menu>
               <Button class="library-import-action" type="text" long :loading="busyAction === 'pandoc'" :disabled="busyAction !== null" @click="importOfficeDocument">导入 Word / EPUB…</Button>
               <Button class="library-import-action" type="text" long :loading="busyAction === 'paste'" :disabled="busyAction !== null" @click="() => pasteFromClipboard()">粘贴并格式化</Button>
+              <Button class="library-import-action" type="text" long :loading="busyAction === 'paste'" :disabled="busyAction !== null" @click="() => pasteFromClipboard(false, 'baidu-netdisk-ai')">百度网盘 AI 粘贴</Button>
+              <Button class="library-import-action" type="text" long :loading="busyAction === 'paste-save'" :disabled="busyAction !== null" @click="() => pasteFromClipboard(true, 'baidu-netdisk-ai')">百度网盘 AI 粘贴并保存</Button>
               <Button class="library-import-action" type="text" long :loading="busyAction === 'paste-image'" :disabled="busyAction !== null" @click="() => pasteImageFromClipboard()">粘贴图片</Button>
               <Button class="library-import-action" type="text" long :loading="busyAction === 'paste-save'" :disabled="busyAction !== null" @click="() => pasteFromClipboard(true)">粘贴并保存</Button>
             </template>

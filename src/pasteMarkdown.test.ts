@@ -76,6 +76,43 @@ describe('rich clipboard list hierarchy', () => {
     expect(parseMarkdown('hours.md', pasted).headings).toHaveLength(3)
   })
 
+  it('formats Baidu Netdisk AI summaries into timestamped outline cards', () => {
+    const source = [
+      '摘要',
+      'FDE（前线部署工程师）是将AI技术落地到企业业务场景的关键角色。',
+      '',
+      '分段总结',
+      '00:01',
+      '职业红利与信息差',
+      '1.职业红利：第一批知道AI商业化的人，存在巨大的信息差。',
+      '2.信息差：关于AI赛道的赚钱方式、分类、所需能力等。',
+      '',
+      '01:32',
+      '七天系统大课介绍',
+      '1.课程目标：全面理解AI商业化的职业（FD）。',
+      '',
+      '重点',
+      '大模型应用中的关键环节',
+      '04:52',
+      'AI商业化的机会',
+      '08:16',
+    ].join('\n')
+
+    const pasted = formatClipboardToMarkdown('', source, 'baidu-netdisk-ai')
+    expect(pasted).toContain('## 摘要')
+    expect(pasted).toContain('## 分段总结')
+    expect(pasted).toContain('### 职业红利与信息差 00:01')
+    expect(pasted).toContain('### 七天系统大课介绍 01:32')
+    expect(pasted).toContain('### 大模型应用中的关键环节 04:52')
+    expect(pasted).toContain('### AI商业化的机会 08:16')
+
+    const document = parseMarkdown('baidu-netdisk-ai.md', pasted)
+    expect(document.headings.map((heading) => heading.text)).toEqual([
+      '摘要', '分段总结', '职业红利与信息差 00:01', '七天系统大课介绍 01:32', '重点', '大模型应用中的关键环节 04:52', 'AI商业化的机会 08:16',
+    ])
+    expect(document.regions.some((region) => region.type === 'list' && region.html.includes('职业红利'))).toBe(true)
+  })
+
   it('keeps flattened step descriptions inside their nested list item', () => {
     const source = [
       '实战选品策略与平台操作 38:02',

@@ -1,5 +1,7 @@
 type ClipboardDocument = Document
 
+export type ClipboardFormat = 'default' | 'baidu-netdisk-ai'
+
 function inlineText(value: string, node?: Node) {
   let element = node?.parentElement ?? null
   while (element) {
@@ -511,6 +513,107 @@ function normalizeRichClipboardText(value: string) {
   return result.join('\n')
 }
 
+function baiduNetdiskAiSection(value: string) {
+  const label = value.trim().replace(/[：:]$/, '').replace(/\s+/g, '')
+  if (label === '摘要') return '摘要'
+  if (label === '分段总结') return '分段总结'
+  if (label === '重点') return '重点'
+  return null
+}
+
+function baiduNetdiskAiTimestamp(value: string) {
+  return value.trim().match(/^\[?(\d{1,2}:\d{2}(?::\d{2})?)\]?$/)?.[1] ?? ''
+}
+
+function normalizeBaiduNetdiskAiText(value: string) {
+  const lines = value.replace(/\r\n?/g, '\n').split('\n')
+  const sectionLabels = lines.map(baiduNetdiskAiSection).filter((label) => Boolean(label))
+  const timestampCount = lines.filter((line) => Boolean(baiduNetdiskAiTimestamp(line))).length
+  if (!sectionLabels.includes('分段总结') || timestampCount < 2 || (!sectionLabels.includes('摘要') && !sectionLabels.includes('重点'))) return null
+
+  const result: string[] = []
+  let section: string | null = null
+  let pendingTimestamp = ''
+  let pendingTitle = ''
+  let convertedHeadings = 0
+  const appendHeading = (title: string, timestamp: string) => {
+    const cleanTitle = title.trim()
+    if (!cleanTitle || !timestamp) return
+    if (result.at(-1)?.trim()) result.push('')
+    result.push(`### ${cleanTitle} ${timestamp}`, '')
+    convertedHeadings += 1
+  }
+
+  for (const line of lines) {
+    const trimmed = line.trim()
+    const label = baiduNetdiskAiSection(trimmed)
+    if (label) {
+      pendingTimestamp = ''
+      pendingTitle = ''
+      if (result.at(-1)?.trim()) result.push('')
+      result.push(`## ${label}`, '')
+      section = label
+      continue
+    }
+    if (!section) {
+      result.push(line)
+      continue
+    }
+    if (!trimmed) {
+      if (result.at(-1)?.trim()) result.push('')
+      continue
+    }
+
+    const timestamp = baiduNetdiskAiTimestamp(trimmed)
+    if (section === '摘要') {
+      result.push(trimmed)
+      continue
+    }
+    if (section === '分段总结') {
+      const inlineHeading = trimmed.match(/^(.+?)\s+(\d{1,2}:\d{2}(?::\d{2})?)$/)
+      if (inlineHeading) {
+        appendHeading(inlineHeading[1], inlineHeading[2])
+        pendingTimestamp = ''
+        continue
+      }
+      if (timestamp) {
+        pendingTimestamp = timestamp
+        continue
+      }
+      if (pendingTimestamp) {
+        appendHeading(trimmed, pendingTimestamp)
+        pendingTimestamp = ''
+        continue
+      }
+      result.push(line)
+      continue
+    }
+
+    const inlineHeading = trimmed.match(/^(.+?)\s+(\d{1,2}:\d{2}(?::\d{2})?)$/)
+    if (inlineHeading) {
+      appendHeading(inlineHeading[1], inlineHeading[2])
+      pendingTitle = ''
+      continue
+    }
+    if (timestamp) {
+      if (pendingTitle) appendHeading(pendingTitle, timestamp)
+      else pendingTimestamp = timestamp
+      pendingTitle = ''
+      continue
+    }
+    if (pendingTimestamp) {
+      appendHeading(trimmed, pendingTimestamp)
+      pendingTimestamp = ''
+      continue
+    }
+    pendingTitle = trimmed
+  }
+
+  if (pendingTitle) result.push(pendingTitle)
+  if (pendingTimestamp) result.push(pendingTimestamp)
+  return convertedHeadings >= 2 ? result.join('\n') : null
+}
+
 function insertClipboardImages(source: string, html: string) {
   const images = clipboardImagesMarkdown(html)
   if (!images) return source
@@ -615,8 +718,17 @@ export function htmlToMarkdown(html: string) {
   return normalizeArticleSections(stripDecorativeHeadingStars(normalizeMarkdown(stripAccidentalClipboardIndent(source))))
 }
 
-export function formatClipboardToMarkdown(html: string, text: string) {
+export function formatBaiduNetdiskAiToMarkdown(text: string) {
+  const normalized = normalizeBaiduNetdiskAiText(promoteClipboardImageLinks(text))
+  return normalized ? formatPastedText(normalized.replace(/^([ \t]*)(\d+)[.)](?=\S)/gm, '$1$2. ')) : ''
+}
+
+export function formatClipboardToMarkdown(html: string, text: string, format: ClipboardFormat = 'default') {
   const promotedText = promoteClipboardImageLinks(text)
+  if (format === 'baidu-netdisk-ai') {
+    const baiduMarkdown = formatBaiduNetdiskAiToMarkdown(promotedText)
+    if (baiduMarkdown) return insertClipboardImages(baiduMarkdown, html)
+  }
   const clipboardMarkdown = clipboardHtmlMatchesPlainText(html, promotedText) ? htmlToMarkdown(html) : ''
   const hasStructuredClipboardContent = /(?:^|\n)[ \t]*(?:#{1,6}[ \t]+|[-+*][ \t]+|\d+[.)][ \t]+)/m.test(clipboardMarkdown)
   const hasExplicitMarkdownStructure = /(?:^|\n)[ \t]{0,3}#{1,6}[ \t]+|(?:^|\n)[ \t]{2,}(?:[-+*]|\d+[.)])[ \t]+/m.test(promotedText)
