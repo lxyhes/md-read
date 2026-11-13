@@ -5884,8 +5884,8 @@ async function requestFullscreen() {
             </div>
           </div>
         </Teleport>
-        <div class="reader-layout" :class="{ 'focus-layout': store.mode === 'focus', 'clean-layout': store.mode === 'clean', 'split-layout': readerDisplayMode === 'split', 'context-open': contextPanelOpen, 'outline-panel-collapsed': outlinePanelCollapsed, 'is-resizing-outline': outlinePanelResizing }" :style="{ '--outline-panel-width': `${outlinePanelWidth}px`, gridTemplateColumns: webPreviewUrl ? 'minmax(0, 1fr)' : undefined }">
-          <aside v-if="store.mode !== 'focus' && store.mode !== 'clean'" id="reader-sidebar" class="outline-panel" :class="{ 'is-collapsed': outlinePanelCollapsed }">
+        <div class="reader-layout" :class="{ 'focus-layout': store.mode === 'focus', 'clean-layout': store.mode === 'clean', 'split-layout': readerDisplayMode === 'split', 'html-layout': readerDisplayMode === 'html', 'context-open': contextPanelOpen, 'outline-panel-collapsed': outlinePanelCollapsed, 'is-resizing-outline': outlinePanelResizing }" :style="{ '--outline-panel-width': `${outlinePanelWidth}px`, gridTemplateColumns: webPreviewUrl ? 'minmax(0, 1fr)' : undefined }">
+          <aside v-if="store.mode !== 'focus' && store.mode !== 'clean' && readerDisplayMode !== 'html'" id="reader-sidebar" class="outline-panel" :class="{ 'is-collapsed': outlinePanelCollapsed }">
             <button v-if="outlinePanelCollapsed" ref="outlinePanelExpandButton" class="outline-panel-expand" type="button" title="展开阅读侧栏" aria-label="展开阅读侧栏" :aria-expanded="!outlinePanelCollapsed" aria-controls="reader-sidebar" @click="toggleOutlinePanel"><AppIcon name="chevron-right" :size="13" /></button>
             <template v-else>
             <div class="outline-resizer" role="separator" tabindex="0" aria-orientation="vertical" aria-label="调整阅读侧栏宽度；拖窄可收起，双击恢复默认宽度，按 Enter 收起" :aria-valuemin="outlinePanelMinWidth" :aria-valuemax="outlinePanelMaxWidth" :aria-valuenow="outlinePanelWidth" :aria-valuetext="`${outlinePanelWidth}px`" title="拖动调整宽度；拖窄可收起；双击恢复默认宽度" @pointerdown="startOutlinePanelResize" @dblclick="resetOutlinePanelWidth" @keydown="onOutlinePanelResizeKeydown" />
@@ -6109,7 +6109,7 @@ async function requestFullscreen() {
                 <div v-if="readerDisplayMode === 'html'" class="reader-html-preview">
                   <p v-if="readerHtmlPreviewLoading" class="reader-html-preview-status" role="status">正在生成网页预览…</p>
                   <div v-else-if="readerHtmlPreviewError" class="reader-html-preview-status" role="alert"><span>{{ readerHtmlPreviewError }}</span><button type="button" @click="showReaderHtmlPreview">重试</button></div>
-                  <iframe v-else-if="readerHtmlPreview" :srcdoc="readerHtmlPreview" title="HTML 网页预览" sandbox="" />
+                  <iframe v-else-if="readerHtmlPreview" :srcdoc="readerHtmlPreview" title="HTML 网页预览" sandbox="allow-scripts" />
                 </div>
                 <div v-if="readerDisplayMode === 'markdown' || readerDisplayMode === 'split'" class="reader-markdown">
                 <div class="regions-stack" :class="{ virtualized: virtualizedReader }">
@@ -6151,7 +6151,7 @@ async function requestFullscreen() {
               <EditorContextActions v-else :clipboard="editorContextClipboard" :format="editorContextFormat" :groups="editorContextGroups" @close="finishEditorContextMenu" />
             </div>
           </Teleport>
-        <aside v-if="contextPanelOpen && store.mode !== 'focus' && store.mode !== 'clean'" class="context-panel">
+        <aside v-if="contextPanelOpen && store.mode !== 'focus' && store.mode !== 'clean' && readerDisplayMode !== 'html'" class="context-panel">
           <div class="context-top"><span class="section-kicker">阅读上下文</span><button class="text-button" type="button" @click="view = 'themes'">主题 <AppIcon name="external" :size="12" /></button></div>
           <div class="context-card current-context"><span class="section-kicker">当前章节</span><strong>{{ currentHeading?.text || '开篇' }}</strong><small>{{ store.currentDocument?.regions.length ?? 0 }} 个阅读区域 · {{ currentAnnotations.length }} 条批注</small></div>
           <div class="context-actions"><button type="button" @click="toggleFocusMode"><AppIcon name="focus" :size="13" />进入专注</button><button type="button" @click="toggleCleanMode"><AppIcon name="eye" :size="13" />纯净阅读</button></div>

@@ -42,6 +42,16 @@ describe('ordered list numbering', () => {
 })
 
 describe('raw Markdown HTML sanitization', () => {
+  it('renders comparison paragraphs with the reader layout', () => {
+    const html = renderMarkdownFragment('AI商业化 + 商业AI化\n怎么把AI卖出去? 怎么把商业AI化?\n技术要变成生意 生意要用上技术')
+    const root = document.createElement('div')
+    root.innerHTML = html
+    expect(root.querySelector('.reader-comparison-layout')).not.toBeNull()
+    expect(root.querySelectorAll('.reader-comparison-column')).toHaveLength(2)
+    expect(root.textContent).toContain('AI商业化')
+    expect(root.textContent).toContain('商业AI化')
+  })
+
   it('removes script and style-based network sinks', () => {
     const html = renderMarkdownFragment('<script>alert(1)</script><div style="background:url(https://tracker.invalid/x)">text</div>')
     expect(html).not.toContain('<script')

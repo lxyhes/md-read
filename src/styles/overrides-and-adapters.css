@@ -2688,6 +2688,21 @@ a:active > .app-icon-vector { transform: scale(.92); }
 html:has(.reader-page), body:has(.reader-page), #app:has(.reader-page) { min-width: 0; }
 .app-shell .reader-document-panes.has-second-document .reader-content { width: min(var(--reader-width), calc(100% - 56px)) !important; padding: 28px 0 80px !important; }
 .app-shell .reader-document-panes.has-second-document .reader-content:not(.is-course-outline) .reader-title { margin-top: 12px !important; font-size: 28px !important; line-height: 1.25 !important; }
+.app-shell .reader-layout.html-layout {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+.app-shell .reader-layout.html-layout .reader-main-column,
+.app-shell .reader-layout.html-layout .reader-document-panes {
+  width: 100%;
+  min-width: 0;
+}
+.app-shell .reader-layout.html-layout .reader-document-panes .reader-content.reader-display-html {
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0;
+  margin-inline: 0;
+  padding: 0 !important;
+}
 .dual-document-toggle { white-space: nowrap; padding: 6px 8px; }
 .dual-document-toggle[aria-pressed="true"] { color: var(--accent); }
 .dual-document-toggle:disabled { opacity: .45; cursor: default; }

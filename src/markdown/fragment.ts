@@ -3,6 +3,7 @@ import remarkFrontmatter from 'remark-frontmatter'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import remarkParse from 'remark-parse'
+import { parseComparisonLayout, renderComparisonLayout } from '../comparisonLayout'
 import { blockHtmlWithSourceIndent, renderFootnotes } from './render'
 import { createRenderContext, nodeText, resolveMarkdownReferences, type MarkdownUrlResolver, type MdastNode } from './shared'
 import { isClipboardImageLink, normalizeMixedOrderedListSource } from '../pasteMarkdown'
@@ -183,7 +184,12 @@ export function renderMarkdownFragment(source: string, resolveUrl: MarkdownUrlRe
   const context = createRenderContext(new Map((tree.children ?? []).filter(node => node.type === 'footnoteDefinition').map(node => [node.identifier ?? node.label ?? '', node])), headings)
   const html = (tree.children ?? [])
     .filter((node) => node.type !== 'yaml' && node.type !== 'toml' && node.type !== 'footnoteDefinition')
-    .map((node) => blockHtmlWithSourceIndent(node, normalizedSource, resolveUrl, context))
+    .map((node) => {
+      const comparisonLayout = ['paragraph', 'blockquote'].includes(node.type) ? parseComparisonLayout(nodeText(node)) : null
+      return comparisonLayout
+        ? renderComparisonLayout(comparisonLayout, node.type === 'blockquote')
+        : blockHtmlWithSourceIndent(node, normalizedSource, resolveUrl, context)
+    })
     .join('')
   return `${html}${renderFootnotes(context, resolveUrl)}`
 }
