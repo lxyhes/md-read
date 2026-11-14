@@ -26,6 +26,10 @@ export function isFenceBacktickInput(value: string, cursor: number) {
   return /^ {0,3}`{2,}$/.test(value.slice(lineStart, cursor)) && value[cursor] !== '`'
 }
 
+export function preserveLineEndings(value: string, original: string) {
+  return original.includes('\r\n') ? value.replace(/\r\n|\r|\n/g, '\r\n') : value
+}
+
 export function selectedLineRange(value: string, start: number, end: number) {
   const lineStart = start === 0 ? 0 : value.lastIndexOf('\n', start - 1) + 1
   const nextBreak = value.indexOf('\n', end > start ? end - 1 : end)

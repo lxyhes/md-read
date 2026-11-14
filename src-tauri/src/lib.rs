@@ -123,6 +123,28 @@ fn write_markdown_checked(path: String, source: String, expected_source: Option<
     Ok(())
 }
 
+#[tauri::command]
+fn remove_managed_asset(markdown_path: String, asset_path: String) -> Result<(), String> {
+    let markdown = Path::new(&markdown_path);
+    if !matches!(markdown.extension().and_then(|ext| ext.to_str()).map(str::to_ascii_lowercase).as_deref(), Some("md" | "markdown" | "qmd")) {
+        return Err("只能管理 Markdown / Quarto 文档的媒体".into());
+    }
+    let document_directory = markdown.parent().ok_or("无法确定文档目录")?.canonicalize()
+        .map_err(|error| format!("无法读取文档目录：{error}"))?;
+    let managed_directory = document_directory.join(".moyue-assets").canonicalize()
+        .map_err(|error| format!("无法读取媒体目录：{error}"))?;
+    let asset = Path::new(&asset_path).canonicalize().map_err(|error| format!("媒体文件不存在：{error}"))?;
+    if !managed_directory.starts_with(&document_directory) || !asset.is_file() || !asset.starts_with(&managed_directory) {
+        return Err("只能删除当前文档 .moyue-assets 目录中的文件".into());
+    }
+    std::fs::remove_file(asset).map_err(|error| format!("删除媒体失败：{error}"))
+}
+
+#[tauri::command]
+fn exit_app(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
 fn is_image(path: &Path) -> bool {
     matches!(
         path.extension().and_then(|value| value.to_str()).map(str::to_ascii_lowercase).as_deref(),
@@ -926,14 +948,6 @@ pub fn run() {
             file_open::queue_files(app.handle(), file_open::markdown_paths(std::env::args().skip(1), &cwd));
             Ok(())
         })
-        .on_window_event(|window, event| {
-            if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
-                // The native close request has already been approved here. Exit the
-                // process directly so WebView/background tasks cannot keep the EXE alive.
-                let _ = window;
-                std::process::exit(0);
-            }
-        })
         .on_page_load(|webview, payload| {
             if webview.label() == "main" && payload.event() == tauri::webview::PageLoadEvent::Finished {
                 if let Err(error) = webview.window().show() {
@@ -945,7 +959,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
-        .invoke_handler(tauri::generate_handler![file_open::take_open_files, tracked_directory, write_markdown_checked, allow_asset_directory, read_local_image, read_clipboard_image, read_clipboard_snapshot, read_clipboard_rich_text, read_clipboard_signature, write_clipboard_snapshot, read_remote_image, download_remote_image, upload_piclist_image, ollama_models, ai_chat, open_directory, reveal_file, open_external_url, web_preview::web_preview, pandoc_import_document, pandoc_export_document, export_html_to_pdf])
+        .invoke_handler(tauri::generate_handler![file_open::take_open_files, tracked_directory, write_markdown_checked, remove_managed_asset, exit_app, allow_asset_directory, read_local_image, read_clipboard_image, read_clipboard_snapshot, read_clipboard_rich_text, read_clipboard_signature, write_clipboard_snapshot, read_remote_image, download_remote_image, upload_piclist_image, ollama_models, ai_chat, open_directory, reveal_file, open_external_url, web_preview::web_preview, pandoc_import_document, pandoc_export_document, export_html_to_pdf])
         .build(tauri::generate_context!())
         .expect("error while building Moyue application")
         .run(|_app, _event| {
@@ -961,7 +975,25 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_allowed_external_url, is_image, is_safe_remote_image_url, is_supported_remote_image, pandoc_export_format, pandoc_import_extension, parse_ollama_models, remote_image_referer};
+    use super::{is_allowed_external_url, is_image, is_safe_remote_image_url, is_supported_remote_image, pandoc_export_format, pandoc_import_extension, parse_ollama_models, remote_image_referer, remove_managed_asset};
+
+    #[test]
+    fn only_deletes_assets_managed_by_the_current_document() {
+        let root = tempfile::tempdir().unwrap();
+        let markdown = root.path().join("note.md");
+        let managed = root.path().join(".moyue-assets");
+        let outside = root.path().join("outside.png");
+        std::fs::write(&markdown, "![image](.moyue-assets/image.png)").unwrap();
+        std::fs::create_dir(&managed).unwrap();
+        let image = managed.join("image.png");
+        std::fs::write(&image, b"image").unwrap();
+        std::fs::write(&outside, b"outside").unwrap();
+
+        assert!(remove_managed_asset(markdown.to_string_lossy().into(), outside.to_string_lossy().into()).is_err());
+        assert!(outside.exists());
+        remove_managed_asset(markdown.to_string_lossy().into(), image.to_string_lossy().into()).unwrap();
+        assert!(!image.exists());
+    }
 
     #[test]
     fn reads_ollama_model_names() {

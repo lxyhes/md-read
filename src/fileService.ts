@@ -1,7 +1,7 @@
 import { convertFileSrc, invoke, isTauri as tauriIsTauri } from '@tauri-apps/api/core'
 import { appDataDir, configDir } from '@tauri-apps/api/path'
 import { open, save } from '@tauri-apps/plugin-dialog'
-import { copyFile, mkdir, readDir, readFile, readTextFile, remove, rename, stat, watch, writeFile, writeTextFile } from '@tauri-apps/plugin-fs'
+import { copyFile, mkdir, readDir, readFile, readTextFile, rename, stat, watch, writeFile, writeTextFile } from '@tauri-apps/plugin-fs'
 import { renderMarkdownFragment } from './markdown/fragment'
 import { isQuarkImageUrl } from './markdown/shared'
 import { promoteClipboardImageLinks } from './pasteMarkdown'
@@ -473,7 +473,7 @@ export async function renameMarkdownAsset(markdownPath: string, markdownUrl: str
 
 export async function removeMarkdownAsset(markdownPath: string, markdownUrl: string): Promise<void> {
   if (!isTauri()) throw new Error('图片删除需要桌面端')
-  await remove(managedAssetPath(markdownPath, markdownUrl))
+  await invoke('remove_managed_asset', { markdownPath, assetPath: managedAssetPath(markdownPath, markdownUrl) })
 }
 
 export async function organizeMarkdownAssets(markdownPath: string, source: string, relativePathPrefix = false): Promise<{ source: string; count: number }> {

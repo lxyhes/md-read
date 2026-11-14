@@ -22,6 +22,7 @@ import Checkbox from '@arco-design/web-vue/es/checkbox'
 import '@arco-design/web-vue/es/checkbox/style/css.js'
 import { invoke, isTauri as tauriIsTauri } from '@tauri-apps/api/core'
 import { bindNativeFileOpen } from './nativeFileOpen'
+import { bindNativeClose } from './nativeClose'
 import { readNativeClipboardRichText } from './nativeClipboard'
 import { canScrollFocusedRegion } from './focusWheel'
 import { useReaderStore } from './stores/reader'
@@ -55,7 +56,7 @@ import { getDocumentStatistics } from './documentStats'
 import { asciiDiagramToMermaid, asciiTreeToTree, markdownToTree } from './asciiDiagram'
 import { formatClipboardImage, formatClipboardToMarkdown, htmlToMarkdown, normalizeMixedOrderedListSource, promoteClipboardImageLinks, suggestPastedMarkdownName, type ClipboardFormat } from './pasteMarkdown'
 import { matchQuickOpen } from './quickOpen'
-import { indentSelection, codeIndentInsertion, isFenceBacktickInput, selectedLineRange, removeSelectedLines, setHeadingLines, setOrderedListLines, toggleHeadingLines, toggleInlineMarkup } from './editorInput'
+import { indentSelection, codeIndentInsertion, isFenceBacktickInput, preserveLineEndings, selectedLineRange, removeSelectedLines, setHeadingLines, setOrderedListLines, toggleHeadingLines, toggleInlineMarkup } from './editorInput'
 import { createEditorHistory, recordEditorHistory, stepEditorHistory } from './editorHistory'
 import { findEditorMatches, replaceEditorMatches } from './editorFind'
 import { parseEditableTable, serializeEditableTable, moveTableRow, moveTableColumn, deleteTableRow, deleteTableColumn, pasteTableCells, type TableAlignment } from './tableEditing'
@@ -347,7 +348,7 @@ const editorSplitRatio = ref(58)
 const editorSplitResizing = ref(false)
 let editorSplitResizeCleanup: (() => void) | null = null
 const editorListNormalization = computed(() => normalizeMixedOrderedListSource(restoreEditorInlineImages(editorSource.value)))
-const editorSourceForSave = computed(() => restoreEditorInlineImages(editorSource.value))
+const editorSourceForSave = computed(() => preserveLineEndings(restoreEditorInlineImages(editorSource.value), editorOriginalSource.value))
 const editorDirty = computed(() => editorOpen.value && editorSourceForSave.value !== editorOriginalSource.value)
 const savingDocument = ref(false)
 const editorSourceStats = computed(() => {
@@ -398,6 +399,7 @@ let focusWheelAt = -Infinity
 let readerZoomWheelAt = -Infinity
 let stopNativeFileDrop: (() => void) | null = null
 let stopNativeFileOpen: (() => void) | null = null
+let stopNativeClose: (() => void) | null = null
 const documentWatchers = new Map<string, () => void>()
 const documentReloadTimers = new Map<string, number>()
 let documentWatchRequest = 0
@@ -4234,7 +4236,10 @@ async function boot() {
 }
 onMounted(() => {
   void boot()
-  if (isTauriRuntime()) void import('@tauri-apps/api/window').then(({ getCurrentWindow }) => getCurrentWindow().isAlwaysOnTop()).then(value => { editorAlwaysOnTop.value = value }).catch(() => {})
+  if (isTauriRuntime()) {
+    void import('@tauri-apps/api/window').then(({ getCurrentWindow }) => getCurrentWindow().isAlwaysOnTop()).then(value => { editorAlwaysOnTop.value = value }).catch(() => {})
+    void bindNativeClose(() => editorDirty.value, persistEditorDraft, notify).then(stop => { stopNativeClose = stop }).catch(() => notify('无法启用关闭前草稿保护'))
+  }
   void migrateEditorDrafts()
   void loadDurableData('moyue:clipboard-history', value => Array.isArray(value) ? value : null)
   void loadPersistedAiSettings()
@@ -4263,6 +4268,7 @@ onUnmounted(() => {
   stopFocusTimer()
   stopNativeFileDrop?.()
   stopNativeFileOpen?.()
+  stopNativeClose?.()
   stopAllDocumentWatchers()
   directoryWatchRequest++
   if (directoryPathTimer !== null) window.clearInterval(directoryPathTimer)

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { markdownLanguage } from '@codemirror/lang-markdown'
-import { codeIndentInsertion, indentSelection, isFenceBacktickInput, isTopLevelParagraph, selectedLineRange, removeSelectedLines, setHeadingLines, setOrderedListLines, toggleHeadingLines, toggleInlineMarkup } from './editorInput'
+import { codeIndentInsertion, indentSelection, isFenceBacktickInput, isTopLevelParagraph, preserveLineEndings, selectedLineRange, removeSelectedLines, setHeadingLines, setOrderedListLines, toggleHeadingLines, toggleInlineMarkup } from './editorInput'
 
 describe('ordered list menu action', () => {
   it('toggles inline formatting on and off while preserving the selection', () => {
@@ -131,6 +131,11 @@ describe('editor indentation', () => {
   it('inserts spaces at a collapsed caret', () => {
     expect(indentSelection('one', 1, 1, false)).toEqual({ value: 'o  ne', start: 3, end: 3 })
   })
+})
+
+it('keeps CRLF documents consistent after editor commands insert LF', () => {
+  expect(preserveLineEndings('one\r\ntwo\nthree', 'one\r\ntwo')).toBe('one\r\ntwo\r\nthree')
+  expect(preserveLineEndings('one\ntwo', 'one\ntwo')).toBe('one\ntwo')
 })
 
 function atEnd(value: string) { return codeIndentInsertion(value, value.length) }
