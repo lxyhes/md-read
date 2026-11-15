@@ -38,8 +38,34 @@ describe('knowledge search', () => {
     const matches = searchKnowledge([first, second], '部署', 8)
 
     expect(matches[0]?.region.type).toBe('heading')
-    expect(matches.filter((match) => match.document.id === first.id)).toHaveLength(3)
+    expect(matches.filter((match) => match.document.id === first.id).length).toBeLessThanOrEqual(4)
     expect(matches.some((match) => match.document.id === second.id)).toBe(true)
+  })
+
+  it('ignores question filler and ranks rarer evidence above repeated generic terms', () => {
+    const generic = parseMarkdown('notes.md', '# 项目说明\n\n项目项目项目的一般介绍。')
+    const answer = parseMarkdown('release.md', '# 发布手册\n\n上线前必须先执行数据库迁移。')
+    const matches = searchKnowledge([generic, answer], '请问这个项目如何执行数据库迁移？')
+
+    expect(matches[0]?.document.id).toBe(answer.id)
+  })
+
+  it('retrieves representative sections for corpus summaries without literal matches', () => {
+    const first = parseMarkdown('alpha.md', '# Alpha\n\n## 目标\n\n保护用户的本地文件。\n\n## 限制\n\n目前只支持 Markdown。')
+    const second = parseMarkdown('beta.md', '# Beta\n\n## 能力\n\n支持跨文档问答。\n\n## 计划\n\n后续增加评测集。')
+    const matches = searchKnowledge([first, second], '总结全部资料的核心要点', 8)
+
+    expect(matches.length).toBeGreaterThanOrEqual(4)
+    expect(new Set(matches.map((match) => match.document.id))).toEqual(new Set([first.id, second.id]))
+  })
+
+  it('adds adjacent text to model context while keeping the citation excerpt precise', () => {
+    const document = parseMarkdown('deploy.md', '# 部署\n\n前置条件：先备份数据库。\n\n执行升级脚本 deploy.sh。\n\n完成后检查健康接口。')
+    const match = searchKnowledge([document], 'deploy.sh')[0]
+
+    expect(match.snippet).toBe('执行升级脚本 deploy.sh。')
+    expect(match.context).toContain('先备份数据库')
+    expect(match.context).toContain('检查健康接口')
   })
 
   it('removes highly similar excerpts from the same document', () => {

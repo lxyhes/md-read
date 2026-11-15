@@ -53,6 +53,27 @@ export function messagesForKnowledgeQuestion(messages: KnowledgeMessage[], quest
 
 export function validatedKnowledgeAnswer(content: string, citations: KnowledgeCitation[]) {
   const valid = new Set(citations.map((citation) => citation.index))
+  const structured = content.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
+  try {
+    const payload = JSON.parse(structured) as { claims?: unknown; insufficient?: unknown }
+    if (Array.isArray(payload.claims)) {
+      const used = new Set<number>()
+      const claims = payload.claims.flatMap((value) => {
+        if (!value || typeof value !== 'object') return []
+        const item = value as { text?: unknown; citations?: unknown }
+        if (typeof item.text !== 'string' || !Array.isArray(item.citations)) return []
+        const indexes = [...new Set(item.citations.filter((index): index is number =>
+          Number.isInteger(index) && valid.has(index as number)))]
+        const text = item.text.replace(/\[(\d+)\]/g, '').replace(/\s+/g, ' ').trim()
+        if (!text || !indexes.length) return []
+        indexes.forEach((index) => used.add(index))
+        return [`• ${text} ${indexes.map((index) => `[${index}]`).join('')}`]
+      })
+      if (claims.length) return { content: claims.join('\n'), citations: citations.filter((citation) => used.has(citation.index)) }
+      if (payload.insufficient === true) return { content: '现有资料不足以回答这个问题。', citations: [] }
+    }
+  } catch { /* Older and less capable models may still return cited plain text. */ }
+
   const used = new Set<number>()
   const safeContent = content.replace(/\[(\d+)\]/g, (marker, value: string) => {
     const index = Number(value)
@@ -60,7 +81,9 @@ export function validatedKnowledgeAnswer(content: string, citations: KnowledgeCi
     used.add(index)
     return marker
   })
-  return { content: safeContent, citations: citations.filter((citation) => used.has(citation.index)) }
+  if (!used.size) return { content: '现有资料不足以生成可核对的回答。', citations: [] }
+  const groundedLines = safeContent.split('\n').filter((line) => !line.trim() || /\[\d+\]/.test(line))
+  return { content: groundedLines.join('\n').trim(), citations: citations.filter((citation) => used.has(citation.index)) }
 }
 
 export function titleForKnowledgeQuestion(question: string) {

@@ -57,6 +57,12 @@ describe('knowledge conversation helpers', () => {
   it('keeps only valid citations actually used by an AI answer', () => {
     const citations = [1, 2].map((index) => ({ index, documentId: 'doc', documentTitle: 'Doc', documentPath: 'doc.md', regionId: `region-${index}`, excerpt: 'Excerpt', sourceHash: 'hash' }))
     expect(validatedKnowledgeAnswer('First [1], invalid [9].', citations)).toEqual({ content: 'First [1], invalid .', citations: [citations[0]] })
+    expect(validatedKnowledgeAnswer('{"claims":[{"text":"First fact","citations":[1,9]},{"text":"Unsupported","citations":[9]}],"insufficient":false}', citations))
+      .toEqual({ content: '• First fact [1]', citations: [citations[0]] })
+    expect(validatedKnowledgeAnswer('```json\n{"claims":[],"insufficient":true}\n```', citations))
+      .toEqual({ content: '现有资料不足以回答这个问题。', citations: [] })
+    expect(validatedKnowledgeAnswer('A confident but unsupported answer.', citations))
+      .toEqual({ content: '现有资料不足以生成可核对的回答。', citations: [] })
   })
 
   it('keeps only available unique sources for a new conversation', () => {
