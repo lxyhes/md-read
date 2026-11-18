@@ -105,6 +105,7 @@ async function getDatabase() {
     const { default: Database } = await import('@tauri-apps/plugin-sql')
     const connection = await Database.load('sqlite:moyue.db')
     await connection.execute(`CREATE TABLE IF NOT EXISTS documents (id TEXT PRIMARY KEY, path TEXT NOT NULL, title TEXT NOT NULL, source_hash TEXT NOT NULL, source TEXT, updated_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS progress (document_id TEXT PRIMARY KEY, region_id TEXT, heading_id TEXT, scroll_percent REAL NOT NULL, reading_time INTEGER NOT NULL, updated_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS annotations (id TEXT PRIMARY KEY, document_id TEXT NOT NULL, region_id TEXT NOT NULL, selected_text TEXT NOT NULL, color TEXT NOT NULL, note TEXT NOT NULL, created_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS knowledge_conversations (id TEXT PRIMARY KEY, title TEXT NOT NULL, source_ids TEXT NOT NULL, messages TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS knowledge_activity (day TEXT PRIMARY KEY, answer_count INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS app_data (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at INTEGER NOT NULL);`)
+    await connection.execute('CREATE TABLE IF NOT EXISTS knowledge_embeddings (document_id TEXT PRIMARY KEY, source_hash TEXT NOT NULL, model_digest TEXT NOT NULL, index_version TEXT NOT NULL, vectors TEXT NOT NULL)')
     database = connection
     return connection
   })().catch((error: unknown) => {
@@ -366,6 +367,27 @@ export async function saveDocumentSnapshot(document: ReaderDocument): Promise<vo
   if (!ids.includes(document.id)) writeJson(SNAPSHOT_INDEX_KEY, [...ids, document.id])
 }
 
+export async function loadKnowledgeVectors(documentId: string, sourceHash: string, digest: string, version: string): Promise<string | undefined> {
+  const db = await getDatabase()
+  if (!db) return
+  const [row] = await db.select<Array<{ vectors: string }>>(
+    'SELECT vectors FROM knowledge_embeddings WHERE document_id = ? AND source_hash = ? AND model_digest = ? AND index_version = ?',
+    [documentId, sourceHash, digest, version],
+  )
+  return row?.vectors
+}
+
+export async function saveKnowledgeVectors(documentId: string, sourceHash: string, digest: string, version: string, vectors: string) {
+  const db = await getDatabase()
+  await db?.execute('INSERT OR REPLACE INTO knowledge_embeddings (document_id, source_hash, model_digest, index_version, vectors) VALUES (?, ?, ?, ?, ?)',
+    [documentId, sourceHash, digest, version, vectors])
+}
+
+export async function deleteKnowledgeVectors(documentId: string) {
+  const db = await getDatabase()
+  await db?.execute('DELETE FROM knowledge_embeddings WHERE document_id = ?', [documentId])
+}
+
 export async function deleteDocument(documentId: string): Promise<void> {
   await deleteBrowserSnapshot(documentId)
   const ids = snapshotIndex()
@@ -378,6 +400,7 @@ export async function deleteDocument(documentId: string): Promise<void> {
   await db?.execute('DELETE FROM documents WHERE id = ?', [documentId])
   await db?.execute('DELETE FROM progress WHERE document_id = ?', [documentId])
   await db?.execute('DELETE FROM annotations WHERE document_id = ?', [documentId])
+  await deleteKnowledgeVectors(documentId)
 }
 
 export function loadDocumentSnapshots(): ReaderDocument[] {

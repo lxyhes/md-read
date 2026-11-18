@@ -177,6 +177,8 @@ Windows 打包需要在 Windows 上执行，产物位于 `src-tauri/target/relea
 - AI 回答按结论绑定引用编号；没有有效原文引用的结论不会展示。
 - 知识库支持离线关键词检索；阅读器划词“翻译”也会调用已配置的 AI 服务。
 
+桌面端可以在同一设置页开启「本地语义检索」并保存配置。先用 `ollama pull qwen3-embedding:0.6b` 安装模型，再在知识库选择「本次资料」。墨阅后台建立本机索引，关闭 AI 生成时也能按语义查找原文。模型不可用或等待超时时，本轮自动使用关键词检索。外部修改了未打开的文件后，可用「刷新资料」同步。
+
 知识库问答支持 Enter 发送、Shift + Enter 换行，中文输入法选词时不会发送。每轮最多检索 8 条原文；引用摘录最多保留 1200 字，启用 AI 时会连同命中段落的相邻上下文发送给所选模型，单条最多 1600 字。“继续解释”“举个例子”等追问会结合最近的问题检索。回答下方可复制正文与引用，右侧可按标题或消息内容搜索全部历史对话。浏览器端 AI 请求超过 120 秒会结束等待，并保留问题以便重试。
 
 欢迎使用、试读自己的 Markdown 文档，并通过 Issue 或 PR 告诉我们：你希望下一次阅读变得更顺手的地方是什么？
@@ -187,6 +189,8 @@ Windows 打包需要在 Windows 上执行，产物位于 `src-tauri/target/relea
 npm run test
 npm run build
 ```
+
+安装语义模型并启动 Ollama 后，可在 PowerShell 中运行 `$env:MOYUE_EVAL_OLLAMA = '1'`，再运行 `npm run test -- src/knowledgeSearch.evaluation.test.ts`，比较关键词与混合检索在 30 道段落级题目上的表现。
 
 当前测试覆盖 Markdown Region 解析、危险 HTML、相对资源、粘贴、源码保真的实时编辑、草稿恢复、表格操作、导出 XML 及公式/脚注/媒体。原生外部工具验收的复现命令见 [验收记录](docs/typora-gap-verification.md)。
 

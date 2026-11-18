@@ -30,6 +30,7 @@ function queryTermsFor(query: string) {
 type SearchIndex = {
   content: string[]
   headings: string[]
+  sectionStarts: number[]
   byTerm: Map<string, Set<number>>
   frequencies: Array<Map<string, number>>
   lengths: number[]
@@ -38,23 +39,32 @@ type SearchIndex = {
 
 const indexes = new WeakMap<ReaderDocument, SearchIndex>()
 
+export function knowledgeRegionText(region: ReaderRegion) {
+  const rows = region.metadata?.tableRows
+  return region.type === 'table' && Array.isArray(rows) ? rows.join('\n') : region.textContent
+}
+
 function indexFor(document: ReaderDocument) {
   const saved = indexes.get(document)
   if (saved) return saved
   const headingByRegion = new Map(document.headings.map((heading) => [heading.regionId, heading.text.toLowerCase()]))
   const content: string[] = []
   const headings: string[] = []
+  const sectionStarts: number[] = []
   const byTerm = new Map<string, Set<number>>()
   const frequencies: Array<Map<string, number>> = []
   const lengths: number[] = []
   let currentHeading = ''
+  let sectionStart = -1
   document.regions.forEach((region, index) => {
+    if (headingByRegion.has(region.id)) sectionStart = index
     currentHeading = headingByRegion.get(region.id) ?? currentHeading
-    const normalized = region.textContent.replace(/\s+/g, ' ').toLowerCase()
+    const normalized = knowledgeRegionText(region).replace(/\s+/g, ' ').toLowerCase()
     const tokens = termsFor(normalized)
     const counts = new Map<string, number>()
     content.push(normalized)
     headings.push(currentHeading)
+    sectionStarts.push(sectionStart)
     frequencies.push(counts)
     lengths.push(Math.max(1, tokens.length))
     for (const term of tokens) {
@@ -65,7 +75,7 @@ function indexFor(document: ReaderDocument) {
     }
   })
   const created = {
-    content, headings, byTerm, frequencies, lengths,
+    content, headings, sectionStarts, byTerm, frequencies, lengths,
     averageLength: lengths.reduce((sum, length) => sum + length, 0) / Math.max(1, lengths.length),
   }
   indexes.set(document, created)
@@ -88,7 +98,19 @@ function excerpt(text: string, query: string, terms: string[], limit = 1200) {
   return `${start > 0 ? '…' : ''}${normalized.slice(start, end)}${end < normalized.length ? '…' : ''}`
 }
 
-function contextFor(document: ReaderDocument, regionIndex: number, heading: string, query: string, terms: string[]) {
+function contextFor(document: ReaderDocument, regionIndex: number, heading: string, query: string, terms: string[], withinSection = false, evidence?: string) {
+  const sections = indexFor(document).sectionStarts
+  if (withinSection) {
+    const body = (index: number) => {
+      const region = document.regions[index]
+      if (!region || sections[index] !== sections[regionIndex] || ['thematic-break', 'image', 'video'].includes(region.type)) return ''
+      return knowledgeRegionText(region)
+    }
+    const anchor = evidence ?? body(regionIndex)
+    const center = anchor.length <= 1200 ? anchor : excerpt(anchor, query, terms)
+    const sideBudget = Math.floor((1550 - center.length - Math.min(100, heading.length)) / 2)
+    return [heading && `章节：${heading.slice(0, 100)}`, body(regionIndex - 1).slice(-sideBudget), center, body(regionIndex + 1).slice(0, sideBudget)].filter(Boolean).join('\n')
+  }
   const text = [regionIndex - 1, regionIndex, regionIndex + 1].flatMap((index) => {
     const region = document.regions[index]
     return region?.textContent.trim() && !['thematic-break', 'image', 'video'].includes(region.type) ? [region.textContent] : []
@@ -101,7 +123,17 @@ function overviewQuestion(query: string) {
   return /(?:总结|概括|摘要|核心|要点|讲了什么|全文|对比|比较|异同|overview|summar(?:y|ize)|compare)/i.test(query)
 }
 
-export function searchKnowledge(documents: ReaderDocument[], query: string, limit = 8): KnowledgeSearchMatch[] {
+export function knowledgeEvidence(document: ReaderDocument, region: ReaderRegion, query: string, score: number, evidence?: string): KnowledgeSearchMatch {
+  const phrase = query.trim().toLowerCase()
+  const terms = queryTermsFor(phrase)
+  return {
+    document, region, score,
+    snippet: excerpt(evidence ?? knowledgeRegionText(region), phrase, terms),
+    context: contextFor(document, region.index, indexFor(document).headings[region.index] ?? '', phrase, terms, true, evidence),
+  }
+}
+
+export function rankKnowledgeCandidates(documents: ReaderDocument[], query: string, limit: number): KnowledgeSearchMatch[] {
   const phrase = query.trim().toLowerCase()
   if (!phrase || limit <= 0) return []
   const terms = queryTermsFor(phrase)
@@ -118,7 +150,7 @@ export function searchKnowledge(documents: ReaderDocument[], query: string, limi
   }))
   const overviewScope = titleMatchedIds.size ? titleMatchedIds : new Set(documents.map((document) => document.id))
 
-  const ranked = documentIndexes.flatMap(({ document, index }) => {
+  return documentIndexes.flatMap(({ document, index }) => {
     const title = `${document.title} ${document.path}`.toLowerCase()
     const titleTerms = terms.filter((term) => title.includes(term))
     const candidateIndexes = new Set(terms.flatMap((term) => [...(index.byTerm.get(term) ?? [])]))
@@ -147,12 +179,17 @@ export function searchKnowledge(documents: ReaderDocument[], query: string, limi
       return [{
         document,
         region,
-        snippet: excerpt(region.textContent, phrase, terms),
+        snippet: excerpt(knowledgeRegionText(region), phrase, terms),
         context: contextFor(document, regionIndex, currentHeading, phrase, terms),
         score,
       }]
     })
   }).sort((a, b) => b.score - a.score)
+}
+
+export function selectKnowledgeMatches(ranked: KnowledgeSearchMatch[], query: string, limit: number): KnowledgeSearchMatch[] {
+  if (limit <= 0) return []
+  const asksForOverview = overviewQuestion(query)
 
   const documentCount = new Set(ranked.map((match) => match.document.id)).size
   const perDocumentLimit = documentCount <= 1 ? limit : Math.max(1, Math.ceil(limit / Math.min(documentCount, 3)))
@@ -177,4 +214,8 @@ export function searchKnowledge(documents: ReaderDocument[], query: string, limi
     if (matches.length >= limit) break
   }
   return matches
+}
+
+export function searchKnowledge(documents: ReaderDocument[], query: string, limit = 8): KnowledgeSearchMatch[] {
+  return selectKnowledgeMatches(rankKnowledgeCandidates(documents, query, limit), query, limit)
 }

@@ -4,6 +4,7 @@ export type AiMessage = { role: AiRole; content: string }
 
 export type AiSettings = {
   enabled: boolean
+  semanticSearch: boolean
   provider: AiProvider
   baseUrl: string
   model: string
@@ -12,6 +13,7 @@ export type AiSettings = {
 
 export const defaultAiSettings: AiSettings = {
   enabled: false,
+  semanticSearch: false,
   provider: 'ollama',
   baseUrl: 'http://127.0.0.1:11434',
   model: 'qwen2.5:7b',

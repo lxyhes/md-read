@@ -18,6 +18,7 @@ export type KnowledgeMessage = {
   content: string
   createdAt: number
   citations: KnowledgeCitation[]
+  keywordFallback?: boolean
 }
 
 export type KnowledgeConversation = {
@@ -154,7 +155,11 @@ export function citationRegionId(citation: KnowledgeCitation, documents: ReaderD
   if (document.regions.some((region) => region.id === citation.regionId)) return citation.regionId
   const excerpt = normalizedCitationText(citation.excerpt)
   if (!excerpt) return null
-  return document.regions.find((region) => normalizedCitationText(region.textContent).includes(excerpt))?.id ?? null
+  return document.regions.find((region) => {
+    const rows = region.metadata?.tableRows
+    return normalizedCitationText(region.textContent).includes(excerpt)
+      || (Array.isArray(rows) && normalizedCitationText(rows.join(' ')).includes(excerpt))
+  })?.id ?? null
 }
 
 export function migrateKnowledgeDocument(conversation: KnowledgeConversation, previous: ReaderDocument, next: ReaderDocument) {

@@ -206,6 +206,7 @@ export function parseMarkdown(path: string, source: string, resolveUrl: Markdown
     const metadata: Record<string, unknown> = {}
     if (node.lang) metadata.language = node.lang
     if (type === 'mermaid') metadata.code = diagramCode ?? ''
+    if (type === 'table') metadata.tableRows = (node.children ?? []).map(row => (row.children ?? []).map(nodeText).join(' | '))
     if (type === 'image') metadata.url = resolveUrl(imageNode(node)?.url ?? '')
     if (type === 'video') metadata.url = resolveUrl(videoNode(node)?.url ?? '')
     const html = type === 'video'

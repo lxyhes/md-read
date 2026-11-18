@@ -441,6 +441,8 @@ html, body, #app { background: var(--app-bg, #070d22); }
 .knowledge-source-scope summary { padding: 10px 12px; color: var(--ink); cursor: pointer; font: 11px var(--ui-font); }
 .knowledge-source-scope summary span { margin-left: 5px; color: var(--accent); }
 .knowledge-source-scope summary small { color: #b77355; }
+.knowledge-source-tools { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 12px; margin: 8px 0; color: var(--muted); }
+.knowledge-source-tools small { font: 11px var(--ui-font); }
 .knowledge-scope-body { padding: 0 9px 9px; }
 .knowledge-source-warning { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 7px; padding: 8px 9px; border-radius: 7px; background: color-mix(in srgb, #b77355 9%, transparent); color: var(--muted); font: 10px/1.5 var(--ui-font); }
 .knowledge-source-warning .text-button { flex: 0 0 auto; padding: 4px 6px; color: #a76547; font: 600 9px var(--ui-font); }
@@ -614,6 +616,7 @@ html, body, #app { background: var(--app-bg, #070d22); }
 .knowledge-source-tools { display: flex; align-items: center; gap: 10px; }
 .knowledge-source-tools .segmented-tabs { margin: 0; }
 .ai-settings-actions { display: flex; gap: 8px; margin-top: 14px; }
+.knowledge-model-settings { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
 .ai-model-picker { display: flex; gap: 8px; }
 .ai-model-picker .arco-select { min-width: 0; flex: 1; margin-top: 0; }
 .ai-model-picker button { flex: 0 0 auto; }

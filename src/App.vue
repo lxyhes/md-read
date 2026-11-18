@@ -73,7 +73,8 @@ import { normalizeLatexDelimiters } from './markdown/fragment'
 import { readEditorDraft, saveEditorDraft, removeEditorDraft, migrateEditorDrafts, hasSaveConflict, editorAssetMap } from './editorDrafts'
 import { startupStylesReady } from './startup'
 import { confirmAppAction, promptAppText } from './appDialog'
-import { searchKnowledge } from './knowledgeSearch'
+import { useKnowledgeIndex } from './useKnowledgeIndex'
+import { KNOWLEDGE_EMBEDDING_MODEL } from './knowledgeHybridSearch'
 import { aiEndpoint, aiPayload, aiResponseText, defaultAiSettings, ollamaModelNames, ollamaTagsEndpoint, type AiMessage, type AiSettings } from './aiProvider'
 import { domesticAiWebModels } from './aiWebModels'
 import { availableKnowledgeSourceIds, citationRegionId, citationState, citationsForMatches, createKnowledgeId, createKnowledgeMessage, filterKnowledgeConversations, knowledgeRetrievalQuery, localDayKey, messagesForKnowledgeQuestion, migrateKnowledgeDocument, recentKnowledgeContext, summarizeKnowledgeActivity, titleForKnowledgeQuestion, validatedKnowledgeAnswer, type KnowledgeActivity, type KnowledgeCitation, type KnowledgeConversation, type KnowledgeMessage } from './knowledgeConversations'
@@ -164,6 +165,7 @@ const FAVORITES_KEY = 'moyue:favorites'
 const KNOWLEDGE_DOCUMENTS_KEY = 'moyue:knowledge-documents'
 const PERSONAL_NOTES_KEY = 'moyue:personal-notes'
 const AI_SETTINGS_KEY = 'moyue:ai-settings'
+const MISSING_KNOWLEDGE_FILES_KEY = 'moyue:knowledge-missing-files'
 const ACTIVE_KNOWLEDGE_CONVERSATION_KEY = 'moyue:knowledge-active-conversation'
 const advancedDefaults: AdvancedSettings = { showReadingProgress: true, defaultExtension: 'md', defaultCodeLanguage: 'text', rememberCodeLanguage: true, emojiAutocomplete: true, autoLink: true, rememberRecent: true, dropBehavior: 'insert', picListEndpoint: 'http://127.0.0.1:36677/upload', picListKey: '', epubChapterDepth: 3, referenceDocx: '', printPageSize: 'A4', printMargin: 18, printHeader: '', printFooter: '', printBackground: true, spellcheck: true, typewriterMode: false, editorAutoSave: false, remoteImagePrivacy: true, relativeImagePathPrefix: false }
 function readAdvancedSettings(): AdvancedSettings {
@@ -234,6 +236,13 @@ const knowledgeActivity = ref<KnowledgeActivity>({})
 const knowledgeLoaded = ref(false)
 let knowledgeLoadPromise: Promise<void> | null = null
 const knowledgeSourceFilter = ref<'all' | 'included'>('all')
+type KnowledgeRefreshState = 'ready' | 'snapshot' | 'conflict' | 'missing'
+const knowledgeRefreshStates = ref<Record<string, KnowledgeRefreshState>>(Object.fromEntries(
+  readStoredIds(MISSING_KNOWLEDGE_FILES_KEY).map(id => [id, 'missing']),
+))
+const knowledgeRefreshing = ref(false)
+const knowledgeTestingModel = ref(false)
+const knowledgeModelTested = ref(false)
 const selectedKnowledgeSourceIds = ref<string[]>([])
 const aiSettings = ref(readAiSettings())
 const aiBusy = ref(false)
@@ -508,9 +517,22 @@ const knowledgeDocuments = computed(() => store.documents.filter((document) => k
 const selectedKnowledgeSourceCount = computed(() => knowledgeDocuments.value.filter((document) => selectedKnowledgeSourceIds.value.includes(document.id)).length)
 const activeKnowledgeConversation = computed(() => knowledgeConversations.value.find((conversation) => conversation.id === activeKnowledgeConversationId.value) ?? null)
 const sortedKnowledgeConversations = computed(() => filterKnowledgeConversations(knowledgeConversations.value, knowledgeHistoryQuery.value))
-const activeKnowledgeSources = computed(() => {
+const selectedKnowledgeSources = computed(() => {
   const sourceIds = activeKnowledgeConversation.value?.sourceIds ?? knowledgeDocumentIds.value
   return store.documents.filter((document) => sourceIds.includes(document.id))
+})
+const activeKnowledgeSources = computed(() => selectedKnowledgeSources.value.filter(document => knowledgeRefreshStates.value[document.id] !== 'missing'))
+const localSemanticSearch = computed(() => isTauriRuntime() && aiSettings.value.semanticSearch === true)
+const { indexCount: knowledgeIndexCount, indexing: knowledgeIndexing, error: knowledgeIndexError, checkModel: checkKnowledgeModel, schedule: scheduleKnowledgeIndex, search: findKnowledge } = useKnowledgeIndex(
+  () => activeKnowledgeSources.value, () => store.documents, () => localSemanticSearch.value,
+  () => view.value === 'knowledge' && knowledgeLoaded.value,
+)
+const knowledgeRefreshSummary = computed(() => {
+  const states = selectedKnowledgeSources.value.map(document => knowledgeRefreshStates.value[document.id])
+  const snapshots = states.filter(state => state === 'snapshot').length
+  const conflicts = states.filter(state => state === 'conflict').length
+  const missing = states.filter(state => state === 'missing').length
+  return [snapshots && `${snapshots} 篇使用已导入版本`, conflicts && `${conflicts} 篇有草稿冲突`, missing && `${missing} 篇原文件已移除`].filter(Boolean).join(' · ')
 })
 const activeKnowledgeMessages = computed(() => activeKnowledgeConversation.value?.messages ?? [])
 watch([activeKnowledgeConversationId, () => activeKnowledgeMessages.value.length, aiBusy], () => {
@@ -3136,18 +3158,47 @@ async function saveAiSettings() {
   aiStatus.value = 'saved'
   notify('AI 服务配置已保存')
 }
+async function testKnowledgeModel() {
+  if (knowledgeTestingModel.value) return
+  knowledgeTestingModel.value = true
+  try { knowledgeModelTested.value = Boolean(await checkKnowledgeModel()) }
+  finally { knowledgeTestingModel.value = false }
+}
+async function copyKnowledgeModelCommand() {
+  try {
+    await writeTextToClipboard(`ollama pull ${KNOWLEDGE_EMBEDDING_MODEL}`)
+    notify('安装命令已复制')
+  } catch { notify('复制失败，可在下方选中命令') }
+}
+function setKnowledgeRefreshState(id: string, state: KnowledgeRefreshState) {
+  const wasMissing = knowledgeRefreshStates.value[id] === 'missing'
+  knowledgeRefreshStates.value[id] = state
+  if (wasMissing !== (state === 'missing')) {
+    try { saveStoredIds(MISSING_KNOWLEDGE_FILES_KEY, Object.keys(knowledgeRefreshStates.value).filter(key => knowledgeRefreshStates.value[key] === 'missing')) }
+    catch { /* The current session still excludes confirmed missing files. */ }
+  }
+}
+async function refreshKnowledgeSources() {
+  if (knowledgeRefreshing.value || aiBusy.value) return
+  knowledgeRefreshing.value = true
+  try {
+    for (const document of selectedKnowledgeSources.value) {
+      const state = hasRealFilesystemPath(document.path) ? await reloadDocumentFromDisk(document.path, true) : 'snapshot'
+      setKnowledgeRefreshState(document.id, state)
+    }
+    if (localSemanticSearch.value) scheduleKnowledgeIndex()
+  } finally { knowledgeRefreshing.value = false }
+}
 async function askKnowledge() {
-  if (aiBusy.value || !knowledgeLoaded.value) return
+  if (aiBusy.value || knowledgeRefreshing.value || !knowledgeLoaded.value) return
   const question = knowledgeQuestion.value.trim()
   if (!question) { notify('先输入一个问题'); return }
   if (!activeKnowledgeSources.value.length) { notify('请先在“本次资料”中选择文档'); return }
+  const sources = activeKnowledgeSources.value
   aiBusy.value = true
   aiError.value = ''
   try {
     const conversation = activeKnowledgeConversation.value ?? await createKnowledgeConversation()
-    const sources = activeKnowledgeSources.value
-    const matches = searchKnowledge(sources, knowledgeRetrievalQuery(question, conversation.messages))
-    const citations = citationsForMatches(matches)
     const messages = messagesForKnowledgeQuestion(conversation.messages, question)
     const currentConversation: KnowledgeConversation = {
       ...conversation,
@@ -3157,8 +3208,12 @@ async function askKnowledge() {
     }
     await persistKnowledgeConversation(currentConversation)
     knowledgeQuestion.value = ''
+    const { matches, keywordFallback } = await findKnowledge(sources, knowledgeRetrievalQuery(question, conversation.messages))
+    const citations = citationsForMatches(matches)
     const finish = async (content: string, answerCitations = citations) => {
-      const next = { ...currentConversation, messages: [...currentConversation.messages, createKnowledgeMessage('assistant', content, answerCitations)], updatedAt: Date.now() }
+      const answer = createKnowledgeMessage('assistant', content, answerCitations)
+      if (keywordFallback) answer.keywordFallback = true
+      const next = { ...currentConversation, messages: [...currentConversation.messages, answer], updatedAt: Date.now() }
       await persistKnowledgeConversation(next)
     }
     if (!sources.length) {
@@ -3196,7 +3251,7 @@ async function askKnowledge() {
     } catch (error) {
       aiStatus.value = 'error'
       aiError.value = error instanceof Error ? error.message : 'AI 回答失败'
-      await finish(`AI 服务暂时不可用：${aiError.value}。检查设置或网络后，可以在输入框中重新提交本问题。`, [])
+      await finish(`AI 服务暂时不可用：${aiError.value}。可以先查看本轮原文，或在输入框中重试。`)
       knowledgeQuestion.value = question
     }
   } finally { aiBusy.value = false }
@@ -4821,30 +4876,47 @@ function scheduleDocumentReload(path: string) {
     void reloadDocumentFromDisk(path)
   }, 320))
 }
-async function reloadDocumentFromDisk(path: string) {
+async function reloadDocumentFromDisk(path: string, quiet = false): Promise<KnowledgeRefreshState> {
   const current = store.documents.find((document) => filePathKey(document.path) === filePathKey(path))
-  if (!current) return
+  if (!current) return 'missing'
   const isCurrent = store.currentDocumentId === current.id
-  if (isCurrent) setFileSyncState('syncing')
+  if (isCurrent && !quiet) setFileSyncState('syncing')
+  let source: string
   try {
-    const source = await readMarkdownPath(path)
+    source = await readMarkdownPath(path)
+  } catch (failure) {
+    const state = /\(os error [23]\)/.test(String(failure)) ? 'missing' : 'snapshot'
+    if (state === 'missing' && (knowledgeDocumentIds.value.includes(current.id) || selectedKnowledgeSources.value.some(document => document.id === current.id))) setKnowledgeRefreshState(current.id, 'missing')
+    if (isCurrent && !quiet) { setFileSyncState('error'); notify('文件自动更新失败，请检查文件是否仍存在') }
+    return state
+  }
+  try {
     if (editorOpen.value && editorDocumentId.value === current.id) {
       editorConflict.value = hasSaveConflict(editorOriginalSource.value, source, editorSourceForSave.value)
-      if (editorConflict.value) notify('磁盘文件已变更；正在编辑的草稿已保留，保存不会覆盖外部修改')
-      if (isCurrent) setFileSyncState(editorConflict.value ? 'error' : 'idle')
-      return
+      if (editorConflict.value && !quiet) notify('磁盘文件已变更；正在编辑的草稿已保留，保存不会覆盖外部修改')
+      if (isCurrent && !quiet) setFileSyncState(editorConflict.value ? 'error' : 'idle')
+      return editorConflict.value ? 'conflict' : 'ready'
     }
-    if (source === current.source) { if (isCurrent) setFileSyncState('idle'); return }
-    await store.reloadDocument({ path, source })
-    if (isCurrent && store.currentDocumentId === current.id) {
+    const latest = store.documents.find(document => document.id === current.id)
+    if (!latest) return 'missing'
+    const reloaded = latest.sourceHash === current.sourceHash && source !== latest.source
+    if (!reloaded) {
+      if (isCurrent && !quiet) setFileSyncState('idle')
+    } else {
+      await store.reloadDocument({ path, source })
+    }
+    if (knowledgeRefreshStates.value[current.id]) setKnowledgeRefreshState(current.id, 'ready')
+    if (!quiet && reloaded && isCurrent && store.currentDocumentId === current.id) {
       await nextTick()
       restoreScroll()
       setFileSyncState('updated')
       notify('文件已自动更新，阅读位置已保留')
       window.setTimeout(() => { if (fileSyncState.value === 'updated') fileSyncState.value = 'idle' }, 2600)
     }
+    return 'ready'
   } catch {
-    if (isCurrent) { setFileSyncState('error'); notify('文件自动更新失败，请检查文件是否仍存在') }
+    if (isCurrent && !quiet) { setFileSyncState('error'); notify('文件自动更新失败，请检查文件是否仍存在') }
+    return 'snapshot'
   }
 }
 function stopAllDocumentWatchers() {
@@ -5734,12 +5806,18 @@ async function requestFullscreen() {
           <section class="knowledge-ask" aria-label="询问知识库">
             <div class="knowledge-ask-heading"><div><span class="section-kicker">问一问</span><h2>{{ activeKnowledgeConversation?.title ?? '从本地资料里找答案' }}</h2><small class="knowledge-ai-status">{{ aiSettings.enabled ? aiStatus === 'connected' ? 'AI 已连接' : aiBusy ? 'AI 正在整理' : 'AI 已启用' : '离线检索 · 资料不会上传' }}</small></div><button class="text-button" type="button" :disabled="aiBusy || !knowledgeLoaded" @click="createKnowledgeConversation()"><AppIcon name="plus" :size="13" />新对话</button></div>
             <Collapse class="knowledge-source-scope" :default-active-key="!activeKnowledgeSources.length ? ['content'] : []"><CollapseItem key="content"><template #header>本次资料 <span>{{ activeKnowledgeSources.length }} 篇</span><small v-if="missingKnowledgeSourceCount"> · {{ missingKnowledgeSourceCount }} 篇来源已不可用</small></template><div class="knowledge-scope-body"><div v-if="missingKnowledgeSourceCount" class="knowledge-source-warning"><span>{{ missingKnowledgeSourceCount }} 篇来源已不可用，历史引用不会受影响。</span><button class="text-button" type="button" :disabled="aiBusy || !knowledgeLoaded" @click="removeUnavailableKnowledgeSources">移除失效来源</button></div><div v-if="store.documents.length" class="knowledge-scope-list"><Checkbox v-for="document in store.documents" :key="document.id" :model-value="activeKnowledgeConversation ? activeKnowledgeConversation.sourceIds.includes(document.id) : knowledgeDocumentIds.includes(document.id)" :disabled="aiBusy || !knowledgeLoaded" @change="toggleConversationSource(document.id)">{{ displayTitle(document.title) }}</Checkbox><button v-if="store.documents.some(document => !(activeKnowledgeConversation?.sourceIds ?? knowledgeDocumentIds).includes(document.id)) && (activeKnowledgeConversation || knowledgeDocuments.length)" class="text-button" type="button" :disabled="aiBusy || !knowledgeLoaded" @click="addAllKnowledgeSources">一键收录现有文档</button></div><p v-else class="knowledge-scope-empty">先导入 Markdown 文档，之后可在这里选择本次要检索的资料。</p></div></CollapseItem></Collapse>
+            <div v-if="isTauriRuntime() && selectedKnowledgeSources.length" class="knowledge-source-tools">
+              <small v-if="localSemanticSearch" role="status">语义索引 {{ knowledgeIndexCount }}/{{ activeKnowledgeSources.length }} 篇{{ knowledgeIndexError ? ` · ${knowledgeIndexError}` : knowledgeIndexing ? ' · 正在建立' : '' }} · 全部可用资料支持关键词检索</small>
+              <small v-if="knowledgeRefreshSummary" role="status">{{ knowledgeRefreshSummary }}</small>
+              <button class="text-button" type="button" :disabled="aiBusy || knowledgeRefreshing" @click="refreshKnowledgeSources">{{ knowledgeRefreshing ? '正在刷新资料…' : '刷新资料' }}</button>
+            </div>
             <div ref="knowledgeTranscriptRef" class="knowledge-transcript" aria-live="polite" aria-label="对话记录">
               <div v-if="!activeKnowledgeConversation" class="knowledge-transcript-empty"><AppIcon name="sparkle" :size="20" /><strong>{{ activeKnowledgeSources.length ? '资料已经准备好' : '从一段新对话开始' }}</strong><span>{{ activeKnowledgeSources.length ? `本次可检索 ${activeKnowledgeSources.length} 篇资料。点一个建议，或直接输入问题。` : '选择资料后提问，答案会保留引用，之后可以继续聊。' }}</span><div v-if="knowledgePromptSuggestions.length" class="knowledge-prompts knowledge-empty-prompts"><span>可以这样问</span><button v-for="prompt in knowledgePromptSuggestions" :key="prompt" type="button" :disabled="aiBusy" @click="useKnowledgePrompt(prompt)">{{ prompt }}</button></div><button v-if="store.documents.length && !knowledgeDocuments.length" class="primary-button" type="button" :disabled="!knowledgeLoaded" @click="addAllKnowledgeSources">一键收录 {{ store.documents.length }} 篇现有文档</button><button v-else-if="!store.documents.length" class="primary-button" type="button" @click="openLibrary('all')">导入 Markdown 文档</button></div>
               <div v-else-if="!activeKnowledgeMessages.length" class="knowledge-transcript-empty"><AppIcon name="sparkle" :size="20" /><strong>{{ activeKnowledgeSources.length ? '资料已经准备好' : '还缺少本次资料' }}</strong><span>{{ activeKnowledgeSources.length ? `本次可检索 ${activeKnowledgeSources.length} 篇资料。点一个建议，或直接输入问题。` : '展开上方“本次资料”，选择文档后就可以开始问。' }}</span><div v-if="knowledgePromptSuggestions.length" class="knowledge-prompts knowledge-empty-prompts"><span>可以这样问</span><button v-for="prompt in knowledgePromptSuggestions" :key="prompt" type="button" :disabled="aiBusy" @click="useKnowledgePrompt(prompt)">{{ prompt }}</button></div></div>
               <article v-for="message in activeKnowledgeMessages" :key="message.id" class="knowledge-message" :class="`is-${message.role}`">
                 <div class="knowledge-message-label">{{ message.role === 'user' ? '你' : '墨阅' }}<time>{{ new Date(message.createdAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) }}</time></div>
                 <div class="knowledge-message-body" v-text="message.content" />
+                <small v-if="message.keywordFallback" class="knowledge-ask-hint">本轮使用关键词检索</small>
                 <button v-if="message.role === 'assistant'" class="text-button knowledge-copy-answer" type="button" @click="copyKnowledgeAnswer(message)"><AppIcon name="copy" :size="12" />复制回答与引用</button>
                 <Collapse v-if="message.citations.length" class="knowledge-citations"><CollapseItem key="content">
                   <template #header><span>引用原文</span><small>{{ message.citations.length }} 条 · {{ new Set(message.citations.map(citation => citation.documentId)).size }} 篇资料</small><span class="knowledge-citations-toggle" /></template>
@@ -5756,8 +5834,8 @@ async function requestFullscreen() {
             </div>
             <div v-if="activeKnowledgeMessages.length && knowledgePromptSuggestions.length" class="knowledge-prompts"><span>继续问</span><button v-for="prompt in knowledgePromptSuggestions" :key="prompt" type="button" :disabled="aiBusy" @click="useKnowledgePrompt(prompt)">{{ prompt }}</button></div>
             <p v-if="aiError" class="knowledge-ai-error" role="alert">{{ aiError }} · 问题仍保留在输入框，可检查配置后重试。</p>
-            <KnowledgeComposer v-model="knowledgeQuestion" :disabled="!knowledgeLoaded" :busy="aiBusy" :has-sources="!!activeKnowledgeSources.length" @submit="askKnowledge" />
-            <p class="knowledge-ask-hint">{{ aiSettings.enabled ? '本轮问题、最近两轮对话和命中的原文片段会发送给所选模型。' : '当前只做本地检索；启用 AI 后可根据命中原文整理回答。' }}</p>
+            <KnowledgeComposer v-model="knowledgeQuestion" :disabled="!knowledgeLoaded || knowledgeRefreshing" :busy="aiBusy" :has-sources="!!activeKnowledgeSources.length" @submit="askKnowledge" />
+            <p class="knowledge-ask-hint">{{ aiSettings.enabled ? '本轮问题、最近两轮对话和命中的原文片段会发送到设置中的 AI 服务。' : '当前只做本地检索；启用 AI 后可根据命中原文整理回答。' }}</p>
           </section>
           <aside class="knowledge-history" aria-label="最近对话与当前资料">
             <div class="knowledge-history-heading"><div><span class="section-kicker">回到这里</span><h2>最近对话</h2></div><button class="icon-button" type="button" aria-label="新建对话" title="新建对话" :disabled="aiBusy || !knowledgeLoaded" @click="createKnowledgeConversation()"><AppIcon name="plus" :size="15" /></button></div>
@@ -6192,7 +6270,19 @@ async function requestFullscreen() {
             <Button type="secondary" @click="notify('同步与备份暂不启用')">同步与备份</Button>
           </div>
           <div class="settings-grid">
-        <div v-show="settingsTab === 'reading'" class="settings-card ai-settings-card"><span class="section-kicker">AI 能力</span><h2>连接 AI 服务</h2><p class="muted-copy">支持本地 Ollama，也支持 OpenAI-compatible 接口。API Key 只保留在当前会话，不写入本地配置。</p><div class="setting-input"><span>服务类型</span><Select v-model="aiSettings.provider" aria-label="服务类型"><Option value="ollama">Ollama（本地）</Option><Option value="openai-compatible">OpenAI-compatible</Option></Select></div><label class="setting-input">服务地址<Input v-model="aiSettings.baseUrl" spellcheck="false" placeholder="http://127.0.0.1:11434" /></label><div v-if="aiSettings.provider === 'ollama'" class="setting-input"><span>模型名称</span><div class="ai-model-picker"><Select v-model="aiSettings.model" :options="ollamaModels" allow-search :loading="aiModelsBusy" :trigger-props="{ contentClass: 'ai-model-dropdown' }" aria-label="Ollama 模型" @popup-visible-change="$event && loadOllamaModels(false)" /><Button class="ghost-button" type="secondary" :disabled="aiModelsBusy" @click="loadOllamaModels()">{{ aiModelsBusy ? '读取中…' : '读取模型' }}</Button></div></div><label v-else class="setting-input">模型名称<Input v-model="aiSettings.model" spellcheck="false" placeholder="模型名称" /></label><label v-if="aiSettings.provider === 'openai-compatible'" class="setting-input">API Key（可选）<InputPassword v-model="aiSettings.apiKey" autocomplete="off" placeholder="仅当前会话使用" /></label><Checkbox class="setting-check" v-model="aiSettings.enabled">在知识库问答中启用 AI 生成</Checkbox><div class="ai-settings-actions"><Button class="ghost-button" type="secondary" @click="saveAiSettings"><AppIcon name="check" :size="14" />保存配置</Button><Button class="primary-button" type="primary" :disabled="aiBusy" @click="testAiConnection">{{ aiBusy ? '连接中…' : '测试连接' }}</Button></div><p v-if="aiStatus === 'saved'" class="ai-status-success" role="status">AI 服务配置已保存</p><p v-else-if="aiStatus === 'connected'" class="ai-status-success">AI 服务已连接，模型 {{ aiSettings.model }} 可用</p><p v-if="aiError" class="ai-status-error" role="alert">{{ aiError }}</p></div>
+        <div v-show="settingsTab === 'reading'" class="settings-card ai-settings-card"><span class="section-kicker">AI 能力</span><h2>连接 AI 服务</h2><p class="muted-copy">支持本地 Ollama，也支持 OpenAI-compatible 接口。API Key 只保留在当前会话，不写入本地配置。</p><div class="setting-input"><span>服务类型</span><Select v-model="aiSettings.provider" aria-label="服务类型"><Option value="ollama">Ollama（本地）</Option><Option value="openai-compatible">OpenAI-compatible</Option></Select></div><label class="setting-input">服务地址<Input v-model="aiSettings.baseUrl" spellcheck="false" placeholder="http://127.0.0.1:11434" /></label><div v-if="aiSettings.provider === 'ollama'" class="setting-input"><span>模型名称</span><div class="ai-model-picker"><Select v-model="aiSettings.model" :options="ollamaModels" allow-search :loading="aiModelsBusy" :trigger-props="{ contentClass: 'ai-model-dropdown' }" aria-label="Ollama 模型" @popup-visible-change="$event && loadOllamaModels(false)" /><Button class="ghost-button" type="secondary" :disabled="aiModelsBusy" @click="loadOllamaModels()">{{ aiModelsBusy ? '读取中…' : '读取模型' }}</Button></div></div><label v-else class="setting-input">模型名称<Input v-model="aiSettings.model" spellcheck="false" placeholder="模型名称" /></label><label v-if="aiSettings.provider === 'openai-compatible'" class="setting-input">API Key（可选）<InputPassword v-model="aiSettings.apiKey" autocomplete="off" placeholder="仅当前会话使用" /></label><Checkbox class="setting-check" v-model="aiSettings.enabled">在知识库问答中启用 AI 生成</Checkbox>
+          <div v-if="isTauriRuntime()" class="knowledge-model-settings">
+            <Checkbox class="setting-check" v-model="aiSettings.semanticSearch">本地语义检索</Checkbox>
+            <p class="muted-copy">索引使用本机 Ollama（127.0.0.1:11434）。生成答案仍使用上方配置的 AI 服务。</p>
+            <div class="ai-settings-actions">
+              <Button class="ghost-button" type="secondary" @click="copyKnowledgeModelCommand">复制安装命令</Button>
+              <Button class="ghost-button" type="secondary" :disabled="knowledgeTestingModel" @click="testKnowledgeModel">{{ knowledgeTestingModel ? '检测中…' : '检测本地模型' }}</Button>
+            </div>
+            <p class="muted-copy"><code>ollama pull {{ KNOWLEDGE_EMBEDDING_MODEL }}</code></p>
+            <p v-if="knowledgeIndexError" class="ai-status-error" role="status">{{ knowledgeIndexError }}</p>
+            <p v-else-if="knowledgeModelTested" class="ai-status-success" role="status">本地语义模型可用</p>
+          </div>
+          <div class="ai-settings-actions"><Button class="ghost-button" type="secondary" @click="saveAiSettings"><AppIcon name="check" :size="14" />保存配置</Button><Button class="primary-button" type="primary" :disabled="aiBusy" @click="testAiConnection">{{ aiBusy ? '连接中…' : '测试连接' }}</Button></div><p v-if="aiStatus === 'saved'" class="ai-status-success" role="status">AI 服务配置已保存</p><p v-else-if="aiStatus === 'connected'" class="ai-status-success">AI 服务已连接，模型 {{ aiSettings.model }} 可用</p><p v-if="aiError" class="ai-status-error" role="alert">{{ aiError }}</p></div>
         <div v-show="settingsTab === 'reading'" class="settings-card ai-web-model-card"><span class="section-kicker">网页入口</span><h2>国产大模型</h2><p class="muted-copy">选择平台后，在右侧内嵌打开官网；登录由对应平台处理。</p><div class="setting-input"><span>模型平台</span><div class="ai-model-picker"><Select v-model="aiWebModel" aria-label="国产大模型网页"><Option v-for="model in domesticAiWebModels" :key="model.id" :value="model.id">{{ model.name }}</Option></Select><Button class="primary-button" type="primary" @click="openAiWebModel"><AppIcon name="external" :size="14" />打开网页</Button></div></div></div>
         <div v-show="settingsTab === 'reading'" class="settings-card font-settings-card">
           <div class="font-settings-heading"><div><span class="section-kicker">阅读偏好</span><h2>字体与排版</h2></div><span>自动保存</span></div>
