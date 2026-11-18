@@ -2,7 +2,7 @@ import type { HeadingItem, ReaderDocument, ReaderRegion, ReaderRegionType } from
 import { blockHtmlWithSourceIndent, renderFootnotes, renderVideoNode } from './markdown/render'
 import { createRenderContext, nodeText, renderMath, resolveMarkdownReferences, type MarkdownUrlResolver, type MdastNode } from './markdown/shared'
 import { formatPastedText, isLikelyProseBlock, normalizeMixedOrderedListSource } from './pasteMarkdown'
-import { isTimestampedParagraph, markdownProcessor as processor, normalizeArticleStrong, normalizeLatexDelimiters, normalizeMixedOrderedLists, promoteStandaloneImageLinks, promoteTimestampedParagraphs, removeEmptyListItems } from './markdown/fragment'
+import { isTimestampedParagraph, markdownProcessor as processor, normalizeArticleStrong, normalizeLatexDelimiters, normalizeMixedOrderedLists, promoteStandaloneImageLinks, promoteTimestampedParagraphs, removeEmptyListItems, restoreClipboardCodeCards, restoreSplitStepsLists } from './markdown/fragment'
 
 export type { MarkdownUrlResolver } from './markdown/shared'
 export { makeImplicitMarkdownHeadingsExplicit, renderMarkdownFragment } from './markdown/fragment'
@@ -184,7 +184,9 @@ export function parseMarkdown(path: string, source: string, resolveUrl: Markdown
   restoreTimestampedLists(tree)
   restoreTimestampedListHeadings(tree)
   removeEmptyListItems(tree)
+  restoreSplitStepsLists(tree, normalizedSource)
   normalizeArticleStrong(tree)
+  restoreClipboardCodeCards(tree, normalizedSource)
   const documentId = `doc_${hashText(path)}`
   const regions: ReaderRegion[] = []
   const headings: HeadingItem[] = []

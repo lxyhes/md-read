@@ -318,15 +318,24 @@
   white-space: pre-wrap;
 }
 .reader-content .region-content .markdown-callout {
+  --callout-accent: var(--accent);
+  --callout-fill: color-mix(in srgb, var(--accent-soft) 35%, transparent);
   margin: 22px 0;
-  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
-  border-left: 4px solid var(--accent);
-  border-radius: 0 13px 13px 0;
-  background: color-mix(in srgb, var(--accent-soft) 35%, transparent);
+  border-inline-start: 4px solid var(--callout-accent);
+  border-radius: 8px;
+  background: var(--callout-fill);
+}
+.reader-content .region-content .markdown-callout:is(.callout-tip, .callout-success) {
+  --callout-accent: #4a9b55;
+  --callout-fill: color-mix(in srgb, var(--callout-accent) 10%, var(--surface-raised));
+}
+.reader-content .region-content .markdown-callout.callout-warning {
+  --callout-accent: #db8928;
+  --callout-fill: color-mix(in srgb, var(--callout-accent) 10%, var(--surface-raised));
 }
 .reader-content .region-content .callout-title {
   padding: 10px 16px 5px;
-  color: var(--accent);
+  color: color-mix(in srgb, var(--callout-accent) 72%, var(--ink));
   font: 700 11px var(--ui-font);
   letter-spacing: .08em;
   text-transform: uppercase;
@@ -335,6 +344,52 @@
   padding: 0 16px 10px;
 }
 .reader-content .region-content .callout-body p:last-child {
+  margin-bottom: 0;
+}
+.app-shell :is(.reader-content .region-block .region-content, .editor-preview) .markdown-steps > ol {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: clamp(9px, 2vw, 16px);
+  border: 1px solid color-mix(in srgb, #83b573 12%, var(--border));
+  border-radius: 9px;
+  background: color-mix(in srgb, #83b573 10%, var(--surface));
+}
+.app-shell :is(.reader-content .region-block .region-content, .editor-preview) .markdown-steps > ol > li {
+  position: relative;
+  padding: 12px 14px 12px 48px;
+  border: 1px solid color-mix(in srgb, #83b573 12%, var(--border));
+  border-radius: 8px;
+  background: var(--surface-raised);
+  counter-increment: list-item;
+}
+.markdown-steps > ol > li::marker {
+  content: '';
+}
+.markdown-steps > ol > li::before {
+  content: counter(list-item) / '';
+  position: absolute;
+  inset: 12px auto auto 12px;
+  display: grid;
+  place-items: center;
+  min-inline-size: 28px;
+  block-size: 28px;
+  padding-inline: 4px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: #57b560;
+  color: #fff;
+  -webkit-text-stroke: 0.8px #214725;
+  paint-order: stroke fill;
+  font: 700 13px/1 var(--ui-font);
+}
+.markdown-steps .step-label {
+  background: linear-gradient(transparent 55%, color-mix(in srgb, #57b560 22%, var(--surface-raised)) 55%);
+  border-radius: 2px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+.app-shell :is(.reader-content .region-block .region-content, .editor-preview) .markdown-steps > ol > li > p:last-child {
   margin-bottom: 0;
 }
 .reader-content .region-content .markdown-footnotes {

@@ -1,7 +1,160 @@
+// @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest'
 import courseSource from '../docs/fixtures/直播电商选品-原文.md?raw'
 import { formatClipboardToMarkdown } from './pasteMarkdown'
 import { parseMarkdown, renderMarkdownFragment } from './parser'
+
+describe('WeChat article paste', () => {
+  it('converts a bordered warning card and leaves the following paragraph outside it', () => {
+    const html = `<h2>03 经验总结</h2>
+      <section style="border-left: 4px solid #f59a38; background-color: #fff6e8">
+        <section><p>实话</p><p><strong>先检查配置和版本</strong>，再参考<a href="https://example.com/">使用文档</a>。</p></section>
+      </section>
+      <p>这是紧接在框外的正文。</p>
+      <p>实话</p><p>这是没有边框的普通段落。</p>`
+    const text = '03 经验总结\n实话\n先检查配置和版本，再参考使用文档。\n这是紧接在框外的正文。\n实话\n这是没有边框的普通段落。'
+    for (const format of ['default', 'wechat-article'] as const) {
+      const source = formatClipboardToMarkdown(html, text, format)
+      expect(source).toContain('> [!WARNING] 实话\n>\n> **先检查配置和版本**，再参考[使用文档](https://example.com/)。')
+      const regions = parseMarkdown('warnings.md', source).regions
+      const warnings = regions.filter((region) => region.html.includes('class="markdown-callout callout-warning"'))
+      expect(warnings).toHaveLength(1)
+      expect(warnings[0].html).toContain('<strong>先检查配置和版本</strong>')
+      expect(warnings[0].html).not.toContain('紧接在框外')
+      expect(regions.some((region) => region.type === 'paragraph' && region.textContent === '这是没有边框的普通段落。')).toBe(true)
+    }
+  })
+
+  it('uses the card styling or semantic markup to choose its type with identical custom titles', () => {
+    const html = `<section style="border-left: 4px solid rgb(72, 165, 82); background: #f0f7ee"><p>先说清楚</p><p>这是绿色提示。</p></section>
+      <section style="border-inline-start: 4px solid #e93; background-color: #fff7e7"><p>先说清楚</p><p>这是橙色提示。</p></section>
+      <aside data-callout="tip"><p>标题可以是任意文字：</p><p>这是语义化提示。</p></aside>
+      <section style="border-left: 3px solid #4c5"><p>先说清楚</p><p>这是只有边框的普通容器。</p></section>
+      <section style="border: 3px solid #4c5; background-color: #f0f7ee"><p>先说清楚</p><p>这是四边相同的普通容器。</p></section>`
+    for (const format of ['default', 'wechat-article'] as const) {
+      const source = formatClipboardToMarkdown(html, '', format)
+      expect(source).toContain('> [!TIP] 先说清楚\n>\n> 这是绿色提示。')
+      expect(source).toContain('> [!WARNING] 先说清楚\n>\n> 这是橙色提示。')
+      expect(source).toContain('> [!TIP] 标题可以是任意文字：')
+      const callouts = parseMarkdown('callouts.md', source).regions.filter((region) => region.html.includes('class="markdown-callout '))
+      expect(callouts).toHaveLength(3)
+      expect(callouts.every((region) => !region.html.includes('普通容器'))).toBe(true)
+    }
+  })
+
+  it('converts separate number badges and bold labels to the existing steps callout', () => {
+    const html = `<p>按下面三个步骤操作。</p><section>
+      <section><span style="font-weight:700">1</span><section><strong>准备</strong>：打开<a href="https://example.com/">示例文件</a>。</section></section>
+      <section><p><b>2</b></p><p><strong>检查：</strong>核对文件内容。</p></section>
+      <section><span>3</span><p><strong>保存</strong>：写入改动。</p></section>
+      </section><p>这里是步骤之后的普通正文。</p><ol><li>普通列表一</li><li>普通列表二</li></ol>`
+    const text = '按下面三个步骤操作。\n1准备：打开示例文件。\n2检查：核对文件内容。\n3保存：写入改动。\n这里是步骤之后的普通正文。\n普通列表一\n普通列表二'
+    for (const format of ['default', 'wechat-article'] as const) {
+      const source = formatClipboardToMarkdown(html, text, format)
+      expect(source).toContain('> [!STEPS]\n>\n> 1. **准备**： 打开[示例文件](https://example.com/)。\n> 2. **检查**： 核对文件内容。\n> 3. **保存**： 写入改动。')
+      const document = parseMarkdown('article.md', source)
+      const steps = document.regions.filter((region) => region.html.includes('class="markdown-steps"'))
+      expect(steps).toHaveLength(1)
+      expect(steps[0].html).not.toContain('普通正文')
+      expect(document.regions.some((region) => region.type === 'list' && region.textContent.includes('普通列表一'))).toBe(true)
+    }
+  })
+
+  it('renders a sequence of broken star-prefixed steps in saved Markdown without editing it', () => {
+    const oldSteps = '1****准备**：打开文件。\n\n2****检查**：核对文件。\n\n3****保存**：写入改动。'
+    const source = `段落正文\n\n${oldSteps}\n\n单独一行\n\n1****保留**：独立编号。`
+    const doc = parseMarkdown('old-article.md', source)
+    const steps = doc.regions.find((region) => region.html.includes('class="markdown-steps"'))
+    expect(steps?.html).toContain('<strong class="step-label">准备</strong>')
+    expect(source.slice(steps?.sourceStart, steps?.sourceEnd)).toBe(oldSteps)
+    expect(renderMarkdownFragment(source)).toContain('class="markdown-steps"')
+    expect(renderMarkdownFragment(source).match(/class="markdown-steps"/g)).toHaveLength(1)
+    expect(renderMarkdownFragment('\x60\x60\x60\n' + oldSteps + '\n\x60\x60\x60')).not.toContain('class="markdown-steps"')
+  })
+
+  it('pairs separately styled section numbers and labels in the reading outline', () => {
+    const html = `<h1 class="rich_media_title">这是一篇图文教程</h1><section id="js_content">
+      <section><div><span style="font-size: 42px; font-weight: 900">01</span></div><div><section style="font-weight: 700">第一部分：几个关键步骤</section></div></section>
+      <p>下面是原来的正文。</p>
+      <section style="display: flex"><span style="font-size: 36px">02</span><span>第二部分：例子和小结</span></section>
+      <h2>03</h2><p><b>最后一部分：回顾细节</b></p>
+      <p><span style="font-size: 24px; font-weight: 700">04</span></p><p>这句是普通正文，不能被吞掉。</p>
+    </section>`
+    const source = formatClipboardToMarkdown(html, '', 'wechat-article')
+    const document = parseMarkdown('article.md', source)
+    expect(document.headings.map(({ text, depth }) => [text, depth])).toEqual([
+      ['这是一篇图文教程', 1],
+      ['01 第一部分：几个关键步骤', 2],
+      ['02 第二部分：例子和小结', 2],
+      ['03 最后一部分：回顾细节', 2],
+    ])
+    expect(source).toContain('下面是原来的正文。')
+    expect(source).toContain('这句是普通正文，不能被吞掉。')
+  })
+
+  it('converts the decorative header and code in copied cards to fenced blocks', () => {
+    const html = '<p>示例命令如下：</p><section class="code-block"><div><span>●●●</span><span>BASH</span></div><div><code>echo "sample"</code></div></section><p>下文有 <code>inline</code>。</p>'
+    const source = formatClipboardToMarkdown(html, '示例命令如下：\n●●●\nBASH\necho "sample"\n下文有 inline。', 'wechat-article')
+    expect(source).toBe(['示例命令如下：', '', '```bash', 'echo "sample"', '```', '', '下文有 `inline`。'].join('\n'))
+  })
+
+  it('repairs saved cards in reader and preview while retaining the original code region offsets', () => {
+    const card = '●●●\n\nbash\n\n`echo sample`'
+    const source = ['编辑器**，后续说明。', card, '保留转义的星号\\*\\*，这是有意写的。', '`inline`'].join('\n\n')
+    const document = parseMarkdown('old-clipboard.md', source)
+    const code = document.regions.find((region) => region.type === 'code')
+    expect(code?.metadata?.language).toBe('bash')
+    expect(source.slice(code?.sourceStart, code?.sourceEnd)).toBe(card)
+    expect(document.regions[0].textContent).toBe('编辑器，后续说明。')
+    expect(document.regions[2].textContent).toContain('星号**，')
+    expect(renderMarkdownFragment(source)).toContain('<pre><code data-language="bash">echo sample</code></pre>')
+    expect(renderMarkdownFragment(source)).not.toContain('●●●')
+    expect(parseMarkdown('ordinary.md', '真实的星号**，以及 `inline`。').regions[0].textContent).toContain('星号**，')
+  })
+
+  it('keeps the article header and turns styled sections and lazy images into Markdown blocks', () => {
+    const image = 'https://mmbiz.qpic.cn/example/640?wx_fmt=png'
+    const html = `<h1 id="activity-name" class="rich_media_title">剪贴板文章示例</h1>
+      <div id="meta_content"><a href="https://mp.weixin.qq.com/">测试作者</a> <em id="publish_time">2026-11-18</em></div>
+      <section id="js_content">
+        <p><span style="font-size: 22px"><strong>一、章节标题</strong></span></p>
+        <p>正文有<strong>重点</strong>。</p>
+        <img data-src="${image}">
+        <p>图注和<a href="https://example.com/">参考链接</a></p>
+      </section>
+      <footer>原网页底栏</footer>`
+    const text = '剪贴板文章示例\n测试作者 2026-11-18\n一、章节标题\n正文有重点。\n图注和参考链接\n原网页底栏'
+    const source = formatClipboardToMarkdown(html, text, 'wechat-article')
+    expect(source).toContain('# 剪贴板文章示例\n\n[测试作者](https://mp.weixin.qq.com/) *2026-11-18*')
+    expect(source).toContain(`## 一、章节标题\n\n正文有**重点**。\n\n![](${image})\n\n图注和[参考链接](https://example.com/)`)
+    expect(source).not.toContain('原网页底栏')
+  })
+
+  it('falls back to plain text when copied HTML is missing or belongs to another article', () => {
+    const text = '这是一篇来自剪贴板的公众号文章'
+    expect(formatClipboardToMarkdown('', text, 'wechat-article')).toBe(text)
+    expect(formatClipboardToMarkdown('<p>无关内容</p><img src="https://example.com/stale.png">', text, 'wechat-article')).toBe(text)
+  })
+
+  it('keeps entities, nested image wrappers, split headings and literal emphasis markers', () => {
+    const image = 'https://mmbiz.qpic.cn/example/640?wx_fmt=png'
+    const html = `<section id="js_content">
+      <p>研发 &amp; 测试的详细记录</p>
+      <p style="font-size:20px"><b>01</b> <b>章节标题</b></p>
+      <section class="code-comment" style="opacity: 0.9"><p>图片之前的介绍</p></section>
+      <p><span><img src="data:image/gif;base64,AAAA" data-actualsrc="${image.slice(6)}"></span><span>原图图注</span></p>
+      <p><strong>双层<span style="font-weight: 700">强调</span></strong>之后是字面星号 **。</p>
+      <div id="js_cmt_area">留言区</div>
+    </section>`
+    const source = formatClipboardToMarkdown(html, '研发 & 测试的详细记录\n01 章节标题\n图片之前的介绍\n原图图注', 'wechat-article')
+    expect(source).toContain(`研发 & 测试的详细记录\n\n## 01 章节标题\n\n图片之前的介绍\n\n![](${image})\n\n原图图注`)
+    expect(source).toContain('**双层强调**之后是字面星号 \\*\\*。')
+    expect(source).not.toContain('留言区')
+    const doc = parseMarkdown('wechat.md', source)
+    expect(doc.regions.some((region) => region.type === 'image')).toBe(true)
+    expect(doc.regions.some((region) => region.html.includes('<strong>双层强调</strong>'))).toBe(true)
+  })
+})
 
 describe('rich clipboard list hierarchy', () => {
   it('renders standalone pasted image links in saved documents and previews', () => {

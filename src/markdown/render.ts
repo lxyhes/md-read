@@ -70,6 +70,7 @@ function inlineHtml(node: MdastNode, preserveSoftBreaks = false, resolveUrl: Mar
     case 'text': return extendedTextHtml(node.value ?? '').replace(preserveSoftBreaks ? /\r?\n/g : /$^/g, '<br />')
     case 'emphasis': return `<em>${children()}</em>`
     case 'strong': return `<strong>${children()}</strong>`
+    case 'stepLabel': return `<strong class="step-label">${children()}</strong>`
     case 'delete': return `<del>${children()}</del>`
     case 'inlineCode': return `<code>${escapeHtml(node.value ?? '')}</code>`
     case 'link': return !autoLinkEnabled() && nodeText(node) === node.url ? escapeHtml(nodeText(node)) : `<a href="${safeUrl(resolveUrl(node.url ?? ''))}" target="_blank" rel="noreferrer">${children()}</a>`
@@ -202,7 +203,20 @@ function blockHtml(node: MdastNode, resolveUrl: MarkdownUrlResolver = (url) => u
       if (inList) return `<p>${content.replace(/^(?:\s|&nbsp;|\u00a0|\u3000)+/, '')}</p>`
       return source ? sourceIndentedHtml(`<p>${content}</p>`, source, node) : `<p>${content}</p>`
     }
-    case 'blockquote': return calloutHtml(node, resolveUrl, context, source) ?? `<blockquote>${children()}</blockquote>`
+    case 'blockquote': {
+      const [marker, list] = node.children ?? []
+      if (node.children?.length === 2 && marker?.type === 'paragraph' && nodeText(marker).trim() === '[!STEPS]' && list?.type === 'list' && list.ordered) {
+        const items = (list.children ?? []).map((item) => {
+          const [paragraph, ...otherBlocks] = item.children ?? []
+          const [label, ...body] = paragraph?.children ?? []
+          if (paragraph?.type !== 'paragraph' || label?.type !== 'strong') return item
+          const firstBlock = { ...paragraph, children: [{ ...label, type: 'stepLabel' }, ...body] }
+          return { ...item, children: [firstBlock, ...otherBlocks] }
+        })
+        return `<div class="markdown-steps">${blockHtml({ ...list, children: items }, resolveUrl, context)}</div>`
+      }
+      return calloutHtml(node, resolveUrl, context, source) ?? `<blockquote>${children()}</blockquote>`
+    }
     case 'list': {
       const tag = node.ordered ? 'ol' : 'ul'
       const start = node.ordered && node.start != null && node.start !== 1 ? ` start="${node.start}"` : ''

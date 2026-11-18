@@ -1,6 +1,6 @@
 type ClipboardDocument = Document
 
-export type ClipboardFormat = 'default' | 'baidu-netdisk-ai'
+export type ClipboardFormat = 'default' | 'baidu-netdisk-ai' | 'wechat-article'
 
 function inlineText(value: string, node?: Node) {
   let element = node?.parentElement ?? null
@@ -30,7 +30,7 @@ function attributeUrl(element: HTMLElement | null, names: string[]) {
 }
 
 function imageUrl(element: HTMLElement | null) {
-  return attributeUrl(element, ['data-markdown-src', 'data-src', 'data-original', 'data-original-src', 'data-image-src', 'data-lazy-src', 'data-url', 'src'])
+  return attributeUrl(element, ['data-markdown-src', 'data-src', 'data-actualsrc', 'data-original', 'data-original-src', 'data-image-src', 'data-lazy-src', 'data-url', 'src'])
 }
 
 function imageAlt(element: HTMLElement | null) {
@@ -89,7 +89,7 @@ function darkColor(value: string) {
 
 function hasCodeStyle(element: HTMLElement) {
   const signal = classAndId(element)
-  if (element.hasAttribute('data-code-block') || /(?:^|[-_\s])(code|code-block|codeblock|highlight|syntax|hljs|monaco|codemirror)(?:$|[-_\s])/i.test(signal)) return true
+  if (element.hasAttribute('data-code-block') || /(?:^|\s)code(?:$|\s)|(?:^|[-_\s])(?:code-block|codeblock|highlight|syntax|hljs|monaco|codemirror)(?:$|[-_\s])/i.test(signal)) return true
   const style = element.getAttribute('style') ?? ''
   const background = style.match(/background(?:-color)?\s*:\s*([^;]+)/i)?.[1] ?? ''
   // A dark webpage is not a code block: structured children must keep their links and lists.
@@ -103,11 +103,102 @@ function looksLikeDiagram(value: string) {
   return signalLines >= 2 && (lines.some((line) => /[┌┐└┘├┤┬┴┼│─━═]/.test(line)) || signalLines >= 3)
 }
 
+function isBold(element: HTMLElement) {
+  return /^(?:STRONG|B)$/.test(element.tagName) || hasStyle(element, /font-weight\s*:\s*(?:bold|[6-9]00)/i)
+}
+
 function renderCodeBlock(source: string, language = 'plain') {
   const value = source.replace(/\r\n?/g, '\n').replace(/^\n|\n$/g, '')
   if (!value.trim()) return ''
   const fence = value.includes('```') ? '~~~' : '```'
   return `${fence}${language}\n${value}\n${fence}\n\n`
+}
+
+export function clipboardCodeCardLanguage(chrome: string, label: string): string {
+  const language = label.trim().toLowerCase()
+  if (!/^[●•·](?:\s*[●•·]){2}$/.test(chrome.trim())) return ''
+  return /^(?:bash|sh|shell|zsh|fish|powershell|ps1|cmd|batch|javascript|js|typescript|ts|python|py|go|rust|java|json|yaml|toml|sql|html|css|xml|diff|text|plain|plaintext)$/.test(language) ? language : ''
+}
+
+function restoreWechatCodeCards(source: string) {
+  const lines = source.split('\n')
+  const result: string[] = []
+  let fence = ''
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]
+    const marker = line.match(/^[ \t]{0,3}(`{3,}|~{3,})(.*)$/)
+    if (marker) {
+      if (!fence) fence = marker[1]
+      else if (marker[1][0] === fence[0] && marker[1].length >= fence.length && !marker[2].trim()) fence = ''
+    }
+    if (!fence && /^[●•·]/.test(line.trim())) {
+      const labelIndex = index + (lines[index + 1]?.trim() ? 1 : 2)
+      const codeIndex = labelIndex + (lines[labelIndex + 1]?.trim() ? 1 : 2)
+      const language = clipboardCodeCardLanguage(line, lines[labelIndex] ?? '')
+      const code = lines[codeIndex]?.trim().match(/^(`+)(.+?)\1$/)
+      if (language && code && !code[2].startsWith('`') && !code[2].endsWith('`')) {
+        result.push(renderCodeBlock(code[2], language).trimEnd())
+        index = codeIndex
+        continue
+      }
+      if (language && /^[ \t]{0,3}(?:`{3,}|~{3,})(?:plain|text|plaintext)?\s*$/.test(lines[codeIndex] ?? '')) {
+        lines[codeIndex] = lines[codeIndex].replace(/^(\s*[`~]+).*$/, `$1${language}`)
+        index = codeIndex - 1
+        continue
+      }
+    }
+    result.push(line)
+  }
+  return result.join('\n')
+}
+
+export function readClipboardStep(line: string) {
+  const match = line.trim().match(/^(?:(?:\\?\*){2})?([1-9]\d?)[ \t]*(?:\\?\*){2,8}([^*\\\n：:]{1,80}?)(?:\\?\*){0,8}[ \t]*([：:])(?:\\?\*){0,8}[ \t]*(\S[^\n]*)$/)
+  if (!match?.[2].trim()) return null
+  const [, number, label, colon, description] = match
+  return { number: Number(number), content: `**${label.trim()}**${colon} ${description}` }
+}
+
+export function clipboardStepsMarkdown(items: NonNullable<ReturnType<typeof readClipboardStep>>[]) {
+  return ['> [!STEPS]', '>', ...items.map(({ number, content }) => `> ${number}. ${content}`)].join('\n')
+}
+
+function restoreClipboardStepCards(source: string) {
+  const lines = source.split('\n')
+  const result: string[] = []
+  let fence = ''
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]
+    const marker = line.match(/^[ \t]{0,3}(`{3,}|~{3,})(.*)$/)
+    if (marker) {
+      if (!fence) fence = marker[1]
+      else if (marker[1][0] === fence[0] && marker[1].length >= fence.length && !marker[2].trim()) fence = ''
+    }
+    if (fence || !/^\s*(?:(?:\\?\*){2})?1(?:\D|$)/.test(line)) {
+      result.push(line)
+      continue
+    }
+    const items: NonNullable<ReturnType<typeof readClipboardStep>>[] = []
+    let next = index
+    let end = index
+    while (next < lines.length) {
+      const badge = lines[next].trim().match(/^(?:(?:\*\*)([1-9]\d?)(?:\*\*)|([1-9]\d?))$/)
+      const content = badge ? next + (lines[next + 1]?.trim() ? 1 : 2) : next
+      const item = readClipboardStep(`${badge?.[1] ?? badge?.[2] ?? ''}${lines[content] ?? ''}`)
+      if (!item || item.number !== items.length + 1) break
+      items.push(item)
+      end = content
+      next = end + (lines[end + 1]?.trim() ? 1 : 2)
+    }
+    if (items.length < 2) {
+      result.push(line)
+      continue
+    }
+    result.push(clipboardStepsMarkdown(items))
+    if (lines[end + 1]?.trim()) result.push('')
+    index = end
+  }
+  return result.join('\n')
 }
 
 export function isLikelyProseBlock(value: string) {
@@ -226,11 +317,50 @@ function classAndId(element: HTMLElement) {
 }
 
 function isHidden(element: HTMLElement) {
-  return element.hidden || element.getAttribute('aria-hidden') === 'true' || /(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden|opacity\s*:\s*0)/i.test(element.getAttribute('style') ?? '')
+  return element.hidden || element.getAttribute('aria-hidden') === 'true' || /(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden|opacity\s*:\s*0(?:\.0+)?)\s*(?:!important\s*)?(?:;|$)/i.test(element.getAttribute('style') ?? '')
 }
 
-function isArticleNoise(element: HTMLElement) {
-  if (['script', 'style', 'noscript', 'template', 'nav', 'aside'].includes(element.tagName.toLowerCase())) return true
+const clipboardCalloutKinds = /^(?:note|tip|important|warning|caution|info|success|failure|danger|bug|example|quote)$/i
+
+function clipboardCalloutKind(element: HTMLElement) {
+  const classNames = [...element.classList]
+  const explicit = [element.dataset.callout, element.dataset.admonition, ...classNames.map((name) =>
+    name.match(/^(?:callout|admonition|alert)-([a-z]+)$/i)?.[1]
+      ?? name.match(/^([a-z]+)-(?:callout|admonition|alert)$/i)?.[1]
+      ?? (classNames.includes('admonition') ? name : undefined))]
+  const kind = explicit.find((value) => value && clipboardCalloutKinds.test(value))
+  if (kind) return kind.toUpperCase()
+
+  const { style } = element
+  const background = style.getPropertyValue('background-color')
+  if (!background || /^(?:transparent|white|#fff(?:fff)?|rgba\([^)]*[,/]\s*0(?:\.0+)?\s*\))$/i.test(background)) return ''
+  const border = style.getPropertyValue('border-left') || style.getPropertyValue('border-inline-start')
+  const opposite = style.getPropertyValue('border-right') || style.getPropertyValue('border-inline-end')
+  if (!border || border === opposite || /^(?:0(?:px)?\b|none\b)/i.test(border)) return ''
+  const color = style.getPropertyValue('border-left-color') || style.getPropertyValue('border-inline-start-color') || border
+  const hex = color.match(/#([\da-f]{6}|[\da-f]{3})\b/i)?.[1]
+  const rgb = hex
+    ? (hex.length === 3 ? hex.replace(/./g, '$&$&') : hex).match(/../g)?.map((pair) => Number.parseInt(pair, 16))
+    : color.match(/rgba?\(\s*(\d+(?:\.\d+)?)[,\s]+(\d+(?:\.\d+)?)[,\s]+(\d+(?:\.\d+)?)/i)?.slice(1).map(Number)
+  if (!rgb) return ''
+  const [red, green, blue] = rgb
+  const max = Math.max(red, green, blue)
+  const range = max - Math.min(red, green, blue)
+  if (range < 24) return ''
+  const sector = max === red ? (green - blue) / range : max === green ? 2 + (blue - red) / range : 4 + (red - green) / range
+  const hue = (sector * 60 + 360) % 360
+  if (hue < 12 || hue >= 345) return 'CAUTION'
+  if (hue < 65) return 'WARNING'
+  if (hue < 165) return 'TIP'
+  if (hue < 250) return 'INFO'
+  return 'IMPORTANT'
+}
+
+function isArticleNoise(element: HTMLElement, wechatArticle: boolean) {
+  const tag = element.tagName.toLowerCase()
+  if (['script', 'style', 'noscript', 'template', 'nav'].includes(tag)) return true
+  if (tag === 'aside' && !clipboardCalloutKind(element)) return true
+  if (wechatArticle) return element.matches('#js_pc_qr_code, #js_sg_bar, #js_tags, #js_cmt_area, #js_bottom_ad_area, #js_reward_area, #js_share_tool, .rich_media_tool')
   return /(?:qr[_-]?code|qrcode|二维码|reward|赞赏|comment|评论|share|分享|like|点赞|collect|收藏|follow|关注|download|下载|login|登录|register|注册|recommend|推荐|sidebar|侧栏|toolbar|工具栏|breadcrumb|面包屑|advert|广告|app[_-]?download|open[_-]?app|fixed[_-]?bottom)/i.test(classAndId(element))
 }
 
@@ -238,10 +368,10 @@ function isArticleTitle(element: HTMLElement) {
   return /(?:rich[_-]?media[_-]?title|note[_-]?title|article[_-]?title|(?:^|[\s_-])title(?:$|[\s_-]))/i.test(classAndId(element))
 }
 
-function removeClipboardNoise(document: ClipboardDocument) {
+function removeClipboardNoise(document: ClipboardDocument, wechatArticle: boolean) {
   Array.from(document.body.querySelectorAll('*')).forEach((node) => {
     const element = node as HTMLElement
-    if (isHidden(element) || isArticleNoise(element)) element.remove()
+    if (isHidden(element) || isArticleNoise(element, wechatArticle)) element.remove()
   })
   return document.body
 }
@@ -259,7 +389,6 @@ function renderFigure(figure: HTMLElement) {
 
 function render(node: HTMLElement): string {
   const tag = node.tagName.toLowerCase()
-  if (isHidden(node) || isArticleNoise(node)) return ''
   if (isArticleTitle(node)) return `# ${inline(node).trim()}\n\n`
   if (tag === 'table') return `${renderTable(node as HTMLTableElement)}\n\n`
   if (tag === 'ul' || tag === 'ol') return `${renderList(node)}\n\n`
@@ -276,7 +405,7 @@ function render(node: HTMLElement): string {
   if (tag === 'blockquote') return `${blockquote(Array.from(node.childNodes).map((child) => child.nodeType === Node.ELEMENT_NODE ? render(child as HTMLElement) : inline(child)).join(''))}\n\n`
   if (tag === 'hr') return '---\n\n'
   const diagramLike = isSimpleCodeCandidate(node) && looksLikeDiagram(codeText(node))
-  if (hasCodeStyle(node) || diagramLike) {
+  if ((hasCodeStyle(node) && !node.querySelector('pre')) || diagramLike) {
     const language = classAndId(node).match(/(?:language|lang)[-_ ]*([\w+#-]+)/i)?.[1] || 'plain'
     const value = codeText(node)
     if (isPlainTextLanguage(language) && isLikelyProseBlock(value)) return `${value.trim()}\n\n`
@@ -368,9 +497,8 @@ function normalizeArticleSections(value: string) {
 
     // Existing Markdown list items already have a hierarchy. Rewriting bold
     // spans inside them as section headings breaks nested lists and links.
-    // The same applies to explicit headings: splitting `### **title**` would
-    // leave an empty heading followed by a plain paragraph.
-    if (/^(?:[ \t]{2,}|\s*(?:#{1,6}\s+|[-+*]\s+|\d+[.)]\s+))/.test(line)) {
+    // Explicit headings and quoted blocks also need to keep their line structure.
+    if (/^(?:[ \t]{2,}|\s*(?:>|#{1,6}\s+|[-+*]\s+|\d+[.)]\s+))/.test(line)) {
       result.push(line)
       continue
     }
@@ -402,7 +530,7 @@ function normalizeTimestampedHeadings(value: string) {
       inFence = !inFence
       return line
     }
-    if (inFence || /^\s*#{1,6}\s+/.test(trimmed)) return line
+    if (inFence || /^(?:>|#{1,6}\s+)/.test(trimmed)) return line
     const match = trimmed.match(/^(.+?)\s+(\d{1,2}:\d{2}(?::\d{2})?)$/)
     const title = match?.[1]?.trim() ?? ''
     if (!match || !title || title.length > 48 || !/[\u3400-\u9fff]/.test(title) || /[。！？!?]$/.test(title)) return line
@@ -710,12 +838,182 @@ export function formatClipboardImage(dataUrl: string, alt = '剪贴板图片') {
   return value ? `![${alt}](${value})` : ''
 }
 
+function prepareWechatCodeCards(body: HTMLElement) {
+  for (const code of body.querySelectorAll<HTMLElement>('pre, code')) {
+    if (!body.contains(code) || (code.tagName === 'CODE' && code.closest('pre'))) continue
+    let block = code
+    while (!block.previousElementSibling && block.parentElement && block.parentElement !== body && block.parentElement.textContent?.trim() === code.textContent?.trim()) {
+      block = block.parentElement
+    }
+    const header = block.previousElementSibling
+    if (!header) continue
+    const label = header.textContent?.trim() ?? ''
+    const combined = label.match(/^([●•·](?:\s*[●•·]){2})\s*(.+)$/)
+    const chrome = combined ? header : header.previousElementSibling
+    const language = clipboardCodeCardLanguage(combined?.[1] ?? chrome?.textContent ?? '', combined?.[2] ?? label)
+    const value = codeText(code)
+    if (!language || !value.trim()) continue
+    const pre = body.ownerDocument.createElement('pre')
+    const content = body.ownerDocument.createElement('code')
+    content.className = `language-${language}`
+    content.textContent = value
+    pre.append(content)
+    block.replaceWith(pre)
+    header.remove()
+    chrome?.remove()
+  }
+}
+
+function mergeWechatNumberedHeadings(body: HTMLElement) {
+  const headingTags = 'h2, h3, h4, h5, h6'
+  const blockTags = `p, section, div, span, ${headingTags}`
+  for (const number of body.querySelectorAll<HTMLElement>(blockTags)) {
+    if (!body.contains(number) || number.closest('pre, code, table, ul, ol')) continue
+    const prefix = number.textContent?.trim() ?? ''
+    if (!/^\d{2}$/.test(prefix)) continue
+
+    const numberParts = [number, ...number.querySelectorAll<HTMLElement>('span, strong, b, em, i')]
+    const large = numberParts.some((element) =>
+      Number(element.getAttribute('style')?.match(/(?:^|;)\s*font-size\s*:\s*(\d+(?:\.\d+)?)px\b/i)?.[1]) >= 20)
+    if (!large && !number.matches(headingTags)) continue
+
+    let badge = number
+    while (badge.parentElement?.matches(blockTags) && badge.parentElement.textContent?.trim() === prefix) {
+      badge = badge.parentElement
+    }
+    const title = badge.nextElementSibling as HTMLElement | null
+    if (!title?.matches(`${blockTags}, strong, b`)) continue
+    let sibling = badge.nextSibling
+    while (sibling && sibling.nodeType !== Node.ELEMENT_NODE && (sibling.nodeType !== Node.TEXT_NODE || !sibling.textContent?.trim())) {
+      sibling = sibling.nextSibling
+    }
+    if (sibling !== title) continue
+    const label = title.textContent?.trim().replace(/\s+/g, ' ') ?? ''
+    if (!/\p{L}/u.test(label) || label.length > 80 || /[。！？；]$/.test(label)) continue
+    if (title.querySelector('img, video, a, br, pre, code, table, ul, ol, blockquote, hr')) continue
+    const titleParts = [title, ...title.querySelectorAll<HTMLElement>(`strong, b, ${blockTags}`)]
+    const styledTitle = titleParts.some((element) =>
+      element.textContent?.trim().replace(/\s+/g, ' ') === label && (isBold(element) || element.matches(headingTags)))
+    const group = badge.parentElement
+    const styledGroup = group?.children.length === 2 && (isBold(group) || hasStyle(group, /display\s*:\s*(?:inline-)?flex\b/i))
+    if (!styledTitle && !styledGroup) continue
+
+    const semantic = badge.matches(headingTags) ? badge : titleParts.find((element) => element.matches(headingTags))
+    const heading = body.ownerDocument.createElement(semantic?.tagName.toLowerCase() ?? 'h2')
+    heading.textContent = `${prefix} ${label}`
+    badge.replaceWith(heading)
+    title.remove()
+  }
+}
+
+function prepareClipboardCallouts(body: HTMLElement) {
+  const containers = 'section, div, aside, blockquote'
+  for (const box of body.querySelectorAll<HTMLElement>(containers)) {
+    if (!body.contains(box)) continue
+    const kind = clipboardCalloutKind(box)
+    if (!kind) continue
+    let content = box
+    while (content.children.length === 1 && content.firstElementChild?.matches(containers)
+      && content.firstElementChild.textContent?.trim() === content.textContent?.trim()) {
+      content = content.firstElementChild as HTMLElement
+    }
+    const title = content.firstElementChild
+    const label = title?.textContent?.trim().replace(/\s+/g, ' ') ?? ''
+    if (!title || !label || label.length > 48 || title.querySelector('img, video, pre, table, ul, ol, blockquote')) continue
+    const nodes = Array.from(content.childNodes)
+    const beforeTitle = nodes.slice(0, nodes.indexOf(title))
+    const details = nodes.slice(nodes.indexOf(title) + 1)
+    if (beforeTitle.some((node) => node.textContent?.trim()) || !details.some((node) => node.textContent?.trim())) continue
+    if (/^\[!/.test(label)) continue
+
+    const quote = body.ownerDocument.createElement('blockquote')
+    const marker = body.ownerDocument.createElement('p')
+    marker.textContent = `[!${kind}] ${label}`
+    quote.append(marker, ...details)
+    box.replaceWith(quote)
+  }
+}
+
+function prepareWechatArticle(body: HTMLElement) {
+  const article = body.querySelector('#js_content, .rich_media_content')
+  if (article) {
+    const header = Array.from(body.querySelectorAll('#activity-name, .rich_media_title, #meta_content'))
+      .filter((element) => !article.contains(element) && !element.contains(article))
+    body.replaceChildren(...header, article)
+  }
+
+  prepareWechatCodeCards(body)
+  mergeWechatNumberedHeadings(body)
+
+  for (const block of body.querySelectorAll<HTMLElement>('p, section, div')) {
+    const label = block.textContent?.trim() ?? ''
+    if (!label || label.length > 48 || /^\d{2}$/.test(label) || /[。！？；]$/.test(label)) continue
+    if (block.querySelector('p, section, div, h1, h2, h3, h4, h5, h6, a, img, br, code, pre, table, ul, ol')) continue
+    const fullLabel = [block, ...block.querySelectorAll<HTMLElement>('span, strong, b')].filter((element) => element.textContent?.trim() === label)
+    const substep = /^[①-⑳]/.test(label)
+    const step = /^(?:第[一二三四五六七八九十\d]+步[：:]|\d{1,2}[.、]\s*)/.test(label)
+    const numbered = substep || step || /^(?:\d{2}\s|[一二三四五六七八九十]+、)/.test(label)
+    const large = fullLabel.some((element) => Number(element.getAttribute('style')?.match(/(?:^|;)\s*font-size\s*:\s*(\d+(?:\.\d+)?)px\b/i)?.[1]) >= (numbered ? 18 : 20))
+    const bold = fullLabel.some(isBold) || (block.children.length > 0 && Array.from(block.childNodes).every((node) =>
+      node.nodeType === Node.ELEMENT_NODE ? isBold(node as HTMLElement) : !node.textContent?.trim()))
+    if (!large || !bold) continue
+    const heading = body.ownerDocument.createElement(substep ? 'h4' : step ? 'h3' : 'h2')
+    heading.textContent = label
+    block.replaceWith(heading)
+  }
+
+  for (const image of body.querySelectorAll<HTMLElement>('img')) {
+    const url = imageUrl(image)
+    if (url.startsWith('//')) image.setAttribute('data-markdown-src', `https:${url}`)
+    if (!url || isTrackingImage(image) || image.closest('figure, table')) continue
+    const link = image.closest('a')
+    const target = link && !link.textContent?.trim() ? link : image
+    target.before(body.ownerDocument.createElement('br'))
+    target.after(body.ownerDocument.createElement('br'))
+  }
+
+  const blockTags = 'br, p, section, div, article, main, figure, h1, h2, h3, h4, h5, h6, blockquote, pre, table, ul, ol'
+  for (const parent of [body, ...body.querySelectorAll('section, div, article, main')]) {
+    for (const child of Array.from(parent.childNodes)) {
+      if (child.nodeType !== Node.TEXT_NODE || child.textContent?.trim()) continue
+      const previous = child.previousSibling
+      if (previous?.nodeType === Node.ELEMENT_NODE && (previous as Element).matches(blockTags)) child.remove()
+    }
+  }
+
+  for (const element of body.querySelectorAll<HTMLElement>('strong, b, [style*="font-weight"]')) {
+    if (!isBold(element)) continue
+    let ancestor = element.parentElement
+    while (ancestor && ancestor !== body && !isBold(ancestor)) ancestor = ancestor.parentElement
+    if (!ancestor || ancestor === body) continue
+    if (/^(?:STRONG|B)$/.test(element.tagName)) element.replaceWith(...element.childNodes)
+    else element.style.removeProperty('font-weight')
+  }
+
+  const textNodes = body.ownerDocument.createTreeWalker(body, 4)
+  for (let node = textNodes.nextNode(); node; node = textNodes.nextNode()) {
+    if (!node.parentElement?.closest('code, pre')) node.textContent = (node.textContent ?? '').replace(/[\\*_\x60[\]]/g, '\\$&')
+  }
+}
+
 export function htmlToMarkdown(html: string) {
+  return convertClipboardHtml(html)
+}
+
+function convertClipboardHtml(html: string, wechatArticle = false, plainText = '') {
   if (!html.trim() || typeof DOMParser === 'undefined') return ''
   const document = new DOMParser().parseFromString(html, 'text/html') as ClipboardDocument
-  const body = removeClipboardNoise(document)
+  if (wechatArticle) {
+    const comparable = (value: string) => value.normalize('NFKC').replace(/[\s\u200b-\u200d\uFEFF]/g, '')
+    const plainPrefix = comparable(plainText).slice(0, 24)
+    if (plainPrefix && !comparable(document.body.textContent ?? '').includes(plainPrefix)) return ''
+  }
+  const body = removeClipboardNoise(document, wechatArticle)
+  if (wechatArticle) prepareWechatArticle(body)
+  prepareClipboardCallouts(body)
   const source = Array.from(body.childNodes).filter((node) => node.nodeType !== Node.TEXT_NODE || Boolean(node.textContent?.trim())).map((node) => node.nodeType === Node.ELEMENT_NODE ? render(node as HTMLElement) : inline(node)).join('')
-  return normalizeArticleSections(stripDecorativeHeadingStars(normalizeMarkdown(stripAccidentalClipboardIndent(source))))
+  const normalized = restoreClipboardStepCards(normalizeMarkdown(stripAccidentalClipboardIndent(source)))
+  return wechatArticle ? restoreWechatCodeCards(normalized) : normalizeArticleSections(stripDecorativeHeadingStars(normalized))
 }
 
 export function formatBaiduNetdiskAiToMarkdown(text: string) {
@@ -725,13 +1023,18 @@ export function formatBaiduNetdiskAiToMarkdown(text: string) {
 
 export function formatClipboardToMarkdown(html: string, text: string, format: ClipboardFormat = 'default') {
   const promotedText = promoteClipboardImageLinks(text)
+  if (format === 'wechat-article') {
+    const article = convertClipboardHtml(html, true, text)
+    return article || restoreWechatCodeCards(formatPastedText(restoreClipboardStepCards(normalizeMarkdown(promotedText))))
+  }
   if (format === 'baidu-netdisk-ai') {
     const baiduMarkdown = formatBaiduNetdiskAiToMarkdown(promotedText)
     if (baiduMarkdown) return insertClipboardImages(baiduMarkdown, html)
   }
   const clipboardMarkdown = clipboardHtmlMatchesPlainText(html, promotedText) ? htmlToMarkdown(html) : ''
+  if (/^> \[!(?:STEPS|NOTE|TIP|IMPORTANT|WARNING|CAUTION|INFO|SUCCESS|FAILURE|DANGER|BUG|EXAMPLE|QUOTE)\](?:[ \t].*)?$/m.test(clipboardMarkdown)) return insertClipboardImages(clipboardMarkdown, html)
   const hasStructuredClipboardContent = /(?:^|\n)[ \t]*(?:#{1,6}[ \t]+|[-+*][ \t]+|\d+[.)][ \t]+)/m.test(clipboardMarkdown)
-  const hasExplicitMarkdownStructure = /(?:^|\n)[ \t]{0,3}#{1,6}[ \t]+|(?:^|\n)[ \t]{2,}(?:[-+*]|\d+[.)])[ \t]+/m.test(promotedText)
+  const hasExplicitMarkdownStructure = /(?:^|\n)[ \t]{0,3}(?:#{1,6}[ \t]+|>[ \t]*\[!STEPS\][ \t]*$)|(?:^|\n)[ \t]{2,}(?:[-+*]|\d+[.)])[ \t]+/m.test(promotedText)
   let source = ''
   if (hasExplicitMarkdownStructure) source = formatPastedText(promotedText)
   else if (hasStructuredClipboardContent) source = formatPastedText(clipboardMarkdown)

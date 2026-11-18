@@ -410,27 +410,27 @@ function imageExtension(url: string, mime: string) {
   return ({ 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp', 'image/svg+xml': 'svg', 'image/avif': 'avif', 'image/bmp': 'bmp' } as Record<string, string>)[mime] ?? 'jpg'
 }
 
-export async function downloadMarkdownImages(markdownPath: string, source: string, relativePathPrefix = false): Promise<{ source: string; count: number }> {
+export async function downloadMarkdownImages(markdownPath: string, source: string, relativePathPrefix = false): Promise<{ source: string; count: number; failed: number }> {
   if (!isTauri()) throw new Error('下载远程图片需要桌面端')
   const directory = dirnameOf(markdownPath)
   if (!directory) throw new Error('请先将 Markdown 保存到本地')
   const pattern = /(!\[[^\]\n]*\]\()(<https?:\/\/[^>\n]+>|https?:\/\/[^)\s\n]+)(\))/gi
   const normalizedSource = promoteClipboardImageLinks(source)
   const urls = [...new Set([...normalizedSource.matchAll(pattern)].map((match) => match[2].replace(/^<|>$/g, '')))]
-  if (!urls.length) return { source, count: 0 }
+  if (!urls.length) return { source, count: 0, failed: 0 }
   const assetDirectory = `${directory}/.moyue-assets`
   await mkdir(assetDirectory, { recursive: true })
   const replacements = new Map<string, string>()
-  for (const [index, url] of urls.entries()) {
-    try {
+  const downloadId = crypto.randomUUID()
+  const batchSize = 4
+  for (let offset = 0; offset < urls.length; offset += batchSize) {
+    await Promise.allSettled(urls.slice(offset, offset + batchSize).map(async (url, index) => {
       const image = await invoke<{ bytes: number[]; mime: string }>('download_remote_image', { url: url.replace(/\\([!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])/g, '$1') })
       const extension = imageExtension(url, image.mime)
-      const name = `download-${Date.now().toString(36)}-${index + 1}.${extension}`
+      const name = `download-${downloadId}-${offset + index + 1}.${extension}`
       await writeFile(`${assetDirectory}/${name}`, Uint8Array.from(image.bytes))
       replacements.set(url, withRelativePathPrefix(`.moyue-assets/${name}`, relativePathPrefix))
-    } catch {
-      // One unreachable image should not block the rest of the document.
-    }
+    }))
   }
   if (!replacements.size) throw new Error('远程图片下载失败，请检查图片地址或网络')
   await authorizeMarkdownAssets(markdownPath)
@@ -440,11 +440,12 @@ export async function downloadMarkdownImages(markdownPath: string, source: strin
       return `${before}${replacements.get(value) ?? wrapped}${after}`
     }),
     count: replacements.size,
+    failed: urls.length - replacements.size,
   }
 }
 
-export async function cachePastedRemoteImages(source: string): Promise<{ source: string; count: number }> {
-  if (!isTauri()) return { source, count: 0 }
+export async function cachePastedRemoteImages(source: string): Promise<{ source: string; count: number; failed: number }> {
+  if (!isTauri()) return { source, count: 0, failed: 0 }
   const directory = (await appDataDir()).replace(/\\/g, '/').replace(/\/$/, '')
   const result = await downloadMarkdownImages(`${directory}/clipboard.md`, source)
   const encodedDirectory = encodeURI(directory).replace(/[?#]/g, (character) => encodeURIComponent(character))

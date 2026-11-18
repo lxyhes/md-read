@@ -97,6 +97,45 @@ $$`)
     expect(document.regions[0].html).not.toContain('[!WARNING]')
   })
 
+  it('renders only ordered lists marked with STEPS as cards', () => {
+    const source = '> [!STEPS]\n>\n> 3. **准备**：打开文件。\n> 4. 保存到**指定目录**。\n\n1. **普通列表**\n\n> [!STEPS]\n> - 普通引用'
+    const [steps, list, quote] = parseMarkdown('steps.md', source).regions
+
+    expect(steps.html).toContain('<div class="markdown-steps"><ol start="3">')
+    expect(steps.html).toContain('<strong class="step-label">准备</strong>：打开文件。')
+    expect(steps.html).toContain('保存到<strong>指定目录</strong>。')
+    expect(steps.html).not.toContain('[!STEPS]')
+    expect(list.html).toContain('<ol>')
+    expect(list.html).toContain('<strong>普通列表</strong>')
+    expect(list.html).not.toContain('markdown-steps')
+    expect(quote.html).toContain('<blockquote>')
+    expect(quote.html).not.toContain('markdown-steps')
+  })
+
+  it('preserves card lists when pasting steps with bold labels followed by colons', () => {
+    const source = '> [!STEPS]\n>\n> 1. **三视图剧本工作台**：在三个视图之间切换和保存状态。\n> 2. **对话与生成接口**：发送消息、接收流式回复。\n> 3. **三级分镜结构**：分集 → 15 秒片段 → 内部单镜头。'
+    const pasted = formatClipboardToMarkdown('', source)
+
+    expect(pasted).toBe(source)
+    expect(parseMarkdown('steps.md', pasted).regions[0].html).toContain('class="markdown-steps"')
+  })
+
+  it('recovers card lists split into separate quoted regions by older paste formatting', () => {
+    const split = '> [!STEPS]\n\n> 1. **三视图剧本工作台**：切换视图。\n\n> 2. **对话与生成接口**：发送消息。\n\n> 3. **三级分镜结构**：拆分镜头。'
+    const source = `${split}\n\n> 1. 另一段引用\n\n1. 普通列表`
+    const document = parseMarkdown('steps.md', source)
+    const [steps, quote, list] = document.regions
+
+    expect(document.regions).toHaveLength(3)
+    expect(document.source.slice(steps.sourceStart, steps.sourceEnd)).toBe(split)
+    expect(steps.html).toContain('<div class="markdown-steps"><ol>')
+    expect(steps.html.match(/<li>/g)).toHaveLength(3)
+    expect(steps.html).not.toContain('[!STEPS]')
+    expect(renderMarkdownFragment(source)).toContain(steps.html)
+    expect(quote.html).toContain('<blockquote><ol>')
+    expect(list.html).toContain('<ol>')
+  })
+
   it('does not emit executable raw HTML', () => {
     const document = parseMarkdown('unsafe.md', '<script>alert(1)</script>\n\n[bad](javascript:alert(1))')
     expect(document.regions[0].html).not.toContain('<script>')

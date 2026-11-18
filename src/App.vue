@@ -3509,12 +3509,27 @@ async function importClipboardContent(html: string, text: string, saveToFile = f
   try {
     let imageDownloadFailed = false
     if (!saveToFile) {
-      try { source = (await cachePastedRemoteImages(source)).source }
-      catch { imageDownloadFailed = true }
+      try {
+        const localized = await cachePastedRemoteImages(source)
+        source = localized.source
+        imageDownloadFailed = localized.failed > 0
+      } catch { imageDownloadFailed = true }
     }
     const suggestedName = suggestPastedMarkdownName(source)
     let path = saveToFile ? await saveMarkdownFile(source, suggestedName) : `${suggestedName}.md`
     if (!path) return
+    if (saveToFile && format === 'wechat-article') {
+      try {
+        const localized = await downloadMarkdownImages(path, source, advancedSettings.value.relativeImagePathPrefix)
+        imageDownloadFailed = localized.failed > 0
+        if (localized.count) {
+          await writeMarkdownFile(path, localized.source, source)
+          source = localized.source
+        }
+      } catch {
+        imageDownloadFailed = true
+      }
+    }
     if (!saveToFile) {
       const usedPaths = new Set(store.documents.map((document) => normalizedPath(document.path).toLowerCase()))
       const base = path.replace(/\.(?:md|markdown|qmd)$/i, '')
@@ -3529,7 +3544,8 @@ async function importClipboardContent(html: string, text: string, saveToFile = f
       view.value = 'reader'
       await nextTick()
       restoreScroll()
-      notify(imageDownloadFailed ? '已粘贴，但远程图片下载失败，请检查网络或图片地址' : saveToFile ? `已保存并打开：${path}` : '已粘贴并格式化为 Markdown')
+      const message = saveToFile ? `已保存并打开：${path}` : '已粘贴并格式化为 Markdown'
+      notify(imageDownloadFailed ? `${message}，有图片未能保存到本地` : message)
     }
   } catch (error) {
     notify(error instanceof Error ? error.message : '粘贴内容失败')
@@ -5767,6 +5783,8 @@ async function requestFullscreen() {
               <Button class="library-import-action" type="text" long :loading="busyAction === 'paste'" :disabled="busyAction !== null" @click="() => pasteFromClipboard()">粘贴并格式化</Button>
               <Button class="library-import-action" type="text" long :loading="busyAction === 'paste'" :disabled="busyAction !== null" @click="() => pasteFromClipboard(false, 'baidu-netdisk-ai')">百度网盘 AI 粘贴</Button>
               <Button class="library-import-action" type="text" long :loading="busyAction === 'paste-save'" :disabled="busyAction !== null" @click="() => pasteFromClipboard(true, 'baidu-netdisk-ai')">百度网盘 AI 粘贴并保存</Button>
+              <Button class="library-import-action" type="text" long :loading="busyAction === 'paste'" :disabled="busyAction !== null" @click="() => pasteFromClipboard(false, 'wechat-article')">微信公众号粘贴</Button>
+              <Button class="library-import-action" type="text" long :loading="busyAction === 'paste-save'" :disabled="busyAction !== null" @click="() => pasteFromClipboard(true, 'wechat-article')">微信公众号粘贴并保存</Button>
               <Button class="library-import-action" type="text" long :loading="busyAction === 'paste-image'" :disabled="busyAction !== null" @click="() => pasteImageFromClipboard()">粘贴图片</Button>
               <Button class="library-import-action" type="text" long :loading="busyAction === 'paste-save'" :disabled="busyAction !== null" @click="() => pasteFromClipboard(true)">粘贴并保存</Button>
             </template>

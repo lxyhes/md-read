@@ -6,7 +6,7 @@ import remarkParse from 'remark-parse'
 import { parseComparisonLayout, renderComparisonLayout } from '../comparisonLayout'
 import { blockHtmlWithSourceIndent, renderFootnotes } from './render'
 import { createRenderContext, nodeText, resolveMarkdownReferences, type MarkdownUrlResolver, type MdastNode } from './shared'
-import { isClipboardImageLink, normalizeMixedOrderedListSource } from '../pasteMarkdown'
+import { clipboardCodeCardLanguage, clipboardStepsMarkdown, isClipboardImageLink, normalizeMixedOrderedListSource, readClipboardStep } from '../pasteMarkdown'
 
 export const markdownProcessor = unified()
   .use(remarkParse)
@@ -69,6 +69,34 @@ export function normalizeArticleStrong(node: MdastNode) {
   })
 }
 
+export function restoreClipboardCodeCards(tree: MdastNode, source: string) {
+  const children = tree.children ?? []
+  const restored: MdastNode[] = []
+  let found = false
+  for (let index = 0; index < children.length; index += 1) {
+    const [chrome, label, body] = children.slice(index, index + 3)
+    const language = chrome.type === 'paragraph' && label?.type === 'paragraph' ? clipboardCodeCardLanguage(nodeText(chrome), nodeText(label)) : ''
+    const inline = body?.type === 'paragraph' && body.children?.length === 1 ? body.children[0] : undefined
+    if (language && inline?.type === 'inlineCode') {
+      restored.push({ type: 'code', lang: language, value: inline.value, position: { start: chrome.position?.start, end: body.position?.end } })
+      index += 2
+      found = true
+    } else {
+      restored.push(chrome)
+    }
+  }
+  if (!found) return
+  tree.children = restored
+  for (const paragraph of restored.filter((node) => node.type === 'paragraph')) {
+    for (const text of paragraph.children ?? []) {
+      if (text.type !== 'text' || !text.value || !text.position) continue
+      const raw = source.slice(text.position.start?.offset, text.position.end?.offset)
+      if (raw.includes('\\*') || text.value.split('**').length !== 2) continue
+      text.value = text.value.replace(/(?<=[\p{L}\p{N}])\*\*(?=[，。、；：！？）】,.!?;:)])/u, '')
+    }
+  }
+}
+
 export function isTimestampedParagraph(node: MdastNode) {
   if (node.type !== 'paragraph') return false
   const text = nodeText(node).trim()
@@ -118,6 +146,55 @@ function normalizeMixedOrderedList(node: MdastNode): MdastNode {
 /** Treat pasted `- 1. item` rows as one ordered list instead of nested lists. */
 export function normalizeMixedOrderedLists(tree: MdastNode) {
   if (tree.children) tree.children = tree.children.map(normalizeMixedOrderedList)
+}
+
+/** Recover STEPS blocks split into separate quotes by older paste formatting. */
+export function restoreSplitStepsLists(tree: MdastNode, source: string) {
+  const children = tree.children ?? []
+  const restored: MdastNode[] = []
+  for (let index = 0; index < children.length; index += 1) {
+    const node = children[index]
+    if (node.type === 'paragraph' && node.position?.start) {
+      const items: NonNullable<ReturnType<typeof readClipboardStep>>[] = []
+      for (let next = index; next < children.length; next += 1) {
+        const paragraph = children[next]
+        if (paragraph.type !== 'paragraph' || !paragraph.position?.start) break
+        const item = readClipboardStep(source.slice(paragraph.position.start.offset, paragraph.position.end?.offset))
+        if (!item || item.number !== items.length + 1) break
+        items.push(item)
+      }
+      if (items.length >= 2) {
+        const [blockquote] = (markdownProcessor.parse(clipboardStepsMarkdown(items)) as unknown as MdastNode).children ?? []
+        index += items.length - 1
+        restored.push({ ...blockquote, position: { start: node.position.start, end: children[index].position?.end } })
+        continue
+      }
+    }
+    restored.push(node)
+    const [marker] = node.children ?? []
+    if (node.type !== 'blockquote' || node.children?.length !== 1 || marker?.type !== 'paragraph' || nodeText(marker).trim() !== '[!STEPS]') continue
+
+    let firstList: MdastNode | undefined
+    const items: MdastNode[] = []
+    for (let next = index + 1; next < children.length; next += 1) {
+      const quote = children[next]
+      const [list] = quote.children ?? []
+      if (quote.type !== 'blockquote' || quote.children?.length !== 1 || list?.type !== 'list' || !list.ordered || !list.children?.length) break
+      if (firstList && (list.start ?? 1) !== (firstList.start ?? 1) + items.length) break
+
+      firstList ??= list
+      for (const item of list.children) items.push(item)
+      index = next
+    }
+    if (firstList) {
+      restored[restored.length - 1] = {
+        ...node,
+        children: [marker, { ...firstList, children: items }],
+        position: { start: node.position?.start, end: children[index].position?.end },
+      }
+    }
+  }
+  tree.children = restored
 }
 
 /** Remove placeholder list rows left behind by pasted rich text or a trailing bullet marker. */
@@ -179,7 +256,9 @@ export function renderMarkdownFragment(source: string, resolveUrl: MarkdownUrlRe
   normalizeMixedOrderedLists(tree)
   promoteTimestampedParagraphs(tree)
   removeEmptyListItems(tree)
+  restoreSplitStepsLists(tree, normalizedSource)
   normalizeArticleStrong(tree)
+  restoreClipboardCodeCards(tree, normalizedSource)
   const headings = (tree.children ?? []).filter((node) => node.type === 'heading').map((node, index) => ({ id: `moyue-heading-${index + 1}`, text: nodeText(node), depth: node.depth ?? 1 }))
   const context = createRenderContext(new Map((tree.children ?? []).filter(node => node.type === 'footnoteDefinition').map(node => [node.identifier ?? node.label ?? '', node])), headings)
   const html = (tree.children ?? [])
