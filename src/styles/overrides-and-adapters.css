@@ -2062,6 +2062,11 @@ a:active > .app-icon-vector { transform: scale(.92); }
   box-shadow: none !important;
   color: color-mix(in srgb, var(--ink) 77%, var(--accent)) !important;
 }
+.app-shell .reader-content .region-content blockquote.markdown-single-line-quote,
+.app-shell .editor-surface .editor-preview blockquote.markdown-single-line-quote {
+  padding: 0 0 0 10px !important;
+  border-left-color: #4a9b55 !important;
+}
 .app-shell .reader-content .region-content blockquote::before,
 .app-shell .reader-content .region-content :is(h2, h3)::before {
   display: none !important;

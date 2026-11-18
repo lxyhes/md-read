@@ -24,7 +24,7 @@ export type MdastNode = {
   identifier?: string
   label?: string | null
   children?: MdastNode[]
-  position?: { start?: { offset?: number }; end?: { offset?: number } }
+  position?: { start?: { offset?: number; line?: number }; end?: { offset?: number; line?: number } }
 }
 
 export type RenderContext = {

@@ -70,6 +70,24 @@
 .reader-content .region-content .heading-text {
   min-width: 0;
 }
+.reader-content .region-content h2.numbered-heading {
+  align-items: center;
+  gap: 12px;
+  padding-block-end: 10px;
+  border-block-end: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+}
+.reader-content .region-content h2.numbered-heading .heading-number {
+  color: color-mix(in srgb, var(--accent) 34%, var(--surface));
+  font-size: 1.5em;
+  font-style: italic;
+  letter-spacing: -.045em;
+  line-height: 1;
+}
+.reader-content .region-content h2.numbered-heading .heading-text {
+  font-size: .76em;
+  font-weight: 700;
+  letter-spacing: -.02em;
+}
 .reader-content .region-content p {
   margin: 0 0 18px;
   color: color-mix(in srgb, var(--ink) 88%, var(--muted));

@@ -97,6 +97,17 @@ $$`)
     expect(document.regions[0].html).not.toContain('[!WARNING]')
   })
 
+  it('marks only plain blockquotes that occupy one Markdown line', () => {
+    const source = '### 小标题\n\n> **单行引用**\n\n> 第一行\n> 第二行\n\n> 1. 引用里的列表\n\n> [!TIP] 提示'
+    const [heading, single, multiline, list, callout] = parseMarkdown('quotes.md', source).regions
+    expect(heading.html).toContain('<h3')
+    expect(single.html).toContain('<blockquote class="markdown-single-line-quote">')
+    expect(multiline.html).toContain('<blockquote>')
+    expect(list.html).toContain('<blockquote>')
+    expect(callout.html).toContain('callout-tip')
+    expect(renderMarkdownFragment(source).match(/markdown-single-line-quote/g)).toHaveLength(1)
+  })
+
   it('renders only ordered lists marked with STEPS as cards', () => {
     const source = '> [!STEPS]\n>\n> 3. **准备**：打开文件。\n> 4. 保存到**指定目录**。\n\n1. **普通列表**\n\n> [!STEPS]\n> - 普通引用'
     const [steps, list, quote] = parseMarkdown('steps.md', source).regions

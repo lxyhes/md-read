@@ -215,7 +215,13 @@ function blockHtml(node: MdastNode, resolveUrl: MarkdownUrlResolver = (url) => u
         })
         return `<div class="markdown-steps">${blockHtml({ ...list, children: items }, resolveUrl, context)}</div>`
       }
-      return calloutHtml(node, resolveUrl, context, source) ?? `<blockquote>${children()}</blockquote>`
+      const callout = calloutHtml(node, resolveUrl, context, source)
+      if (callout) return callout
+      const startLine = node.position?.start?.line
+      const singleLine = node.children?.length === 1 && marker?.type === 'paragraph'
+        && startLine !== undefined && startLine === node.position?.end?.line
+      const quoteClass = singleLine ? ' class="markdown-single-line-quote"' : ''
+      return `<blockquote${quoteClass}>${children()}</blockquote>`
     }
     case 'list': {
       const tag = node.ordered ? 'ol' : 'ul'
