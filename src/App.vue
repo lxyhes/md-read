@@ -2848,7 +2848,8 @@ async function saveCurrentDocument() {
     let imageDownloadFailed = false
     if (isTauriRuntime()) {
       try {
-        const localized = await downloadMarkdownImages(path, source, advancedSettings.value.relativeImagePathPrefix)
+        const localized = await downloadMarkdownImages(path, source, advancedSettings.value.relativeImagePathPrefix, { includeClipboardCache: true })
+        imageDownloadFailed = localized.failed > 0
         if (localized.count) {
           await writeMarkdownFile(path, localized.source, source)
           source = localized.source
@@ -2856,7 +2857,7 @@ async function saveCurrentDocument() {
       } catch { imageDownloadFailed = true }
     }
     await renameReaderDocument(document.id, path, source)
-    notify(imageDownloadFailed ? `Markdown 已保存，但远程图片下载失败：${path}` : `Markdown 已保存：${path}`)
+    notify(imageDownloadFailed ? `Markdown 已保存，有图片未能存到同目录：${path}` : `Markdown 已保存：${path}`)
   } catch (error) {
     notify(error instanceof Error ? error.message : 'Markdown 保存失败')
   } finally {

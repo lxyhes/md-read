@@ -410,29 +410,48 @@ function imageExtension(url: string, mime: string) {
   return ({ 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp', 'image/svg+xml': 'svg', 'image/avif': 'avif', 'image/bmp': 'bmp' } as Record<string, string>)[mime] ?? 'jpg'
 }
 
-export async function downloadMarkdownImages(markdownPath: string, source: string, relativePathPrefix = false): Promise<{ source: string; count: number; failed: number }> {
+export async function downloadMarkdownImages(
+  markdownPath: string,
+  source: string,
+  relativePathPrefix = false,
+  options: { includeClipboardCache?: boolean } = {},
+): Promise<{ source: string; count: number; failed: number }> {
   if (!isTauri()) throw new Error('下载远程图片需要桌面端')
   const directory = dirnameOf(markdownPath)
   if (!directory) throw new Error('请先将 Markdown 保存到本地')
-  const pattern = /(!\[[^\]\n]*\]\()(<https?:\/\/[^>\n]+>|https?:\/\/[^)\s\n]+)(\))/gi
+  const pattern = /(!\[(?:\\.|[^\\\]\n])*\]\()(<[^>\n]+>|[^)\s\n]+)(\))/gi
   const normalizedSource = promoteClipboardImageLinks(source)
-  const urls = [...new Set([...normalizedSource.matchAll(pattern)].map((match) => match[2].replace(/^<|>$/g, '')))]
-  if (!urls.length) return { source, count: 0, failed: 0 }
+  const cacheRoot = options.includeClipboardCache ? await appDataDir() : ''
+  const urls = new Set(Array.from(normalizedSource.matchAll(pattern), (match) => match[2].replace(/^<|>$/g, '')))
+  const images = [...urls].flatMap((url) => {
+    if (/^https?:\/\//i.test(url)) return [{ url, cachedPath: '' }]
+    if (!cacheRoot) return []
+    const path = localAssetPath(decodeUrlPath(url))
+    if (!path || !isImagePath(path) || !isInternalSessionAssetPath(cacheRoot, path)) return []
+    return [{ url, cachedPath: normalizeLocalPath(path) }]
+  })
+  if (!images.length) return { source, count: 0, failed: 0 }
   const assetDirectory = `${directory}/.moyue-assets`
   await mkdir(assetDirectory, { recursive: true })
   const replacements = new Map<string, string>()
   const downloadId = crypto.randomUUID()
   const batchSize = 4
-  for (let offset = 0; offset < urls.length; offset += batchSize) {
-    await Promise.allSettled(urls.slice(offset, offset + batchSize).map(async (url, index) => {
-      const image = await invoke<{ bytes: number[]; mime: string }>('download_remote_image', { url: url.replace(/\\([!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])/g, '$1') })
-      const extension = imageExtension(url, image.mime)
-      const name = `download-${downloadId}-${offset + index + 1}.${extension}`
-      await writeFile(`${assetDirectory}/${name}`, Uint8Array.from(image.bytes))
+  for (let offset = 0; offset < images.length; offset += batchSize) {
+    await Promise.allSettled(images.slice(offset, offset + batchSize).map(async ({ url, cachedPath }, index) => {
+      const namePrefix = `download-${downloadId}-${offset + index + 1}`
+      let name: string
+      if (cachedPath) {
+        name = `${namePrefix}.${imageExtension(cachedPath, '')}`
+        await copyFile(cachedPath, `${assetDirectory}/${name}`)
+      } else {
+        const image = await invoke<{ bytes: number[]; mime: string }>('download_remote_image', { url: url.replace(/\\([!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])/g, '$1') })
+        name = `${namePrefix}.${imageExtension(url, image.mime)}`
+        await writeFile(`${assetDirectory}/${name}`, Uint8Array.from(image.bytes))
+      }
       replacements.set(url, withRelativePathPrefix(`.moyue-assets/${name}`, relativePathPrefix))
     }))
   }
-  if (!replacements.size) throw new Error('远程图片下载失败，请检查图片地址或网络')
+  if (!replacements.size) throw new Error(options.includeClipboardCache ? '图片未能保存到 Markdown 同目录' : '远程图片下载失败，请检查图片地址或网络')
   await authorizeMarkdownAssets(markdownPath)
   return {
     source: normalizedSource.replace(pattern, (match, before: string, wrapped: string, after: string) => {
@@ -440,7 +459,7 @@ export async function downloadMarkdownImages(markdownPath: string, source: strin
       return `${before}${replacements.get(value) ?? wrapped}${after}`
     }),
     count: replacements.size,
-    failed: urls.length - replacements.size,
+    failed: images.length - replacements.size,
   }
 }
 
