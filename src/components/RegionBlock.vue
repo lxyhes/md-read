@@ -25,6 +25,8 @@ const asciiDiagramCode = computed(() => asciiDiagramCandidate.value ? asciiDiagr
 const isDiagramLike = computed(() => Boolean(asciiTree.value || asciiDiagramCode.value))
 const codeLineCount = computed(() => Math.max(1, props.region.textContent.split(/\r?\n/).length))
 const focusDistanceClass = computed(() => `focus-distance-${Math.min(3, Math.max(0, props.focusDistance ?? 0))}`)
+const longHeading = computed(() => props.region.type === 'heading'
+  && props.region.textContent.replace(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/gu, 'aa').length >= 48)
 const regionAnnotations = computed(() => props.annotations?.filter((annotation) => annotation.regionId === props.region.id) ?? [])
 const comparisonLayout = computed(() => ['paragraph', 'blockquote'].includes(props.region.type) ? parseComparisonLayout(props.region.textContent) : null)
 const regionRoot = ref<HTMLElement | null>(null)
@@ -176,7 +178,7 @@ function handleContentClick(event: MouseEvent) {
 </script>
 
 <template>
-  <article ref="regionRoot" :data-region-id="region.id" class="region-block" :class="[`region-${region.type}`, focusDistanceClass, { focused, active }]" tabindex="0" @click="emit('focus')" @keydown.enter.self.prevent="emit('focus')" @keydown.space.self.prevent="emit('focus')">
+  <article ref="regionRoot" :data-region-id="region.id" class="region-block" :class="[`region-${region.type}`, focusDistanceClass, { focused, active, 'long-heading': longHeading }]" tabindex="0" @click="emit('focus')" @keydown.enter.self.prevent="emit('focus')" @keydown.space.self.prevent="emit('focus')">
       <div v-if="region.type === 'mermaid'" class="region-content" @click.stop="emit('openViewer')">
       <MermaidBlock :code="String(region.metadata?.code ?? region.textContent)" :theme-key="themeKey" />
       <button class="inline-view-action region-copy-image" type="button" @click.stop="emit('copy-image')">复制为图片</button>

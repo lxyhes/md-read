@@ -436,6 +436,7 @@ const focusRemaining = ref(25 * 60)
 const focusRunning = ref(false)
 let focusTimer: number | null = null
 let scrollFrame: number | null = null
+let readerHighlightTimer: number | null = null
 let progressTimer: number | null = null
 let searchTimer: number | null = null
 let regionLayoutObserver: ResizeObserver | null = null
@@ -449,8 +450,8 @@ const virtualScrollTop = ref(0)
 const virtualViewportHeight = ref(0)
 const virtualRegionThreshold = 240
 const virtualGap = 8
-let focusScrollTargetId: string | null = null
-let focusWheelAt = -Infinity
+let readerScrollTargetId: string | null = null
+let readerStepWheelAt = -Infinity
 let readerZoomWheelAt = -Infinity
 let stopNativeFileDrop: (() => void) | null = null
 let stopNativeFileOpen: (() => void) | null = null
@@ -4435,6 +4436,7 @@ onUnmounted(() => {
   if (directoryRefreshTimer !== null) window.clearTimeout(directoryRefreshTimer)
   if (searchTimer !== null) window.clearTimeout(searchTimer)
   if (scrollFrame !== null) window.cancelAnimationFrame(scrollFrame)
+  cancelReaderHighlight()
   if (progressTimer !== null) window.clearTimeout(progressTimer)
   regionLayoutObserver?.disconnect()
   regionMeasurementObserver?.disconnect()
@@ -4491,7 +4493,7 @@ watch([sidebarFilter, sidebarGlob], async () => {
   await revealFilesystemTarget(root, filesystemTreeTarget.value)
 })
 watch(() => store.mode, (mode) => { if (mode !== 'focus') stopFocusTimer() })
-watch(() => store.currentDocument?.path, (path) => { fileSyncState.value = 'idle'; focusScrollTargetId = null; outlineQuery.value = ''; selectedFilePaths.value = []; invalidateRegionLayout(); void refreshFileTree(); if (path) { rememberFolder(directoryOf(path)); void syncFilesystemTreeTarget(path) } }, { immediate: true })
+watch(() => store.currentDocument?.path, (path) => { fileSyncState.value = 'idle'; readerScrollTargetId = null; outlineQuery.value = ''; selectedFilePaths.value = []; invalidateRegionLayout(); void refreshFileTree(); if (path) { rememberFolder(directoryOf(path)); void syncFilesystemTreeTarget(path) } }, { immediate: true })
 watch(currentDirectory, () => { void syncDirectoryWatcher() }, { immediate: true })
 watch(currentDirectoryFiles, (files) => {
   const available = new Set(files.filter(isBatchDeletableFile).map((file) => filePathKey(file.path)))
@@ -4667,11 +4669,11 @@ function onKeydown(event: KeyboardEvent) {
   if (view.value === 'reader' && (store.mode === 'region-focus' || store.mode === 'focus') && !isTypingTarget(event.target) && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
     event.preventDefault()
     if (event.repeat) return
-    moveFocus(event.key === 'ArrowDown' ? 1 : -1)
+    moveReaderRegion(event.key === 'ArrowDown' ? 1 : -1)
   }
 }
 
-function moveFocus(delta: number) {
+function moveReaderRegion(delta: number) {
   const regions = readerRegions.value
   if (!regions.length) return
   const focusedIndex = regions.findIndex((region) => region.id === store.focusedRegionId)
@@ -4680,23 +4682,26 @@ function moveFocus(delta: number) {
   const nextIndex = Math.min(regions.length - 1, Math.max(0, current + delta))
   if (nextIndex === current) return
   const next = regions[nextIndex]
+  cancelReaderHighlight()
   if (store.mode === 'focus') store.setFocusedRegion(next.id)
-  else store.focusRegion(next.id)
-  focusScrollTargetId = next.id
+  else if (store.mode === 'region-focus') store.focusRegion(next.id)
+  else store.activeRegionId = next.id
+  syncActiveHeading(next.id)
+  readerScrollTargetId = next.id
   void nextTick(() => {
-    if (focusScrollTargetId !== next.id) return
+    if (readerScrollTargetId !== next.id) return
     const viewport = readerViewport.value
     const target = viewport ? [...viewport.querySelectorAll<HTMLElement>('[data-region-id]')].find((element) => element.dataset.regionId === next.id) : null
     if (!viewport) return
     if (!target && virtualizedReader.value) {
       const index = virtualLayout.value.regions.findIndex((region) => region.id === next.id)
-      if (index >= 0) viewport.scrollTop = Math.max(0, virtualLayout.value.offsets[index] - Math.min(viewport.clientHeight * .34, 280))
+      if (index >= 0) viewport.scrollTop = Math.max(0, virtualLayout.value.offsets[index] - readerTrackingOffset(viewport.clientHeight))
       return
     }
     if (!target) return
     const viewportRect = viewport.getBoundingClientRect()
     const targetRect = target.getBoundingClientRect()
-    const probeOffset = Math.min(viewport.clientHeight * .34, 280)
+    const probeOffset = readerTrackingOffset(viewport.clientHeight)
     const targetCenter = viewport.scrollTop + targetRect.top - viewportRect.top + targetRect.height / 2
     const targetTop = targetRect.height > viewport.clientHeight
       ? viewport.scrollTop + (delta > 0 ? targetRect.top - viewportRect.top : targetRect.bottom - viewportRect.bottom)
@@ -5122,11 +5127,17 @@ function invalidateRegionLayout() {
   regionLayoutStateKey = null
   regionLayoutCache = []
 }
+function readerTrackingOffset(viewportHeight: number) {
+  return Math.min(viewportHeight * .34, 280)
+}
 function syncVirtualViewport() {
   const viewport = readerViewport.value
   if (!viewport) return
+  const height = viewport.clientHeight
+  // Leave enough room to scroll the last block past the reading line.
+  viewport.style.setProperty('--reader-end-padding', `${Math.max(96, height - readerTrackingOffset(height))}px`)
   virtualScrollTop.value = viewport.scrollTop
-  virtualViewportHeight.value = viewport.clientHeight
+  virtualViewportHeight.value = height
 }
 function observeRenderedRegionSizes() {
   if (!regionMeasurementObserver) return
@@ -5171,16 +5182,15 @@ function refreshRegionLayout(element: HTMLElement, documentId: string) {
   regionLayoutStateKey = `${documentId}:${store.mode}:${store.focusedRegionId ?? ''}`
 }
 function regionAtScrollPosition(element: HTMLElement, documentId: string) {
+  const target = element.scrollTop + readerTrackingOffset(element.clientHeight)
   if (virtualizedReader.value) {
     const layout = virtualLayout.value
-    const target = element.scrollTop + Math.min(element.clientHeight * .34, 280)
     const index = findVirtualIndex(layout, target)
     return layout.regions[index]?.id ?? store.activeRegionId
   }
   const stateKey = `${documentId}:${store.mode}:${store.focusedRegionId ?? ''}`
   if (regionLayoutDocumentId !== documentId || regionLayoutStateKey !== stateKey || !regionLayoutCache.length) refreshRegionLayout(element, documentId)
   if (!regionLayoutCache.length) return store.activeRegionId
-  const target = element.scrollTop + Math.min(element.clientHeight * .34, 280)
   let low = 0
   let high = regionLayoutCache.length - 1
   while (low < high) {
@@ -5201,11 +5211,11 @@ function regionAtScrollPosition(element: HTMLElement, documentId: string) {
 function restoreScroll() {
   const viewport = readerViewport.value
   if (!viewport) return
+  syncVirtualViewport()
   const percent = currentProgress.value?.scrollPercent ?? 0
   readerScrollPercent.value = percent
   viewport.scrollTop = percent * (viewport.scrollHeight - viewport.clientHeight)
   virtualScrollTop.value = viewport.scrollTop
-  virtualViewportHeight.value = viewport.clientHeight
 }
 function currentViewportPercent() {
   const viewport = readerViewport.value
@@ -5225,7 +5235,6 @@ function restoreViewportPercent(percent: number) {
 function onReaderWheel(event: WheelEvent) {
   closeEditorContextMenu()
   const viewport = readerViewport.value
-  const isFocusMode = store.mode === 'region-focus' || store.mode === 'focus'
   if (!viewport || event.deltaY === 0) return
   if ((event.ctrlKey || event.metaKey) && view.value === 'reader' && !editorOpen.value && !isTypingTarget(event.target)) {
     event.preventDefault()
@@ -5235,20 +5244,45 @@ function onReaderWheel(event: WheelEvent) {
     changeReaderZoom(event.deltaY > 0 ? -1 : 1)
     return
   }
-  if (!isFocusMode || event.ctrlKey || event.metaKey) return
-  const focused = [...viewport.querySelectorAll<HTMLElement>('[data-region-id]')].find((element) => element.dataset.regionId === store.focusedRegionId)
-  if (focused && canScrollFocusedRegion(focused.getBoundingClientRect(), viewport.getBoundingClientRect(), event.deltaY)) {
-    focusScrollTargetId = null
+  if (event.ctrlKey || event.metaKey || event.shiftKey || Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return
+  const document = store.currentDocument
+  if (!document || editorOpen.value || store.mode === 'clean' || (readerDisplayMode.value !== 'markdown' && readerDisplayMode.value !== 'split')) {
+    readerScrollTargetId = null
+    return
+  }
+  const activeId = store.focusedRegionId ?? store.activeRegionId ?? regionAtScrollPosition(viewport, document.id)
+  const active = [...viewport.querySelectorAll<HTMLElement>('[data-region-id]')].find((element) => element.dataset.regionId === activeId)
+  const viewportRect = viewport.getBoundingClientRect()
+  const activeRect = active?.getBoundingClientRect()
+  const delta = event.deltaY > 0 ? 1 : -1
+  const withinLongBlock = activeRect && canScrollFocusedRegion(activeRect, viewportRect, event.deltaY)
+  if (withinLongBlock && store.mode === 'focus') {
+    readerScrollTargetId = null
     return
   }
   event.preventDefault()
   const now = performance.now()
-  if (now - focusWheelAt < 180) return
-  focusWheelAt = now
-  moveFocus(event.deltaY > 0 ? 1 : -1)
+  if (now - readerStepWheelAt < 180) return
+  readerStepWheelAt = now
+  if (withinLongBlock) {
+    readerScrollTargetId = null
+    const remaining = delta > 0 ? activeRect.bottom - viewportRect.bottom : viewportRect.top - activeRect.top
+    viewport.scrollTop += delta * Math.min(remaining, viewport.clientHeight * .35)
+    return
+  }
+  store.activeRegionId ??= activeId
+  moveReaderRegion(delta)
 }
-function onReaderPointerDown() { focusScrollTargetId = null }
+function cancelReaderHighlight() {
+  if (readerHighlightTimer !== null) window.clearTimeout(readerHighlightTimer)
+  readerHighlightTimer = null
+}
+function onReaderPointerDown() {
+  cancelReaderHighlight()
+  readerScrollTargetId = null
+}
 function onReaderScroll() {
+  cancelReaderHighlight()
   if (scrollFrame !== null) return
   scrollFrame = window.requestAnimationFrame(() => {
     scrollFrame = null
@@ -5259,38 +5293,51 @@ function onReaderScroll() {
     virtualViewportHeight.value = element.clientHeight
     const percent = element.scrollHeight <= element.clientHeight ? 0 : element.scrollTop / (element.scrollHeight - element.clientHeight)
     readerScrollPercent.value = percent
-    const regionId = regionAtScrollPosition(element, document.id)
-    const isFocusMode = store.mode === 'region-focus' || store.mode === 'focus'
-    const isNavigating = isFocusMode && focusScrollTargetId !== null && regionId !== focusScrollTargetId
-    const effectiveRegionId = isNavigating ? store.focusedRegionId ?? regionId : regionId
-    if (!isNavigating && focusScrollTargetId === regionId) {
-      focusScrollTargetId = null
+    if (store.mode === 'clean' || store.mode === 'focus' || readerScrollTargetId !== null) {
+      commitReaderScroll(element, document.id, percent)
+      return
     }
-    store.activeRegionId = effectiveRegionId ?? store.activeRegionId
-    if (!isNavigating && isFocusMode && effectiveRegionId && effectiveRegionId !== store.focusedRegionId) {
-      if (store.mode === 'focus') store.setFocusedRegion(effectiveRegionId)
-      else store.focusRegion(effectiveRegionId)
-    }
-    syncActiveHeading(effectiveRegionId)
-    pendingProgress = { documentId: document.id, scrollPercent: percent, regionId: effectiveRegionId ?? null, headingId: headingIdForRegion(effectiveRegionId) }
-    if (progressTimer === null) {
-      progressTimer = window.setTimeout(() => {
-        progressTimer = null
-        const next = pendingProgress
-        pendingProgress = null
-        if (next && store.currentDocumentId === next.documentId) {
-          void store.setProgress(next.scrollPercent, next.regionId, next.headingId)
-            .then(() => { saveFailed.value = false })
-            .catch(() => { saveFailed.value = true; notify('阅读位置保存失败，请检查本地存储权限') })
-        }
-      }, 180)
-    }
+    const mode = store.mode
+    readerHighlightTimer = window.setTimeout(() => {
+      readerHighlightTimer = null
+      if (readerViewport.value === element && store.currentDocumentId === document.id && store.mode === mode && !editorOpen.value && readerScrollTargetId === null) {
+        commitReaderScroll(element, document.id, percent)
+      }
+    }, 180)
   })
+}
+function commitReaderScroll(element: HTMLElement, documentId: string, percent: number) {
+  const regionId = regionAtScrollPosition(element, documentId)
+  const isFocusMode = store.mode === 'region-focus' || store.mode === 'focus'
+  const isNavigating = readerScrollTargetId !== null && regionId !== readerScrollTargetId
+  const effectiveRegionId = isNavigating ? readerScrollTargetId : regionId
+  if (!isNavigating && readerScrollTargetId === regionId) {
+    readerScrollTargetId = null
+  }
+  store.activeRegionId = effectiveRegionId ?? store.activeRegionId
+  if (!isNavigating && isFocusMode && effectiveRegionId && effectiveRegionId !== store.focusedRegionId) {
+    if (store.mode === 'focus') store.setFocusedRegion(effectiveRegionId)
+    else store.focusRegion(effectiveRegionId)
+  }
+  syncActiveHeading(effectiveRegionId)
+  pendingProgress = { documentId, scrollPercent: percent, regionId: effectiveRegionId ?? null, headingId: headingIdForRegion(effectiveRegionId) }
+  if (progressTimer === null) {
+    progressTimer = window.setTimeout(() => {
+      progressTimer = null
+      const next = pendingProgress
+      pendingProgress = null
+      if (next && store.currentDocumentId === next.documentId) {
+        void store.setProgress(next.scrollPercent, next.regionId, next.headingId)
+          .then(() => { saveFailed.value = false })
+          .catch(() => { saveFailed.value = true; notify('阅读位置保存失败，请检查本地存储权限') })
+      }
+    }, 180)
+  }
 }
 
 function focusRegion(region: ReaderRegion) {
   selectionToolbar.value = null
-  focusScrollTargetId = null
+  readerScrollTargetId = null
   if (store.mode === 'focus') {
     store.setFocusedRegion(region.id)
     return
@@ -5560,6 +5607,7 @@ async function deleteViewerDiagram() {
   } catch (error) { notify(error instanceof Error ? error.message : '删除图表失败') }
 }
 function scrollToHeading(regionId: string) {
+  cancelReaderHighlight()
   if (readerDisplayMode.value === 'html') {
     const documentId = store.currentDocumentId
     const headingId = headingIdForRegion(regionId)
@@ -5635,11 +5683,11 @@ function toggleFocusTimer() {
 }
 function resetFocusTimer() { stopFocusTimer(); focusRemaining.value = 25 * 60 }
 function exitFocusMode() {
-  focusScrollTargetId = null
+  readerScrollTargetId = null
   store.setMode('normal')
 }
 function clearRegionFocus() {
-  focusScrollTargetId = null
+  readerScrollTargetId = null
   if (store.mode === 'focus') store.clearFocusedRegion()
   else store.clearFocus()
 }
