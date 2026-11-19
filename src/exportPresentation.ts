@@ -39,9 +39,9 @@ export function embeddedImageAssets(tree: MdastNode, assets: readonly MarkdownEx
   return result
 }
 
-export function createPortableHtml(title: string, source: string, assets: readonly MarkdownExportAsset[], css = '') {
+export function createPortableHtml(title: string, source: string, assets: readonly MarkdownExportAsset[], css = '', outline?: Parameters<typeof renderMarkdownFragment>[2]) {
   const urls = new Map(assets.map(asset => [asset.url, assetDataUrl(asset)]))
-  const body = renderMarkdownFragment(source, url => urls.get(url) ?? url)
+  const body = renderMarkdownFragment(source, url => urls.get(url) ?? url, outline)
   // Exported CSS remains data, even if an imported theme contains an HTML closing tag.
   const styles = css ? `<style>${css.replace(/</g, '\\3c ')}</style>` : ''
   return `<!doctype html>\n<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title>${styles}</head><body class="app-shell"><main id="write" class="reader-content region-content">${body}</main></body></html>`

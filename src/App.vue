@@ -30,7 +30,7 @@ import RegionBlock from './components/RegionBlock.vue'
 import SecondDocumentPane from './components/SecondDocumentPane.vue'
 import EditorOutline from './components/EditorOutline.vue'
 import { decodeLinkPart, findDocumentHeading } from './documentLinks'
-import WebPreviewPanel from './components/WebPreviewPanel.vue'
+import WebPreviewPanel, { hideNativeWebPreviews } from './components/WebPreviewPanel.vue'
 import WebPreviewDock from './components/WebPreviewDock.vue'
 import MermaidBlock from './components/MermaidBlock.vue'
 import TreeDiagram from './components/TreeDiagram.vue'
@@ -73,11 +73,12 @@ import { embedExportImages, rasterizeExportImages } from './exportImages'
 import { normalizeLatexDelimiters } from './markdown/fragment'
 import { readEditorDraft, saveEditorDraft, removeEditorDraft, migrateEditorDrafts, hasSaveConflict, editorAssetMap } from './editorDrafts'
 import { startupStylesReady } from './startup'
-import { confirmAppAction, promptAppText } from './appDialog'
+import { activeAppDialog, confirmAppAction, promptAppText } from './appDialog'
 import { useKnowledgeIndex } from './useKnowledgeIndex'
 import { KNOWLEDGE_EMBEDDING_MODEL } from './knowledgeHybridSearch'
 import { aiEndpoint, aiPayload, aiResponseText, defaultAiSettings, ollamaModelNames, ollamaTagsEndpoint, type AiMessage, type AiSettings } from './aiProvider'
 import { domesticAiWebModels } from './aiWebModels'
+import { parseWebPreviewAddress } from './webPreviewAddress'
 import { availableKnowledgeSourceIds, citationRegionId, citationState, citationsForMatches, createKnowledgeId, createKnowledgeMessage, filterKnowledgeConversations, knowledgeRetrievalQuery, localDayKey, messagesForKnowledgeQuestion, migrateKnowledgeDocument, recentKnowledgeContext, summarizeKnowledgeActivity, titleForKnowledgeQuestion, validatedKnowledgeAnswer, type KnowledgeActivity, type KnowledgeCitation, type KnowledgeConversation, type KnowledgeMessage } from './knowledgeConversations'
 import { deleteKnowledgeConversation, loadAppSetting, loadDurableData, loadKnowledgeActivity, loadKnowledgeConversations, recordKnowledgeAnswer, saveAppSetting, saveDurableData, saveKnowledgeConversation } from './persistence'
 import logoAsset from './assets/moyue-logo-256.png'
@@ -333,7 +334,8 @@ const editorStatusbarVisible = ref(true)
 const editorEmojiPickerOpen = ref(false)
 const editorAlwaysOnTop = ref(false)
 const webPreviewsBlocked = computed(() => Boolean(editorOpen.value || searchOpen.value || quickOpenOpen.value || viewer.value || wordCountOpen.value))
-const hasWebPreviews = computed(() => view.value === 'reader' && !webPreviewsBlocked.value && Boolean(webPreviewUrl.value || aiWebPreviews.value.length))
+const hasWebPreviews = computed(() => view.value === 'reader' && !webPreviewsBlocked.value && !activeAppDialog.value && Boolean(webPreviewUrl.value || aiWebPreviews.value.length))
+watch(hasWebPreviews, (visible) => { if (!visible) hideNativeWebPreviews() }, { flush: 'post', immediate: true })
 const canCompareAiWeb = computed(() => aiWebPreviews.value.length > 1 && webPreviewContentWidth.value >= 920)
 const visibleAiWebPreviews = computed(() => {
   const active = aiWebPreviews.value.find(({ id }) => id === activeAiWebId.value)
@@ -391,7 +393,8 @@ let tableEditorHistoryGroup = ''
 const editorCodeLanguage = ref(advancedSettings.value.defaultCodeLanguage)
 const lastMediaAction = ref<{ source: string; path: string | null } | null>(null)
 const editorOriginalSource = ref('')
-const editorSaving = ref(false)
+const editorSaveTask = shallowRef<Promise<boolean> | null>(null)
+const editorSaving = computed(() => editorSaveTask.value !== null)
 const editorCursor = ref({ line: 1, column: 1 })
 const editorCursorOffset = ref(0)
 const editorInlineAssets = ref<Record<string, string>>({})
@@ -641,7 +644,17 @@ const readerScrollPercent = ref(0)
 const readerAtTop = computed(() => readerScrollPercent.value <= 0.01)
 const readerAtBottom = computed(() => readerScrollPercent.value >= 0.99)
 const readerDisplayMode = ref<'markdown' | 'mindmap' | 'split' | 'html'>('markdown')
+const readerSidebarAvailable = computed(() => store.mode !== 'focus' && store.mode !== 'clean')
+const readerContextVisible = computed(() => contextPanelOpen.value && readerSidebarAvailable.value && readerDisplayMode.value !== 'html' && !hasWebPreviews.value)
+const readerWebPreviewColumns = computed(() => {
+  if (!hasWebPreviews.value) return undefined
+  return readerSidebarAvailable.value && !outlinePanelCollapsed.value
+    ? 'min(44%, var(--outline-panel-width)) minmax(0, 1fr)'
+    : 'minmax(0, 1fr)'
+})
 const readerHtmlPreview = ref('')
+const readerHtmlFrame = ref<HTMLIFrameElement | null>(null)
+let pendingHtmlHeading: { documentId: string; regionId: string } | undefined
 const readerHtmlPreviewError = ref('')
 const readerHtmlPreviewLoading = ref(false)
 const readerHtmlReturnScrollPercent = ref(0)
@@ -769,6 +782,13 @@ function normalizedPath(path: string) { return path.replace(/\\/g, '/') }
 async function openPreviewInBrowser(url: string) {
   if (isTauriRuntime()) await invoke('open_external_url', { url }).catch(() => notify('链接打开失败，请检查链接地址'))
   else window.open(url, '_blank', 'noopener,noreferrer')
+}
+async function openWebAddress() {
+  const input = await promptAppText({ title: '打开网页', inputLabel: '网址', defaultValue: '', confirmLabel: '打开' })
+  if (input === null) return
+  const url = parseWebPreviewAddress(input)
+  if (url) webPreviewUrl.value = url
+  else notify('请输入有效的 HTTP 或 HTTPS 网址')
 }
 function directoryOf(path: string) {
   const normalized = normalizedPath(path)
@@ -1024,7 +1044,12 @@ async function openEditor() {
 }
 
 async function closeEditor() {
+  const documentId = editorDocumentId.value
+  const saving = editorSaveTask.value
+  if (saving && !(await saving)) return
+  if (!editorOpen.value || editorDocumentId.value !== documentId) return
   if (editorDirty.value && !(await persistEditorDraft())) { notify('草稿备份失败，请先保存或另存副本再退出'); return }
+  if (!editorOpen.value || editorDocumentId.value !== documentId) return
   editorOpen.value = false
   editorFindOpen.value = false
   editorContextMenu.value = null
@@ -1402,13 +1427,16 @@ function isRealDocumentPath(path: string) {
   return isTauriRuntime() && (/^[A-Za-z]:[\\/]/.test(path) || path.includes('/') || path.includes('\\'))
 }
 
-async function saveEditor() {
+function saveEditor() {
   const document = store.documents.find(item => item.id === editorDocumentId.value)
   if (!document || !editorOpen.value || editorSaving.value) return
+  editorSaveTask.value = persistEditorChanges(document).finally(() => { editorSaveTask.value = null })
+}
+
+async function persistEditorChanges(document: ReaderDocument) {
   const sourceToSave = editorSourceForSave.value
   const original = editorOriginalSource.value
   const documentId = document.id
-  editorSaving.value = true
   try {
     if (isRealDocumentPath(document.path)) await writeMarkdownFile(document.path, sourceToSave, original)
     await store.replaceDocumentSource(documentId, sourceToSave)
@@ -1422,13 +1450,15 @@ async function saveEditor() {
       else if (draft) await saveEditorDraft({ ...draft, baseSource: sourceToSave })
     }
     notify('Markdown 已保存')
+    return true
   } catch (error) {
     if (editorDocumentId.value === documentId) {
       editorConflict.value = String(error).includes('其他程序修改')
       await persistEditorDraft()
     }
     notify(String(error instanceof Error ? error.message : error))
-  } finally { editorSaving.value = false }
+    return false
+  }
 }
 
 function updateEditorCursor() {
@@ -2802,11 +2832,12 @@ async function chooseDocxReference() {
   } catch (error) { notify(String(error instanceof Error ? error.message : error)) }
 }
 
-async function exportHtmlSource(document: ReaderDocument, styled = true) {
+async function exportHtmlSource(document: ReaderDocument, styled = true, includePreviewOutline = false) {
   const { prepareExportDiagrams } = await import('./exportDiagrams')
   const source = await prepareExportDiagrams(document.source, exportAppContext)
   const assets = await rasterizeExportImages(await readMarkdownExportAssets(document.path, source))
-  return createPortableHtml(document.title, source, assets, styled ? createExportCss(store.activeTheme, store.readerSettings) : '')
+  return createPortableHtml(document.title, source, assets, styled ? createExportCss(store.activeTheme, store.readerSettings) : '',
+    includePreviewOutline ? document.headings : undefined)
 }
 
 async function showReaderHtmlPreview() {
@@ -2819,7 +2850,7 @@ async function showReaderHtmlPreview() {
   readerHtmlPreviewError.value = ''
   readerHtmlPreviewLoading.value = true
   try {
-    const html = await exportHtmlSource(document)
+    const html = await exportHtmlSource(document, true, true)
     if (request === readerHtmlPreviewRequest && store.currentDocumentId === document.id && readerDisplayMode.value === 'html') readerHtmlPreview.value = html
   } catch (error) {
     if (request === readerHtmlPreviewRequest && store.currentDocumentId === document.id) readerHtmlPreviewError.value = error instanceof Error ? error.message : String(error)
@@ -2831,7 +2862,10 @@ async function showReaderHtmlPreview() {
 function setReaderDisplayMode(mode: 'markdown' | 'mindmap' | 'split') {
   const leavingHtmlPreview = readerDisplayMode.value === 'html'
   readerDisplayMode.value = mode
-  if (leavingHtmlPreview) restoreViewportPercent(readerHtmlReturnScrollPercent.value)
+  if (leavingHtmlPreview) {
+    pendingHtmlHeading = undefined
+    restoreViewportPercent(readerHtmlReturnScrollPercent.value)
+  }
 }
 
 async function renderDocumentPng(document: ReaderDocument) {
@@ -3389,6 +3423,14 @@ function toggleOutlinePanel() {
   outlinePanelCollapsed.value = !outlinePanelCollapsed.value
   localStorage.setItem('moyue:outline-panel-collapsed', String(outlinePanelCollapsed.value))
   void nextTick(() => (outlinePanelCollapsed.value ? outlinePanelExpandButton : outlinePanelToggleButton).value?.focus())
+}
+function toggleReaderOutline() {
+  if (!outlinePanelCollapsed.value && leftPanelTab.value === 'outline') {
+    toggleOutlinePanel()
+    return
+  }
+  leftPanelTab.value = 'outline'
+  if (outlinePanelCollapsed.value) toggleOutlinePanel()
 }
 function startOutlinePanelResize(event: PointerEvent) {
   if (event.button !== 0) return
@@ -4459,7 +4501,6 @@ watch(() => store.currentDocumentId, () => {
   collapsedOutlineHeadingIds.value = new Set()
   outlineExpansionOverride.value = null
   virtualMeasuredHeights.value = new Map()
-  if (readerDisplayMode.value === 'html') void showReaderHtmlPreview()
   // Do not render the new document at the previous document's virtual offset.
   virtualScrollTop.value = 0
   nextTick(() => {
@@ -4472,7 +4513,7 @@ watch(() => [store.mode, store.activeThemeId, store.readerSettings.fontSize, sto
   virtualMeasuredHeights.value = new Map()
   nextTick(() => { syncVirtualViewport(); observeReaderLayout() })
 })
-watch(() => [store.activeThemeId, store.readerSettings.fontSize, store.readerSettings.lineHeight, store.readerSettings.width, store.readerSettings.fontFamily], () => {
+watch(() => [store.currentDocumentId, store.currentDocument?.sourceHash, store.activeThemeId, store.readerSettings.fontSize, store.readerSettings.lineHeight, store.readerSettings.width, store.readerSettings.fontFamily], () => {
   if (readerDisplayMode.value === 'html') void showReaderHtmlPreview()
 })
 watch(() => [virtualizedReader.value, virtualRange.value.start, virtualRange.value.end], () => { void nextTick(observeRenderedRegionSizes) })
@@ -5519,6 +5560,32 @@ async function deleteViewerDiagram() {
   } catch (error) { notify(error instanceof Error ? error.message : '删除图表失败') }
 }
 function scrollToHeading(regionId: string) {
+  if (readerDisplayMode.value === 'html') {
+    const documentId = store.currentDocumentId
+    const headingId = headingIdForRegion(regionId)
+    if (documentId && headingId && !readerHtmlPreviewError.value) {
+      const frameDocument = readerHtmlFrame.value?.contentDocument
+      if (readerHtmlPreviewLoading.value || !readerHtmlFrame.value || frameDocument?.URL === 'about:blank') {
+        pendingHtmlHeading = { documentId, regionId }
+        return
+      }
+      const heading = frameDocument?.querySelector(`[data-preview-heading="${CSS.escape(headingId)}"]`)
+      if (heading) {
+        syncActiveHeading(regionId, true)
+        heading.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        return
+      }
+    }
+    setReaderDisplayMode('markdown')
+    notify('HTML 预览中找不到该位置，已切回 Markdown')
+    void nextTick(() => scrollToHeading(regionId))
+    return
+  }
+  if (readerDisplayMode.value === 'mindmap') {
+    setReaderDisplayMode('split')
+    void nextTick(() => scrollToHeading(regionId))
+    return
+  }
   syncActiveHeading(regionId, true)
   const element = document.querySelector(`[data-region-id="${regionId}"]`)
   if (element) { element.scrollIntoView({ behavior: 'smooth', block: 'start' }); return }
@@ -5528,6 +5595,14 @@ function scrollToHeading(regionId: string) {
       readerViewport.value?.scrollTo({ top: virtualLayout.value.offsets[index], behavior: 'smooth' })
       return
     }
+  }
+}
+function onReaderHtmlLoad() {
+  const pending = pendingHtmlHeading
+  if (readerHtmlFrame.value?.contentDocument?.URL === 'about:blank') return
+  pendingHtmlHeading = undefined
+  if (pending && pending.documentId === store.currentDocumentId && readerDisplayMode.value === 'html') {
+    scrollToHeading(pending.regionId)
   }
 }
 function jumpToCurrentHeading() {
@@ -6070,8 +6145,8 @@ async function requestFullscreen() {
             </div>
           </div>
         </Teleport>
-        <div class="reader-layout" :class="{ 'focus-layout': store.mode === 'focus', 'clean-layout': store.mode === 'clean', 'split-layout': readerDisplayMode === 'split', 'html-layout': readerDisplayMode === 'html', 'context-open': contextPanelOpen, 'outline-panel-collapsed': outlinePanelCollapsed, 'is-resizing-outline': outlinePanelResizing }" :style="{ '--outline-panel-width': `${outlinePanelWidth}px`, gridTemplateColumns: hasWebPreviews ? 'minmax(0, 1fr)' : undefined }">
-          <aside v-if="store.mode !== 'focus' && store.mode !== 'clean' && readerDisplayMode !== 'html'" id="reader-sidebar" class="outline-panel" :class="{ 'is-collapsed': outlinePanelCollapsed }">
+        <div class="reader-layout" :class="{ 'focus-layout': store.mode === 'focus', 'clean-layout': store.mode === 'clean', 'split-layout': readerDisplayMode === 'split', 'html-layout': readerDisplayMode === 'html', 'context-open': readerContextVisible, 'outline-panel-collapsed': outlinePanelCollapsed, 'is-resizing-outline': outlinePanelResizing }" :style="{ '--outline-panel-width': `${outlinePanelWidth}px`, gridTemplateColumns: readerWebPreviewColumns }">
+          <aside v-if="readerSidebarAvailable" id="reader-sidebar" class="outline-panel" :class="{ 'is-collapsed': outlinePanelCollapsed }">
             <button v-if="outlinePanelCollapsed" ref="outlinePanelExpandButton" class="outline-panel-expand" type="button" title="展开阅读侧栏" aria-label="展开阅读侧栏" :aria-expanded="!outlinePanelCollapsed" aria-controls="reader-sidebar" @click="toggleOutlinePanel"><AppIcon name="chevron-right" :size="13" /></button>
             <template v-else>
             <div class="outline-resizer" role="separator" tabindex="0" aria-orientation="vertical" aria-label="调整阅读侧栏宽度；拖窄可收起，双击恢复默认宽度，按 Enter 收起" :aria-valuemin="outlinePanelMinWidth" :aria-valuemax="outlinePanelMaxWidth" :aria-valuenow="outlinePanelWidth" :aria-valuetext="`${outlinePanelWidth}px`" title="拖动调整宽度；拖窄可收起；双击恢复默认宽度" @pointerdown="startOutlinePanelResize" @dblclick="resetOutlinePanelWidth" @keydown="onOutlinePanelResizeKeydown" />
@@ -6203,6 +6278,11 @@ async function requestFullscreen() {
                           @keydown.enter.stop @click="openAiWebModel(model)">{{ model.name }}<span v-if="aiWebPreviews.some(({ id }) => id === model.id)">（已打开）</span></button>
                       </template>
                     </ArcoDropdown>
+                    <button type="button" @keydown.enter.stop @click="openWebAddress">打开网页</button>
+                    <button v-if="(hasWebPreviews || readerDisplayMode === 'html') && readerSidebarAvailable" type="button" aria-controls="reader-sidebar"
+                      :aria-expanded="!outlinePanelCollapsed && leftPanelTab === 'outline'"
+                      :class="{ active: !outlinePanelCollapsed && leftPanelTab === 'outline' }"
+                      @keydown.enter.stop @click="toggleReaderOutline">大纲</button>
                   </div>
                   <div class="reader-reading-actions">
                     <div class="reader-display-switch" role="tablist" aria-label="阅读视图">
@@ -6309,7 +6389,8 @@ async function requestFullscreen() {
                 <div v-if="readerDisplayMode === 'html'" class="reader-html-preview">
                   <p v-if="readerHtmlPreviewLoading" class="reader-html-preview-status" role="status">正在生成网页预览…</p>
                   <div v-else-if="readerHtmlPreviewError" class="reader-html-preview-status" role="alert"><span>{{ readerHtmlPreviewError }}</span><button type="button" @click="showReaderHtmlPreview">重试</button></div>
-                  <iframe v-else-if="readerHtmlPreview" :srcdoc="readerHtmlPreview" title="HTML 网页预览" sandbox="allow-scripts" />
+                  <iframe v-else-if="readerHtmlPreview" ref="readerHtmlFrame" :srcdoc="readerHtmlPreview"
+                    title="HTML 网页预览" sandbox="allow-same-origin" @load="onReaderHtmlLoad" />
                 </div>
                 <div v-if="readerDisplayMode === 'markdown' || readerDisplayMode === 'split'" class="reader-markdown">
                 <div class="regions-stack" :class="{ virtualized: virtualizedReader }">
@@ -6351,7 +6432,7 @@ async function requestFullscreen() {
               <EditorContextActions v-else :clipboard="editorContextClipboard" :format="editorContextFormat" :groups="editorContextGroups" @close="finishEditorContextMenu" />
             </div>
           </Teleport>
-        <aside v-if="contextPanelOpen && store.mode !== 'focus' && store.mode !== 'clean' && readerDisplayMode !== 'html'" class="context-panel">
+        <aside v-if="readerContextVisible" class="context-panel">
           <div class="context-top"><span class="section-kicker">阅读上下文</span><button class="text-button" type="button" @click="view = 'themes'">主题 <AppIcon name="external" :size="12" /></button></div>
           <div class="context-card current-context"><span class="section-kicker">当前章节</span><strong>{{ currentHeading?.text || '开篇' }}</strong><small>{{ store.currentDocument?.regions.length ?? 0 }} 个阅读区域 · {{ currentAnnotations.length }} 条批注</small></div>
           <div class="context-actions"><button type="button" @click="toggleFocusMode"><AppIcon name="focus" :size="13" />进入专注</button><button type="button" @click="toggleCleanMode"><AppIcon name="eye" :size="13" />纯净阅读</button></div>
@@ -6454,7 +6535,7 @@ async function requestFullscreen() {
       <template v-else>
         <WebPreviewPanel v-for="preview in visibleAiWebPreviews" :key="preview.id"
           :url="preview.url" :session="preview.id" :name="preview.name" :layout-key="aiWebLayoutKey" :compact="visibleAiWebPreviews.length > 1"
-          @close="closeAiWebModel(preview.id)" @navigate="preview.url = $event" @external="openPreviewInBrowser" />
+          @close="closeAiWebModel(preview.id)" @navigate="preview.url = $event" @open-web="webPreviewUrl = $event" @external="openPreviewInBrowser" />
       </template>
     </WebPreviewDock>
 

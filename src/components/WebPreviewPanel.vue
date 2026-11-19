@@ -1,25 +1,43 @@
 <script lang="ts">
 // Serialize native operations across close/reopen so an old panel cannot close the new one.
-let queue = Promise.resolve()
+let queue = Promise.resolve(true)
+
+export function hideNativeWebPreviews() {
+  if (!isTauri()) return
+  queue = queue.then(async () => {
+    await invoke('web_preview', { action: 'hide-all', session: '' })
+    return true
+  }).catch((cause) => {
+    console.warn('收起网页预览失败', cause)
+    return false
+  })
+}
 </script>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import AppIcon from './AppIcon.vue'
+import { parseWebPreviewAddress } from '../webPreviewAddress'
 
 const props = defineProps<{ url: string; session: string; name?: string; layoutKey?: string; compact?: boolean }>()
-const emit = defineEmits<{ close: []; external: [url: string]; navigate: [url: string] }>()
+const emit = defineEmits<{ close: []; external: [url: string]; navigate: [url: string]; 'open-web': [url: string] }>()
 const native = isTauri()
 const surface = ref<HTMLElement | null>(null)
 const frame = ref<HTMLIFrameElement | null>(null)
 const currentUrl = ref(props.url)
+const address = ref(props.url)
+const addressFocused = ref(false)
 const title = ref('网页预览')
 const loading = ref(true)
 const error = ref('')
 const delayed = ref(false)
-const host = computed(() => { try { return new URL(currentUrl.value).host } catch { return '' } })
+const feedback = ref('')
+const zoomKey = `moyue:web-preview-zoom:${props.session || 'web'}`
+const savedZoom = Number(localStorage.getItem(zoomKey) ?? 100)
+const zoomPercent = ref(Number.isInteger(savedZoom) && savedZoom >= 60 && savedZoom <= 150 ? savedZoom : 100)
+const zoomBusy = ref(false)
 let alive = true
 let ready = false
 let resizeQueued = false
@@ -31,38 +49,95 @@ function bounds() {
   const rect = surface.value?.getBoundingClientRect()
   return rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null
 }
-function command(action: string, url: string | null = null) {
-  queue = queue.then(() => {
+function command(action: string, url: string | null = null, zoom: number | null = null) {
+  queue = queue.then(async () => {
     if (action === 'resize') resizeQueued = false
-    if (!alive && action !== 'close') return
+    if (!alive && action !== 'close') return false
     const rect = action === 'open' || action === 'resume' || action === 'resize' ? bounds() : null
-    if (action === 'resize' && (error.value || !rect)) return
-    return invoke<void>('web_preview', { action, session: props.session, url, bounds: rect })
+    if (action === 'resize' && (error.value || !rect)) return false
+    await invoke<string | null>('web_preview', { action, session: props.session, url, bounds: rect, zoom })
+    return true
   })
     .catch(async (cause) => {
-      if (alive) { error.value = String(cause); loading.value = false }
+      if (action === 'zoom' || action === 'forward' || action === 'back') {
+        if (alive) feedback.value = String(cause)
+        return false
+      }
+      if (action === 'close') console.warn('收起网页预览失败', cause)
+      else if (alive) { error.value = String(cause); finished() }
       if (action !== 'close') await invoke('web_preview', { action: 'close', session: props.session, url: null, bounds: null }).catch(() => {})
+      return false
     })
   return queue
 }
 function finished() { loading.value = false; delayed.value = false; clearTimeout(timer) }
 function startLoading() {
-  loading.value = true; delayed.value = false; error.value = ''; clearTimeout(timer)
+  loading.value = true; delayed.value = false; error.value = ''; feedback.value = ''; clearTimeout(timer)
   timer = setTimeout(() => { if (alive && loading.value) delayed.value = true }, 15000)
 }
-async function open(action: 'open' | 'resume') {
-  currentUrl.value = props.url; title.value = '网页预览'; startLoading()
+async function open(action: 'open' | 'resume', url = props.url) {
+  currentUrl.value = url; title.value = '网页预览'; startLoading()
   await nextTick()
-  if (alive && native) await command(action, props.url)
+  if (alive && native && await command(action, url) && zoomPercent.value !== 100) {
+    await command('zoom', null, zoomPercent.value / 100)
+  }
 }
-function back() {
-  if (native) void command('back')
-  else { try { frame.value?.contentWindow?.history.back() } catch { error.value = '浏览器版无法控制跨站网页，请使用桌面端或系统浏览器。' } }
+function goHistory(direction: 'back' | 'forward') {
+  feedback.value = ''
+  if (native) void command(direction)
+  else {
+    try { frame.value?.contentWindow?.history[direction]() }
+    catch { feedback.value = '浏览器版无法控制跨站网页的历史记录' }
+  }
 }
 function reload() {
+  if (error.value) {
+    void open('open', currentUrl.value)
+    return
+  }
   startLoading()
   if (native) void command('reload')
   else if (frame.value) frame.value.src = currentUrl.value
+}
+async function changeZoom(percent: number) {
+  percent = Math.min(150, Math.max(60, percent))
+  if (zoomBusy.value || percent === zoomPercent.value) return
+  zoomBusy.value = true
+  feedback.value = ''
+  try {
+    if (await command('zoom', null, percent / 100)) {
+      zoomPercent.value = percent
+      localStorage.setItem(zoomKey, String(percent))
+    }
+  } finally { zoomBusy.value = false }
+}
+async function readAddress() {
+  if (native && !error.value) {
+    const url = await invoke<string | null>('web_preview', { action: 'address', session: props.session })
+      .catch(() => null)
+    if (url) currentUrl.value = url
+  }
+  return currentUrl.value
+}
+async function copyAddress() {
+  try {
+    await navigator.clipboard.writeText(await readAddress())
+    feedback.value = '已复制网址'
+  } catch { feedback.value = '无法访问剪贴板，请手动复制网址' }
+}
+async function openInBrowser() {
+  // Keep window.open in the click handler for browsers with popup blocking.
+  emit('external', native ? await readAddress() : currentUrl.value)
+}
+function submitAddress() {
+  const url = parseWebPreviewAddress(address.value)
+  if (!url) { feedback.value = '请输入有效的 HTTP 或 HTTPS 网址'; return }
+  address.value = url
+  feedback.value = ''
+  if (url === currentUrl.value && !error.value) return
+  if (props.session) emit('open-web', url)
+  else if (url === props.url) void open('open', url)
+  else emit('navigate', url)
 }
 function scheduleResize() {
   if (!native || !alive || !ready || error.value || resizeQueued) return
@@ -71,6 +146,7 @@ function scheduleResize() {
 }
 watch(() => props.layoutKey, scheduleResize, { flush: 'post' })
 watch(() => props.url, () => { if (ready) void open('open') })
+watch(currentUrl, (url) => { if (!addressFocused.value) address.value = url })
 
 onMounted(async () => {
   if (native) {
@@ -105,14 +181,32 @@ onUnmounted(() => {
 <template>
   <section class="web-preview-panel" :class="{ 'is-compact': compact }" :aria-label="name ?? '网页预览'">
     <header class="web-preview-header">
-      <div class="web-preview-heading"><AppIcon name="external" :size="16" /><strong :title="title">{{ name ?? title }}</strong><button type="button" :aria-label="`关闭${name ?? '网页预览'}`" title="关闭" @click="emit('close')"><AppIcon name="close" :size="17" /></button></div>
+      <div class="web-preview-heading">
+        <AppIcon name="external" :size="16" /><strong :title="title">{{ name ?? title }}</strong>
+        <div v-if="native" class="web-preview-zoom" role="group" aria-label="网页缩放">
+          <button type="button" aria-label="缩小网页" title="缩小网页" :disabled="loading || !!error || zoomBusy || zoomPercent <= 60"
+            @keydown.enter.stop @click="changeZoom(zoomPercent - 10)"><AppIcon name="minus" :size="14" /></button>
+          <button type="button" title="恢复网页缩放至 100%" :aria-label="`当前缩放 ${zoomPercent}%，恢复默认`"
+            :disabled="loading || !!error || zoomBusy || zoomPercent === 100" @keydown.enter.stop @click="changeZoom(100)">{{ zoomPercent }}%</button>
+          <button type="button" aria-label="放大网页" title="放大网页" :disabled="loading || !!error || zoomBusy || zoomPercent >= 150"
+            @keydown.enter.stop @click="changeZoom(zoomPercent + 10)"><AppIcon name="plus" :size="14" /></button>
+        </div>
+        <button type="button" :aria-label="`关闭${name ?? '网页预览'}`" title="关闭" @keydown.enter.stop @click="emit('close')"><AppIcon name="close" :size="17" /></button>
+      </div>
       <div class="web-preview-toolbar">
-        <button type="button" aria-label="返回上一网页" title="返回上一网页" @click="back">←</button>
-        <button type="button" aria-label="重新加载网页" title="重新加载网页" @click="reload"><AppIcon name="sync" :size="15" /></button>
-        <span class="web-preview-address" :title="currentUrl">{{ host }}</span>
-        <button type="button" class="web-preview-external" title="用系统浏览器打开" @click="emit('external', currentUrl)"><AppIcon name="external" :size="14" /><span>浏览器打开</span></button>
+        <button type="button" aria-label="返回上一网页" title="返回上一网页" @keydown.enter.stop @click="goHistory('back')"><AppIcon name="chevron-left" :size="15" /></button>
+        <button type="button" aria-label="前进到下一网页" title="前进到下一网页" @keydown.enter.stop @click="goHistory('forward')"><AppIcon name="chevron-right" :size="15" /></button>
+        <button type="button" aria-label="重新加载网页" title="重新加载网页" @keydown.enter.stop @click="reload"><AppIcon name="sync" :size="15" /></button>
+        <form class="web-preview-address" @submit.prevent="submitAddress">
+          <input v-model="address" aria-label="网页地址，按回车打开" :title="currentUrl" type="text" inputmode="url" spellcheck="false"
+            @focus="addressFocused = true" @blur="addressFocused = false" @keydown.enter.stop
+            @keydown.esc.stop.prevent="address = currentUrl" />
+        </form>
+        <button type="button" aria-label="复制网址" title="复制网址" @keydown.enter.stop @click="copyAddress"><AppIcon name="copy" :size="14" /></button>
+        <button type="button" aria-label="用系统浏览器打开" title="用系统浏览器打开" @keydown.enter.stop @click="openInBrowser"><AppIcon name="external" :size="14" /></button>
       </div>
       <div v-if="loading" class="web-preview-loading" role="status">正在加载网页…</div>
+      <div v-else-if="feedback" class="web-preview-loading" role="status">{{ feedback }}</div>
     </header>
     <div ref="surface" class="web-preview-surface">
       <div v-if="error" class="web-preview-error" role="alert"><strong>网页暂时无法预览</strong><p>{{ error }}</p><button type="button" @click="emit('external', currentUrl)">用系统浏览器打开</button></div>
@@ -131,8 +225,13 @@ onUnmounted(() => {
 .web-preview-panel button:hover { background: var(--accent-soft); color: var(--ink); }
 .web-preview-panel button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .web-preview-toolbar { display: flex; align-items: center; gap: 4px; padding: 0 10px 9px; }
-.web-preview-address { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 5px 8px; border: 1px solid var(--border); border-radius: 5px; color: var(--muted); font-size: 12px; }
-.web-preview-external { white-space: nowrap; }
+.web-preview-address { min-width: 0; flex: 1; }
+.web-preview-address input { width: 100%; box-sizing: border-box; padding: 5px 8px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface); color: var(--ink); font: inherit; }
+.web-preview-address input:focus-visible { outline: 1px solid var(--accent); }
+.web-preview-zoom { display: flex; align-items: center; }
+.web-preview-zoom button { min-width: 24px; padding-inline: 4px; }
+.web-preview-panel button:disabled { opacity: .6; cursor: default; }
+.web-preview-panel button:disabled:hover { background: transparent; color: var(--muted); }
 .web-preview-loading { color: var(--accent); padding: 0 14px 7px; font-size: 11px; }
 .web-preview-surface { position: relative; flex: 1; min-height: 0; background: #fff; }
 .web-preview-surface iframe { width: 100%; height: 100%; border: 0; display: block; }

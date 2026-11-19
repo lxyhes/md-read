@@ -25,7 +25,6 @@ button { border: 0; color: inherit; cursor: pointer; }
 .profile-chip b, .profile-chip small { display: block; font-family: var(--ui-font); }
 .profile-chip b { font-size: 11px; }.profile-chip small { margin-top: 2px; color: var(--muted); font-size: 11px; }
 .main-shell { min-width: 0; flex: 1; display: flex; flex-direction: column; }
-.main-shell.with-web-preview .outline-panel, .main-shell.with-web-preview .context-panel { display: none; }
 .app-shell .main-shell.with-web-preview .reader-content { width: calc(100% - 40px); }
 .main-shell.with-web-preview .reader-meta { flex-wrap: wrap; }
 .main-shell.with-web-preview .topbar { gap: 10px; padding-left: 18px; padding-right: 18px; }

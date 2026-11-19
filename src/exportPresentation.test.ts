@@ -4,8 +4,19 @@ import { DOMParser } from '@xmldom/xmldom'
 import { builtInThemes } from './themes'
 import { createExportCss, createPortableHtml, serializeXhtml } from './exportPresentation'
 import { createDocx, createEpub } from './exportService'
+import { parseMarkdown } from './parser'
 
 describe('faithful exports', () => {
+  it('maps duplicate headings and timestamped sections to their own HTML preview anchors', () => {
+    const source = '# 同名章节\n\n正文\n\n# 同名章节\n\n**课程介绍 00:32**'
+    const { title, headings } = parseMarkdown('outline.md', source)
+    const html = createPortableHtml(title, source, [], '', headings)
+    expect(headings).toHaveLength(3)
+    expect([...html.matchAll(/data-preview-heading="([^"]+)"/g)].map((match) => match[1]))
+      .toEqual(headings.map(({ id }) => id))
+    expect(createPortableHtml(title, source, [])).not.toContain('data-preview-heading')
+  })
+
   it('inherits active theme and custom typography without duplicating the title', () => {
     const theme = builtInThemes.find(theme => theme.manifest.id === 'bamboo-shadow')!
     const css = createExportCss(theme, { fontSize: 21, lineHeight: 2, width: 940, fontFamily: 'SimSun,serif' })

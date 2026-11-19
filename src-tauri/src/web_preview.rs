@@ -2,6 +2,20 @@ use serde::Deserialize;
 use tauri::{Emitter, Manager, WebviewBuilder, WebviewUrl};
 
 const LABEL: &str = "link-preview";
+const AI_LABEL_PREFIX: &str = "ai-preview-";
+
+fn dismiss_preview(view: &tauri::Webview) -> tauri::Result<()> {
+    // Keep a retained child outside the visible window even if the platform shows it again.
+    let hidden = view.hide();
+    let parked = view.set_bounds(tauri::Rect {
+        position: tauri::LogicalPosition::new(-1.0, -1.0).into(),
+        size: tauri::LogicalSize::new(1.0, 1.0).into(),
+    });
+    if view.label() == LABEL {
+        return view.close();
+    }
+    hidden.or(parked)
+}
 
 #[derive(Deserialize)]
 pub struct Bounds { x: f64, y: f64, width: f64, height: f64 }
@@ -28,27 +42,45 @@ fn preview_url(value: &str) -> Result<tauri::Url, String> {
 }
 
 #[tauri::command]
-pub async fn web_preview(app: tauri::AppHandle, webview: tauri::Webview, action: String, url: Option<String>, bounds: Option<Bounds>, session: String) -> Result<(), String> {
+pub async fn web_preview(app: tauri::AppHandle, webview: tauri::Webview, action: String, url: Option<String>, bounds: Option<Bounds>, session: String, zoom: Option<f64>) -> Result<Option<String>, String> {
     // Remote pages must never be able to control the reader or create other webviews.
     if webview.label() != "main" { return Err("仅阅读器可控制网页预览".into()); }
     let label = match session.as_str() {
         "" => LABEL.to_owned(),
-        "deepseek" | "qwen" | "kimi" | "doubao" | "yuanbao" | "zhipu" => format!("ai-preview-{session}"),
+        "deepseek" | "qwen" | "kimi" | "doubao" | "yuanbao" | "zhipu" => format!("{AI_LABEL_PREFIX}{session}"),
         _ => return Err("未知网页会话".into()),
     };
     let result = match action.as_str() {
-        "close" => match app.get_webview(&label) {
-            Some(view) if !session.is_empty() => view.hide(),
-            Some(view) => view.close(),
-            None => Ok(()),
-        },
+        "address" => {
+            let url = app.get_webview(&label).ok_or("网页预览未打开")?.url().map_err(|error| error.to_string())?;
+            return preview_url(url.as_str()).map(|url| Some(url.into()));
+        }
+        "close" => app.get_webview(&label).as_ref().map(dismiss_preview).unwrap_or(Ok(())),
+        "hide-all" => {
+            let mut result = Ok(());
+            for child in webview.window().webviews() {
+                if child.label() == LABEL || child.label().starts_with(AI_LABEL_PREFIX) {
+                    result = dismiss_preview(&child).and(result);
+                }
+            }
+            result
+        }
         "resize" => {
             let rect = bounds.ok_or("缺少网页预览区域")?.rect()?;
             app.get_webview(&label).map(|view| view.set_bounds(rect)).unwrap_or(Ok(()))
         }
-        "back" | "reload" => {
+        "back" | "forward" | "reload" => {
             let view = app.get_webview(&label).ok_or("网页预览未打开")?;
-            view.eval(if action == "back" { "history.back()" } else { "location.reload()" })
+            let script = match action.as_str() {
+                "back" => "history.back()",
+                "forward" => "history.forward()",
+                _ => "location.reload()",
+            };
+            view.eval(script)
+        }
+        "zoom" => {
+            let scale = zoom.filter(|scale| (0.6..=1.5).contains(scale)).ok_or("网页缩放比例无效")?;
+            app.get_webview(&label).ok_or("网页预览未打开")?.set_zoom(scale)
         }
         "open" | "resume" => {
             let target = preview_url(url.as_deref().ok_or("缺少网页地址")?)?;
@@ -63,7 +95,7 @@ pub async fn web_preview(app: tauri::AppHandle, webview: tauri::Webview, action:
                     }
                     view.show()
                 } else {
-                    view.navigate(target)
+                    view.navigate(target).and_then(|()| view.show())
                 }
             } else {
                 let title_app = app.clone();
@@ -93,7 +125,7 @@ pub async fn web_preview(app: tauri::AppHandle, webview: tauri::Webview, action:
         }
         _ => return Err("未知网页预览操作".into()),
     };
-    result.map_err(|error| format!("网页预览失败：{error}"))
+    result.map(|()| None).map_err(|error| format!("网页预览失败：{error}"))
 }
 
 #[cfg(test)]

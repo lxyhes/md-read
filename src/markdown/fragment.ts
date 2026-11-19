@@ -294,7 +294,7 @@ export function makeImplicitMarkdownHeadingsExplicit(source: string): { source: 
   return { source: normalized, converted: uniqueOffsets.length, insertedOffsets: uniqueOffsets.sort((a, b) => a - b) }
 }
 
-export function renderMarkdownFragment(source: string, resolveUrl: MarkdownUrlResolver = (url) => url): string {
+export function renderMarkdownFragment(source: string, resolveUrl: MarkdownUrlResolver = (url) => url, outline?: readonly { depth: number; text: string; id: string }[]): string {
   const normalizedSource = normalizeMixedOrderedListSource(normalizeLatexDelimiters(source)).source
   const tree = markdownProcessor.parse(normalizedSource) as unknown as MdastNode
   resolveMarkdownReferences(tree)
@@ -308,13 +308,24 @@ export function renderMarkdownFragment(source: string, resolveUrl: MarkdownUrlRe
   restoreClipboardCodeCards(tree, normalizedSource)
   const headings = (tree.children ?? []).filter((node) => node.type === 'heading').map((node, index) => ({ id: `moyue-heading-${index + 1}`, text: nodeText(node), depth: node.depth ?? 1 }))
   const context = createRenderContext(new Map((tree.children ?? []).filter(node => node.type === 'footnoteDefinition').map(node => [node.identifier ?? node.label ?? '', node])), headings)
+  const outlineIds = new Map<string, string[]>()
+  for (const heading of outline ?? []) {
+    const key = `${heading.depth}:${heading.text.trim()}`
+    const ids = outlineIds.get(key) ?? []
+    ids.push(heading.id)
+    outlineIds.set(key, ids)
+  }
   const html = (tree.children ?? [])
     .filter((node) => node.type !== 'yaml' && node.type !== 'toml' && node.type !== 'footnoteDefinition')
     .map((node) => {
       const comparisonLayout = ['paragraph', 'blockquote'].includes(node.type) ? parseComparisonLayout(nodeText(node)) : null
-      return comparisonLayout
+      const block = comparisonLayout
         ? renderComparisonLayout(comparisonLayout, node.type === 'blockquote')
         : blockHtmlWithSourceIndent(node, normalizedSource, resolveUrl, context)
+      if (!outline) return block
+      const depth = node.type === 'heading' ? node.depth ?? 1 : isTimestampedParagraph(node) ? 2 : 0
+      const id = depth ? outlineIds.get(`${depth}:${nodeText(node).trim()}`)?.shift() : undefined
+      return id ? block.replace(/^<(h[1-6]|p)(?=[\s>])/, `<$1 data-preview-heading="${id.replace(/[^a-zA-Z0-9_-]/g, '')}"`) : block
     })
     .join('')
   return `${html}${renderFootnotes(context, resolveUrl)}`
