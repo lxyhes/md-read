@@ -5,6 +5,52 @@ import { formatClipboardToMarkdown } from './pasteMarkdown'
 import { parseMarkdown, renderMarkdownFragment } from './parser'
 
 describe('WeChat article paste', () => {
+  it('keeps centered or semantic image captions attached through paste and rendering', () => {
+    const html = `<p><img src="https://example.com/diagram.png" alt="流程图"></p>
+      <p style="text-align: center">流程图与<a href="https://example.com/guide">说明</a></p>
+      <p>下一段普通正文。</p>
+      <figure><img src="https://example.com/sample.png" alt="示例图"><figcaption>示例说明</figcaption></figure>`
+    for (const format of ['default', 'wechat-article'] as const) {
+      const source = formatClipboardToMarkdown(html, '', format)
+      const [image, paragraph, figure] = parseMarkdown('captions.md', source).regions
+      expect(image.type).toBe('image')
+      expect(image.textContent).toBe('流程图与说明')
+      expect(image.html).toContain('<figure class="markdown-image-figure">')
+      expect(image.html).toContain('<figcaption>流程图与<a href="https://example.com/guide"')
+      expect(image.html).toContain('>说明</a></figcaption>')
+      expect(paragraph.textContent).toBe('下一段普通正文。')
+      expect(figure.html).toContain('<figcaption>示例说明</figcaption>')
+      expect(renderMarkdownFragment(source)).toContain('<figcaption>示例说明</figcaption>')
+    }
+  })
+
+  it('recognizes detached captions in older imports without absorbing ordinary prose', () => {
+    const imageAndCaption = '![图片](panel.png)\n\n并发控制面板'
+    const source = `${imageAndCaption}\n\n>2. 下一节\n\n![图片](other.png)\n\n这句是普通正文。\n\n>3. 更多内容\n\n![图片](third.png)\n\n*带格式的旧图注*`
+    const regions = parseMarkdown('legacy.md', source).regions
+    expect(regions[0].type).toBe('image')
+    expect(source.slice(regions[0].sourceStart, regions[0].sourceEnd)).toBe(imageAndCaption)
+    expect(regions[0].html).toContain('<figcaption>并发控制面板</figcaption>')
+    expect(regions[2].html).not.toContain('figcaption')
+    expect(regions[3].textContent).toBe('这句是普通正文。')
+    expect(regions[5].html).toContain('<figcaption>带格式的旧图注</figcaption>')
+  })
+
+  it('attaches detached labels between consecutive images and before surrounding prose', () => {
+    const source = [
+      '![图片](first.png)', '开源项目页面', '![图片](second.png)', '工具面板',
+      '这里开始介绍接入前需要准备的环境：',
+      '![图片](third.png)', '下面请注意：', '这句话属于正文。',
+    ].join('\n\n')
+    const regions = parseMarkdown('legacy-gallery.md', source).regions
+    expect(regions[0].html).toContain('<figcaption>开源项目页面</figcaption>')
+    expect(regions[1].html).toContain('<figcaption>工具面板</figcaption>')
+    expect(regions[2].textContent).toBe('这里开始介绍接入前需要准备的环境：')
+    expect(regions[3].html).not.toContain('figcaption')
+    expect(regions[4].textContent).toBe('下面请注意：')
+    expect(renderMarkdownFragment(source).match(/<figcaption>/g)).toHaveLength(2)
+  })
+
   it('converts a bordered warning card and leaves the following paragraph outside it', () => {
     const html = `<h2>03 经验总结</h2>
       <section style="border-left: 4px solid #f59a38; background-color: #fff6e8">

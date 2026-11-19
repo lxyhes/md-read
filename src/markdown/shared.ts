@@ -21,6 +21,7 @@ export type MdastNode = {
   url?: string
   title?: string | null
   alt?: string | null
+  caption?: MdastNode[]
   identifier?: string
   label?: string | null
   children?: MdastNode[]

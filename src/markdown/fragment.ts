@@ -125,6 +125,52 @@ export function promoteStandaloneImageLinks(node: MdastNode) {
   node.children?.forEach(promoteStandaloneImageLinks)
 }
 
+export function attachImageCaptions(tree: MdastNode) {
+  const blocks = tree.children ?? []
+  const result: MdastNode[] = []
+  for (let index = 0; index < blocks.length; index += 1) {
+    const block = blocks[index]
+    const [image, lineBreak, label] = block.children ?? []
+    if (block.type !== 'paragraph' || image?.type !== 'image') {
+      result.push(block)
+      continue
+    }
+    if (block.children?.length === 3 && lineBreak?.type === 'break' && label?.type === 'emphasis') {
+      result.push({ ...block, children: [{ ...image, caption: label.children }] })
+      continue
+    }
+    const captionBlock = blocks[index + 1]
+    if (block.children?.length !== 1 || captionBlock?.type !== 'paragraph' || !captionBlock.children?.length) {
+      result.push(block)
+      continue
+    }
+    const text = nodeText(captionBlock).trim()
+    const [first] = captionBlock.children
+    const italic = captionBlock.children.length === 1 && first.type === 'emphasis'
+    const sameAsAlt = Boolean(text) && text === image.alt?.trim() && !/^(?:图片|图像|截图|image)$/i.test(text)
+    const next = blocks[index + 2]
+    const beforeNextBlock = next?.type === 'heading' || next?.type === 'blockquote'
+      || (next?.type === 'paragraph' && next.children?.[0]?.type === 'image')
+    const nextText = next?.type === 'paragraph' ? nodeText(next).trim() : ''
+    const beforeBodyText = nextText.length > 48 || /[。！？；：.!?;:]$/.test(nextText)
+    // shortcut: infer detached legacy captions from generic image alt, a short label, and the next block.
+    const detachedLabel = /^(?:图片|图像|截图|image)$/i.test(image.alt ?? '') && captionBlock.children.length === 1
+      && first.type === 'text' && /^[^\n。！？；，!?]{2,48}$/.test(text) && !/[:：.]$/.test(text)
+      && (beforeNextBlock || beforeBodyText)
+    if (!italic && !sameAsAlt && !detachedLabel) {
+      result.push(block)
+      continue
+    }
+    result.push({
+      ...block,
+      children: [{ ...image, caption: italic ? first.children : captionBlock.children }],
+      position: { start: block.position?.start, end: captionBlock.position?.end },
+    })
+    index += 1
+  }
+  tree.children = result
+}
+
 function normalizeMixedOrderedList(node: MdastNode): MdastNode {
   if (node.children) node.children = node.children.map(normalizeMixedOrderedList)
   if (node.type !== 'list' || node.ordered || (node.children?.length ?? 0) < 2) return node
@@ -253,6 +299,7 @@ export function renderMarkdownFragment(source: string, resolveUrl: MarkdownUrlRe
   const tree = markdownProcessor.parse(normalizedSource) as unknown as MdastNode
   resolveMarkdownReferences(tree)
   promoteStandaloneImageLinks(tree)
+  attachImageCaptions(tree)
   normalizeMixedOrderedLists(tree)
   promoteTimestampedParagraphs(tree)
   removeEmptyListItems(tree)

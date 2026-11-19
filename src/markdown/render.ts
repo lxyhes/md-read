@@ -251,7 +251,10 @@ function blockHtml(node: MdastNode, resolveUrl: MarkdownUrlResolver = (url) => u
     case 'math': return `<div class="math-block">${renderMath(node.value ?? '', true)}</div>`
     case 'image': {
       const url = resolveUrl(node.url ?? '')
-      return `<img src="${safeImageUrl(url)}" alt="${escapeHtml(node.title ?? node.alt ?? '')}" loading="eager" decoding="async"${imageReferrerPolicyAttribute(url)} />`
+      const image = `<img src="${safeImageUrl(url)}" alt="${escapeHtml(node.title ?? node.alt ?? '')}" loading="eager" decoding="async"${imageReferrerPolicyAttribute(url)} />`
+      if (!node.caption?.length) return image
+      const caption = node.caption.map((child) => inlineHtml(child, false, resolveUrl, context)).join('')
+      return `<figure class="markdown-image-figure">${image}<figcaption>${caption}</figcaption></figure>`
     }
     case 'thematicBreak': return '<hr />'
     case 'table': {

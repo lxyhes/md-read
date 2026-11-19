@@ -70,6 +70,22 @@
 .reader-content .region-content .heading-text {
   min-width: 0;
 }
+.markdown-image-figure {
+  margin: 0;
+}
+.markdown-image-figure > img {
+  display: block;
+  max-width: 100%;
+  margin-inline: auto;
+}
+.markdown-image-figure > figcaption {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: .8em;
+  font-weight: 400;
+  line-height: 1.5;
+  text-align: center;
+}
 .reader-content .region-content h2.numbered-heading {
   align-items: center;
   gap: 12px;

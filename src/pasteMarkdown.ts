@@ -382,9 +382,34 @@ function renderFigure(figure: HTMLElement) {
   const image = figure.querySelector('img') as HTMLElement | null
   const imageSource = imageMarkdown(image)
   const caption = figure.querySelector('figcaption, .img-caption, .img_desc, [class*="caption"]') as HTMLElement | null
-  const captionText = caption ? inline(caption).trim() : ''
+  const captionText = caption ? inline(caption).trim().replace(/\s*\n\s*/g, ' ') : ''
   if (!imageSource && !captionText) return ''
-  return `${imageSource}${captionText ? `\n\n*${captionText}*` : ''}\n\n`
+  return `${imageSource}${captionText ? `${imageSource ? '\\\n' : ''}*${captionText}*` : ''}\n\n`
+}
+
+function prepareClipboardImageCaptions(body: HTMLElement) {
+  const captionTags = 'figcaption, .img-caption, .image-caption, .img_desc, [class*="caption"]'
+  for (const image of body.querySelectorAll<HTMLElement>('img')) {
+    if (image.closest('figure, table') || !imageMarkdown(image)) continue
+    let block = image
+    while (block.parentElement?.matches('a, p, span, div, section')
+      && block.parentElement.children.length === 1 && !block.parentElement.textContent?.trim()) {
+      block = block.parentElement
+    }
+    const caption = block.nextElementSibling as HTMLElement | null
+    const text = caption?.textContent?.trim() ?? ''
+    if (!caption || !text || text.length > 120 || caption.querySelector('img, table, pre, ul, ol, blockquote')) continue
+    const centered = caption.matches('[align="center"]') || hasStyle(caption, /(?:^|;)\s*text-align\s*:\s*center\b/i)
+    const captionStyling = caption.matches(captionTags) || caption.querySelector(captionTags)
+      || (centered && /^(?:P|DIV|SECTION|SMALL)$/.test(caption.tagName))
+    if (!captionStyling) continue
+    const figure = body.ownerDocument.createElement('figure')
+    const label = body.ownerDocument.createElement('figcaption')
+    label.append(...caption.childNodes)
+    block.replaceWith(figure)
+    figure.append(image, label)
+    caption.remove()
+  }
 }
 
 function render(node: HTMLElement): string {
@@ -483,6 +508,7 @@ function normalizeArticleSections(value: string) {
   let inFence = false
   const lines = value.split('\n')
   const result: string[] = []
+  const imageCaptionStart = /^!\[.*\]\(.*\)\\$/
   for (const line of lines) {
     const trimmed = line.trim()
     if (/^(?:```|~~~)/.test(trimmed)) {
@@ -491,6 +517,10 @@ function normalizeArticleSections(value: string) {
       continue
     }
     if (inFence || !trimmed) {
+      result.push(line)
+      continue
+    }
+    if (imageCaptionStart.test(trimmed) || (imageCaptionStart.test(result[result.length - 1] ?? '') && /^\*.+\*$/.test(trimmed))) {
       result.push(line)
       continue
     }
@@ -1009,6 +1039,7 @@ function convertClipboardHtml(html: string, wechatArticle = false, plainText = '
     if (plainPrefix && !comparable(document.body.textContent ?? '').includes(plainPrefix)) return ''
   }
   const body = removeClipboardNoise(document, wechatArticle)
+  prepareClipboardImageCaptions(body)
   if (wechatArticle) prepareWechatArticle(body)
   prepareClipboardCallouts(body)
   const source = Array.from(body.childNodes).filter((node) => node.nodeType !== Node.TEXT_NODE || Boolean(node.textContent?.trim())).map((node) => node.nodeType === Node.ELEMENT_NODE ? render(node as HTMLElement) : inline(node)).join('')
@@ -1032,6 +1063,7 @@ export function formatClipboardToMarkdown(html: string, text: string, format: Cl
     if (baiduMarkdown) return insertClipboardImages(baiduMarkdown, html)
   }
   const clipboardMarkdown = clipboardHtmlMatchesPlainText(html, promotedText) ? htmlToMarkdown(html) : ''
+  if (/^!\[.*\]\(.*\)\\\n\*.+\*$/m.test(clipboardMarkdown)) return insertClipboardImages(clipboardMarkdown, html)
   if (/^> \[!(?:STEPS|NOTE|TIP|IMPORTANT|WARNING|CAUTION|INFO|SUCCESS|FAILURE|DANGER|BUG|EXAMPLE|QUOTE)\](?:[ \t].*)?$/m.test(clipboardMarkdown)) return insertClipboardImages(clipboardMarkdown, html)
   const hasStructuredClipboardContent = /(?:^|\n)[ \t]*(?:#{1,6}[ \t]+|[-+*][ \t]+|\d+[.)][ \t]+)/m.test(clipboardMarkdown)
   const hasExplicitMarkdownStructure = /(?:^|\n)[ \t]{0,3}(?:#{1,6}[ \t]+|>[ \t]*\[!STEPS\][ \t]*$)|(?:^|\n)[ \t]{2,}(?:[-+*]|\d+[.)])[ \t]+/m.test(promotedText)

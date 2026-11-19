@@ -2,7 +2,7 @@ import type { HeadingItem, ReaderDocument, ReaderRegion, ReaderRegionType } from
 import { blockHtmlWithSourceIndent, renderFootnotes, renderVideoNode } from './markdown/render'
 import { createRenderContext, nodeText, renderMath, resolveMarkdownReferences, type MarkdownUrlResolver, type MdastNode } from './markdown/shared'
 import { formatPastedText, isLikelyProseBlock, normalizeMixedOrderedListSource } from './pasteMarkdown'
-import { isTimestampedParagraph, markdownProcessor as processor, normalizeArticleStrong, normalizeLatexDelimiters, normalizeMixedOrderedLists, promoteStandaloneImageLinks, promoteTimestampedParagraphs, removeEmptyListItems, restoreClipboardCodeCards, restoreSplitStepsLists } from './markdown/fragment'
+import { attachImageCaptions, isTimestampedParagraph, markdownProcessor as processor, normalizeArticleStrong, normalizeLatexDelimiters, normalizeMixedOrderedLists, promoteStandaloneImageLinks, promoteTimestampedParagraphs, removeEmptyListItems, restoreClipboardCodeCards, restoreSplitStepsLists } from './markdown/fragment'
 
 export type { MarkdownUrlResolver } from './markdown/shared'
 export { makeImplicitMarkdownHeadingsExplicit, renderMarkdownFragment } from './markdown/fragment'
@@ -179,6 +179,7 @@ export function parseMarkdown(path: string, source: string, resolveUrl: Markdown
   const tree = processor.parse(normalizedSource) as unknown as MdastNode
   resolveMarkdownReferences(tree)
   promoteStandaloneImageLinks(tree)
+  attachImageCaptions(tree)
   normalizeMixedOrderedLists(tree)
   promoteTimestampedParagraphs(tree)
   restoreTimestampedLists(tree)
@@ -201,7 +202,8 @@ export function parseMarkdown(path: string, source: string, resolveUrl: Markdown
     const type = regionType(node)
     const diagramCode = type === 'mermaid' ? mermaidCode(node) ?? '' : null
     const mathCode = type === 'math' ? gitlabMathCode(node) : null
-    const textContent = (diagramCode ?? mathCode ?? nodeText(node)).trim()
+    const imageCaption = type === 'image' ? imageNode(node)?.caption?.map(nodeText).join('') : undefined
+    const textContent = (diagramCode ?? mathCode ?? imageCaption ?? nodeText(node)).trim()
     const start = node.position?.start?.offset ?? 0
     const end = node.position?.end?.offset ?? start + textContent.length
     const id = `reg_${hashText(`${path}:${node.type}:${start}:${end}:${textContent.slice(0, 120)}`)}`
