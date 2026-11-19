@@ -10,6 +10,7 @@ export type SyntaxExample = {
   previewSource?: string
   previewText?: string
   diagram?: string
+  reference?: string
 }
 
 const flowchart = 'flowchart LR\n  A[开始] --> B[完成]'
@@ -39,9 +40,9 @@ export const syntaxGuide: { name: string; examples: SyntaxExample[] }[] = [
   { name: '链接与媒体', examples: [
     { name: '链接', source: '[项目说明](./README.md)', tip: '方括号写显示文字，圆括号写网址或相对于当前文档的路径。', mode: 'inline', keywords: '超链接 link url' },
     { name: '自动链接', source: '<https://example.com>\n\n<hello@example.com>', tip: '把网址或邮箱放进尖括号，显示文字就是地址本身。', keywords: 'autolink url email 邮箱 网址 gfm' },
-    { name: '引用式链接', source: '请阅读[项目说明][guide-readme]。\n\n[guide-readme]: ./README.md', tip: '正文使用引用名，再在另一行定义对应地址。同一个地址可以复用。', keywords: 'reference link' },
+    { name: '引用式链接', source: '请阅读[项目说明][guide-readme]。\n\n[guide-readme]: ./README.md', tip: '正文使用引用名，再在另一行定义对应地址。同一个地址可以复用。', keywords: 'reference link', reference: 'guide-readme' },
     { name: '图片', source: '![图片说明](./photo.png)', tip: '在链接写法前加 !，把路径换成你的图片地址。方括号里写图片的替代文字。', keywords: '插图 image alt' },
-    { name: '引用式图片', source: '![图片说明][guide-photo]\n\n[guide-photo]: ./photo.png', tip: '将图片路径单独定义，可以在文档里多次引用。', keywords: 'reference image' },
+    { name: '引用式图片', source: '![图片说明][guide-photo]\n\n[guide-photo]: ./photo.png', tip: '将图片路径单独定义，可以在文档里多次引用。', keywords: 'reference image', reference: 'guide-photo' },
     { name: '图片宽度', source: '<img src="./photo.png" alt="图片说明" width="80">', tip: '用 HTML 的 width 属性控制图片宽度，例子中的 80 表示 80 像素。', keywords: '缩放 大小 尺寸 html img' },
     { name: '视频', source: '[视频](./demo.mp4)', tip: '让视频链接单独占一个段落，并把路径换成你的视频文件。', keywords: 'video mp4 webm', previewText: '阅读视图会在这里显示视频播放器。' },
   ] },
@@ -58,7 +59,7 @@ export const syntaxGuide: { name: string; examples: SyntaxExample[] }[] = [
     { name: '行内公式', source: '$E = mc^2$', tip: '用一对美元符号把短公式放在正文行内。', mode: 'inline', keywords: '数学 latex math' },
     { name: '块级公式', source: '$$\n\\frac{1}{2} + \\frac{1}{2} = 1\n$$', tip: '用两行 $$ 把公式单独成块。例子里的 \\frac 用来写分数。', keywords: '数学 latex math 分数' },
     { name: 'Mermaid 流程图', source: `\`\`\`mermaid\n${flowchart}\n\`\`\``, tip: '给代码围栏标记 mermaid。在流程图中，--> 连接两个节点。', keywords: '图表 diagram flowchart', diagram: flowchart },
-    { name: '脚注', source: '这句话需要补充说明。[^guide-note]\n\n[^guide-note]: 这里写补充内容。', tip: '正文和定义使用同一个脚注名。给不同脚注起不同的名字。', keywords: '注释 footnote gfm' },
+    { name: '脚注', source: '这句话需要补充说明。[^guide-note]\n\n[^guide-note]: 这里写补充内容。', tip: '正文和定义使用同一个脚注名。给不同脚注起不同的名字。', keywords: '注释 footnote gfm', reference: '^guide-note' },
     { name: '目录', source: '[toc]', tip: '在已有标题的文档里，让 [toc] 单独成段，就能生成目录。', keywords: '大纲 toc', previewSource: '[toc]\n\n## 开始写作\n\n## 常用技巧' },
     { name: '提示框', source: '> [!TIP]\n> 保存前可以先查看阅读效果。', tip: '引用的第一行写 [!TIP]。也可用 NOTE、IMPORTANT、WARNING、CAUTION 等类型。', keywords: '警告 注意 callout alert note tip important warning caution info success failure danger bug example quote' },
     { name: '文档元数据', source: '---\ntitle: 我的笔记\n---', tip: '把 YAML 元数据放在文件开头。墨阅可用 title 作为文档标题。', mode: 'copy', keywords: 'yaml front matter frontmatter 标题 属性', previewText: '文档标题为「我的笔记」，元数据块在正文里隐藏。' },
@@ -86,7 +87,8 @@ export function searchSyntaxGuide(query: string) {
       return context.includes(term) ? 1 : 0
     })
     if (scores.includes(0)) return []
-    const score = name === phrase ? Infinity : scores.reduce((total, termScore) => total + termScore, 0)
+    const score = scores.reduce<number>((total, termScore) => total + termScore, 0)
+      + (name === phrase ? 5 * terms.length : 0)
     return [{ example, score }]
   }))
   const examples = matches.sort((a, b) => b.score - a.score).map(match => match.example)
@@ -95,7 +97,16 @@ export function searchSyntaxGuide(query: string) {
 
 export function insertSyntaxExample(source: string, position: number, example: SyntaxExample) {
   const eol = source.includes('\r\n') ? '\r\n' : '\n'
-  const text = example.source.replace(/\n/g, eol)
+  let text = example.source.replace(/\n/g, eol)
+  if (example.reference) {
+    const label = example.reference
+    const existing = source.toLowerCase()
+    let unusedLabel = label
+    for (let index = 2; existing.includes(`[${unusedLabel}]`); index++) {
+      unusedLabel = `${label}-${index}`
+    }
+    text = text.replaceAll(`[${label}]`, `[${unusedLabel}]`)
+  }
   if (example.mode === 'inline') {
     return { value: source.slice(0, position) + text + source.slice(position), cursor: position + text.length }
   }

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { expect, it, vi } from 'vitest'
 import { createApp, h, nextTick } from 'vue'
-import { insertSyntaxExample, syntaxGuide } from '../markdown/syntaxGuide'
+import { insertSyntaxExample, searchSyntaxGuide, syntaxGuide } from '../markdown/syntaxGuide'
 import MarkdownSyntaxGuide from './MarkdownSyntaxGuide.vue'
 
 const examples = syntaxGuide.flatMap(group => group.examples)
@@ -21,6 +21,18 @@ it('searches the guide, changes previews, copies raw syntax and emits the chosen
     expect(host.querySelector('.syntax-guide-preview strong')?.textContent).toBe('重点文字')
 
     const search = host.querySelector('input')!
+    search.focus()
+    search.value = '公式'
+    search.dispatchEvent(new Event('input'))
+    await nextTick()
+    expect(host.querySelector('[aria-current="true"]')?.textContent).toBe('行内公式')
+    search.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
+    await nextTick()
+    expect(host.querySelector('[aria-current="true"]')?.textContent).toBe('块级公式')
+    expect(document.activeElement).toBe(search)
+    search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
+    expect(document.activeElement).toBe(button('插入示例'))
+
     search.value = '待办 task'
     search.dispatchEvent(new Event('input'))
     await nextTick()
@@ -43,6 +55,16 @@ it('searches the guide, changes previews, copies raw syntax and emits the chosen
   }
 })
 
+it('ranks names and aliases ahead of incidental words and matches full-width syntax', () => {
+  const firstMatch = (query: string) => searchSyntaxGuide(query)[0]?.examples[0]?.name
+  expect(firstMatch('待办')).toBe('任务列表')
+  expect(firstMatch('斜体')).toBe('斜体')
+  expect(firstMatch('标题')).toBe('标题')
+  expect(firstMatch('＊＊')).toBe('粗体')
+  expect(firstMatch('＊＊＊')).toBe('粗斜体')
+  expect(searchSyntaxGuide('没有对应条目')).toEqual([])
+})
+
 it('inserts inline syntax after the selection and block syntax after the complete current block', () => {
   const bold = examples.find(example => example.name === '粗体')!
   expect(insertSyntaxExample('原文。', 2, bold)).toEqual({ value: '原文**重点文字**。', cursor: 10 })
@@ -52,4 +74,11 @@ it('inserts inline syntax after the selection and block syntax after the complet
   const result = insertSyntaxExample(table + '\r\n\r\n原文', 2, todo)
   expect(result.value).toBe(table + '\r\n\r\n- [ ] 待完成\r\n- [x] 已完成\r\n\r\n原文')
   expect(result.value.slice(result.cursor)).toBe('\r\n\r\n原文')
+})
+
+it('assigns a fresh label when inserting a footnote example again', () => {
+  const note = examples.find(example => example.name === '脚注')!
+  const original = note.source.toUpperCase()
+  const result = insertSyntaxExample(original, original.length, note)
+  expect(result.value).toBe(original + '\n\n' + note.source.replaceAll('guide-note', 'guide-note-2'))
 })

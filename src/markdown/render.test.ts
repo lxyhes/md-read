@@ -3,6 +3,16 @@ import { describe, expect, it } from 'vitest'
 import { renderMarkdownFragment } from './fragment'
 import { parseMarkdown } from '../parser'
 
+it('keeps Markdown table alignment in reading view and example previews', () => {
+  const source = '| 左 | 中 | 右 | 默认 |\n| :--- | :---: | ---: | --- |\n| A | B | C | D |'
+  for (const html of [parseMarkdown('table.md', source).regions[0].html, renderMarkdownFragment(source)]) {
+    const root = document.createElement('div')
+    root.innerHTML = html
+    const alignments = ['left', 'center', 'right', '']
+    expect(Array.from(root.querySelectorAll<HTMLTableCellElement>('th, td'), cell => cell.style.textAlign)).toEqual([...alignments, ...alignments])
+  }
+})
+
 describe('ordered list numbering', () => {
   it.each([0, 22])('keeps a list starting at %i in reader and fragment rendering', start => {
     const source = `${start}. 第一项\n${start + 1}. 第二项`

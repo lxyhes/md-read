@@ -259,7 +259,16 @@ function blockHtml(node: MdastNode, resolveUrl: MarkdownUrlResolver = (url) => u
     case 'thematicBreak': return '<hr />'
     case 'table': {
       const rows = node.children ?? []
-      const renderRow = (row: MdastNode, cellTag: 'th' | 'td') => `<tr>${(row.children ?? []).map((cell) => `<${cellTag}>${(cell.children ?? []).map((child) => inlineHtml(child, false, resolveUrl, context)).join('')}</${cellTag}>`).join('')}</tr>`
+      const renderRow = (row: MdastNode, cellTag: 'th' | 'td') => {
+        const cells = (row.children ?? []).map((cell, index) => {
+          const alignment = node.align?.[index]
+          const style = alignment === 'left' || alignment === 'center' || alignment === 'right'
+            ? ` style="text-align:${alignment}"` : ''
+          const content = (cell.children ?? []).map(child => inlineHtml(child, false, resolveUrl, context)).join('')
+          return `<${cellTag}${style}>${content}</${cellTag}>`
+        })
+        return `<tr>${cells.join('')}</tr>`
+      }
       const [header, ...body] = rows
       return `<div class="table-scroll"><table>${header ? `<thead>${renderRow(header, 'th')}</thead>` : ''}${body.length ? `<tbody>${body.map((row) => renderRow(row, 'td')).join('')}</tbody>` : ''}</table></div>`
     }

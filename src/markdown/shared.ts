@@ -17,6 +17,7 @@ export type MdastNode = {
   ordered?: boolean
   start?: number | null
   checked?: boolean | null
+  align?: ('left' | 'center' | 'right' | null)[]
   lang?: string | null
   url?: string
   title?: string | null
