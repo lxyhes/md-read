@@ -9,7 +9,7 @@ import { invoke, isTauri } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import AppIcon from './AppIcon.vue'
 
-const props = defineProps<{ url: string }>()
+const props = defineProps<{ url: string; session: string; name?: string; layoutKey?: string; compact?: boolean }>()
 const emit = defineEmits<{ close: []; external: [url: string]; navigate: [url: string] }>()
 const native = isTauri()
 const surface = ref<HTMLElement | null>(null)
@@ -21,6 +21,8 @@ const error = ref('')
 const delayed = ref(false)
 const host = computed(() => { try { return new URL(currentUrl.value).host } catch { return '' } })
 let alive = true
+let ready = false
+let resizeQueued = false
 let observer: ResizeObserver | undefined
 let timer: ReturnType<typeof setTimeout> | undefined
 let unlisten: UnlistenFn[] = []
@@ -29,11 +31,17 @@ function bounds() {
   const rect = surface.value?.getBoundingClientRect()
   return rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null
 }
-function command(action: string, extra: Record<string, unknown> = {}) {
-  queue = queue.then(() => invoke<void>('web_preview', { action, url: null, bounds: null, ...extra }))
+function command(action: string, url: string | null = null) {
+  queue = queue.then(() => {
+    if (action === 'resize') resizeQueued = false
+    if (!alive && action !== 'close') return
+    const rect = action === 'open' || action === 'resume' || action === 'resize' ? bounds() : null
+    if (action === 'resize' && (error.value || !rect)) return
+    return invoke<void>('web_preview', { action, session: props.session, url, bounds: rect })
+  })
     .catch(async (cause) => {
       if (alive) { error.value = String(cause); loading.value = false }
-      if (action !== 'close') await invoke('web_preview', { action: 'close', url: null, bounds: null }).catch(() => {})
+      if (action !== 'close') await invoke('web_preview', { action: 'close', session: props.session, url: null, bounds: null }).catch(() => {})
     })
   return queue
 }
@@ -42,10 +50,10 @@ function startLoading() {
   loading.value = true; delayed.value = false; error.value = ''; clearTimeout(timer)
   timer = setTimeout(() => { if (alive && loading.value) delayed.value = true }, 15000)
 }
-async function open() {
+async function open(action: 'open' | 'resume') {
   currentUrl.value = props.url; title.value = '网页预览'; startLoading()
   await nextTick()
-  if (alive && native) await command('open', { url: props.url, bounds: bounds() })
+  if (alive && native) await command(action, props.url)
 }
 function back() {
   if (native) void command('back')
@@ -56,23 +64,37 @@ function reload() {
   if (native) void command('reload')
   else if (frame.value) frame.value.src = currentUrl.value
 }
+function scheduleResize() {
+  if (!native || !alive || !ready || error.value || resizeQueued) return
+  resizeQueued = true
+  void command('resize')
+}
+watch(() => props.layoutKey, scheduleResize, { flush: 'post' })
+watch(() => props.url, () => { if (ready) void open('open') })
+
 onMounted(async () => {
   if (native) {
     const subscriptions = await Promise.all([
-      listen<{ title?: string; url?: string; loading?: boolean }>('web-preview-update', ({ payload }) => {
+      listen<{ session: string; title?: string; url?: string; loading?: boolean }>('web-preview-update', ({ payload }) => {
+        if (!alive || payload.session !== props.session) return
         if (payload.title) title.value = payload.title
         if (payload.url) currentUrl.value = payload.url
         if (payload.loading === false) finished()
         else if (payload.loading === true) startLoading()
       }),
-      listen<string>('web-preview-popup', ({ payload }) => emit('navigate', payload)),
+      listen<{ session: string; url: string }>('web-preview-popup', ({ payload }) => {
+        if (alive && payload.session === props.session) emit('navigate', payload.url)
+      }),
     ]).catch(() => [] as UnlistenFn[])
     if (!alive) { subscriptions.forEach((stop) => stop()); return }
     unlisten = subscriptions
-    observer = new ResizeObserver(() => { if (alive && !error.value) void command('resize', { bounds: bounds() }) })
+    observer = new ResizeObserver(scheduleResize)
     if (surface.value) observer.observe(surface.value)
   }
-  if (alive) { watch(() => props.url, open); await open() }
+  if (alive) {
+    ready = true
+    await open(props.session ? 'resume' : 'open')
+  }
 })
 onUnmounted(() => {
   alive = false; clearTimeout(timer); observer?.disconnect(); unlisten.forEach((stop) => stop())
@@ -81,9 +103,9 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <aside class="web-preview-panel" aria-label="网页预览">
+  <section class="web-preview-panel" :class="{ 'is-compact': compact }" :aria-label="name ?? '网页预览'">
     <header class="web-preview-header">
-      <div class="web-preview-heading"><AppIcon name="external" :size="16" /><strong :title="title">{{ title }}</strong><button type="button" aria-label="关闭网页预览" title="关闭网页预览" @click="emit('close')"><AppIcon name="close" :size="17" /></button></div>
+      <div class="web-preview-heading"><AppIcon name="external" :size="16" /><strong :title="title">{{ name ?? title }}</strong><button type="button" :aria-label="`关闭${name ?? '网页预览'}`" title="关闭" @click="emit('close')"><AppIcon name="close" :size="17" /></button></div>
       <div class="web-preview-toolbar">
         <button type="button" aria-label="返回上一网页" title="返回上一网页" @click="back">←</button>
         <button type="button" aria-label="重新加载网页" title="重新加载网页" @click="reload"><AppIcon name="sync" :size="15" /></button>
@@ -96,12 +118,12 @@ onUnmounted(() => {
       <div v-if="error" class="web-preview-error" role="alert"><strong>网页暂时无法预览</strong><p>{{ error }}</p><button type="button" @click="emit('external', currentUrl)">用系统浏览器打开</button></div>
       <iframe v-else-if="!native" ref="frame" :src="url" title="链接网页预览" sandbox="allow-scripts allow-same-origin allow-forms allow-popups" referrerpolicy="no-referrer" @load="finished" />
     </div>
-    <footer class="web-preview-footer">{{ delayed ? '加载时间较长，可重新加载或用浏览器打开。' : native ? '网页独立加载 · 关闭预览不影响原文' : '浏览器版受网站嵌入限制；若空白，请用系统浏览器打开。' }}</footer>
-  </aside>
+    <footer v-if="!compact || delayed" class="web-preview-footer">{{ delayed ? '加载时间较长，可重新加载或用浏览器打开。' : native ? '网页独立加载 · 关闭预览不影响原文' : '浏览器版受网站嵌入限制；若空白，请用系统浏览器打开。' }}</footer>
+  </section>
 </template>
 
 <style scoped>
-.web-preview-panel { flex: 0 0 min(46vw, 760px); min-width: 360px; height: 100%; display: flex; flex-direction: column; border-left: 1px solid var(--border); background: var(--surface, #fff); color: var(--ink); font: 13px/1.4 var(--ui-font); }
+.web-preview-panel { min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--surface, #fff); color: var(--ink); font: 13px/1.4 var(--ui-font); }
 .web-preview-header { flex: none; border-bottom: 1px solid var(--border); }
 .web-preview-heading { height: 44px; display: flex; align-items: center; gap: 9px; padding: 0 12px; }
 .web-preview-heading > strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
@@ -118,4 +140,7 @@ onUnmounted(() => {
 .web-preview-error { padding: 32px 22px; color: #343b3a; }
 .web-preview-error p { overflow-wrap: anywhere; font-size: 12px; }
 .web-preview-error button { background: #e8f1ef; color: #23655e; }
+.is-compact .web-preview-heading { height: 34px; }
+.is-compact .web-preview-toolbar { padding-bottom: 4px; }
+.is-compact button { min-height: 28px; min-width: 28px; }
 </style>

@@ -858,14 +858,14 @@
 @keyframes loading-spin {
   to { transform: rotate(360deg); }
 }
-.reader-tab-status.is-error {
-  color: #e98282;
+.reader-tab-status[data-tone="error"] {
+  --reader-status-color: color-mix(in srgb, #c54c4c 80%, var(--ink));
 }
-.reader-tab-status.is-syncing {
-  color: var(--accent);
+.reader-tab-status[data-tone="syncing"] {
+  --reader-status-color: var(--accent);
 }
-.reader-tab-status.is-syncing span:first-child {
-  animation: loading-spin .9s linear infinite;
+@media (prefers-reduced-motion: no-preference) {
+  .reader-tab-status[data-tone="syncing"] .app-icon { animation: loading-spin .9s linear infinite; }
 }
 
 /* Reading density: readable chrome, less dead space, and a calmer focus mask. */
@@ -1986,8 +1986,6 @@ button:focus-visible,
   flex: 0 0 auto;
   align-items: center;
   gap: 3px;
-  padding-left: 6px;
-  border-left: 1px solid var(--border);
 }
 .reader-tab-actions .reader-new-tab,
 .reader-tab-list-trigger {
@@ -2391,12 +2389,6 @@ button:focus-visible,
 .tab-reopen-button:hover:not(:disabled) { background: var(--accent-soft); }
 .tab-reopen-button:disabled { cursor: not-allowed; opacity: .42; }
 .tab-context-menu button:last-child { border-top: 1px solid var(--border); margin-top: 4px; }
-@media (max-width: 900px) {
-  .reader-tab-status span:nth-child(2),
-  .reader-tab-status span:nth-child(3) {
-    display: none;
-  }
-}
 
 /* Clean reading removes chrome while preserving the exact scroll position. */
 .app-shell.is-clean .global-nav {

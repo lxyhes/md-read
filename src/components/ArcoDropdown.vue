@@ -3,8 +3,9 @@ import { ref } from 'vue'
 import Dropdown from '@arco-design/web-vue/es/dropdown'
 import '@arco-design/web-vue/es/dropdown/style/css.js'
 
-const props = withDefaults(defineProps<{ panelClass?: string; popupContainer?: string | HTMLElement }>(), {
+const props = withDefaults(defineProps<{ panelClass?: string; popupContainer?: string | HTMLElement; position?: 'bl' | 'br' }>(), {
   panelClass: 'reader-more-popover',
+  position: 'bl',
 })
 const emit = defineEmits<{ 'visible-change': [visible: boolean] }>()
 const visible = ref(false)
@@ -25,7 +26,7 @@ defineExpose({ close: () => setVisible(false) })
 <template>
   <Dropdown
     trigger="click"
-    position="bl"
+    :position="props.position"
     :popup-container="props.popupContainer"
     :popup-visible="visible"
     :popup-max-height="false"

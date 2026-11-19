@@ -28,41 +28,62 @@ fn preview_url(value: &str) -> Result<tauri::Url, String> {
 }
 
 #[tauri::command]
-pub async fn web_preview(app: tauri::AppHandle, webview: tauri::Webview, action: String, url: Option<String>, bounds: Option<Bounds>) -> Result<(), String> {
+pub async fn web_preview(app: tauri::AppHandle, webview: tauri::Webview, action: String, url: Option<String>, bounds: Option<Bounds>, session: String) -> Result<(), String> {
     // Remote pages must never be able to control the reader or create other webviews.
     if webview.label() != "main" { return Err("仅阅读器可控制网页预览".into()); }
+    let label = match session.as_str() {
+        "" => LABEL.to_owned(),
+        "deepseek" | "qwen" | "kimi" | "doubao" | "yuanbao" | "zhipu" => format!("ai-preview-{session}"),
+        _ => return Err("未知网页会话".into()),
+    };
     let result = match action.as_str() {
-        "close" => app.get_webview(LABEL).map(|view| view.close()).unwrap_or(Ok(())),
+        "close" => match app.get_webview(&label) {
+            Some(view) if !session.is_empty() => view.hide(),
+            Some(view) => view.close(),
+            None => Ok(()),
+        },
         "resize" => {
             let rect = bounds.ok_or("缺少网页预览区域")?.rect()?;
-            app.get_webview(LABEL).map(|view| view.set_bounds(rect)).unwrap_or(Ok(()))
+            app.get_webview(&label).map(|view| view.set_bounds(rect)).unwrap_or(Ok(()))
         }
         "back" | "reload" => {
-            let view = app.get_webview(LABEL).ok_or("网页预览未打开")?;
+            let view = app.get_webview(&label).ok_or("网页预览未打开")?;
             view.eval(if action == "back" { "history.back()" } else { "location.reload()" })
         }
-        "open" => {
+        "open" | "resume" => {
             let target = preview_url(url.as_deref().ok_or("缺少网页地址")?)?;
             let rect = bounds.ok_or("缺少网页预览区域")?.rect()?;
-            if let Some(view) = app.get_webview(LABEL) {
+            if let Some(view) = app.get_webview(&label) {
                 view.set_bounds(rect).map_err(|error| error.to_string())?;
-                view.navigate(target)
+                if action == "resume" && !session.is_empty() {
+                    if let Ok(url) = view.url() {
+                        let _ = app.emit_to("main", "web-preview-update", serde_json::json!({
+                            "session": session, "url": url.as_str(), "loading": false
+                        }));
+                    }
+                    view.show()
+                } else {
+                    view.navigate(target)
+                }
             } else {
                 let title_app = app.clone();
                 let load_app = app.clone();
                 let popup_app = app.clone();
-                let builder = WebviewBuilder::new(LABEL, WebviewUrl::External(target))
+                let title_session = session.clone();
+                let load_session = session.clone();
+                let builder = WebviewBuilder::new(label, WebviewUrl::External(target))
+                    .incognito(false)
                     .on_navigation(|url| preview_url(url.as_str()).is_ok())
                     .on_document_title_changed(move |_, title| {
-                        let _ = title_app.emit_to("main", "web-preview-update", serde_json::json!({"title": title}));
+                        let _ = title_app.emit_to("main", "web-preview-update", serde_json::json!({"session": title_session, "title": title}));
                     })
                     .on_page_load(move |_, payload| {
                         let loading = matches!(payload.event(), tauri::webview::PageLoadEvent::Started);
-                        let _ = load_app.emit_to("main", "web-preview-update", serde_json::json!({"url": payload.url().as_str(), "loading": loading}));
+                        let _ = load_app.emit_to("main", "web-preview-update", serde_json::json!({"session": load_session, "url": payload.url().as_str(), "loading": loading}));
                     })
                     .on_new_window(move |url, _| {
                         if preview_url(url.as_str()).is_ok() {
-                            let _ = popup_app.emit_to("main", "web-preview-popup", url.as_str());
+                            let _ = popup_app.emit_to("main", "web-preview-popup", serde_json::json!({"session": session, "url": url.as_str()}));
                         }
                         tauri::webview::NewWindowResponse::Deny
                     });

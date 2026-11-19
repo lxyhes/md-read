@@ -31,6 +31,7 @@ import SecondDocumentPane from './components/SecondDocumentPane.vue'
 import EditorOutline from './components/EditorOutline.vue'
 import { decodeLinkPart, findDocumentHeading } from './documentLinks'
 import WebPreviewPanel from './components/WebPreviewPanel.vue'
+import WebPreviewDock from './components/WebPreviewDock.vue'
 import MermaidBlock from './components/MermaidBlock.vue'
 import TreeDiagram from './components/TreeDiagram.vue'
 import AppIcon from './components/AppIcon.vue'
@@ -98,9 +99,13 @@ const store = useReaderStore()
 const exportAppContext = getCurrentInstance()!.appContext
 const view = ref<View>('library')
 const webPreviewUrl = ref('')
-watch(view, (next) => { if (next !== 'reader' && next !== 'settings') webPreviewUrl.value = '' })
-const aiWebModel = ref(localStorage.getItem('moyue:ai-web-model') ?? domesticAiWebModels[0].id)
-watch(aiWebModel, (value) => localStorage.setItem('moyue:ai-web-model', value))
+type AiWebModel = (typeof domesticAiWebModels)[number]
+const aiWebPreviews = ref<{ id: AiWebModel['id']; name: string; url: string }[]>([])
+const activeAiWebId = ref<AiWebModel['id']>()
+const previousAiWebId = ref<AiWebModel['id']>()
+const aiWebCompare = ref(true)
+const webPreviewContentWidth = ref(0)
+watch(view, (next) => { if (next !== 'reader') webPreviewUrl.value = '' })
 const libraryTab = ref<'home' | 'all'>('all')
 const librarySearchQuery = ref('')
 const navCollapsed = ref(localStorage.getItem('moyue:nav-collapsed') === 'true')
@@ -134,6 +139,13 @@ const toast = ref('')
 const booting = ref(true)
 const saveFailed = ref(false)
 const fileSyncState = ref<FileSyncState>('idle')
+const readerTabStatus = computed(() => {
+  if (saveFailed.value) return { icon: 'info', label: '保存失败', tone: 'error' } as const
+  if (fileSyncState.value === 'error') return { icon: 'info', label: '同步失败', tone: 'error' } as const
+  if (fileSyncState.value === 'syncing') return { icon: 'sync', label: '正在同步', tone: 'syncing' } as const
+  if (fileSyncState.value === 'updated') return { icon: 'check', label: '已自动更新', tone: 'idle' } as const
+  return { icon: 'check', label: '自动保存', tone: 'idle' } as const
+})
 const fullscreenActive = ref(typeof document !== 'undefined' && Boolean(document.fullscreenElement))
 const settingsTab = ref('reading')
 type AdvancedSettings = {
@@ -289,6 +301,25 @@ const dualDocumentMode = ref(false)
 const showSecondDocument = computed(() => dualDocumentMode.value && store.openDocuments.length > 1)
 watch(() => store.openDocuments.length, count => { if (count < 2) dualDocumentMode.value = false })
 const tabListTrigger = ref<HTMLElement | null>(null)
+const readerTabScroll = ref<HTMLElement | null>(null)
+
+function revealCurrentReaderTab() {
+  const strip = readerTabScroll.value
+  const tab = strip?.querySelector('.reader-tab[aria-selected="true"]')
+  if (!strip || !tab) return
+  const viewport = strip.getBoundingClientRect()
+  const bounds = tab.getBoundingClientRect()
+  if (bounds.left < viewport.left) strip.scrollLeft += bounds.left - viewport.left
+  else if (bounds.right > viewport.right) strip.scrollLeft += bounds.right - viewport.right
+}
+
+watch(readerTabScroll, (strip, _, onCleanup) => {
+  if (!strip) return
+  revealCurrentReaderTab()
+  const observer = new ResizeObserver(revealCurrentReaderTab)
+  observer.observe(strip)
+  onCleanup(() => observer.disconnect())
+}, { flush: 'post' })
 const tabListPopoverStyle = ref<Record<string, string>>({})
 const tabSearchQuery = ref('')
 const recentlyClosedTabs = ref<string[]>([])
@@ -301,8 +332,20 @@ const editorToolbarVisible = ref(true)
 const editorStatusbarVisible = ref(true)
 const editorEmojiPickerOpen = ref(false)
 const editorAlwaysOnTop = ref(false)
-watch([editorOpen, searchOpen, quickOpenOpen, viewer, wordCountOpen], (values) => {
-  if (values.some(Boolean)) webPreviewUrl.value = ''
+const webPreviewsBlocked = computed(() => Boolean(editorOpen.value || searchOpen.value || quickOpenOpen.value || viewer.value || wordCountOpen.value))
+const hasWebPreviews = computed(() => view.value === 'reader' && !webPreviewsBlocked.value && Boolean(webPreviewUrl.value || aiWebPreviews.value.length))
+const canCompareAiWeb = computed(() => aiWebPreviews.value.length > 1 && webPreviewContentWidth.value >= 920)
+const visibleAiWebPreviews = computed(() => {
+  const active = aiWebPreviews.value.find(({ id }) => id === activeAiWebId.value)
+  if (!active) return []
+  if (!aiWebCompare.value || !canCompareAiWeb.value) return [active]
+  const other = aiWebPreviews.value.find(({ id }) => id !== active.id && id === previousAiWebId.value)
+    ?? aiWebPreviews.value.find(({ id }) => id !== active.id)
+  return other ? [active, other] : [active]
+})
+const aiWebLayoutKey = computed(() => visibleAiWebPreviews.value.map(({ id }) => id).join(','))
+watch(webPreviewsBlocked, (blocked) => {
+  if (blocked) webPreviewUrl.value = ''
 })
 const editorFindOpen = ref(false)
 const editorFindQuery = ref('')
@@ -726,10 +769,6 @@ function normalizedPath(path: string) { return path.replace(/\\/g, '/') }
 async function openPreviewInBrowser(url: string) {
   if (isTauriRuntime()) await invoke('open_external_url', { url }).catch(() => notify('链接打开失败，请检查链接地址'))
   else window.open(url, '_blank', 'noopener,noreferrer')
-}
-function openAiWebModel() {
-  const model = domesticAiWebModels.find(({ id }) => id === aiWebModel.value)
-  if (model) webPreviewUrl.value = model.url
 }
 function directoryOf(path: string) {
   const normalized = normalizedPath(path)
@@ -4424,7 +4463,7 @@ watch(() => store.currentDocumentId, () => {
   // Do not render the new document at the previous document's virtual offset.
   virtualScrollTop.value = 0
   nextTick(() => {
-    document.querySelector<HTMLElement>('.reader-tab[aria-selected="true"]')?.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'nearest' })
+    revealCurrentReaderTab()
     restoreScroll()
     observeReaderLayout()
   })
@@ -5573,6 +5612,45 @@ async function captureSelection(event: MouseEvent) {
   }
 }
 
+function openAiWebModel(model: AiWebModel) {
+  webPreviewUrl.value = ''
+  if (!aiWebPreviews.value.some(({ id }) => id === model.id)) {
+    aiWebPreviews.value.push({ ...model })
+  }
+  selectAiWebModel(model.id)
+}
+
+function selectAiWebModel(id: AiWebModel['id']) {
+  if (activeAiWebId.value === id) return
+  previousAiWebId.value = activeAiWebId.value
+  activeAiWebId.value = id
+}
+
+function closeAiWebModel(id: AiWebModel['id']) {
+  aiWebPreviews.value = aiWebPreviews.value.filter((preview) => preview.id !== id)
+  if (id === activeAiWebId.value) {
+    activeAiWebId.value = aiWebPreviews.value.find((preview) => preview.id === previousAiWebId.value)?.id
+      ?? aiWebPreviews.value[0]?.id
+  }
+  if (id === previousAiWebId.value || previousAiWebId.value === activeAiWebId.value) {
+    previousAiWebId.value = undefined
+  }
+}
+
+async function openAiWebModelForSelection(model: AiWebModel) {
+  const selection = selectionToolbar.value
+  if (!selection) return
+
+  selectionToolbar.value = null
+  openAiWebModel(model)
+  try {
+    await navigator.clipboard.writeText(selection.text)
+    notify('已复制选中文字，可粘贴到对话框')
+  } catch {
+    notify('无法访问剪贴板，请手动复制选中文字')
+  }
+}
+
 async function copySelection() {
   if (!selectionToolbar.value) return
   try {
@@ -5760,10 +5838,10 @@ async function requestFullscreen() {
       </div>
     </aside>
 
-    <main class="main-shell" :class="{ 'with-web-preview': Boolean(webPreviewUrl) }">
+    <main class="main-shell" :class="{ 'with-web-preview': hasWebPreviews }">
       <header class="topbar" :class="{ faded: store.mode === 'focus' }">
         <div v-if="view !== 'reader'" class="crumbs"><strong>{{ view === 'themes' ? '主题空间' : view === 'clipboard' ? '剪贴板' : view === 'favorites' ? '收藏夹' : view === 'knowledge' ? 'AI 知识库' : view === 'notes' ? '个人笔记' : view === 'settings' ? '偏好设置' : '我的文档' }}</strong></div>
-        <button class="command-trigger" type="button" title="搜索：Ctrl/Cmd + K；快速打开：Ctrl/Cmd + P" @click="openSearch('all')"><AppIcon v-if="webPreviewUrl" name="search" :size="16" /><span>搜索文档、标题、内容</span><kbd>⌘ K</kbd></button>
+        <button class="command-trigger" type="button" title="搜索：Ctrl/Cmd + K；快速打开：Ctrl/Cmd + P" @click="openSearch('all')"><AppIcon v-if="hasWebPreviews" name="search" :size="16" /><span>搜索文档、标题、内容</span><kbd>⌘ K</kbd></button>
         <div class="top-actions">
           <IconButton icon="focus" label="专注阅读" :active="store.mode === 'focus'" @click="toggleFocusMode" />
           <IconButton icon="palette" label="切换主题" @click="view = 'themes'" />
@@ -5992,7 +6070,7 @@ async function requestFullscreen() {
             </div>
           </div>
         </Teleport>
-        <div class="reader-layout" :class="{ 'focus-layout': store.mode === 'focus', 'clean-layout': store.mode === 'clean', 'split-layout': readerDisplayMode === 'split', 'html-layout': readerDisplayMode === 'html', 'context-open': contextPanelOpen, 'outline-panel-collapsed': outlinePanelCollapsed, 'is-resizing-outline': outlinePanelResizing }" :style="{ '--outline-panel-width': `${outlinePanelWidth}px`, gridTemplateColumns: webPreviewUrl ? 'minmax(0, 1fr)' : undefined }">
+        <div class="reader-layout" :class="{ 'focus-layout': store.mode === 'focus', 'clean-layout': store.mode === 'clean', 'split-layout': readerDisplayMode === 'split', 'html-layout': readerDisplayMode === 'html', 'context-open': contextPanelOpen, 'outline-panel-collapsed': outlinePanelCollapsed, 'is-resizing-outline': outlinePanelResizing }" :style="{ '--outline-panel-width': `${outlinePanelWidth}px`, gridTemplateColumns: hasWebPreviews ? 'minmax(0, 1fr)' : undefined }">
           <aside v-if="store.mode !== 'focus' && store.mode !== 'clean' && readerDisplayMode !== 'html'" id="reader-sidebar" class="outline-panel" :class="{ 'is-collapsed': outlinePanelCollapsed }">
             <button v-if="outlinePanelCollapsed" ref="outlinePanelExpandButton" class="outline-panel-expand" type="button" title="展开阅读侧栏" aria-label="展开阅读侧栏" :aria-expanded="!outlinePanelCollapsed" aria-controls="reader-sidebar" @click="toggleOutlinePanel"><AppIcon name="chevron-right" :size="13" /></button>
             <template v-else>
@@ -6061,21 +6139,27 @@ async function requestFullscreen() {
           <ReaderHeader>
             <template #tabs>
               <div class="reader-tabbar" aria-label="已打开文档">
-                <div class="reader-tab-scroll" role="tablist" aria-label="已打开文档">
+                <div ref="readerTabScroll" class="reader-tab-scroll" role="tablist" aria-label="已打开文档">
                   <div v-for="document in store.openDocuments" :key="document.id" class="reader-tab" :class="{ active: store.currentDocumentId === document.id }" role="tab" :aria-selected="store.currentDocumentId === document.id" :aria-label="`打开 ${tabLabel(document)}`" :title="`${tabLabel(document)}\n${document.path}`" tabindex="0" @click="chooseDocument(document.id)" @contextmenu.prevent="openTabContextMenu($event, document.id)" @auxclick="onTabAuxClick($event, document.id)" @keydown.enter="chooseDocument(document.id)" @keydown.space.prevent="chooseDocument(document.id)">
                     <span><AppIcon name="reader" :size="15" /></span>
                     <strong>{{ tabLabel(document) }}</strong>
                     <IconButton icon="close" size="sm" :label="`关闭 ${tabLabel(document)}`" :show-title="false" @click.stop="closeDocument(document.id)" />
                   </div>
-              </div>
+                </div>
                 <div class="reader-tab-actions">
-                  <button class="text-button dual-document-toggle" type="button" :aria-pressed="dualDocumentMode" :disabled="store.openDocuments.length < 2" :title="store.openDocuments.length < 2 ? '先打开两篇 Markdown 文档' : '并排阅读两篇 Markdown 文档'" @click="dualDocumentMode = !dualDocumentMode">{{ dualDocumentMode ? '单文档' : '双文档' }}</button>
                   <IconButton class="reader-new-tab" icon="plus" size="sm" label="打开新文档" :disabled="busyAction !== null" @click="openFile" />
                   <div ref="tabListTrigger" class="reader-tab-list-wrap">
                     <IconButton class="reader-tab-list-trigger" icon="chevron-down" size="sm" :active="tabListOpen" :label="`查看全部标签（${store.openDocuments.length}）`" :aria-expanded="tabListOpen" @click.stop="toggleTabList" />
                   </div>
+                  <button class="text-button dual-document-toggle" type="button" :aria-pressed="dualDocumentMode" :disabled="store.openDocuments.length < 2" :title="store.openDocuments.length < 2 ? '先打开两篇 Markdown 文档' : dualDocumentMode ? '返回单文档阅读' : '并排阅读两篇 Markdown 文档'" @click="dualDocumentMode = !dualDocumentMode">双文档</button>
                 </div>
-                <div class="reader-tab-status" :class="{ 'is-error': saveFailed || fileSyncState === 'error', 'is-syncing': fileSyncState === 'syncing' }"><span><AppIcon :name="saveFailed || fileSyncState === 'error' ? 'info' : fileSyncState === 'updated' ? 'check' : 'sync'" :size="13" /></span><span>{{ store.currentDocument?.wordCount }} 字</span><span><AppIcon name="history" :size="13" /> {{ fileSyncState === 'syncing' ? '正在同步' : fileSyncState === 'updated' ? '已自动更新' : saveFailed ? '保存失败' : '自动保存' }}</span></div>
+                <div class="reader-tab-status" :data-tone="readerTabStatus.tone">
+                  <small v-if="store.currentDocument" class="reader-tab-word-count">{{ store.currentDocument.wordCount.toLocaleString('zh-CN') }} 字</small>
+                  <span role="status" :title="readerTabStatus.label === '自动保存' ? '自动保存阅读位置' : undefined">
+                    <AppIcon :name="readerTabStatus.icon" :size="14" />
+                    {{ readerTabStatus.label }}
+                  </span>
+                </div>
               </div>
             </template>
             <template #toolbar>
@@ -6111,6 +6195,14 @@ async function requestFullscreen() {
                       </template>
                     </ArcoDropdown>
                     <FontPicker class="reader-toolbar-font-picker" compact label="正文字体" :model-value="store.readerSettings.fontFamily" :fallback-family="defaultTokens.reader.fontFamily" @update:model-value="store.updateSettings({ fontFamily: $event })" />
+                    <ArcoDropdown position="br">
+                      <button type="button" @keydown.enter.stop>打开 AI</button>
+                      <template #menu>
+                        <button v-for="model in domesticAiWebModels" :key="model.id" type="button"
+                          :class="{ active: aiWebPreviews.some(({ id }) => id === model.id) }"
+                          @keydown.enter.stop @click="openAiWebModel(model)">{{ model.name }}<span v-if="aiWebPreviews.some(({ id }) => id === model.id)">（已打开）</span></button>
+                      </template>
+                    </ArcoDropdown>
                   </div>
                   <div class="reader-reading-actions">
                     <div class="reader-display-switch" role="tablist" aria-label="阅读视图">
@@ -6269,7 +6361,24 @@ async function requestFullscreen() {
         </div>
         <div v-if="store.mode === 'region-focus'" class="focus-hud" role="status"><span v-if="focusPosition" class="focus-hud-position">{{ focusPosition }}</span><span class="focus-hud-shortcut"><kbd>↑</kbd><kbd>↓</kbd>切换</span><button type="button" @click="clearRegionFocus"><kbd>Esc</kbd>退出聚焦</button></div>
         <div v-if="store.mode === 'clean'" class="clean-mode-hud"><span><AppIcon name="eye" :size="13" />纯净阅读</span><button type="button" @click="toggleCleanMode">退出 <kbd>Esc</kbd></button></div>
-        <div v-if="selectionToolbar" class="selection-toolbar"><span class="selection-label">{{ selectionToolbar.text.slice(0, 28) }}{{ selectionToolbar.text.length > 28 ? '…' : '' }}</span><button type="button" @click="highlightSelection">{{ selectionIsHighlighted() ? '取消高亮' : '高亮' }}</button><button type="button" @click="beginAnnotation">批注</button><button type="button" @click="searchSelection">搜索</button><button type="button" @click="assist('translate')">翻译</button><button type="button" @click="copySelectionMarkdown">复制 Markdown</button><button type="button" @click="copySelectionHtml">复制 HTML</button><button type="button" @click="copySelectionMathMl">复制 MathML</button><button type="button" @click="copySelection">复制纯文本</button></div>
+        <div v-if="selectionToolbar" class="selection-toolbar">
+          <span class="selection-label">{{ selectionToolbar.text.slice(0, 28) }}{{ selectionToolbar.text.length > 28 ? '…' : '' }}</span>
+          <button type="button" @click="highlightSelection">{{ selectionIsHighlighted() ? '取消高亮' : '高亮' }}</button>
+          <button type="button" @click="beginAnnotation">批注</button>
+          <button type="button" @click="searchSelection">搜索</button>
+          <button type="button" @click="assist('translate')">翻译</button>
+          <ArcoDropdown>
+            <button type="button" @keydown.enter.stop>问 AI</button>
+            <template #menu>
+              <button v-for="model in domesticAiWebModels" :key="model.id" type="button"
+                @keydown.enter.stop @click="openAiWebModelForSelection(model)">{{ model.name }}</button>
+            </template>
+          </ArcoDropdown>
+          <button type="button" @click="copySelectionMarkdown">复制 Markdown</button>
+          <button type="button" @click="copySelectionHtml">复制 HTML</button>
+          <button type="button" @click="copySelectionMathMl">复制 MathML</button>
+          <button type="button" @click="copySelection">复制纯文本</button>
+        </div>
         <div v-if="wordCountOpen && store.currentDocument" class="overlay file-properties-overlay" @click.self="wordCountOpen = false"><div class="file-properties-dialog" role="dialog" aria-modal="true" aria-labelledby="word-count-title"><div class="file-properties-heading"><div><span class="section-kicker">文档统计</span><h2 id="word-count-title">{{ displayTitle(store.currentDocument.title) }}</h2></div><IconButton icon="close" size="sm" label="关闭字数统计" @click="wordCountOpen = false" /></div><dl class="file-properties-list"><div><dt>正文字符</dt><dd>{{ wordCountStats.characters }}</dd></div><div><dt>中英文词</dt><dd>{{ wordCountStats.words }}</dd></div><div><dt>源文件行</dt><dd>{{ wordCountStats.lines }}</dd></div><div><dt>正文块</dt><dd>{{ wordCountStats.blocks }}</dd></div><div><dt>标题</dt><dd>{{ wordCountStats.headings }}</dd></div></dl><div class="file-properties-actions"><Button class="ghost-button" type="secondary" @click="wordCountOpen = false">完成</Button></div></div></div>
       </section>
 
@@ -6302,7 +6411,6 @@ async function requestFullscreen() {
             <p v-else-if="knowledgeModelTested" class="ai-status-success" role="status">本地语义模型可用</p>
           </div>
           <div class="ai-settings-actions"><Button class="ghost-button" type="secondary" @click="saveAiSettings"><AppIcon name="check" :size="14" />保存配置</Button><Button class="primary-button" type="primary" :disabled="aiBusy" @click="testAiConnection">{{ aiBusy ? '连接中…' : '测试连接' }}</Button></div><p v-if="aiStatus === 'saved'" class="ai-status-success" role="status">AI 服务配置已保存</p><p v-else-if="aiStatus === 'connected'" class="ai-status-success">AI 服务已连接，模型 {{ aiSettings.model }} 可用</p><p v-if="aiError" class="ai-status-error" role="alert">{{ aiError }}</p></div>
-        <div v-show="settingsTab === 'reading'" class="settings-card ai-web-model-card"><span class="section-kicker">网页入口</span><h2>国产大模型</h2><p class="muted-copy">选择平台后，在右侧内嵌打开官网；登录由对应平台处理。</p><div class="setting-input"><span>模型平台</span><div class="ai-model-picker"><Select v-model="aiWebModel" aria-label="国产大模型网页"><Option v-for="model in domesticAiWebModels" :key="model.id" :value="model.id">{{ model.name }}</Option></Select><Button class="primary-button" type="primary" @click="openAiWebModel"><AppIcon name="external" :size="14" />打开网页</Button></div></div></div>
         <div v-show="settingsTab === 'reading'" class="settings-card font-settings-card">
           <div class="font-settings-heading"><div><span class="section-kicker">阅读偏好</span><h2>字体与排版</h2></div><span>自动保存</span></div>
           <FontPicker label="正文字体" :model-value="store.readerSettings.fontFamily" :fallback-family="defaultTokens.reader.fontFamily" @update:model-value="store.updateSettings({ fontFamily: $event })" />
@@ -6320,7 +6428,35 @@ async function requestFullscreen() {
         <div v-show="settingsTab === 'reading'" class="settings-card"><span class="section-kicker">阅读</span><h2>阅读偏好</h2><label class="setting-row"><span>正文宽度 <b>{{ store.readerSettings.width }}px</b></span><Slider :model-value="store.readerSettings.width" :min="620" :max="1280" :step="10" @update:model-value="changeSetting('width', Number($event))" /></label><label class="setting-row"><span>字号 <b>{{ store.readerSettings.fontSize }}px</b></span><Slider :model-value="store.readerSettings.fontSize" :min="15" :max="24" :step="1" @update:model-value="changeSetting('fontSize', Number($event))" /></label><label class="setting-row"><span>行距 <b>{{ store.readerSettings.lineHeight }}</b></span><Slider :model-value="store.readerSettings.lineHeight" :min="1.4" :max="2.2" :step=".05" @update:model-value="changeSetting('lineHeight', Number($event))" /></label><div class="setting-toggle-row"><span>显示阅读进度</span><Switch v-model="advancedSettings.showReadingProgress" aria-label="显示阅读进度" /></div><div class="setting-toggle-row"><span>专注阅读</span><Switch :model-value="store.mode === 'focus'" :disabled="!store.currentDocument" aria-label="专注阅读" @change="toggleFocusMode" /></div></div><div v-show="settingsTab === 'reading'" class="settings-card"><span class="section-kicker">辅助功能</span><h2>翻译与解释</h2><p class="muted-copy">使用适配器连接你自己的翻译或解释服务；配置后可从划词工具栏调用。</p><label class="setting-input">服务标识<Input v-model="customProvider" placeholder="例如：local-llm / my-translator" /></label><Button class="primary-button" type="primary" @click="notify(customProvider ? '适配器标识已保存' : '保持未配置状态')"><AppIcon name="check" :size="14" />保存配置</Button></div><div v-show="settingsTab === 'shortcuts'" class="settings-card shortcuts-card"><span class="section-kicker">快捷操作</span><h2>快捷键</h2><div class="shortcut-row"><span>全局搜索</span><kbd>Ctrl / Cmd + K</kbd></div><div class="shortcut-row"><span>当前文档搜索</span><kbd>Ctrl / Cmd + F</kbd></div><div class="shortcut-row"><span>阅读缩放</span><kbd>Ctrl / Cmd + + / -</kbd></div><div class="shortcut-row"><span>专注模式</span><kbd>F</kbd></div><div class="shortcut-row"><span>退出聚焦</span><kbd>Esc</kbd></div><div class="shortcut-row"><span>切换区域</span><kbd>↑ ↓</kbd></div></div><div v-show="settingsTab === 'extensions'" class="settings-card extensions-card"><div class="extensions-head"><div><span class="section-kicker">插件中心</span><h2>插件扩展</h2></div><Button class="ghost-button" type="secondary" @click="notify('插件运行时将在后续版本启用')"><AppIcon name="plugin" :size="14" />打开插件目录</Button></div><div class="extension-filter"><AppIcon name="search" :size="14" /><span>按需扩展阅读能力</span></div><div class="extension-list"><div class="extension-item"><span class="extension-icon purple"><AppIcon name="sparkle" :size="17" /></span><span><b>AI 阅读助手</b><small>总结、解释与问答适配器</small></span><Button type="secondary" @click="notify('请先在翻译与解释中配置服务')">配置</Button></div><div class="extension-item"><span class="extension-icon green"><AppIcon name="download" :size="17" /></span><span><b>导出增强</b><small>为阅读内容准备更多导出格式</small></span><Button type="secondary" @click="notify('导出增强将在下一阶段接入')">安装</Button></div><div class="extension-item"><span class="extension-icon pink"><AppIcon name="components" :size="17" /></span><span><b>思维导图</b><small>把长文转换为结构化视图</small></span><Button type="secondary" @click="notify('插件运行时暂未启用')">安装</Button></div></div></div></div></section>
       <ClipboardManager v-show="view === 'clipboard'" @notify="notify" />
     </main>
-    <WebPreviewPanel v-if="webPreviewUrl && (view === 'reader' || view === 'settings')" :url="webPreviewUrl" @close="webPreviewUrl = ''" @navigate="webPreviewUrl = $event" @external="openPreviewInBrowser" />
+    <WebPreviewDock v-if="hasWebPreviews" :columns="!webPreviewUrl && visibleAiWebPreviews.length === 2 ? 2 : 1"
+      @resize-content="webPreviewContentWidth = $event">
+      <template v-if="!webPreviewUrl" #toolbar>
+        <div class="ai-web-switcher">
+          <div class="ai-web-tabs" role="group" aria-label="已打开的 AI">
+            <div v-for="preview in aiWebPreviews" :key="preview.id" class="ai-web-tab"
+              :class="{ active: preview.id === activeAiWebId, compared: visibleAiWebPreviews[1]?.id === preview.id }">
+              <button type="button" :aria-pressed="preview.id === activeAiWebId"
+                @keydown.enter.stop @click="selectAiWebModel(preview.id)">{{ preview.name }}</button>
+              <button type="button" class="ai-web-tab-close" :aria-label="`关闭${preview.name}`"
+                @keydown.enter.stop @click="closeAiWebModel(preview.id)"><AppIcon name="close" :size="12" /></button>
+            </div>
+          </div>
+          <div v-if="aiWebPreviews.length > 1" class="ai-web-layout" role="group" aria-label="AI 网页布局"
+            :title="canCompareAiWeb ? undefined : '拖宽右侧区域即可并排对比'">
+            <button type="button" :aria-pressed="visibleAiWebPreviews.length === 1" @keydown.enter.stop @click="aiWebCompare = false">单窗</button>
+            <button type="button" :aria-pressed="visibleAiWebPreviews.length === 2" :disabled="!canCompareAiWeb"
+              @keydown.enter.stop @click="aiWebCompare = true">并排对比</button>
+          </div>
+        </div>
+      </template>
+      <WebPreviewPanel v-if="webPreviewUrl" :url="webPreviewUrl" session=""
+        @close="webPreviewUrl = ''" @navigate="webPreviewUrl = $event" @external="openPreviewInBrowser" />
+      <template v-else>
+        <WebPreviewPanel v-for="preview in visibleAiWebPreviews" :key="preview.id"
+          :url="preview.url" :session="preview.id" :name="preview.name" :layout-key="aiWebLayoutKey" :compact="visibleAiWebPreviews.length > 1"
+          @close="closeAiWebModel(preview.id)" @navigate="preview.url = $event" @external="openPreviewInBrowser" />
+      </template>
+    </WebPreviewDock>
 
     <div v-if="quickOpenOpen" class="overlay search-overlay" @click.self="closeQuickOpen">
       <div ref="quickOpenDialog" class="search-dialog quick-open-dialog" role="dialog" aria-modal="true" aria-label="快速打开文件" tabindex="-1" @keydown="onModalKeydown($event, 'quick-open')">
@@ -6477,3 +6613,16 @@ async function requestFullscreen() {
     <div v-if="toast" class="toast" role="status" aria-live="polite">{{ toast }}</div>
   </div>
 </template>
+
+<style scoped>
+.ai-web-switcher { display: flex; flex: none; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 5px 8px; border-bottom: 1px solid var(--border); background: var(--surface); font: 12px var(--ui-font); }
+.ai-web-tabs { display: flex; flex: 1 1 160px; min-width: 0; gap: 4px; overflow-x: auto; }
+.ai-web-tab, .ai-web-layout { display: flex; align-items: center; flex: none; border: 1px solid var(--border); border-radius: 6px; white-space: nowrap; }
+.ai-web-tab.active { border-color: var(--accent); background: var(--accent-soft); }
+.ai-web-tab.compared { border-color: var(--accent); }
+.ai-web-switcher button { min-height: 28px; padding: 3px 8px; border: 0; border-radius: 5px; background: transparent; color: var(--ink); font: inherit; }
+.ai-web-switcher button:hover:not(:disabled), .ai-web-layout button[aria-pressed='true'] { background: var(--accent-soft); }
+.ai-web-switcher button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ai-web-switcher button:disabled { opacity: .45; }
+.ai-web-switcher .ai-web-tab-close { display: grid; place-items: center; padding-inline: 5px; color: var(--muted); }
+</style>

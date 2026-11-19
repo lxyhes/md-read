@@ -1,6 +1,16 @@
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::{Emitter, Manager};
+use tauri_plugin_dialog::FilePath;
+use tauri_plugin_fs::FsExt;
+
+const MARKDOWN_EXTENSIONS: &[&str] = &["md", "markdown", "qmd"];
+
+#[cfg(target_os = "windows")]
+mod windows_picker;
+
+#[cfg(target_os = "windows")]
+pub use windows_picker::run_picker_child;
 
 #[derive(Default)]
 pub struct PendingFileOpens(Mutex<Vec<String>>);
@@ -10,7 +20,7 @@ pub fn markdown_paths(paths: impl IntoIterator<Item = String>, cwd: &Path) -> Ve
         if value.starts_with('-') { return None; }
         let path = PathBuf::from(value);
         let extension = path.extension()?.to_str()?;
-        if !["md", "markdown", "qmd"].iter().any(|ext| extension.eq_ignore_ascii_case(ext)) {
+        if !MARKDOWN_EXTENSIONS.iter().any(|ext| extension.eq_ignore_ascii_case(ext)) {
             return None;
         }
         let path = if path.is_absolute() { path } else { cwd.join(path) };
@@ -45,6 +55,40 @@ pub fn focus_main_window(app: &tauri::AppHandle) {
 #[tauri::command]
 pub fn take_open_files(state: tauri::State<PendingFileOpens>) -> Vec<String> {
     std::mem::take(&mut *state.0.lock().unwrap_or_else(|error| error.into_inner()))
+}
+
+#[tauri::command]
+pub async fn pick_markdown_files(webview: tauri::Webview) -> Result<Vec<FilePath>, String> {
+    if webview.label() != "main" {
+        return Err("仅阅读器可打开文件选择器".into());
+    }
+    let window = webview.window();
+
+    #[cfg(target_os = "windows")]
+    let files = {
+        let window = window.clone();
+        tauri::async_runtime::spawn_blocking(move || windows_picker::pick_files(&window))
+            .await.map_err(|error| error.to_string())??
+    };
+
+    #[cfg(not(target_os = "windows"))]
+    let files = {
+        use tauri_plugin_dialog::DialogExt;
+        window.dialog().file().set_parent(&window)
+            .add_filter("Markdown / Quarto", MARKDOWN_EXTENSIONS)
+            .blocking_pick_files().unwrap_or_default()
+    };
+
+    let scopes = window.state::<tauri::scope::Scopes>();
+    for file in &files {
+        if let FilePath::Path(path) = file {
+            if let Some(scope) = window.try_fs_scope() {
+                scope.allow_file(path).map_err(|error| error.to_string())?;
+            }
+            scopes.allow_file(path).map_err(|error| error.to_string())?;
+        }
+    }
+    Ok(files.into_iter().map(FilePath::simplified).collect())
 }
 
 #[cfg(test)]

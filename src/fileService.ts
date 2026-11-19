@@ -159,8 +159,9 @@ export function createBrowserAssetMap(files: File[]): Record<string, string> {
 
 export async function openMarkdownFile(): Promise<OpenedFile[]> {
   if (isTauri()) {
-    const selected = await open({ multiple: true, filters: [{ name: 'Markdown / Quarto', extensions: ['md', 'markdown', 'qmd'] }] })
-    const paths = Array.isArray(selected) ? selected : selected ? [selected] : []
+    const paths = await invoke<string[]>('pick_markdown_files').catch((error: unknown) => {
+      throw error instanceof Error ? error : new Error(String(error))
+    })
     return Promise.all(paths.map(async (path) => ({ path, source: await readTextFile(path) })))
   }
   return new Promise((resolve) => {
