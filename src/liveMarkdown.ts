@@ -146,7 +146,7 @@ class TableWidget extends WidgetType {
     const ctx = root.tableContext
     ctx.row = Math.min(Math.max(0, row), ctx.table.rows.length - 1)
     ctx.col = Math.min(Math.max(0, col), ctx.table.alignments.length - 1)
-    root.querySelector<HTMLTextAreaElement>(`textarea[data-row="${ctx.row}"][data-col="${ctx.col}"]`)?.focus()
+    root.querySelector<HTMLTextAreaElement>(`textarea[data-row="${ctx.row}"][data-col="${ctx.col}"]`)?.focus({ preventScroll: true })
   }
   commit(root: TableDOM, view: EditorView, change: (table: EditableTable, ctx: TableContext) => void) {
     const ctx = root.tableContext

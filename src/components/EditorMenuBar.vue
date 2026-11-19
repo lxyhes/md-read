@@ -102,6 +102,7 @@ function select(item: Item, group: string, nested = false) {
         </template>
       </ArcoDropdown>
     </div>
+    <slot />
     <Teleport to="body">
       <div v-if="submenu" class="editor-menu-subpopover" role="menu" :aria-label="submenu.label" :style="{ left: `${submenu.left}px`, top: `${submenu.top}px`, width: `${submenu.width}px` }" @mousedown.stop @pointerdown.stop @click.stop @keydown="navigate($event, submenu.group, true)">
         <button class="editor-menu-submenu-back" type="button" role="menuitem" @click="closeSubmenu"><span aria-hidden="true">‹</span>{{ submenu.label }}<small>返回</small></button>

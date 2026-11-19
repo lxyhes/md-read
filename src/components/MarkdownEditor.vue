@@ -131,7 +131,7 @@ onMounted(() => {
       if (update.docChanged || update.selectionSet) {
         emit('caret')
         emit('history', { undo: undoDepth(update.state) > 0, redo: redoDepth(update.state) > 0 })
-        if (props.typewriter && !update.transactions.some(transaction => transaction.isUserEvent('select.pointer') || transaction.isUserEvent('select.outline'))) {
+        if (props.typewriter && !update.transactions.some(transaction => transaction.isUserEvent('select.pointer') || transaction.isUserEvent('select.outline') || transaction.isUserEvent('input.table'))) {
           requestAnimationFrame(centerCaret)
         }
       }

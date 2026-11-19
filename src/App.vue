@@ -42,6 +42,8 @@ import FontPicker from './components/FontPicker.vue'
 import ReaderHeader from './components/ReaderHeader.vue'
 import type MarkdownEditorComponent from './components/MarkdownEditor.vue'
 import EditorMenuBar from './components/EditorMenuBar.vue'
+import MarkdownSyntaxGuide from './components/MarkdownSyntaxGuide.vue'
+import { insertSyntaxExample, type SyntaxExample } from './markdown/syntaxGuide'
 import EditorContextActions, { type ContextAction } from './components/EditorContextActions.vue'
 import { IconBold, IconCheckCircle, IconCode, IconCopy, IconDelete, IconItalic, IconLink, IconOrderedList, IconPaste, IconQuote, IconScissor, IconUnorderedList } from '@arco-design/web-vue/es/icon'
 import ArcoDropdown from './components/ArcoDropdown.vue'
@@ -360,6 +362,8 @@ let editorFindReplacing = false
 const editorFindResult = computed(() => findEditorMatches(editorSource.value, editorFindQuery.value, { ...editorFindOptions.value, scope: editorFindScope.value }))
 const editorSource = ref('')
 const editorTextarea = ref<InstanceType<typeof MarkdownEditorComponent> | null>(null)
+const editorSyntaxGuideOpen = ref(false)
+watch(editorOpen, open => { if (!open) editorSyntaxGuideOpen.value = false })
 const editorUndoAvailable = ref(false)
 const editorRedoAvailable = ref(false)
 const editorFocusMode = ref(localStorage.getItem('moyue:editor-focus') === 'true')
@@ -1487,6 +1491,15 @@ function applyEditorChange(value: string, start: number, end = start) {
   editorSource.value = value
   editorTextarea.value?.focus()
   updateEditorCursor()
+}
+
+async function insertFromSyntaxGuide(example: SyntaxExample) {
+  const editor = editorTextarea.value
+  if (!editor || editorMode.value === 'preview' || example.mode === 'copy') return
+  const { value, cursor } = insertSyntaxExample(editorSource.value, editor.selectionEnd, example)
+  editorSyntaxGuideOpen.value = false
+  await nextTick()
+  applyEditorChange(value, cursor)
 }
 
 function normalizeEditorMarkdown() {
@@ -4527,6 +4540,7 @@ watch(() => [store.activeHeadingId, leftPanelTab.value, store.mode], () => {
 
 function onKeydown(event: KeyboardEvent) {
   if (event.isComposing || event.keyCode === 229 || event.defaultPrevented) return
+  if (editorSyntaxGuideOpen.value) return
   if (tableEditor.value) {
     if (event.key === 'Escape') { event.preventDefault(); closeTableEditor() }
     if ((event.ctrlKey || event.metaKey) && ['z', 'y'].includes(event.key.toLowerCase()) && !event.altKey) {
@@ -4553,6 +4567,7 @@ function onKeydown(event: KeyboardEvent) {
     return
   }
   if (editorOpen.value && !quickOpenOpen.value && !searchOpen.value) {
+    if (event.key === 'F1') { event.preventDefault(); editorSyntaxGuideOpen.value = true; return }
     const mod = event.ctrlKey || event.metaKey
     if (mod && event.shiftKey && !event.altKey && event.code === 'Digit9') { event.preventDefault(); resetEditorZoom(); return }
     if (mod && event.shiftKey && !event.altKey && (event.key === '=' || event.key === '+' || event.code === 'Equal')) { event.preventDefault(); changeReaderZoom(1); return }
@@ -6250,7 +6265,10 @@ async function requestFullscreen() {
             </template>
           </aside>
           <div class="reader-main-column">
-          <EditorMenuBar v-if="editorOpen" :groups="editorMenuGroups" />
+          <EditorMenuBar v-if="editorOpen" :groups="editorMenuGroups">
+            <button class="editor-menu-trigger editor-syntax-guide-trigger" type="button" aria-haspopup="dialog" aria-keyshortcuts="F1" title="Markdown 语法帮助（F1）" @click="editorSyntaxGuideOpen = true"><AppIcon name="info" :size="14" />语法帮助</button>
+          </EditorMenuBar>
+          <MarkdownSyntaxGuide v-if="editorOpen && editorSyntaxGuideOpen" :can-insert="editorMode !== 'preview' && !!editorTextarea" :copy="writeTextToClipboard" @close="editorSyntaxGuideOpen = false" @insert="insertFromSyntaxGuide" />
           <div v-if="editorOpen && editorToolbarVisible" class="editor-document-actions" role="group" aria-label="编辑文档操作">
             <Button type="outline" @click="closeEditor"><template #icon><AppIcon name="chevron-left" :size="16" /></template>返回阅读</Button>
             <Button v-if="editorPreviewDocument?.headings.length" type="secondary" :aria-expanded="editorOutlineOpen" aria-controls="editor-draft-outline" @click="editorOutlineOpen = !editorOutlineOpen"><template #icon><AppIcon name="reader" :size="16" /></template>{{ editorOutlineOpen ? '隐藏大纲' : '显示大纲' }}</Button>

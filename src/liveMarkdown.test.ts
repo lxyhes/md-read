@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { EditorState } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
@@ -107,4 +107,29 @@ describe('rich Markdown image previews', () => {
     expect(host.querySelector('.cm-content')?.textContent).not.toContain('data:image/png;base64')
     view.destroy()
   })
+})
+
+it('refocuses a resized table without scrolling away from it', async () => {
+  const host = document.createElement('div')
+  document.body.append(host)
+  const source = '| 场景 | 安全 |\n| --- | --- |\n| GET | 是 |\n\n正文'
+  const focus = vi.spyOn(HTMLTextAreaElement.prototype, 'focus')
+  const view = new EditorView({
+    state: EditorState.create({
+      doc: source,
+      extensions: [markdown({ base: markdownLanguage }), liveMarkdown({ resolveUrl: value => value, openLink: () => {}, message: () => {} })],
+      selection: { anchor: source.length },
+    }),
+    parent: host,
+  })
+
+  host.querySelector<HTMLTextAreaElement>('textarea[data-row="1"][data-col="0"]')?.focus()
+  Array.from(host.querySelectorAll<HTMLButtonElement>('.live-table-tools button')).find(button => button.textContent === '加行')?.click()
+  await new Promise(requestAnimationFrame)
+
+  expect(view.state.doc.toString()).toContain('|  |  |')
+  expect(focus).toHaveBeenLastCalledWith({ preventScroll: true })
+  focus.mockRestore()
+  view.destroy()
+  host.remove()
 })

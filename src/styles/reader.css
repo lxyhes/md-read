@@ -182,7 +182,7 @@
   margin-top: 4px;
   margin-bottom: 5px;
 }
-.reader-content .region-content .task-item {
+:is(.reader-content .region-content, .syntax-guide-preview) .task-item {
   display: grid;
   grid-template-columns: 20px minmax(0, 1fr);
   gap: 6px;
@@ -190,10 +190,10 @@
   padding-left: 0;
   list-style: none;
 }
-.reader-content .region-content .task-item::before {
+:is(.reader-content .region-content, .syntax-guide-preview) .task-item::before {
   display: none;
 }
-.reader-content .region-content .task-checkbox {
+:is(.reader-content .region-content, .syntax-guide-preview) .task-checkbox {
   display: grid;
   place-items: center;
   width: 16px;
@@ -205,11 +205,11 @@
   background: transparent;
   font: 700 10px var(--ui-font);
 }
-.reader-content .region-content .task-item.is-checked .task-checkbox {
+:is(.reader-content .region-content, .syntax-guide-preview) .task-item.is-checked .task-checkbox {
   border-color: var(--accent);
   background: var(--accent);
 }
-.reader-content .region-content .task-item.is-checked > p {
+:is(.reader-content .region-content, .syntax-guide-preview) .task-item.is-checked > p {
   color: var(--muted);
   text-decoration: line-through;
   text-decoration-color: color-mix(in srgb, var(--accent) 48%, transparent);
@@ -351,7 +351,7 @@
   color: var(--accent);
   white-space: pre-wrap;
 }
-.reader-content .region-content .markdown-callout {
+:is(.reader-content .region-content, .syntax-guide-preview) .markdown-callout {
   --callout-accent: var(--accent);
   --callout-fill: color-mix(in srgb, var(--accent-soft) 35%, transparent);
   margin: 22px 0;
@@ -359,25 +359,25 @@
   border-radius: 8px;
   background: var(--callout-fill);
 }
-.reader-content .region-content .markdown-callout:is(.callout-tip, .callout-success) {
+:is(.reader-content .region-content, .syntax-guide-preview) .markdown-callout:is(.callout-tip, .callout-success) {
   --callout-accent: #4a9b55;
   --callout-fill: color-mix(in srgb, var(--callout-accent) 10%, var(--surface-raised));
 }
-.reader-content .region-content .markdown-callout.callout-warning {
+:is(.reader-content .region-content, .syntax-guide-preview) .markdown-callout.callout-warning {
   --callout-accent: #db8928;
   --callout-fill: color-mix(in srgb, var(--callout-accent) 10%, var(--surface-raised));
 }
-.reader-content .region-content .callout-title {
+:is(.reader-content .region-content, .syntax-guide-preview) .callout-title {
   padding: 10px 16px 5px;
   color: color-mix(in srgb, var(--callout-accent) 72%, var(--ink));
   font: 700 11px var(--ui-font);
   letter-spacing: .08em;
   text-transform: uppercase;
 }
-.reader-content .region-content .callout-body {
+:is(.reader-content .region-content, .syntax-guide-preview) .callout-body {
   padding: 0 16px 10px;
 }
-.reader-content .region-content .callout-body p:last-child {
+:is(.reader-content .region-content, .syntax-guide-preview) .callout-body p:last-child {
   margin-bottom: 0;
 }
 .app-shell :is(.reader-content .region-block .region-content, .editor-preview) .markdown-steps > ol {
