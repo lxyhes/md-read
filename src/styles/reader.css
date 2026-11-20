@@ -2230,7 +2230,7 @@ button:focus-visible,
   background: transparent;
   color: var(--muted);
   text-align: left;
-  font: 12px/20px var(--ui-font);
+  font: 600 12px/20px var(--ui-font);
 }
 .filesystem-tree-row:hover {
   background: color-mix(in srgb, var(--accent) 5%, transparent);

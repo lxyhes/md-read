@@ -2761,7 +2761,7 @@ body.is-resizing-outline * {
 .tree-summary-markdown {
   min-width: 0;
   color: var(--ink);
-  font: 13px/1.7 var(--body-font);
+  font: 14px/1.7 var(--reader-font);
   overflow-wrap: anywhere;
 }
 .tree-summary-markdown > :first-child { margin-top: 0; }
@@ -2906,7 +2906,8 @@ body.is-resizing-outline * {
   padding: clamp(12px, 2vw, 24px);
   border-color: var(--border);
   background: color-mix(in srgb, var(--accent) 3%, var(--surface));
-  font-size: max(13px, calc(var(--reader-size) * .9));
+  font-family: var(--reader-font);
+  font-size: max(14px, calc(var(--reader-size) * .9));
 }
 .reader-mindmap .tree-root {
   max-width: 100%;
@@ -3101,7 +3102,7 @@ body.is-resizing-outline * {
   padding: 8px 10px;
 }
 .reader-mindmap .tree-diagram .tree-summary-leaf {
-  font-size: max(13px, .95em);
+  font-size: max(14px, .95em);
   line-height: 1.55;
 }
 .is-horizontal .tree-timestamp-link {

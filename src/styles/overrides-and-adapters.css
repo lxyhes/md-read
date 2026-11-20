@@ -1209,12 +1209,12 @@ a:active > .app-icon-vector { transform: scale(.92); }
 .app-shell:not(.is-focus) .reader-content.is-course-outline .regions-stack { gap: 2px; }
 .app-shell:not(.is-focus) .reader-content.is-course-outline .region-block,
 .app-shell:not(.is-focus) .reader-content.is-course-outline .region-block.region-heading { padding-top: 3px; padding-bottom: 3px; }
-.app-shell :is(.reader-content, .editor-surface).is-course-outline { --document-font: var(--ui-font); --document-weight: 400; --document-leading: 1.48; }
+.app-shell :is(.reader-content, .editor-surface).is-course-outline { --document-font: var(--reader-font); --document-weight: 400; --document-leading: 1.48; }
 .app-shell:not(.is-focus) .reader-content.is-course-outline .region-content { font: var(--document-weight) var(--reader-size)/var(--document-leading) var(--document-font); }
 .app-shell:not(.is-focus) .reader-content.is-course-outline .region-content h3 { margin: 4px 0; }
 .app-shell:not(.is-focus) .reader-content.is-course-outline .region-content h3,
 .app-shell .editor-surface.is-course-outline .editor-preview h3,
-.app-shell .editor-surface.is-course-outline .markdown-editor.is-live .cm-line.live-h3 { font: 700 17px/1.35 var(--ui-font); letter-spacing: 0; }
+.app-shell .editor-surface.is-course-outline .markdown-editor.is-live .cm-line.live-h3 { font: 700 17px/1.35 var(--reader-font); letter-spacing: 0; }
 .app-shell:not(.is-focus) .reader-content.is-course-outline .region-content h3::before { width: 5px; margin-right: 7px; }
 .app-shell:not(.is-focus) .reader-content.is-course-outline .region-content p { margin-bottom: 3px; line-height: var(--document-leading); }
 .app-shell:not(.is-focus) .reader-content.is-course-outline .region-content ul,
@@ -1674,7 +1674,7 @@ a:active > .app-icon-vector { transform: scale(.92); }
 .arco-dropdown-list .arco-dropdown-option {
   min-height: 34px !important;
   color: var(--ink) !important;
-  font: 12px/1.45 var(--ui-font) !important;
+  font: 500 12px/1.45 var(--ui-font) !important;
 }
 .arco-select-dropdown .arco-select-option-active,
 .arco-select-dropdown .arco-select-option-selected,
@@ -2218,7 +2218,6 @@ a:active > .app-icon-vector { transform: scale(.92); }
   border-bottom: 0;
 }
 .app-shell .reader-content .table-region td:first-child {
-  font-family: var(--ui-font);
   font-size: 1em;
   font-weight: 400;
 }
@@ -2805,9 +2804,9 @@ html:has(.reader-page), body:has(.reader-page), #app:has(.reader-page) { min-wid
   .second-document-pane { display: none; }
 }
 
-/* Keep small interface text crisp on 1080p screens without making it heavier. */
 :root {
   text-rendering: auto;
+  font-synthesis: weight;
   --ui-font: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif;
 }
 
@@ -2851,11 +2850,11 @@ html:has(.reader-page), body:has(.reader-page), #app:has(.reader-page) { min-wid
 }
 
 .app-shell .reader-content .table-region :is(th, td) {
-  font-family: var(--ui-font);
+  font-family: var(--reader-font);
 }
 
 .app-shell .reader-content .table-region :is(th, td) code {
-  font-family: var(--ui-font);
+  font-family: inherit;
   font-size: 1em !important;
   font-weight: inherit;
 }
@@ -3291,7 +3290,7 @@ body .app-shell.is-editor-studio .reader-layout {
   padding: 4px 7px;
   border-radius: 6px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .app-shell:not(.is-editor-studio) .reader-meta-topbar .reader-display-switch,
@@ -3305,7 +3304,7 @@ body .app-shell.is-editor-studio .reader-layout {
   min-height: 26px;
   padding: 4px 6px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .app-shell:not(.is-editor-studio) .reader-meta-topbar .reader-navigation {
@@ -3564,7 +3563,7 @@ body .app-shell.is-editor-studio .reader-layout {
 
 .app-shell:not(.is-editor-studio) .reader-main-column > .reader-tabbar .reader-tab strong {
   font-size: 12px;
-  font-weight: 540;
+  font-weight: 600;
 }
 
 .app-shell:not(.is-editor-studio) .reader-main-column > .reader-tabbar .reader-tab[aria-selected="true"] strong {

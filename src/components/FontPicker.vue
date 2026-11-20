@@ -73,7 +73,7 @@ const custom = computed(() => props.modelValue && !fontPresets.some((font) => fo
 .font-reading-preview p { margin: 12px 0 0; font-size: var(--reader-size, 18px); line-height: var(--reader-leading, 1.8); }
 .font-reading-preview p[lang="en"] { margin-top: 7px; font-size: 16px; }
 .font-picker-compact { flex-shrink: 0; }
-.font-picker-compact .font-select-label { min-width: 0; gap: 7px; font-size: 12px; }
+.font-picker-compact .font-select-label { min-width: 0; gap: 7px; font-size: 12px; font-weight: 600; }
 .font-picker-compact :deep(.arco-select) { width: 118px; min-width: 118px; flex: 0 1 154px; }
 .font-picker-compact :deep(.arco-select-view-single) { min-height: 30px; padding-inline: 8px; }
 .font-picker-compact :deep(.arco-select-view-single) { display: flex; align-items: center; }

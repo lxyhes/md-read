@@ -4558,7 +4558,7 @@ watch(() => store.currentDocumentId, () => {
     observeReaderLayout()
   })
 })
-watch(() => [store.mode, store.activeThemeId, store.readerSettings.fontSize, store.readerSettings.lineHeight, store.readerSettings.width], () => {
+watch(() => [store.mode, store.activeThemeId, store.readerSettings.fontSize, store.readerSettings.lineHeight, store.readerSettings.width, store.readerSettings.fontFamily], () => {
   virtualMeasuredHeights.value = new Map()
   nextTick(() => { syncVirtualViewport(); observeReaderLayout() })
 })
