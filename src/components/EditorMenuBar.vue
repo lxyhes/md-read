@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, ref } from 'vue'
-import ArcoDropdown from './ArcoDropdown.vue'
+import AppDropdown from './AppDropdown.vue'
 
 type Item = { label?: string; action?: () => void; shortcut?: string; disabled?: boolean; separator?: boolean; checkable?: boolean; checked?: boolean; children?: Item[] }
 type Group = { label: string; items: Item[] }
@@ -42,7 +42,7 @@ function navigate(event: KeyboardEvent, group: string, nested = false) {
       closeSubmenu()
       return
     }
-    open.value = null
+    dropdownRefs.value[group]?.close()
     menuTrigger(group)?.focus()
     return
   }
@@ -90,7 +90,7 @@ function select(item: Item, group: string, nested = false) {
 <template>
   <nav ref="root" class="editor-menu-bar" aria-label="编辑菜单">
     <div v-for="group in groups" :key="group.label" class="editor-menu-group">
-      <ArcoDropdown :ref="instance => setDropdownRef(group.label, instance)" panel-class="editor-menu-popover" :popup-container="root || undefined" @visible-change="(next) => { open = next ? group.label : (open === group.label ? null : open); if (!next) submenu = null }">
+      <AppDropdown :ref="instance => setDropdownRef(group.label, instance)" panel-class="editor-menu-popover" :popup-container="root || undefined" @visible-change="(next) => { open = next ? group.label : (open === group.label ? null : open); if (!next) submenu = null }">
         <button class="editor-menu-trigger" :data-menu-trigger="group.label" type="button" :aria-expanded="open === group.label" aria-haspopup="menu">{{ group.label }}</button>
         <template #menu>
           <div role="menu" :aria-label="group.label" @keydown="navigate($event, group.label)">
@@ -100,7 +100,7 @@ function select(item: Item, group: string, nested = false) {
             </template>
           </div>
         </template>
-      </ArcoDropdown>
+      </AppDropdown>
     </div>
     <slot />
     <Teleport to="body">

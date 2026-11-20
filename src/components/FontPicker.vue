@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import Select, { Option } from '@arco-design/web-vue/es/select'
-import '@arco-design/web-vue/es/select/style/css.js'
+import { SelectOption as Option } from 'ant-design-vue'
+import Select from './AppSelect.vue'
 import { fontPresets } from '../fonts'
 
 const props = withDefaults(defineProps<{
@@ -20,10 +20,10 @@ const custom = computed(() => props.modelValue && !fontPresets.some((font) => fo
     <div class="font-select-label">
       <span>{{ label }}</span>
       <Select
-        :model-value="modelValue"
-        :aria-label="label"
+        :value="modelValue"
+        :label="label"
         :class="{ 'font-select-compact': compact }"
-        @update:model-value="emit('update:modelValue', $event as string)"
+        @update:value="emit('update:modelValue', $event as string)"
       >
         <Option value="">{{ defaultLabel }}</Option>
         <Option v-for="font in fontPresets" :key="font.id" :value="font.family">{{ font.name }}</Option>
@@ -54,9 +54,9 @@ const custom = computed(() => props.modelValue && !fontPresets.some((font) => fo
 .font-picker { min-width: 0; color: var(--ink); font: 12px/1.5 var(--ui-font); }
 .font-select-label { display: flex; align-items: center; gap: 12px; color: var(--muted); }
 .font-select-label > span { flex-shrink: 0; }
-.font-select-label :deep(.arco-select) { min-width: 154px; max-width: 100%; }
-.font-select-label :deep(.arco-select-view-single) { min-height: 34px; border-color: var(--border); border-radius: 6px; background: var(--surface-raised); color: var(--ink); font: inherit; }
-.font-select-label :deep(.arco-select-view-single:focus-within) { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 15%, transparent); }
+.font-select-label :deep(.ant-select) { min-width: 154px; max-width: 100%; }
+.font-select-label :deep(.ant-select-single) { min-height: 34px; border-color: var(--border); border-radius: 6px; background: var(--surface-raised); color: var(--ink); font: inherit; }
+.font-select-label :deep(.ant-select-single:focus-within) { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 15%, transparent); }
 .font-sample:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .font-picker-note { margin: 12px 0 18px; color: var(--muted); font-size: 11px; }
 .font-samples { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
@@ -74,12 +74,12 @@ const custom = computed(() => props.modelValue && !fontPresets.some((font) => fo
 .font-reading-preview p[lang="en"] { margin-top: 7px; font-size: 16px; }
 .font-picker-compact { flex-shrink: 0; }
 .font-picker-compact .font-select-label { min-width: 0; gap: 7px; font-size: 12px; font-weight: 600; }
-.font-picker-compact :deep(.arco-select) { width: 118px; min-width: 118px; flex: 0 1 154px; }
-.font-picker-compact :deep(.arco-select-view-single) { min-height: 30px; padding-inline: 8px; }
-.font-picker-compact :deep(.arco-select-view-single) { display: flex; align-items: center; }
-.font-picker-compact :deep(.arco-select-view-value),
-.font-picker-compact :deep(.arco-select-view-input) { min-height: 0; padding-block: 0; line-height: 1.35; }
-.font-picker-compact :deep(.arco-select-view-value) { justify-content: center; text-align: center; }
-.font-picker-compact :deep(.arco-select-view-suffix) { align-self: stretch; }
+.font-picker-compact :deep(.ant-select) { width: 118px; min-width: 118px; flex: 0 1 154px; }
+.font-picker-compact :deep(.ant-select-single) { min-height: 30px; padding-inline: 8px; }
+.font-picker-compact :deep(.ant-select-single) { display: flex; align-items: center; }
+.font-picker-compact :deep(.ant-select-selection-item),
+.font-picker-compact :deep(.ant-select-selection-search-input) { min-height: 0; padding-block: 0; line-height: 1.35; }
+.font-picker-compact :deep(.ant-select-selection-item) { justify-content: center; text-align: center; }
+.font-picker-compact :deep(.ant-select-arrow) { align-self: stretch; }
 @media (max-width: 1180px) { .font-samples { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>

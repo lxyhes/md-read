@@ -2462,7 +2462,7 @@ body.is-resizing-outline * {
   gap: 6px;
   font-size: 10px;
 }
-.reader-meta-tools .font-picker-compact .arco-select {
+.reader-meta-tools .font-picker-compact .ant-select {
   min-width: 112px;
   height: 30px;
   padding: 4px 25px 4px 8px;
@@ -3132,7 +3132,7 @@ body.is-resizing-outline * {
 }
 .reader-edit-actions { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
 .file-filter-toolbar { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 10px 8px; padding: 12px 0 10px; border-bottom: 1px solid var(--border); }
-.file-filter-toolbar .arco-select { width: 100%; min-width: 0; }
+.file-filter-toolbar .ant-select { width: 100%; min-width: 0; }
 .file-filter-toolbar .file-filter-select { grid-column: 1; grid-row: 1; }
 .file-filter-toolbar .file-sort-select { grid-column: 2; grid-row: 1; }
 .file-filter-toolbar .file-glob-input { grid-column: 1 / -1; }

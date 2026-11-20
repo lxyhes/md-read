@@ -1,8 +1,6 @@
 <script setup lang="ts">
-import Button from '@arco-design/web-vue/es/button'
-import Textarea from '@arco-design/web-vue/es/textarea'
-import '@arco-design/web-vue/es/button/style/css.js'
-import '@arco-design/web-vue/es/textarea/style/css.js'
+import Button from './AppButton.vue'
+import Textarea from './AppTextarea.vue'
 import AppIcon from './AppIcon.vue'
 
 defineProps<{ modelValue: string; disabled: boolean; busy: boolean; hasSources: boolean }>()

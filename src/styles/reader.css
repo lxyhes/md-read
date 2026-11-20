@@ -3025,7 +3025,7 @@ button:focus-visible,
   flex: 0 0 auto;
   gap: 2px;
 }
-.outline-actions .arco-btn.icon-button {
+.outline-actions .ant-btn.icon-button {
   width: 24px;
   min-width: 24px;
 }

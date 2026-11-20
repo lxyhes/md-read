@@ -1,11 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import Button from '@arco-design/web-vue/es/button'
-import Input from '@arco-design/web-vue/es/input'
-import Select, { Option } from '@arco-design/web-vue/es/select'
-import '@arco-design/web-vue/es/button/style/css.js'
-import '@arco-design/web-vue/es/input/style/css.js'
-import '@arco-design/web-vue/es/select/style/css.js'
+import Button from './AppButton.vue'
+import Input from './AppInput.vue'
+import { SelectOption as Option } from 'ant-design-vue'
+import Select from './AppSelect.vue'
 import { exportTheme, importTheme } from '../themes'
 import type { MoyueTheme } from '../types'
 import ThemeEditor from './ThemeEditor.vue'
@@ -91,7 +89,7 @@ async function onThemeFile(event: Event) {
         <Button :class="{ active: themeTab === 'mine' }" type="text" @click="themeTab = 'mine'">我的主题</Button>
       </div>
       <label class="theme-search"><AppIcon name="search" :size="14" /><Input v-model="themeSearch" placeholder="搜索主题、风格、作者…" allow-clear /></label>
-      <Select v-model="themeModeFilter" class="theme-filter" aria-label="主题风格">
+      <Select v-model:value="themeModeFilter" class="theme-filter" label="主题风格">
         <Option value="all">全部风格</Option>
         <Option value="dark">深色阅读</Option>
         <Option value="light">浅色阅读</Option>

@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
-import Modal from '@arco-design/web-vue/es/modal'
-import Input from '@arco-design/web-vue/es/input'
-import '@arco-design/web-vue/es/modal/style/css.js'
-import '@arco-design/web-vue/es/input/style/css.js'
+import { Modal } from 'ant-design-vue'
+import Input from './AppInput.vue'
 import { activeAppDialog, resolveAppDialog } from '../appDialog'
 
 const promptValue = ref('')
@@ -29,11 +27,11 @@ function submitDialog() {
 
 <template>
   <Modal
-    :visible="Boolean(activeAppDialog)"
+    :open="Boolean(activeAppDialog)"
     :title="activeAppDialog?.title"
     :ok-text="activeAppDialog?.confirmLabel || '确定'"
     :mask-closable="true"
-    :esc-to-close="true"
+    :keyboard="true"
     :closable="true"
     @cancel="cancelDialog"
     @ok="submitDialog"

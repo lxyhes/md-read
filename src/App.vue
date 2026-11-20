@@ -1,25 +1,17 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, getCurrentInstance, h, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
-import Select, { Option } from '@arco-design/web-vue/es/select'
-import '@arco-design/web-vue/es/select/style/css.js'
-import List, { ListItem } from '@arco-design/web-vue/es/list'
-import '@arco-design/web-vue/es/list/style/css.js'
-import Button from '@arco-design/web-vue/es/button'
-import '@arco-design/web-vue/es/button/style/css.js'
-import Input, { InputPassword } from '@arco-design/web-vue/es/input'
-import Textarea from '@arco-design/web-vue/es/textarea'
-import '@arco-design/web-vue/es/textarea/style/css.js'
-import InputNumber from '@arco-design/web-vue/es/input-number'
-import '@arco-design/web-vue/es/input-number/style/css.js'
-import Slider from '@arco-design/web-vue/es/slider'
-import '@arco-design/web-vue/es/slider/style/css.js'
-import Switch from '@arco-design/web-vue/es/switch'
-import '@arco-design/web-vue/es/switch/style/css.js'
-import Collapse, { CollapseItem } from '@arco-design/web-vue/es/collapse'
-import '@arco-design/web-vue/es/collapse/style/css.js'
-import '@arco-design/web-vue/es/input/style/css.js'
-import Checkbox from '@arco-design/web-vue/es/checkbox'
-import '@arco-design/web-vue/es/checkbox/style/css.js'
+import { ConfigProvider, theme as antTheme, SelectOption as Option } from 'ant-design-vue'
+import zhCN from 'ant-design-vue/es/locale/zh_CN'
+import Select from './components/AppSelect.vue'
+import Button from './components/AppButton.vue'
+import Input from './components/AppInput.vue'
+import { InputPassword } from 'ant-design-vue'
+import Textarea from './components/AppTextarea.vue'
+import { InputNumber } from 'ant-design-vue'
+import { Slider } from 'ant-design-vue'
+import { Switch } from 'ant-design-vue'
+import { Collapse, CollapsePanel as CollapseItem } from 'ant-design-vue'
+import { Checkbox } from 'ant-design-vue'
 import { invoke, isTauri as tauriIsTauri } from '@tauri-apps/api/core'
 import { bindNativeFileOpen } from './nativeFileOpen'
 import { bindNativeClose } from './nativeClose'
@@ -45,8 +37,8 @@ import EditorMenuBar from './components/EditorMenuBar.vue'
 import MarkdownSyntaxGuide from './components/MarkdownSyntaxGuide.vue'
 import { insertSyntaxExample, type SyntaxExample } from './markdown/syntaxGuide'
 import EditorContextActions, { type ContextAction } from './components/EditorContextActions.vue'
-import { IconBold, IconCheckCircle, IconCode, IconCopy, IconDelete, IconItalic, IconLink, IconOrderedList, IconPaste, IconQuote, IconScissor, IconUnorderedList } from '@arco-design/web-vue/es/icon'
-import ArcoDropdown from './components/ArcoDropdown.vue'
+import { BoldOutlined, CheckCircleOutlined, CodeOutlined, CopyOutlined, DeleteOutlined, ItalicOutlined, LinkOutlined, OrderedListOutlined, SnippetsOutlined, AlignLeftOutlined, ScissorOutlined, UnorderedListOutlined } from '@ant-design/icons-vue'
+import AppDropdown from './components/AppDropdown.vue'
 import { interfaceFont } from './fonts'
 import { defaultTokens } from './themes'
 import type { FileSystemTreeNode } from './components/FileSystemTree.vue'
@@ -106,6 +98,27 @@ type SearchScope = 'all' | 'current'
 type FileTreeEntry = { path: string; name: string; documentId?: string; isDirectory?: boolean; size?: number; createdAt?: number; modifiedAt?: number }
 type PersonalNote = { id: string; title: string; body: string; updatedAt: number }
 const store = useReaderStore()
+
+const componentTheme = computed(() => {
+  const { tokens, manifest } = store.activeTheme
+  const color = tokens.color
+  return {
+    algorithm: manifest.mode === 'dark' ? antTheme.darkAlgorithm : antTheme.defaultAlgorithm,
+    token: {
+      colorPrimary: color.accent,
+      colorBgContainer: color.surface,
+      colorBgElevated: color.surfaceRaised,
+      colorBorder: color.border,
+      colorText: color.text,
+      colorTextSecondary: color.textMuted,
+      fontFamily: 'var(--ui-font)',
+    },
+  }
+})
+
+function getControlPopupContainer(trigger?: HTMLElement) {
+  return trigger?.closest<HTMLElement>('dialog[open]') ?? document.body
+}
 const exportAppContext = getCurrentInstance()!.appContext
 const view = ref<View>('library')
 const webPreviewUrl = ref('')
@@ -1322,7 +1335,7 @@ function openEditorFind() {
   editorFindScope.value = undefined
   editorFindIndex.value = -1
   editorFindOpen.value = true
-  void nextTick(() => { editorFindInput.value?.focus(); editorFindInput.value?.inputRef?.select() })
+  void nextTick(() => { editorFindInput.value?.focus(); editorFindInput.value?.select() })
 }
 
 function closeEditorFind() {
@@ -2834,20 +2847,20 @@ async function pasteIntoEditor(plain = false) {
 }
 
 const editorContextClipboard = computed<ContextAction[]>(() => [
-  { label: '剪切', icon: IconScissor, disabled: !editorContextMenu.value?.hasSelection, action: () => copyEditorSelection(true) },
-  { label: '复制', icon: IconCopy, disabled: !editorContextMenu.value?.hasSelection, action: () => copyEditorSelection() },
-  { label: '粘贴', icon: IconPaste, action: () => pasteIntoEditor() },
-  { label: '删除当前行', icon: IconDelete, action: deleteEditorLine },
+  { label: '剪切', icon: ScissorOutlined, disabled: !editorContextMenu.value?.hasSelection, action: () => copyEditorSelection(true) },
+  { label: '复制', icon: CopyOutlined, disabled: !editorContextMenu.value?.hasSelection, action: () => copyEditorSelection() },
+  { label: '粘贴', icon: SnippetsOutlined, action: () => pasteIntoEditor() },
+  { label: '删除当前行', icon: DeleteOutlined, action: deleteEditorLine },
 ])
 const editorContextFormat: ContextAction[] = [
-  { label: '粗体', icon: IconBold, shortcut: 'Ctrl+B', action: () => wrapEditorSelection('**', '**', '粗体') },
-  { label: '斜体', icon: IconItalic, shortcut: 'Ctrl+I', action: () => wrapEditorSelection('*', '*', '斜体') },
-  { label: '行内代码', icon: IconCode, action: () => wrapEditorSelection('`', '`', '代码') },
-  { label: '链接', icon: IconLink, shortcut: 'Ctrl+K', action: insertEditorLink },
-  { label: '引用', icon: IconQuote, action: () => prefixEditorLines('> ') },
-  { label: '有序列表', icon: IconOrderedList, action: () => prefixEditorLines('1. ') },
-  { label: '无序列表', icon: IconUnorderedList, action: () => prefixEditorLines('- ') },
-  { label: '任务列表', icon: IconCheckCircle, action: () => prefixEditorLines('- [ ] ') },
+  { label: '粗体', icon: BoldOutlined, shortcut: 'Ctrl+B', action: () => wrapEditorSelection('**', '**', '粗体') },
+  { label: '斜体', icon: ItalicOutlined, shortcut: 'Ctrl+I', action: () => wrapEditorSelection('*', '*', '斜体') },
+  { label: '行内代码', icon: CodeOutlined, action: () => wrapEditorSelection('`', '`', '代码') },
+  { label: '链接', icon: LinkOutlined, shortcut: 'Ctrl+K', action: insertEditorLink },
+  { label: '引用', icon: AlignLeftOutlined, action: () => prefixEditorLines('> ') },
+  { label: '有序列表', icon: OrderedListOutlined, action: () => prefixEditorLines('1. ') },
+  { label: '无序列表', icon: UnorderedListOutlined, action: () => prefixEditorLines('- ') },
+  { label: '任务列表', icon: CheckCircleOutlined, action: () => prefixEditorLines('- [ ] ') },
 ]
 const editorContextGroups = [
   { label: '剪贴板', items: [
@@ -3539,7 +3552,7 @@ function onOutlinePanelResizeKeydown(event: KeyboardEvent) {
   }
 }
 function isTypingTarget(target: EventTarget | null) {
-  return target instanceof Element && Boolean(target.closest('input, textarea, select, [contenteditable="true"], [role="combobox"], [role="listbox"], .arco-select'))
+  return target instanceof Element && Boolean(target.closest('input, textarea, select, [contenteditable="true"], [role="combobox"], [role="listbox"], .ant-select'))
 }
 
 function blobToDataUrl(blob: Blob): Promise<string> {
@@ -6011,6 +6024,7 @@ async function requestFullscreen() {
 </script>
 
 <template>
+  <ConfigProvider :theme="componentTheme" :locale="zhCN" :get-popup-container="getControlPopupContainer" :auto-insert-space-in-button="false">
   <div class="app-shell" :aria-busy="booting || busyAction !== null" :class="{ 'is-focus': store.mode === 'focus', 'is-clean': store.mode === 'clean', 'is-editor-studio': editorOpen, 'is-region-focus': store.mode === 'region-focus', 'has-focus-region': Boolean(store.focusedRegionId), 'is-dragging': draggingFiles, 'nav-collapsed': navCollapsed, [`theme-${store.activeThemeId}`]: true }" :style="store.mode === 'focus' ? focusThemeStyles : undefined" @dragover.prevent @dragenter.prevent="onDragEnter" @dragleave.prevent="onDragLeave" @drop.prevent="onDrop">
     <datalist id="editor-code-languages"><option v-for="language in ['text', 'typescript', 'javascript', 'python', 'rust', 'go', 'java', 'sql', 'bash', 'json', 'yaml', 'mermaid', 'gas', 'url']" :key="language" :value="language" /></datalist>
     <AppDialog />
@@ -6021,7 +6035,7 @@ async function requestFullscreen() {
         <button class="rail-item" type="button" title="搜索文档" aria-label="搜索文档" @click="openSearch('all')"><AppIcon name="search" :size="20" /><span>搜索</span></button>
         <div class="rail-divider" />
         <button class="rail-item" :class="{ active: view === 'favorites' }" type="button" title="收藏夹" aria-label="收藏夹" @click="openFavorites"><AppIcon name="star" :size="20" /><span>收藏</span></button>
-        <ArcoDropdown panel-class="reader-more-popover rail-more-popover">
+        <AppDropdown panel-class="reader-more-popover rail-more-popover">
           <button class="rail-item" :class="{ active: ['clipboard', 'knowledge', 'notes', 'themes'].includes(view) }" type="button" title="更多工具" aria-label="更多工具" aria-haspopup="menu"><AppIcon name="more" :size="20" /><span>更多</span></button>
           <template #menu>
             <button type="button" role="menuitem" @click="view = 'clipboard'"><AppIcon name="clipboard" :size="15" />剪贴板</button>
@@ -6030,7 +6044,7 @@ async function requestFullscreen() {
             <button type="button" role="menuitem" @click="view = 'themes'"><AppIcon name="palette" :size="15" />主题</button>
             <button type="button" role="menuitem" @click="notify('插件市场将在下一阶段接入')"><AppIcon name="plugin" :size="15" />插件（即将上线）</button>
           </template>
-        </ArcoDropdown>
+        </AppDropdown>
         <div class="rail-spacer" />
         <button class="rail-item" :class="{ active: view === 'settings' }" type="button" title="设置" aria-label="设置" @click="view = 'settings'"><AppIcon name="settings" :size="20" /><span>设置</span></button>
       </div>
@@ -6053,7 +6067,7 @@ async function requestFullscreen() {
           <button v-if="store.currentDocument" class="hero-continue" type="button" @click="chooseDocument(store.currentDocument.id)"><span>继续阅读</span><strong>{{ displayTitle(store.currentDocument.title) }}</strong><small>{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}% 已读 · 约 {{ store.currentDocument.estimatedReadMinutes }} 分钟</small><AppIcon name="chevron-right" :size="16" /></button>
         </div>
         <div class="page-toolbar reveal-2"><div class="library-toolbar-heading"><div><h2>最近阅读 <span>{{ filteredLibraryDocuments.length }}<i v-if="librarySearchQuery.trim()"> / {{ store.documents.length }}</i></span></h2></div><Input v-model="librarySearchQuery" class="library-search" allow-clear placeholder="搜索已打开的 Markdown…" :input-attrs="{ 'aria-label': '按名称搜索已打开的 Markdown' }"><template #prefix><AppIcon name="search" :size="14" /></template></Input></div><div class="toolbar-actions">
-          <ArcoDropdown panel-class="library-more-popover">
+          <AppDropdown panel-class="library-more-popover">
             <Button class="ghost-button" type="secondary"><template #icon><AppIcon name="copy" :size="14" /></template>更多导入</Button>
             <template #menu>
               <Button class="library-import-action" type="text" long :loading="busyAction === 'pandoc'" :disabled="busyAction !== null" @click="importOfficeDocument">导入 Word / EPUB…</Button>
@@ -6065,8 +6079,8 @@ async function requestFullscreen() {
               <Button class="library-import-action" type="text" long :loading="busyAction === 'paste-image'" :disabled="busyAction !== null" @click="() => pasteImageFromClipboard()">粘贴图片</Button>
               <Button class="library-import-action" type="text" long :loading="busyAction === 'paste-save'" :disabled="busyAction !== null" @click="() => pasteFromClipboard(true)">粘贴并保存</Button>
             </template>
-          </ArcoDropdown>
-          <ArcoDropdown v-if="isTauriRuntime() && orderedRecentFolders.length" panel-class="library-more-popover recent-folders-popover">
+          </AppDropdown>
+          <AppDropdown v-if="isTauriRuntime() && orderedRecentFolders.length" panel-class="library-more-popover recent-folders-popover">
             <Button class="ghost-button" type="secondary"><AppIcon name="history" :size="14" />最近文件夹</Button>
             <template #menu>
               <div class="recent-folders-heading"><div><strong>最近打开</strong><span class="recent-folder-count">· {{ orderedRecentFolders.length }} 个文件夹</span></div></div>
@@ -6078,7 +6092,7 @@ async function requestFullscreen() {
                 </div>
               </div>
             </template>
-          </ArcoDropdown>
+          </AppDropdown>
           <Button class="ghost-button" type="secondary" :loading="busyAction === 'folder'" :disabled="busyAction !== null" @click="openFolder"><template #icon><AppIcon name="folder" :size="14" /></template>打开文件夹</Button><Button class="primary-button" type="primary" :loading="busyAction === 'file'" :disabled="busyAction !== null" @click="openFile"><template #icon><AppIcon name="plus" :size="14" /></template>导入 Markdown</Button></div></div>
         <div class="document-grid reveal-3">
           <div v-if="librarySearchQuery.trim() && !filteredLibraryDocuments.length" class="library-empty"><AppIcon name="search" :size="20" /><strong>没有找到匹配的文档</strong><span>试试搜索其他 Markdown 名称</span></div>
@@ -6100,7 +6114,7 @@ async function requestFullscreen() {
         <div class="knowledge-workspace">
           <section class="knowledge-ask" aria-label="询问知识库">
             <div class="knowledge-ask-heading"><div><span class="section-kicker">问一问</span><h2>{{ activeKnowledgeConversation?.title ?? '从本地资料里找答案' }}</h2><small class="knowledge-ai-status">{{ aiSettings.enabled ? aiStatus === 'connected' ? 'AI 已连接' : aiBusy ? 'AI 正在整理' : 'AI 已启用' : '离线检索 · 资料不会上传' }}</small></div><button class="text-button" type="button" :disabled="aiBusy || !knowledgeLoaded" @click="createKnowledgeConversation()"><AppIcon name="plus" :size="13" />新对话</button></div>
-            <Collapse class="knowledge-source-scope" :default-active-key="!activeKnowledgeSources.length ? ['content'] : []"><CollapseItem key="content"><template #header>本次资料 <span>{{ activeKnowledgeSources.length }} 篇</span><small v-if="missingKnowledgeSourceCount"> · {{ missingKnowledgeSourceCount }} 篇来源已不可用</small></template><div class="knowledge-scope-body"><div v-if="missingKnowledgeSourceCount" class="knowledge-source-warning"><span>{{ missingKnowledgeSourceCount }} 篇来源已不可用，历史引用不会受影响。</span><button class="text-button" type="button" :disabled="aiBusy || !knowledgeLoaded" @click="removeUnavailableKnowledgeSources">移除失效来源</button></div><div v-if="store.documents.length" class="knowledge-scope-list"><Checkbox v-for="document in store.documents" :key="document.id" :model-value="activeKnowledgeConversation ? activeKnowledgeConversation.sourceIds.includes(document.id) : knowledgeDocumentIds.includes(document.id)" :disabled="aiBusy || !knowledgeLoaded" @change="toggleConversationSource(document.id)">{{ displayTitle(document.title) }}</Checkbox><button v-if="store.documents.some(document => !(activeKnowledgeConversation?.sourceIds ?? knowledgeDocumentIds).includes(document.id)) && (activeKnowledgeConversation || knowledgeDocuments.length)" class="text-button" type="button" :disabled="aiBusy || !knowledgeLoaded" @click="addAllKnowledgeSources">一键收录现有文档</button></div><p v-else class="knowledge-scope-empty">先导入 Markdown 文档，之后可在这里选择本次要检索的资料。</p></div></CollapseItem></Collapse>
+            <Collapse class="knowledge-source-scope" :default-active-key="!activeKnowledgeSources.length ? ['content'] : []"><CollapseItem key="content"><template #header>本次资料 <span>{{ activeKnowledgeSources.length }} 篇</span><small v-if="missingKnowledgeSourceCount"> · {{ missingKnowledgeSourceCount }} 篇来源已不可用</small></template><div class="knowledge-scope-body"><div v-if="missingKnowledgeSourceCount" class="knowledge-source-warning"><span>{{ missingKnowledgeSourceCount }} 篇来源已不可用，历史引用不会受影响。</span><button class="text-button" type="button" :disabled="aiBusy || !knowledgeLoaded" @click="removeUnavailableKnowledgeSources">移除失效来源</button></div><div v-if="store.documents.length" class="knowledge-scope-list"><Checkbox v-for="document in store.documents" :key="document.id" :checked="activeKnowledgeConversation ? activeKnowledgeConversation.sourceIds.includes(document.id) : knowledgeDocumentIds.includes(document.id)" :disabled="aiBusy || !knowledgeLoaded" @change="toggleConversationSource(document.id)">{{ displayTitle(document.title) }}</Checkbox><button v-if="store.documents.some(document => !(activeKnowledgeConversation?.sourceIds ?? knowledgeDocumentIds).includes(document.id)) && (activeKnowledgeConversation || knowledgeDocuments.length)" class="text-button" type="button" :disabled="aiBusy || !knowledgeLoaded" @click="addAllKnowledgeSources">一键收录现有文档</button></div><p v-else class="knowledge-scope-empty">先导入 Markdown 文档，之后可在这里选择本次要检索的资料。</p></div></CollapseItem></Collapse>
             <div v-if="isTauriRuntime() && selectedKnowledgeSources.length" class="knowledge-source-tools">
               <small v-if="localSemanticSearch" role="status">语义索引 {{ knowledgeIndexCount }}/{{ activeKnowledgeSources.length }} 篇{{ knowledgeIndexError ? ` · ${knowledgeIndexError}` : knowledgeIndexing ? ' · 正在建立' : '' }} · 全部可用资料支持关键词检索</small>
               <small v-if="knowledgeRefreshSummary" role="status">{{ knowledgeRefreshSummary }}</small>
@@ -6166,7 +6180,7 @@ async function requestFullscreen() {
           <section class="knowledge-manager-list" aria-label="知识源列表">
             <div v-if="!store.documents.length" class="knowledge-manager-empty"><AppIcon name="sparkle" :size="22" /><strong>还没有可加入的文档</strong><span>先导入 Markdown 文档，再把它加入知识库。</span><button class="primary-button" type="button" @click="closeKnowledgeManager(); openLibrary('all')">导入文档</button></div>
             <div v-else-if="!filteredKnowledgeDocuments.length" class="knowledge-manager-empty"><AppIcon name="search" :size="22" /><strong>{{ knowledgeSourceFilter === 'included' ? '还没有已收录的文档' : '没有找到匹配的文档' }}</strong><span>{{ knowledgeSourceFilter === 'included' ? '切换到全部文档，选择要加入的资料。' : '试试搜索其他名称或路径。' }}</span><button v-if="knowledgeSourceFilter === 'included'" class="ghost-button" type="button" @click="knowledgeSourceFilter = 'all'">显示全部文档</button></div>
-            <div v-else class="knowledge-manager-rows"><article v-for="document in filteredKnowledgeDocuments" :key="document.id" class="knowledge-manager-row"><div class="knowledge-manager-select"><Checkbox :model-value="selectedKnowledgeSourceIds.includes(document.id)" :disabled="!knowledgeDocumentIds.includes(document.id)" :aria-label="`选择移出：${displayTitle(document.title)}`" @change="toggleKnowledgeSourceSelection(document.id)" /><span class="knowledge-icon"><AppIcon :name="knowledgeDocumentIds.includes(document.id) ? 'check' : 'file'" :size="15" /></span><span class="knowledge-copy"><strong>{{ displayTitle(document.title) }}</strong><small :title="document.path">{{ document.path }} · {{ document.wordCount }} 字</small></span></div><span class="knowledge-manager-status" :class="{ included: knowledgeDocumentIds.includes(document.id) }">{{ knowledgeDocumentIds.includes(document.id) ? '已收录' : '未收录' }}</span><button class="ghost-button" type="button" @click="toggleKnowledgeDocument(document.id)">{{ knowledgeDocumentIds.includes(document.id) ? '移出' : '加入' }}</button><button class="text-button" type="button" @click="closeKnowledgeManager(); chooseDocument(document.id)">打开 <AppIcon name="external" :size="12" /></button></article></div>
+            <div v-else class="knowledge-manager-rows"><article v-for="document in filteredKnowledgeDocuments" :key="document.id" class="knowledge-manager-row"><div class="knowledge-manager-select"><Checkbox :checked="selectedKnowledgeSourceIds.includes(document.id)" :disabled="!knowledgeDocumentIds.includes(document.id)" :aria-label="`选择移出：${displayTitle(document.title)}`" @change="toggleKnowledgeSourceSelection(document.id)" /><span class="knowledge-icon"><AppIcon :name="knowledgeDocumentIds.includes(document.id) ? 'check' : 'file'" :size="15" /></span><span class="knowledge-copy"><strong>{{ displayTitle(document.title) }}</strong><small :title="document.path">{{ document.path }} · {{ document.wordCount }} 字</small></span></div><span class="knowledge-manager-status" :class="{ included: knowledgeDocumentIds.includes(document.id) }">{{ knowledgeDocumentIds.includes(document.id) ? '已收录' : '未收录' }}</span><button class="ghost-button" type="button" @click="toggleKnowledgeDocument(document.id)">{{ knowledgeDocumentIds.includes(document.id) ? '移出' : '加入' }}</button><button class="text-button" type="button" @click="closeKnowledgeManager(); chooseDocument(document.id)">打开 <AppIcon name="external" :size="12" /></button></article></div>
           </section>
           <footer class="knowledge-manager-footer"><p>移出仅影响默认知识库，不删除本地文档；已有对话的资料范围保持不变。</p><div class="knowledge-manager-actions"><span>已选 {{ selectedKnowledgeSourceCount }} 篇</span><button class="ghost-button" type="button" :disabled="!selectedKnowledgeSourceCount" @click="removeSelectedKnowledgeSources">移出所选</button><button class="danger-button" type="button" :disabled="!knowledgeDocumentIds.length" @click="removeAllKnowledgeSources">全部移出 {{ knowledgeDocumentIds.length }}</button><button class="primary-button" type="button" @click="closeKnowledgeManager">完成</button></div></footer>
         </dialog>
@@ -6287,10 +6301,10 @@ async function requestFullscreen() {
             <div v-if="leftPanelTab === 'files'" class="file-browser-panel">
               <div class="file-location" :title="fileBrowserMode === 'tree' ? filesystemTree?.path : currentDirectory"><AppIcon name="folder" :size="15" :stroke-width="2" /><span>{{ fileBrowserMode === 'tree' ? '目录树' : currentDirectoryLabel }}</span><button class="file-tree-back" type="button" :aria-label="fileBrowserMode === 'tree' ? '切换到文档列表' : '切换到目录树'" @click="fileBrowserMode === 'tree' ? showDocumentList() : showDocumentTree()">{{ fileBrowserMode === 'tree' ? '列表' : '目录树' }}</button></div>
               <div class="file-filter-toolbar" aria-label="文件侧栏筛选">
-                <Select v-model="sidebarFilter" size="small" aria-label="文件筛选方式" class="file-filter-select"><Option value="markdown">Markdown 文件</Option><Option value="hidden">包含隐藏文件</Option><Option value="all">全部文件</Option><Option value="glob">自定义 glob</Option></Select>
+                <Select v-model:value="sidebarFilter" size="small" label="文件筛选方式" class="file-filter-select"><Option value="markdown">Markdown 文件</Option><Option value="hidden">包含隐藏文件</Option><Option value="all">全部文件</Option><Option value="glob">自定义 glob</Option></Select>
                 <Input v-if="sidebarFilter === 'glob'" v-model="sidebarGlob" class="file-glob-input" allow-clear :input-attrs="{ 'aria-label': '自定义 glob' }" placeholder="例如 *.md" />
-                <Select v-model="fileSort" size="small" aria-label="文件排序方式" class="file-sort-select"><Option value="name">名称</Option><Option value="natural">自然顺序</Option><Option value="created">创建时间</Option><Option value="modified">修改时间</Option><Option value="size">文件大小</Option></Select>
-                <div v-if="fileBrowserMode === 'tree'" class="file-tree-mix"><span>文件夹与文件混排</span><Switch v-model="fileTreeMixFolders" size="small" aria-label="文件夹与文件混排" /></div>
+                <Select v-model:value="fileSort" size="small" label="文件排序方式" class="file-sort-select"><Option value="name">名称</Option><Option value="natural">自然顺序</Option><Option value="created">创建时间</Option><Option value="modified">修改时间</Option><Option value="size">文件大小</Option></Select>
+                <div v-if="fileBrowserMode === 'tree'" class="file-tree-mix"><span>文件夹与文件混排</span><Switch v-model:checked="fileTreeMixFolders" size="small" aria-label="文件夹与文件混排" /></div>
               </div>
               <div v-if="fileBrowserMode === 'tree'" class="filesystem-tree-panel">
                 <div v-if="filesystemTree" class="filesystem-tree" :aria-label="filesystemTreeScope === 'system' ? '当前目录文档树' : '当前目录已载入文档'"><FileSystemTree :node="filesystemTree" :selected-path="filesystemTreeTarget" @toggle="toggleFilesystemNode" @open="openFilesystemTreeNode" @contextmenu="openFilesystemContextMenu" /></div>
@@ -6299,15 +6313,15 @@ async function requestFullscreen() {
               <ContentSkeleton v-else-if="fileListLoading" class="file-loading-skeleton" label="正在读取文件列表" :rows="5" />
               <div v-else class="file-list-shell">
                 <div v-if="batchDeletableFiles.length" class="file-list-toolbar">
-                  <Checkbox class="file-select-all-arco" :model-value="allFilesSelected" :indeterminate="selectedFiles.length > 0 && !allFilesSelected" aria-label="全选可移除文档" @change="toggleAllFileSelection">全选</Checkbox>
+                  <Checkbox class="file-select-all" :checked="allFilesSelected" :indeterminate="selectedFiles.length > 0 && !allFilesSelected" aria-label="全选可移除文档" @change="toggleAllFileSelection">全选</Checkbox>
                   <div class="file-list-actions"><span v-if="selectedFiles.length" class="file-selection-count" aria-live="polite">已选 {{ selectedFiles.length }}</span><Button v-if="selectedFiles.length" type="text" status="danger" size="mini" html-type="button" class="file-batch-delete" :disabled="busyAction !== null" @click="requestDeleteFiles(selectedFiles)"><AppIcon name="trash" :size="12" />删除</Button></div>
                 </div>
-                <List class="file-list" :bordered="false" :split="false" :hoverable="false" :scrollbar="false" :aria-label="sidebarFilter === 'markdown' ? '当前文件夹中的 Markdown 文件' : '当前文件夹中的文件'">
-                  <ListItem v-for="file in currentDirectoryFiles" :key="file.path" class="file-item" :class="{ active: store.currentDocumentId === file.documentId, selected: isFileSelected(file), 'is-unloaded': !file.documentId }">
-                    <Checkbox v-if="batchDeletableFiles.length && isBatchDeletableFile(file)" class="file-select-arco" :aria-label="`选择 ${file.name}`" :model-value="isFileSelected(file)" @click.stop @change="toggleFileSelection(file)" /><span v-else-if="batchDeletableFiles.length" class="file-select-spacer" aria-hidden="true" />
+                <div class="file-list" role="list" :aria-label="sidebarFilter === 'markdown' ? '当前文件夹中的 Markdown 文件' : '当前文件夹中的文件'">
+                  <div role="listitem" v-for="file in currentDirectoryFiles" :key="file.path" class="file-item" :class="{ active: store.currentDocumentId === file.documentId, selected: isFileSelected(file), 'is-unloaded': !file.documentId }">
+                    <Checkbox v-if="batchDeletableFiles.length && isBatchDeletableFile(file)" class="file-select" :aria-label="`选择 ${file.name}`" :checked="isFileSelected(file)" @click.stop @change="toggleFileSelection(file)" /><span v-else-if="batchDeletableFiles.length" class="file-select-spacer" aria-hidden="true" />
                     <button type="button" class="file-item-open" :aria-label="file.documentId ? `打开 ${file.name}` : `载入 ${file.name}`" @click="openFileTreeEntry(file)" @contextmenu.prevent="openFileContextMenu($event, file)"><AppIcon name="file" :size="14" /><span class="file-item-copy"><strong>{{ file.name }}</strong><small>{{ fileStatus(file) }}</small></span><i v-if="store.currentDocumentId === file.documentId" class="file-active-mark" /></button><IconButton v-if="isDeletableFile(file)" class="file-delete" icon="trash" size="sm" :label="`删除 ${file.name}`" :disabled="busyAction !== null" @click="deleteFile(file)" />
-                  </ListItem>
-                </List>
+                  </div>
+                </div>
               </div>
             </div>
             <div v-else class="outline-view">
@@ -6378,7 +6392,7 @@ async function requestFullscreen() {
                   <div class="reader-edit-actions">
                     <button type="button" :class="{ active: editorOpen }" @click="editorOpen ? closeEditor() : openEditor()">{{ editorOpen ? '阅读' : '编辑' }}</button>
                     <button v-if="!isRealDocumentPath(store.currentDocument?.path ?? '')" class="save-pasted-button" type="button" :disabled="savingDocument" @click="saveCurrentDocument">{{ savingDocument ? '保存中…' : '保存 Markdown' }}</button>
-                    <ArcoDropdown class="reader-more-menu">
+                    <AppDropdown class="reader-more-menu">
                       <button type="button">更多</button>
                       <template #menu>
                         <button type="button" @click="toggleCleanMode">纯净阅读</button>
@@ -6399,16 +6413,16 @@ async function requestFullscreen() {
                         <button type="button" @click="exportPdfDocument()">导出 PDF</button>
                         <button type="button" @click="printDocument">打印</button>
                       </template>
-                    </ArcoDropdown>
+                    </AppDropdown>
                     <FontPicker class="reader-toolbar-font-picker" compact label="正文字体" :model-value="store.readerSettings.fontFamily" :fallback-family="defaultTokens.reader.fontFamily" @update:model-value="store.updateSettings({ fontFamily: $event })" />
-                    <ArcoDropdown position="br">
+                    <AppDropdown position="br">
                       <button type="button" @keydown.enter.stop>打开 AI</button>
                       <template #menu>
                         <button v-for="model in domesticAiWebModels" :key="model.id" type="button"
                           :class="{ active: aiWebPreviews.some(({ id }) => id === model.id) }"
                           @keydown.enter.stop @click="openAiWebModel(model)">{{ model.name }}<span v-if="aiWebPreviews.some(({ id }) => id === model.id)">（已打开）</span></button>
                       </template>
-                    </ArcoDropdown>
+                    </AppDropdown>
                     <button type="button" @keydown.enter.stop @click="openWebAddress">打开网页</button>
                     <button v-if="(hasWebPreviews || readerDisplayMode === 'html') && readerSidebarAvailable" type="button" aria-controls="reader-sidebar"
                       :aria-expanded="!outlinePanelCollapsed && leftPanelTab === 'outline'"
@@ -6469,9 +6483,9 @@ async function requestFullscreen() {
                     <Button class="editor-tool-button" type="secondary" :disabled="!editorFindResult.matches.length" @click="replaceEditorFind(true)">全部替换</Button>
                   </div>
                   <div class="editor-find-options">
-                    <Checkbox v-model="editorFindOptions.caseSensitive">区分大小写</Checkbox>
-                    <Checkbox v-model="editorFindOptions.wholeWord">整词</Checkbox>
-                    <Checkbox v-model="editorFindOptions.regex">正则</Checkbox>
+                    <Checkbox v-model:checked="editorFindOptions.caseSensitive">区分大小写</Checkbox>
+                    <Checkbox v-model:checked="editorFindOptions.wholeWord">整词</Checkbox>
+                    <Checkbox v-model:checked="editorFindOptions.regex">正则</Checkbox>
                     <Button class="editor-tool-button" type="secondary" :aria-pressed="!!editorFindScope" @click="toggleEditorFindScope">{{ editorFindScope ? '取消选区范围' : '仅在选区查找' }}</Button>
                     <small>只修改草稿，不写入文件</small>
                   </div>
@@ -6590,13 +6604,13 @@ async function requestFullscreen() {
           <button type="button" @click="beginAnnotation">批注</button>
           <button type="button" @click="searchSelection">搜索</button>
           <button type="button" @click="assist('translate')">翻译</button>
-          <ArcoDropdown panel-class="reader-more-popover selection-ai-menu">
+          <AppDropdown panel-class="reader-more-popover selection-ai-menu">
             <button type="button" @keydown.enter.stop>问 AI</button>
             <template #menu>
               <button v-for="model in domesticAiWebModels" :key="model.id" type="button"
                 @keydown.enter.stop @click="openAiWebModelForSelection(model)">{{ model.name }}</button>
             </template>
-          </ArcoDropdown>
+          </AppDropdown>
           <button type="button" @click="copySelectionMarkdown">复制 Markdown</button>
           <button type="button" @click="copySelectionHtml">复制 HTML</button>
           <button type="button" @click="copySelectionMathMl">复制 MathML</button>
@@ -6622,9 +6636,9 @@ async function requestFullscreen() {
             <Button type="secondary" @click="notify('同步与备份暂不启用')">同步与备份</Button>
           </div>
           <div class="settings-grid">
-        <div v-show="settingsTab === 'reading'" class="settings-card ai-settings-card"><span class="section-kicker">AI 能力</span><h2>连接 AI 服务</h2><p class="muted-copy">支持本地 Ollama，也支持 OpenAI-compatible 接口。API Key 只保留在当前会话，不写入本地配置。</p><div class="setting-input"><span>服务类型</span><Select v-model="aiSettings.provider" aria-label="服务类型"><Option value="ollama">Ollama（本地）</Option><Option value="openai-compatible">OpenAI-compatible</Option></Select></div><label class="setting-input">服务地址<Input v-model="aiSettings.baseUrl" spellcheck="false" placeholder="http://127.0.0.1:11434" /></label><div v-if="aiSettings.provider === 'ollama'" class="setting-input"><span>模型名称</span><div class="ai-model-picker"><Select v-model="aiSettings.model" :options="ollamaModels" allow-search :loading="aiModelsBusy" :trigger-props="{ contentClass: 'ai-model-dropdown' }" aria-label="Ollama 模型" @popup-visible-change="$event && loadOllamaModels(false)" /><Button class="ghost-button" type="secondary" :disabled="aiModelsBusy" @click="loadOllamaModels()">{{ aiModelsBusy ? '读取中…' : '读取模型' }}</Button></div></div><label v-else class="setting-input">模型名称<Input v-model="aiSettings.model" spellcheck="false" placeholder="模型名称" /></label><label v-if="aiSettings.provider === 'openai-compatible'" class="setting-input">API Key（可选）<InputPassword v-model="aiSettings.apiKey" autocomplete="off" placeholder="仅当前会话使用" /></label><Checkbox class="setting-check" v-model="aiSettings.enabled">在知识库问答中启用 AI 生成</Checkbox>
+        <div v-show="settingsTab === 'reading'" class="settings-card ai-settings-card"><span class="section-kicker">AI 能力</span><h2>连接 AI 服务</h2><p class="muted-copy">支持本地 Ollama，也支持 OpenAI-compatible 接口。API Key 只保留在当前会话，不写入本地配置。</p><div class="setting-input"><span>服务类型</span><Select v-model:value="aiSettings.provider" label="服务类型"><Option value="ollama">Ollama（本地）</Option><Option value="openai-compatible">OpenAI-compatible</Option></Select></div><label class="setting-input">服务地址<Input v-model="aiSettings.baseUrl" spellcheck="false" placeholder="http://127.0.0.1:11434" /></label><div v-if="aiSettings.provider === 'ollama'" class="setting-input"><span>模型名称</span><div class="ai-model-picker"><Select v-model:value="aiSettings.model" :options="ollamaModels.map(model => ({ value: model, label: model }))" show-search option-filter-prop="label" :loading="aiModelsBusy" popup-class-name="ai-model-dropdown" label="Ollama 模型" @dropdown-visible-change="$event && loadOllamaModels(false)" /><Button class="ghost-button" type="secondary" :disabled="aiModelsBusy" @click="loadOllamaModels()">{{ aiModelsBusy ? '读取中…' : '读取模型' }}</Button></div></div><label v-else class="setting-input">模型名称<Input v-model="aiSettings.model" spellcheck="false" placeholder="模型名称" /></label><label v-if="aiSettings.provider === 'openai-compatible'" class="setting-input">API Key（可选）<InputPassword v-model:value="aiSettings.apiKey" autocomplete="off" placeholder="仅当前会话使用" /></label><Checkbox class="setting-check" v-model:checked="aiSettings.enabled">在知识库问答中启用 AI 生成</Checkbox>
           <div v-if="isTauriRuntime()" class="knowledge-model-settings">
-            <Checkbox class="setting-check" v-model="aiSettings.semanticSearch">本地语义检索</Checkbox>
+            <Checkbox class="setting-check" v-model:checked="aiSettings.semanticSearch">本地语义检索</Checkbox>
             <p class="muted-copy">索引使用本机 Ollama（127.0.0.1:11434）。生成答案仍使用上方配置的 AI 服务。</p>
             <div class="ai-settings-actions">
               <Button class="ghost-button" type="secondary" @click="copyKnowledgeModelCommand">复制安装命令</Button>
@@ -6643,13 +6657,13 @@ async function requestFullscreen() {
             <p>用于菜单、侧栏与按钮。正文单独设置，代码保持等宽。</p>
           </div>
         </div>
-        <div v-show="settingsTab === 'editing'" class="settings-card settings-card-wide"><span class="section-kicker">写作</span><h2>编辑器行为</h2><div class="setting-form-grid"><div class="setting-input"><span>默认扩展名</span><Select v-model="advancedSettings.defaultExtension" aria-label="默认扩展名"><Option value="md">.md</Option><Option value="markdown">.markdown</Option></Select></div><label class="setting-input">默认代码语言<Input v-model="advancedSettings.defaultCodeLanguage" list="editor-code-languages" /></label><div class="setting-input"><span>文件拖放</span><Select v-model="advancedSettings.dropBehavior" aria-label="文件拖放"><Option value="insert">编辑时插入媒体</Option><Option value="open">只打开 Markdown</Option></Select></div></div><Checkbox class="setting-check" v-model="advancedSettings.rememberCodeLanguage">记住上次代码语言</Checkbox><Checkbox class="setting-check" v-model="advancedSettings.emojiAutocomplete">输入 : 时显示 Emoji 建议</Checkbox><Checkbox class="setting-check" v-model="advancedSettings.spellcheck">启用系统拼写检查</Checkbox><Checkbox class="setting-check" v-model="advancedSettings.editorAutoSave">每 60 秒自动保存文件（遇到外部修改时停止）</Checkbox><p class="muted-copy">无论是否启用自动保存，编辑草稿都会即时备份；再次编辑同一文档会自动恢复。</p><Checkbox class="setting-check" v-model="advancedSettings.typewriterMode">打字时让光标保持在屏幕中央</Checkbox><Checkbox class="setting-check" v-model="advancedSettings.rememberRecent">保存最近打开的文档</Checkbox></div>
-        <div v-show="settingsTab === 'editing'" class="settings-card"><span class="section-kicker">输入辅助</span><h2>链接识别</h2><Checkbox class="setting-check" v-model="advancedSettings.autoLink">自动把裸网址渲染为链接</Checkbox><p class="muted-copy">关闭后，仍保留明确写出的 Markdown 链接。</p></div>
-        <div v-show="settingsTab === 'editing'" class="settings-card"><span class="section-kicker">图片上传</span><h2>PicList</h2><label class="setting-input">服务地址<Input v-model="advancedSettings.picListEndpoint" placeholder="http://127.0.0.1:36677/upload" /></label><label class="setting-input">接口密钥<InputPassword v-model="advancedSettings.picListKey" placeholder="可选" /></label><p class="muted-copy">仅连接本机 PicList 服务；图片不会经过墨阅服务器。</p></div>
-        <div v-show="settingsTab === 'editing'" class="settings-card"><span class="section-kicker">图片路径</span><h2>相对路径</h2><Checkbox class="setting-check" v-model="advancedSettings.relativeImagePathPrefix">新插入的本地图片路径以 <code>./</code> 开头</Checkbox><p class="muted-copy">应用于导入、粘贴、拖入、下载、整理和重命名；已有引用保持不变。</p></div>
-        <div v-show="settingsTab === 'editing'" class="settings-card"><span class="section-kicker">远程图片</span><h2>兼容与隐私</h2><Checkbox class="setting-check" v-model="advancedSettings.remoteImagePrivacy">不向图片服务发送来源信息</Checkbox><p class="muted-copy">默认采用浏览器标准策略，兼容需要来源信息的图床；启用后会以 no-referrer 请求远程图片。</p></div>
-        <div v-show="settingsTab === 'editing'" class="settings-card"><span class="section-kicker">导出</span><h2>电子书与打印</h2><p class="muted-copy">HTML / EPUB / PDF / 长图跟随当前主题与排版；桌面端 DOCX / LaTeX 使用 Pandoc；EPUB 内嵌图像、视频和字幕，保留公式、脚注和链接。</p><label class="setting-input">Word 样式模板（可选 .docx）<Input :model-value="advancedSettings.referenceDocx" readonly placeholder="使用 Pandoc 默认样式" /></label><div class="setting-actions"><Button class="ghost-button" type="secondary" @click="chooseDocxReference">选择模板</Button><Button v-if="advancedSettings.referenceDocx" class="ghost-button" type="secondary" @click="advancedSettings.referenceDocx = ''">恢复默认</Button></div><label class="setting-row"><span>EPUB 目录层级 <b>H{{ advancedSettings.epubChapterDepth }}</b></span><Slider v-model="advancedSettings.epubChapterDepth" :min="1" :max="6" /></label><div class="setting-form-grid"><div class="setting-input"><span>纸张</span><Select v-model="advancedSettings.printPageSize" aria-label="纸张"><Option value="A4">A4</Option><Option value="Letter">Letter</Option></Select></div><label class="setting-input">页边距（mm）<InputNumber v-model="advancedSettings.printMargin" :min="8" :max="40" /></label><label class="setting-input">页眉<Input v-model="advancedSettings.printHeader" /></label><label class="setting-input">页脚<Input v-model="advancedSettings.printFooter" /></label></div><Checkbox class="setting-check" v-model="advancedSettings.printBackground">打印主题背景</Checkbox></div>
-        <div v-show="settingsTab === 'reading'" class="settings-card"><span class="section-kicker">阅读</span><h2>阅读偏好</h2><label class="setting-row"><span>正文宽度 <b>{{ store.readerSettings.width }}px</b></span><Slider :model-value="store.readerSettings.width" :min="620" :max="1280" :step="10" @update:model-value="changeSetting('width', Number($event))" /></label><label class="setting-row"><span>字号 <b>{{ store.readerSettings.fontSize }}px</b></span><Slider :model-value="store.readerSettings.fontSize" :min="15" :max="24" :step="1" @update:model-value="changeSetting('fontSize', Number($event))" /></label><label class="setting-row"><span>行距 <b>{{ store.readerSettings.lineHeight }}</b></span><Slider :model-value="store.readerSettings.lineHeight" :min="1.4" :max="2.2" :step=".05" @update:model-value="changeSetting('lineHeight', Number($event))" /></label><div class="setting-toggle-row"><span>显示阅读进度</span><Switch v-model="advancedSettings.showReadingProgress" aria-label="显示阅读进度" /></div><div class="setting-toggle-row"><span>专注阅读</span><Switch :model-value="store.mode === 'focus'" :disabled="!store.currentDocument" aria-label="专注阅读" @change="toggleFocusMode" /></div></div><div v-show="settingsTab === 'reading'" class="settings-card"><span class="section-kicker">辅助功能</span><h2>翻译与解释</h2><p class="muted-copy">使用适配器连接你自己的翻译或解释服务；配置后可从划词工具栏调用。</p><label class="setting-input">服务标识<Input v-model="customProvider" placeholder="例如：local-llm / my-translator" /></label><Button class="primary-button" type="primary" @click="notify(customProvider ? '适配器标识已保存' : '保持未配置状态')"><AppIcon name="check" :size="14" />保存配置</Button></div><div v-show="settingsTab === 'shortcuts'" class="settings-card shortcuts-card"><span class="section-kicker">快捷操作</span><h2>快捷键</h2><div class="shortcut-row"><span>全局搜索</span><kbd>Ctrl / Cmd + K</kbd></div><div class="shortcut-row"><span>当前文档搜索</span><kbd>Ctrl / Cmd + F</kbd></div><div class="shortcut-row"><span>阅读缩放</span><kbd>Ctrl / Cmd + + / -</kbd></div><div class="shortcut-row"><span>专注模式</span><kbd>F</kbd></div><div class="shortcut-row"><span>退出聚焦</span><kbd>Esc</kbd></div><div class="shortcut-row"><span>切换区域</span><kbd>↑ ↓</kbd></div></div><div v-show="settingsTab === 'extensions'" class="settings-card extensions-card"><div class="extensions-head"><div><span class="section-kicker">插件中心</span><h2>插件扩展</h2></div><Button class="ghost-button" type="secondary" @click="notify('插件运行时将在后续版本启用')"><AppIcon name="plugin" :size="14" />打开插件目录</Button></div><div class="extension-filter"><AppIcon name="search" :size="14" /><span>按需扩展阅读能力</span></div><div class="extension-list"><div class="extension-item"><span class="extension-icon purple"><AppIcon name="sparkle" :size="17" /></span><span><b>AI 阅读助手</b><small>总结、解释与问答适配器</small></span><Button type="secondary" @click="notify('请先在翻译与解释中配置服务')">配置</Button></div><div class="extension-item"><span class="extension-icon green"><AppIcon name="download" :size="17" /></span><span><b>导出增强</b><small>为阅读内容准备更多导出格式</small></span><Button type="secondary" @click="notify('导出增强将在下一阶段接入')">安装</Button></div><div class="extension-item"><span class="extension-icon pink"><AppIcon name="components" :size="17" /></span><span><b>思维导图</b><small>把长文转换为结构化视图</small></span><Button type="secondary" @click="notify('插件运行时暂未启用')">安装</Button></div></div></div></div></section>
+        <div v-show="settingsTab === 'editing'" class="settings-card settings-card-wide"><span class="section-kicker">写作</span><h2>编辑器行为</h2><div class="setting-form-grid"><div class="setting-input"><span>默认扩展名</span><Select v-model:value="advancedSettings.defaultExtension" label="默认扩展名"><Option value="md">.md</Option><Option value="markdown">.markdown</Option></Select></div><label class="setting-input">默认代码语言<Input v-model="advancedSettings.defaultCodeLanguage" list="editor-code-languages" /></label><div class="setting-input"><span>文件拖放</span><Select v-model:value="advancedSettings.dropBehavior" label="文件拖放"><Option value="insert">编辑时插入媒体</Option><Option value="open">只打开 Markdown</Option></Select></div></div><Checkbox class="setting-check" v-model:checked="advancedSettings.rememberCodeLanguage">记住上次代码语言</Checkbox><Checkbox class="setting-check" v-model:checked="advancedSettings.emojiAutocomplete">输入 : 时显示 Emoji 建议</Checkbox><Checkbox class="setting-check" v-model:checked="advancedSettings.spellcheck">启用系统拼写检查</Checkbox><Checkbox class="setting-check" v-model:checked="advancedSettings.editorAutoSave">每 60 秒自动保存文件（遇到外部修改时停止）</Checkbox><p class="muted-copy">无论是否启用自动保存，编辑草稿都会即时备份；再次编辑同一文档会自动恢复。</p><Checkbox class="setting-check" v-model:checked="advancedSettings.typewriterMode">打字时让光标保持在屏幕中央</Checkbox><Checkbox class="setting-check" v-model:checked="advancedSettings.rememberRecent">保存最近打开的文档</Checkbox></div>
+        <div v-show="settingsTab === 'editing'" class="settings-card"><span class="section-kicker">输入辅助</span><h2>链接识别</h2><Checkbox class="setting-check" v-model:checked="advancedSettings.autoLink">自动把裸网址渲染为链接</Checkbox><p class="muted-copy">关闭后，仍保留明确写出的 Markdown 链接。</p></div>
+        <div v-show="settingsTab === 'editing'" class="settings-card"><span class="section-kicker">图片上传</span><h2>PicList</h2><label class="setting-input">服务地址<Input v-model="advancedSettings.picListEndpoint" placeholder="http://127.0.0.1:36677/upload" /></label><label class="setting-input">接口密钥<InputPassword v-model:value="advancedSettings.picListKey" placeholder="可选" /></label><p class="muted-copy">仅连接本机 PicList 服务；图片不会经过墨阅服务器。</p></div>
+        <div v-show="settingsTab === 'editing'" class="settings-card"><span class="section-kicker">图片路径</span><h2>相对路径</h2><Checkbox class="setting-check" v-model:checked="advancedSettings.relativeImagePathPrefix">新插入的本地图片路径以 <code>./</code> 开头</Checkbox><p class="muted-copy">应用于导入、粘贴、拖入、下载、整理和重命名；已有引用保持不变。</p></div>
+        <div v-show="settingsTab === 'editing'" class="settings-card"><span class="section-kicker">远程图片</span><h2>兼容与隐私</h2><Checkbox class="setting-check" v-model:checked="advancedSettings.remoteImagePrivacy">不向图片服务发送来源信息</Checkbox><p class="muted-copy">默认采用浏览器标准策略，兼容需要来源信息的图床；启用后会以 no-referrer 请求远程图片。</p></div>
+        <div v-show="settingsTab === 'editing'" class="settings-card"><span class="section-kicker">导出</span><h2>电子书与打印</h2><p class="muted-copy">HTML / EPUB / PDF / 长图跟随当前主题与排版；桌面端 DOCX / LaTeX 使用 Pandoc；EPUB 内嵌图像、视频和字幕，保留公式、脚注和链接。</p><label class="setting-input">Word 样式模板（可选 .docx）<Input :model-value="advancedSettings.referenceDocx" readonly placeholder="使用 Pandoc 默认样式" /></label><div class="setting-actions"><Button class="ghost-button" type="secondary" @click="chooseDocxReference">选择模板</Button><Button v-if="advancedSettings.referenceDocx" class="ghost-button" type="secondary" @click="advancedSettings.referenceDocx = ''">恢复默认</Button></div><label class="setting-row"><span>EPUB 目录层级 <b>H{{ advancedSettings.epubChapterDepth }}</b></span><Slider v-model:value="advancedSettings.epubChapterDepth" :min="1" :max="6" /></label><div class="setting-form-grid"><div class="setting-input"><span>纸张</span><Select v-model:value="advancedSettings.printPageSize" label="纸张"><Option value="A4">A4</Option><Option value="Letter">Letter</Option></Select></div><label class="setting-input">页边距（mm）<InputNumber v-model:value="advancedSettings.printMargin" :min="8" :max="40" /></label><label class="setting-input">页眉<Input v-model="advancedSettings.printHeader" /></label><label class="setting-input">页脚<Input v-model="advancedSettings.printFooter" /></label></div><Checkbox class="setting-check" v-model:checked="advancedSettings.printBackground">打印主题背景</Checkbox></div>
+        <div v-show="settingsTab === 'reading'" class="settings-card"><span class="section-kicker">阅读</span><h2>阅读偏好</h2><label class="setting-row"><span>正文宽度 <b>{{ store.readerSettings.width }}px</b></span><Slider :value="store.readerSettings.width" :min="620" :max="1280" :step="10" @update:value="changeSetting('width', Number($event))" /></label><label class="setting-row"><span>字号 <b>{{ store.readerSettings.fontSize }}px</b></span><Slider :value="store.readerSettings.fontSize" :min="15" :max="24" :step="1" @update:value="changeSetting('fontSize', Number($event))" /></label><label class="setting-row"><span>行距 <b>{{ store.readerSettings.lineHeight }}</b></span><Slider :value="store.readerSettings.lineHeight" :min="1.4" :max="2.2" :step=".05" @update:value="changeSetting('lineHeight', Number($event))" /></label><div class="setting-toggle-row"><span>显示阅读进度</span><Switch v-model:checked="advancedSettings.showReadingProgress" aria-label="显示阅读进度" /></div><div class="setting-toggle-row"><span>专注阅读</span><Switch :checked="store.mode === 'focus'" :disabled="!store.currentDocument" aria-label="专注阅读" @change="toggleFocusMode" /></div></div><div v-show="settingsTab === 'reading'" class="settings-card"><span class="section-kicker">辅助功能</span><h2>翻译与解释</h2><p class="muted-copy">使用适配器连接你自己的翻译或解释服务；配置后可从划词工具栏调用。</p><label class="setting-input">服务标识<Input v-model="customProvider" placeholder="例如：local-llm / my-translator" /></label><Button class="primary-button" type="primary" @click="notify(customProvider ? '适配器标识已保存' : '保持未配置状态')"><AppIcon name="check" :size="14" />保存配置</Button></div><div v-show="settingsTab === 'shortcuts'" class="settings-card shortcuts-card"><span class="section-kicker">快捷操作</span><h2>快捷键</h2><div class="shortcut-row"><span>全局搜索</span><kbd>Ctrl / Cmd + K</kbd></div><div class="shortcut-row"><span>当前文档搜索</span><kbd>Ctrl / Cmd + F</kbd></div><div class="shortcut-row"><span>阅读缩放</span><kbd>Ctrl / Cmd + + / -</kbd></div><div class="shortcut-row"><span>专注模式</span><kbd>F</kbd></div><div class="shortcut-row"><span>退出聚焦</span><kbd>Esc</kbd></div><div class="shortcut-row"><span>切换区域</span><kbd>↑ ↓</kbd></div></div><div v-show="settingsTab === 'extensions'" class="settings-card extensions-card"><div class="extensions-head"><div><span class="section-kicker">插件中心</span><h2>插件扩展</h2></div><Button class="ghost-button" type="secondary" @click="notify('插件运行时将在后续版本启用')"><AppIcon name="plugin" :size="14" />打开插件目录</Button></div><div class="extension-filter"><AppIcon name="search" :size="14" /><span>按需扩展阅读能力</span></div><div class="extension-list"><div class="extension-item"><span class="extension-icon purple"><AppIcon name="sparkle" :size="17" /></span><span><b>AI 阅读助手</b><small>总结、解释与问答适配器</small></span><Button type="secondary" @click="notify('请先在翻译与解释中配置服务')">配置</Button></div><div class="extension-item"><span class="extension-icon green"><AppIcon name="download" :size="17" /></span><span><b>导出增强</b><small>为阅读内容准备更多导出格式</small></span><Button type="secondary" @click="notify('导出增强将在下一阶段接入')">安装</Button></div><div class="extension-item"><span class="extension-icon pink"><AppIcon name="components" :size="17" /></span><span><b>思维导图</b><small>把长文转换为结构化视图</small></span><Button type="secondary" @click="notify('插件运行时暂未启用')">安装</Button></div></div></div></div></section>
       <ClipboardManager v-show="view === 'clipboard'" @notify="notify" />
     </main>
     <WebPreviewDock v-if="hasWebPreviews" :columns="!webPreviewUrl && visibleAiWebPreviews.length === 2 ? 2 : 1"
@@ -6724,7 +6738,7 @@ async function requestFullscreen() {
         </div>
         <div v-if="replaceOpen" class="replace-row">
           <Input v-model="replaceValue" class="global-replace-input" allow-clear placeholder="替换为…" :input-attrs="{ 'aria-label': '替换内容' }" />
-          <Checkbox v-model="searchRegex">正则</Checkbox>
+          <Checkbox v-model:checked="searchRegex">正则</Checkbox>
           <Button type="primary" :disabled="!searchPattern || !!searchPatternError" @click="replaceSearchMatches">全部替换</Button>
         </div>
         <p v-if="searchPatternError" class="search-error">正则表达式无效</p>
@@ -6739,7 +6753,7 @@ async function requestFullscreen() {
       </div>
     </div>
 
-    <div v-if="tableBuilderOpen" class="overlay editor-dialog-overlay" @click.self="tableBuilderOpen = false"><div class="editor-dialog" role="dialog" aria-modal="true" aria-label="插入表格"><span class="section-kicker">表格工具</span><h2>插入可编辑表格</h2><div class="setting-form-grid"><label class="setting-input">行数<InputNumber v-model="tableBuilder.rows" :min="2" :max="20" /></label><label class="setting-input">列数<InputNumber v-model="tableBuilder.columns" :min="1" :max="12" /></label><div class="setting-input"><span>对齐</span><Select v-model="tableBuilder.alignment" aria-label="对齐"><Option value="left">左对齐</Option><Option value="center">居中</Option><Option value="right">右对齐</Option></Select></div></div><div class="note-actions"><Button class="ghost-button" type="secondary" @click="tableBuilderOpen = false">取消</Button><Button class="primary-button" type="primary" @click="confirmInsertEditorTable">插入表格</Button></div></div></div>
+    <div v-if="tableBuilderOpen" class="overlay editor-dialog-overlay" @click.self="tableBuilderOpen = false"><div class="editor-dialog" role="dialog" aria-modal="true" aria-label="插入表格"><span class="section-kicker">表格工具</span><h2>插入可编辑表格</h2><div class="setting-form-grid"><label class="setting-input">行数<InputNumber v-model:value="tableBuilder.rows" :min="2" :max="20" /></label><label class="setting-input">列数<InputNumber v-model:value="tableBuilder.columns" :min="1" :max="12" /></label><div class="setting-input"><span>对齐</span><Select v-model:value="tableBuilder.alignment" label="对齐"><Option value="left">左对齐</Option><Option value="center">居中</Option><Option value="right">右对齐</Option></Select></div></div><div class="note-actions"><Button class="ghost-button" type="secondary" @click="tableBuilderOpen = false">取消</Button><Button class="primary-button" type="primary" @click="confirmInsertEditorTable">插入表格</Button></div></div></div>
       <dialog v-if="tableEditor" ref="tableEditorDialog" class="editor-dialog table-editor-dialog" aria-label="编辑表格" @cancel.prevent="closeTableEditor" @keydown="onTableEditorDialogKeydown">
         <fieldset class="table-editor-fields" :disabled="tableEditorSaving">
         <div class="extensions-head"><div><h2>编辑表格</h2><small>{{ tableEditor.draft ? '应用到草稿，可撤销；不会自动写入文件' : '保存后更新当前文档' }}</small></div><div><button class="ghost-button" type="button" :disabled="tableEditor.rows.length >= 500" @click="addTableEditorRow">增加行</button><button class="ghost-button" type="button" :disabled="tableEditor.alignments.length >= 12" @click="addTableEditorColumn">增加列</button></div></div>
@@ -6760,7 +6774,7 @@ async function requestFullscreen() {
         <div class="table-alignment-actions" aria-label="统一设置列对齐"><span>{{ tableEditor.selectedColumns.length ? `已选 ${tableEditor.selectedColumns.length} 列：` : '全部列：' }}</span><button type="button" @click="setTableEditorAlignment('left')">左</button><button type="button" @click="setTableEditorAlignment('center')">中</button><button type="button" @click="setTableEditorAlignment('right')">右</button></div>
         <div class="table-column-selection" aria-label="选择需要对齐的列"><span>选择列：</span><button v-for="(_, column) in tableEditor.alignments" :key="`column-${column}`" type="button" :class="{ active: tableEditor.selectedColumns.includes(column) }" @click="toggleTableEditorColumn(column)">第 {{ column + 1 }} 列</button><small>不选择时作用于全部列</small></div>
         <div class="table-editor-grid" :style="{ gridTemplateColumns: `repeat(${tableEditor.alignments.length}, minmax(120px, 1fr))` }">
-          <template v-for="(_, column) in tableEditor.alignments" :key="`alignment-${column}`"><Select v-model="tableEditor.alignments[column]" :aria-label="`第 ${column + 1} 列对齐方式`" class="table-alignment-select"><Option value="left">左对齐</Option><Option value="center">居中</Option><Option value="right">右对齐</Option></Select></template>
+          <template v-for="(_, column) in tableEditor.alignments" :key="`alignment-${column}`"><Select v-model:value="tableEditor.alignments[column]" :label="`第 ${column + 1} 列对齐方式`" class="table-alignment-select"><Option value="left">左对齐</Option><Option value="center">居中</Option><Option value="right">右对齐</Option></Select></template>
           <template v-for="(row, rowIndex) in tableEditor.rows" :key="`row-${rowIndex}`"><textarea v-for="(_, column) in tableEditor.alignments" :key="`${rowIndex}-${column}`" v-model="row[column]" :rows="Math.min(4, Math.max(1, row[column].split(/\r?\n/).length))" :data-table-cell="`${rowIndex}-${column}`" :class="{ 'table-header-input': rowIndex === 0 }" :aria-label="`第 ${rowIndex + 1} 行第 ${column + 1} 列`" :disabled="tableEditorSaving" @focus="onTableCellFocus(rowIndex, column)" @click="tableEditorHistory.group = ''" @beforeinput="onTableCellBeforeInput($event, rowIndex, column)" @keydown="onTableCellKeydown($event, rowIndex, column)" @paste="onTableCellPaste($event, rowIndex, column)" /></template>
         </div>
         <p>Tab 切换单元格，Enter 向下，Shift+Enter 换行；末尾自动增行。支持粘贴表格数据和 Ctrl/Cmd+Z 撤销。</p>
@@ -6780,7 +6794,7 @@ async function requestFullscreen() {
             <Button v-if="viewer.type === 'mermaid' && viewerTab === 'preview'" class="viewer-fit-button" type="text" size="small" title="适应窗口" @click="fitViewer"><AppIcon name="expand" :size="13" />适应</Button>
             <div v-if="viewerCanZoom" class="viewer-zoom-group">
               <IconButton icon="minus" size="sm" variant="surface" label="缩小" @click="setViewerZoom(viewerZoom - .1)" />
-              <Slider v-if="viewerTab === 'preview'" class="viewer-zoom-slider" :model-value="viewerZoom" :min=".1" :max="3" :step=".05" :format-tooltip="(value: number) => `${Math.round(value * 100)}%`" :aria-label="viewer.type === 'image' ? '图片缩放' : '图表缩放'" @update:model-value="setViewerZoom(Number($event))" />
+              <Slider v-if="viewerTab === 'preview'" class="viewer-zoom-slider" :value="viewerZoom" :min=".1" :max="3" :step=".05" :tip-formatter="(value = 1) => `${Math.round(value * 100)}%`" :aria-label="viewer.type === 'image' ? '图片缩放' : '图表缩放'" @update:value="setViewerZoom(Number($event))" />
               <Button class="viewer-zoom-value" type="text" size="small" title="还原到 100%" @click="resetViewerView">{{ Math.round(viewerZoom * 100) }}%</Button>
               <IconButton icon="plus" size="sm" variant="surface" label="放大" @click="setViewerZoom(viewerZoom + .1)" />
             </div>
@@ -6837,6 +6851,7 @@ async function requestFullscreen() {
     <div v-if="draggingFiles" class="drop-overlay" aria-live="polite"><span><AppIcon name="plus" :size="26" /></span><strong>释放以导入 Markdown</strong><small>支持 .md / .markdown 文件</small></div>
     <div v-if="toast" class="toast" role="status" aria-live="polite">{{ toast }}</div>
   </div>
+  </ConfigProvider>
 </template>
 
 <style scoped>

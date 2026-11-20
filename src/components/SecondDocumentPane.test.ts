@@ -12,12 +12,11 @@ let unmount = () => {}
 afterEach(() => { unmount(); document.body.innerHTML = '' })
 
 async function chooseDocument(host: HTMLElement, label: string) {
-  const trigger = host.querySelector<HTMLElement>('.second-document-doc-select.arco-select-view-single')
-  expect(trigger).not.toBeNull()
-  trigger!.click()
+  const trigger = host.querySelector<HTMLInputElement>('[role="combobox"]')!
+  expect(trigger.labels?.[0]?.textContent).toBe('选择第二篇 Markdown 文档')
+  trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', keyCode: 40, bubbles: true }))
   await nextTick()
-  await nextTick()
-  const option = [...document.querySelectorAll<HTMLElement>('.arco-select-option')].find(item => item.textContent?.trim() === label || item.textContent?.includes(label))
+  const option = [...document.querySelectorAll<HTMLElement>('.ant-select-dropdown [aria-selected]')].find(item => item.textContent?.includes(label))
   expect(option).not.toBeUndefined()
   option!.click()
   await nextTick()
@@ -70,14 +69,9 @@ describe('second document pane', () => {
 
     expect(host.textContent).toContain('Second content')
     await nextTick()
-    const select = host.querySelector<HTMLElement>('.second-document-doc-select.arco-select-view-single')!
-    expect(host.querySelector('.second-document-doc-select .arco-select-view-value')?.textContent?.trim()).toBe('Second')
+    expect(host.querySelector('.second-document-doc-select')?.textContent?.trim()).toBe('Second')
     expect(host.querySelector<HTMLElement>('.second-document-select')?.title).toBe(documents[1].path)
-    select.click()
-    await nextTick()
-    expect([...document.querySelectorAll('.arco-select-option')].map(option => option.textContent?.trim())).toEqual(['Second', 'Third'])
-    document.querySelector<HTMLElement>('.arco-select-option:last-child')!.click()
-    await nextTick()
+    await chooseDocument(host, 'Third')
     expect(host.textContent).toContain('Third content')
     expect(host.textContent).not.toContain('Second content')
 

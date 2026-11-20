@@ -106,7 +106,7 @@ a:active > .app-icon-vector { transform: scale(.92); }
   background: color-mix(in srgb, var(--accent) 24%, transparent);
   color: var(--ink);
 }
-.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)) :is(button, a, input:not(.arco-input, .arco-select-view-input), select, textarea:not(.arco-textarea)):focus-visible {
+.app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)) :is(button, a, input:not(.ant-input, .ant-select-selection-search-input), select, textarea:not(.moyue-textarea)):focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent) 66%, transparent);
   outline-offset: 3px;
 }
@@ -455,7 +455,7 @@ a:active > .app-icon-vector { transform: scale(.92); }
   }
 }
 
-/* Arco teleports this panel to body, so scope it to the popup class itself. */
+/* The dropdown is teleported to body, so scope it to the popup class itself. */
 .recent-folders-popover {
   box-sizing: border-box;
   width: min(374px, calc(100vw - 32px));
@@ -523,7 +523,7 @@ a:active > .app-icon-vector { transform: scale(.92); }
   background: color-mix(in srgb, var(--accent-soft) 34%, transparent);
 }
 
-.recent-folders-popover .recent-folder-open.arco-btn {
+.recent-folders-popover .recent-folder-open.ant-btn {
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -537,7 +537,7 @@ a:active > .app-icon-vector { transform: scale(.92); }
   text-align: left;
 }
 
-.recent-folders-popover .recent-folder-open.arco-btn > .arco-btn-icon {
+.recent-folders-popover .recent-folder-open.ant-btn > .moyue-btn-icon {
   display: grid;
   width: 18px;
   height: 18px;
@@ -546,7 +546,7 @@ a:active > .app-icon-vector { transform: scale(.92); }
   place-items: center;
 }
 
-.recent-folders-popover .recent-folder-open.arco-btn > .arco-btn-content {
+.recent-folders-popover .recent-folder-open.ant-btn > .moyue-btn-content {
   min-width: 0;
   flex: 1 1 0;
   overflow: hidden;
@@ -575,7 +575,7 @@ a:active > .app-icon-vector { transform: scale(.92); }
   font: 10px/1.2 var(--mono);
 }
 
-.recent-folders-popover .recent-folder-action.arco-btn {
+.recent-folders-popover .recent-folder-action.ant-btn {
   width: 100%;
   min-width: 0;
   padding: 0;
@@ -585,7 +585,7 @@ a:active > .app-icon-vector { transform: scale(.92); }
   white-space: nowrap;
 }
 
-.recent-folders-popover .recent-folder-action.arco-btn:hover {
+.recent-folders-popover .recent-folder-action.ant-btn:hover {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--accent);
 }
@@ -1451,7 +1451,7 @@ a:active > .app-icon-vector { transform: scale(.92); }
   font: 12px/1.35 var(--ui-font);
 }
 .app-shell .reader-meta-tools .font-select-label,
-.app-shell .reader-meta-tools .font-picker-compact .arco-select {
+.app-shell .reader-meta-tools .font-picker-compact .ant-select {
   font-size: 12px;
 }
 .app-shell .reader-edit-actions button,
@@ -1486,7 +1486,7 @@ a:active > .app-icon-vector { transform: scale(.92); }
 }
 .app-shell .reader-more-popover button,
 .app-shell .reader-more-popover .font-select-label,
-.app-shell .reader-more-popover .font-picker-compact .arco-select {
+.app-shell .reader-more-popover .font-picker-compact .ant-select {
   font-size: 13px;
   font-weight: 500;
 }
@@ -1495,7 +1495,7 @@ a:active > .app-icon-vector { transform: scale(.92); }
   color: var(--ink);
 }
 .app-shell .reader-more-popover .font-select-label,
-.app-shell .reader-more-popover .font-picker-compact .arco-select {
+.app-shell .reader-more-popover .font-picker-compact .ant-select {
   font-size: 12px;
 }
 .app-shell .tab-list-heading,
@@ -1530,54 +1530,54 @@ a:active > .app-icon-vector { transform: scale(.92); }
   min-height: 34px;
   font: 12px/1.45 var(--ui-font);
 }
-.app-shell :is(select, .arco-select, .arco-select-view-single) {
+.app-shell :is(select, .ant-select, .ant-select-single) {
   font-family: var(--ui-font);
   font-size: 12px;
 }
-.app-shell .arco-select-view-single .arco-select-view-value { font: inherit !important; }
-.app-shell :is(.settings-page, .editor-dialog, .note-dialog) .arco-input-wrapper .arco-input,
-.app-shell .note-dialog .arco-textarea {
+.app-shell .ant-select-single .ant-select-selection-item { font: inherit !important; }
+.app-shell :is(.settings-page, .editor-dialog, .note-dialog) .moyue-input-field .ant-input,
+.app-shell .note-dialog .moyue-textarea {
   padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
 }
-.app-shell .setting-row .arco-slider {
+.app-shell .setting-row .ant-slider {
   width: 100%;
 }
-.app-shell .setting-row .arco-slider span {
+.app-shell .setting-row .ant-slider span {
   display: inline-block;
   margin-bottom: 0;
 }
-.app-shell .editor-find-row > .arco-input-wrapper {
+.app-shell .editor-find-row > .moyue-input-field {
   flex: 1;
   min-width: 180px;
   text-align: left;
 }
-.app-shell :is(.knowledge-source-scope, .knowledge-citations, .knowledge-citation, .knowledge-source-overflow).arco-collapse {
+.app-shell :is(.knowledge-source-scope, .knowledge-citations, .knowledge-citation, .knowledge-source-overflow).ant-collapse {
   border-color: var(--border);
   background: var(--surface);
   color: var(--ink);
 }
-.app-shell .knowledge-page .arco-collapse-item-header {
+.app-shell .knowledge-page .ant-collapse-header {
   border-color: var(--border);
   background: var(--surface-raised);
   color: var(--ink);
   font: 12px/1.5 var(--ui-font);
 }
-.app-shell .knowledge-page .arco-collapse-item-content {
+.app-shell .knowledge-page .ant-collapse-content-box {
   background: var(--surface);
   color: var(--ink);
 }
-.app-shell .knowledge-page .arco-collapse-item-header-title {
+.app-shell .knowledge-page .ant-collapse-header-text {
   min-width: 0;
 }
-.app-shell .knowledge-page .arco-collapse-item-header-title > small {
+.app-shell .knowledge-page .ant-collapse-header-text > small {
   margin-left: 8px;
   color: var(--muted);
 }
-.app-shell :is(.arco-input-wrapper, .arco-textarea-wrapper, .arco-select-view-single) {
+.app-shell :is(.moyue-input-field, .moyue-textarea-field, .ant-select-single) {
   min-height: 34px;
   border: 1px solid var(--border);
   border-radius: 7px;
@@ -1587,41 +1587,47 @@ a:active > .app-icon-vector { transform: scale(.92); }
   font: 12px/1.4 var(--ui-font);
   transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
 }
-.app-shell :is(.arco-input-wrapper, .arco-textarea-wrapper, .arco-select-view-single):hover {
+.app-shell :is(.moyue-input-field, .moyue-textarea-field, .ant-select-single):hover {
   border-color: color-mix(in srgb, var(--accent) 52%, var(--border));
   background: color-mix(in srgb, var(--accent) 5%, var(--surface-raised));
 }
-.app-shell :is(.arco-input-wrapper, .arco-textarea-wrapper, .arco-select-view-single):focus-within,
-.app-shell .arco-select-view-single.arco-select-view-focus {
+.app-shell :is(.moyue-input-field, .moyue-textarea-field, .ant-select-single):focus-within,
+.app-shell .ant-select-single.ant-select-focused {
   z-index: 1;
   border-color: var(--accent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
 }
-.app-shell :is(.arco-input-wrapper, .arco-textarea-wrapper) :is(.arco-input, .arco-textarea) {
+.app-shell :is(.moyue-input-field, .moyue-textarea-field) :is(.ant-input, .moyue-textarea) {
   color: inherit;
   font: inherit;
 }
-.app-shell .arco-select-view-single .arco-select-view-suffix,
-.app-shell :is(.arco-input-wrapper, .arco-textarea-wrapper) :is(.arco-input-clear-btn, .arco-textarea-clear-btn) {
+.moyue-input-field {
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+}
+.moyue-input-field > :is(.ant-input, .ant-input-affix-wrapper),
+.moyue-textarea-field > .moyue-textarea,
+.app-shell .ant-select-single.ant-select:not(.ant-select-customize-input) > .ant-select-selector {
+  min-width: 0;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  box-shadow: none;
+}
+.moyue-input-field > :is(.ant-input, .ant-input-affix-wrapper) { flex: 1; }
+.moyue-textarea-field > .moyue-textarea { display: block; }
+.app-shell .ant-select-single .ant-select-arrow,
+.app-shell :is(.moyue-input-field, .moyue-textarea-field) .ant-input-clear-icon {
   color: var(--muted);
 }
-.app-shell :is(.arco-input-wrapper.arco-input-disabled, .arco-textarea-wrapper.arco-textarea-disabled, .arco-select-view-single.arco-select-view-disabled) {
+.app-shell :is(.moyue-input-field:has(.ant-input:disabled), .moyue-textarea-field:has(textarea:disabled), .ant-select-single.ant-select-disabled) {
   opacity: .58;
   cursor: not-allowed;
 }
 
-/* Some desktop WebViews do not forward label clicks to Arco's zero-size input. */
-.app-shell .arco-checkbox > input.arco-checkbox-target {
-  inset: 0;
-  z-index: 2;
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  cursor: inherit;
-}
-
-/* Select views keep the toolbars compact without inheriting Arco's roomy default. */
-.app-shell .theme-filter.arco-select-view-single {
+/* Select views keep the toolbars compact without inheriting the default spacing. */
+.app-shell .theme-filter.ant-select-single {
   box-sizing: border-box;
   min-height: 34px;
   height: 34px;
@@ -1634,27 +1640,27 @@ a:active > .app-icon-vector { transform: scale(.92); }
   font: 12px/1.4 var(--ui-font);
   box-shadow: none;
 }
-.app-shell .theme-filter.arco-select-view-single:hover {
+.app-shell .theme-filter.ant-select-single:hover {
   border-bottom-color: color-mix(in srgb, var(--accent) 52%, var(--border));
   background: color-mix(in srgb, var(--accent) 5%, transparent);
 }
-.app-shell .theme-filter.arco-select-view-single.arco-select-view-focus {
+.app-shell .theme-filter.ant-select-single.ant-select-focused {
   border-bottom-color: var(--accent);
   box-shadow: 0 2px 0 color-mix(in srgb, var(--accent) 28%, transparent);
 }
-.app-shell .theme-search .arco-input-wrapper {
+.app-shell .theme-search .moyue-input-field {
   min-height: 34px;
   padding-inline: 0;
   border: 0;
   background: transparent;
   box-shadow: none;
 }
-.app-shell .theme-search .arco-input.arco-input-size-medium {
+.app-shell .theme-search .ant-input {
   padding: 0;
   color: var(--ink);
   font: 12px/1.4 var(--ui-font);
 }
-.app-shell .theme-search .arco-input-clear-btn {
+.app-shell .theme-search .ant-input-clear-icon {
   color: var(--muted);
 }
 .app-shell .setting-input > input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]) {
@@ -1662,52 +1668,51 @@ a:active > .app-icon-vector { transform: scale(.92); }
   min-height: 34px;
   font: 12px/1.4 var(--ui-font);
 }
-.arco-select-dropdown,
-.arco-dropdown-list,
-.arco-trigger-popup .arco-dropdown-list-wrapper {
+.ant-select-dropdown,
+.ant-dropdown-menu {
   border: 1px solid var(--border) !important;
   border-radius: 8px !important;
   background: var(--surface-raised) !important;
   box-shadow: 0 12px 32px color-mix(in srgb, var(--app-bg) 28%, transparent) !important;
 }
-.arco-select-dropdown .arco-select-option,
-.arco-dropdown-list .arco-dropdown-option {
+.ant-select-dropdown .ant-select-item-option,
+.ant-dropdown-menu .ant-dropdown-menu-item {
   min-height: 34px !important;
   color: var(--ink) !important;
   font: 500 12px/1.45 var(--ui-font) !important;
 }
-.arco-select-dropdown .arco-select-option-active,
-.arco-select-dropdown .arco-select-option-selected,
-.arco-dropdown-list .arco-dropdown-option-active,
-.arco-dropdown-list .arco-dropdown-option:hover {
+.ant-select-dropdown .ant-select-item-option-active,
+.ant-select-dropdown .ant-select-item-option-selected,
+.ant-dropdown-menu .ant-dropdown-menu-item-active,
+.ant-dropdown-menu .ant-dropdown-menu-item:hover {
   background: var(--accent-soft) !important;
   color: var(--ink) !important;
 }
-.app-shell .arco-btn {
+.app-shell .ant-btn {
   min-height: 34px;
   border-radius: 6px;
   font: 12px/1.35 var(--ui-font);
 }
-.app-shell .arco-btn-primary {
+.app-shell .moyue-btn-primary {
   border-color: var(--accent);
   background: var(--accent);
   color: var(--app-bg);
 }
-.app-shell .arco-btn-secondary {
+.app-shell .moyue-btn-secondary {
   border-color: var(--border);
   background: transparent;
   color: var(--muted);
 }
-.app-shell .arco-btn-text {
+.app-shell .moyue-btn-text {
   color: var(--muted);
 }
-.app-shell .arco-btn-text:hover:not(:disabled) {
+.app-shell .moyue-btn-text:hover:not(:disabled) {
   background: var(--accent-soft);
   color: var(--ink);
 }
 
 /* Modal and dropdown portals render outside .app-shell; keep their controls on the same tokens. */
-.arco-modal :is(.arco-input-wrapper, .arco-textarea-wrapper) {
+.ant-modal :is(.moyue-input-field, .moyue-textarea-field) {
   min-height: 34px;
   border: 1px solid var(--border);
   border-radius: 7px;
@@ -1716,108 +1721,108 @@ a:active > .app-icon-vector { transform: scale(.92); }
   box-shadow: none;
   font: 12px/1.4 var(--ui-font);
 }
-.arco-modal :is(.arco-input-wrapper, .arco-textarea-wrapper):focus-within {
+.ant-modal :is(.moyue-input-field, .moyue-textarea-field):focus-within {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
 }
-.arco-modal :is(.arco-input, .arco-textarea) {
+.ant-modal :is(.ant-input, .moyue-textarea) {
   color: inherit;
   font: inherit;
 }
-.arco-modal .arco-btn {
+.ant-modal .ant-btn {
   min-height: 34px;
   border-radius: 6px;
   font: 12px/1.35 var(--ui-font);
 }
-.arco-modal .arco-btn-primary {
+.ant-modal .moyue-btn-primary {
   border-color: var(--accent);
   background: var(--accent);
   color: var(--app-bg);
 }
-.arco-modal .arco-btn-secondary {
+.ant-modal .moyue-btn-secondary {
   border-color: var(--border);
   background: transparent;
   color: var(--muted);
 }
-.file-properties-dialog .arco-btn {
+.file-properties-dialog .ant-btn {
   min-height: 34px;
   border-radius: 6px;
   font: 12px/1.35 var(--ui-font);
 }
-.file-properties-dialog .arco-btn-primary {
+.file-properties-dialog .moyue-btn-primary {
   border-color: var(--accent);
   background: var(--accent);
   color: var(--app-bg);
 }
-.file-properties-dialog .arco-btn-secondary {
+.file-properties-dialog .moyue-btn-secondary {
   border-color: var(--border);
   background: transparent;
   color: var(--muted);
 }
-.file-properties-dialog .arco-btn.icon-button {
+.file-properties-dialog .ant-btn.icon-button {
   border-color: transparent;
   background: transparent;
   color: var(--muted);
   box-shadow: none;
 }
-.file-properties-dialog .arco-btn.icon-button:hover {
+.file-properties-dialog .ant-btn.icon-button:hover {
   border-color: color-mix(in srgb, var(--accent) 35%, transparent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--accent);
 }
 
-/* Arco hover and active styles must follow the selected Moyue theme. */
-:is(.app-shell, .arco-modal, .arco-dropdown) .arco-btn.arco-btn-primary:not(.arco-btn-status-danger):not(.arco-btn-status-warning):not(.arco-btn-status-success) {
+/* Button hover and active styles follow the selected Moyue theme. */
+:is(.app-shell, .ant-modal, .ant-dropdown) .ant-btn.moyue-btn-primary:not(.moyue-btn-status-danger):not(.moyue-btn-status-warning):not(.moyue-btn-status-success) {
   border-color: var(--accent);
   background: var(--accent);
   color: var(--app-bg);
 }
-:is(.app-shell, .arco-modal, .arco-dropdown) .arco-btn.arco-btn-text:not(.arco-btn-status-danger):not(.arco-btn-status-warning):not(.arco-btn-status-success) {
+:is(.app-shell, .ant-modal, .ant-dropdown) .ant-btn.moyue-btn-text:not(.moyue-btn-status-danger):not(.moyue-btn-status-warning):not(.moyue-btn-status-success) {
   color: var(--muted);
 }
-:is(.app-shell, .arco-modal, .arco-dropdown) .arco-btn.icon-button.active {
+:is(.app-shell, .ant-modal, .ant-dropdown) .ant-btn.icon-button.active {
   color: var(--accent);
 }
-:is(.app-shell, .arco-modal, .arco-dropdown) .arco-btn-primary:not(.arco-btn-status-danger):not(.arco-btn-status-warning):not(.arco-btn-status-success):not(:disabled):hover {
+:is(.app-shell, .ant-modal, .ant-dropdown) .moyue-btn-primary:not(.moyue-btn-status-danger):not(.moyue-btn-status-warning):not(.moyue-btn-status-success):not(:disabled):hover {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 85%, var(--ink));
   color: var(--app-bg);
 }
-:is(.app-shell, .arco-modal, .arco-dropdown) .arco-btn-primary:not(.arco-btn-status-danger):not(.arco-btn-status-warning):not(.arco-btn-status-success):not(:disabled):active {
+:is(.app-shell, .ant-modal, .ant-dropdown) .moyue-btn-primary:not(.moyue-btn-status-danger):not(.moyue-btn-status-warning):not(.moyue-btn-status-success):not(:disabled):active {
   background: color-mix(in srgb, var(--accent) 72%, var(--ink));
 }
-:is(.file-properties-dialog) .arco-btn-primary:not(:disabled):hover {
+:is(.file-properties-dialog) .moyue-btn-primary:not(:disabled):hover {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 85%, var(--ink));
   color: var(--app-bg);
 }
-:is(.file-properties-dialog) .arco-btn-secondary:not(:disabled):hover {
+:is(.file-properties-dialog) .moyue-btn-secondary:not(:disabled):hover {
   border-color: var(--accent);
   background: var(--accent-soft);
   color: var(--accent);
 }
-:is(.app-shell, .arco-modal, .arco-dropdown) :is(.arco-btn-secondary, .arco-btn-outline, .arco-btn-dashed, .arco-btn-text):not(.arco-btn-status-danger):not(.arco-btn-status-warning):not(.arco-btn-status-success):not(:disabled):hover {
+:is(.app-shell, .ant-modal, .ant-dropdown) :is(.moyue-btn-secondary, .moyue-btn-outline, .moyue-btn-dashed, .moyue-btn-text):not(.moyue-btn-status-danger):not(.moyue-btn-status-warning):not(.moyue-btn-status-success):not(:disabled):hover {
   border-color: var(--accent);
   background: var(--accent-soft);
   color: var(--accent);
 }
-:is(.app-shell, .arco-modal, .arco-dropdown) :is(.arco-btn-outline, .arco-btn-dashed):not(.arco-btn-status-danger):not(.arco-btn-status-warning):not(.arco-btn-status-success) {
+:is(.app-shell, .ant-modal, .ant-dropdown) :is(.moyue-btn-outline, .moyue-btn-dashed):not(.moyue-btn-status-danger):not(.moyue-btn-status-warning):not(.moyue-btn-status-success) {
   border-color: var(--accent);
   color: var(--accent);
 }
-:is(.app-shell, .arco-modal, .arco-dropdown) .arco-btn-primary.arco-btn-status-danger {
+:is(.app-shell, .ant-modal, .ant-dropdown) .moyue-btn-primary.moyue-btn-status-danger {
   border-color: rgb(var(--danger-6));
   background: rgb(var(--danger-6));
   color: #fff;
 }
-:is(.app-shell, .arco-modal, .arco-dropdown) .arco-btn-primary.arco-btn-status-danger:not(:disabled):hover {
+:is(.app-shell, .ant-modal, .ant-dropdown) .moyue-btn-primary.moyue-btn-status-danger:not(:disabled):hover {
   border-color: rgb(var(--danger-5));
   background: rgb(var(--danger-5));
 }
-:is(.app-shell, .arco-modal, .arco-dropdown) .arco-btn-text.arco-btn-status-danger {
+:is(.app-shell, .ant-modal, .ant-dropdown) .moyue-btn-text.moyue-btn-status-danger {
   color: rgb(var(--danger-6));
 }
-:is(.app-shell, .arco-modal, .arco-dropdown) .arco-btn-text.arco-btn-status-danger:not(:disabled):hover {
+:is(.app-shell, .ant-modal, .ant-dropdown) .moyue-btn-text.moyue-btn-status-danger:not(:disabled):hover {
   background: rgba(var(--danger-6), .1);
   color: rgb(var(--danger-6));
 }
@@ -1930,20 +1935,20 @@ a:active > .app-icon-vector { transform: scale(.92); }
 .app-shell .library-search input {
   font-size: 12px;
 }
-.app-shell .library-search.arco-input-wrapper {
+.app-shell .library-search.moyue-input-field {
   height: 38px;
   padding: 0 11px;
   box-shadow: none;
 }
-.app-shell .library-search.arco-input-wrapper:hover,
-.app-shell .library-search.arco-input-wrapper.arco-input-focus {
+.app-shell .library-search.moyue-input-field:hover,
+.app-shell .library-search.moyue-input-field:focus-within {
   border-color: color-mix(in srgb, var(--accent) 65%, var(--border));
   background: var(--surface-raised);
 }
-.app-shell .library-search .arco-input-prefix {
+.app-shell .library-search .ant-input-prefix {
   margin-right: 8px;
 }
-.app-shell .library-search .arco-input-clear-btn {
+.app-shell .library-search .ant-input-clear-icon {
   color: var(--muted);
 }
 .library-more-popover .library-import-action {
@@ -2618,7 +2623,7 @@ a:active > .app-icon-vector { transform: scale(.92); }
   border-bottom: 1px solid var(--border);
   background: var(--surface);
 }
-.editor-document-actions .arco-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.editor-document-actions .ant-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .editor-save-state { display: inline-flex; align-items: center; gap: 5px; margin-inline-start: 4px; color: var(--muted); font: 12px var(--ui-font); white-space: nowrap; }
 .app-shell.is-editor-studio .markdown-editor.is-live .live-preview-widget img { max-height: 42vh; }
 .app-shell.is-editor-studio .editor-draft-layout > .editor-workspace { width: 100%; height: 100%; min-height: 0; margin: 0; }
@@ -3385,19 +3390,19 @@ body .app-shell.is-editor-studio .reader-layout {
   gap: 2px;
 }
 
-.arco-dropdown:has(.reader-more-popover, .library-more-popover) {
+.ant-dropdown:has(.reader-more-popover, .library-more-popover) {
   padding: 0;
   border: 0;
   background: transparent;
   box-shadow: none;
 }
 
-.arco-dropdown:has(.reader-more-popover, .library-more-popover) :is(.reader-more-popover, .library-more-popover) {
+.ant-dropdown:has(.reader-more-popover, .library-more-popover) :is(.reader-more-popover, .library-more-popover) {
   position: static;
   inset: auto;
 }
 
-.arco-dropdown:has(.reader-more-popover, .library-more-popover) :is(.reader-more-popover, .library-more-popover) button {
+.ant-dropdown:has(.reader-more-popover, .library-more-popover) :is(.reader-more-popover, .library-more-popover) button {
   width: 100%;
   padding: 8px 9px;
   border: 0;
@@ -3406,19 +3411,19 @@ body .app-shell.is-editor-studio .reader-layout {
   text-align: left;
 }
 
-.arco-dropdown:has(.reader-more-popover, .library-more-popover) :is(.reader-more-popover, .library-more-popover) button:hover {
+.ant-dropdown:has(.reader-more-popover, .library-more-popover) :is(.reader-more-popover, .library-more-popover) button:hover {
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   color: var(--ink);
 }
 
-.arco-dropdown:has(.editor-menu-popover) {
+.ant-dropdown:has(.editor-menu-popover) {
   padding: 0;
   border: 0;
   background: transparent;
   box-shadow: none;
 }
 
-.arco-dropdown:has(.editor-menu-popover) .editor-menu-popover {
+.ant-dropdown:has(.editor-menu-popover) .editor-menu-popover {
   position: static;
   inset: auto;
 }
@@ -3489,7 +3494,7 @@ body .app-shell.is-editor-studio .reader-layout {
   white-space: nowrap;
 }
 
-.app-shell:not(.is-editor-studio) .reader-edit-actions .reader-toolbar-font-picker .arco-select {
+.app-shell:not(.is-editor-studio) .reader-edit-actions .reader-toolbar-font-picker .ant-select {
   width: 122px;
   min-width: 122px;
 }
@@ -3809,7 +3814,7 @@ body .app-shell.is-editor-studio .reader-layout {
   background: transparent;
 }
 
-.app-shell :is(.tab-list-search, .outline-search).arco-input-wrapper {
+.app-shell :is(.tab-list-search, .outline-search).moyue-input-field {
   width: 100%;
   box-sizing: border-box;
   padding: 0 8px;
@@ -3820,7 +3825,7 @@ body .app-shell.is-editor-studio .reader-layout {
   min-width: 0;
 }
 
-.app-shell .file-filter-toolbar .arco-select-view-single {
+.app-shell .file-filter-toolbar .ant-select-single {
   height: 32px;
   min-height: 32px;
   padding: 0 10px;
@@ -3828,7 +3833,7 @@ body .app-shell.is-editor-studio .reader-layout {
   font-size: 12px;
 }
 
-.app-shell .file-filter-toolbar .arco-input {
+.app-shell .file-filter-toolbar .ant-input {
   min-width: 0;
   padding: 0;
   border: 0;
@@ -3836,7 +3841,7 @@ body .app-shell.is-editor-studio .reader-layout {
   background: transparent;
 }
 
-.app-shell .file-select-arco {
+.app-shell .file-select {
   flex: 0 0 22px;
   justify-content: center;
   width: 22px;
@@ -3844,13 +3849,13 @@ body .app-shell.is-editor-studio .reader-layout {
   padding: 0;
 }
 
-.app-shell .viewer-shell .arco-btn-content {
+.app-shell .viewer-shell .moyue-btn-content {
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
 
-.app-shell .viewer-footer-actions .arco-btn-status-danger {
+.app-shell .viewer-footer-actions .moyue-btn-status-danger {
   color: rgb(var(--danger-6));
 }
 
@@ -3859,7 +3864,7 @@ body .app-shell.is-editor-studio .reader-layout {
   flex: 1;
 }
 
-.app-shell .global-search-dialog .replace-row .arco-input {
+.app-shell .global-search-dialog .replace-row .ant-input {
   min-height: 0;
   padding: 0;
   border: 0;
@@ -3965,7 +3970,7 @@ body .app-shell.is-editor-studio .reader-layout {
   font-size: 11px;
 }
 
-.app-shell .replace-row label:not(.arco-checkbox) input {
+.app-shell .replace-row label:not(.ant-checkbox-wrapper) input {
   width: 14px;
   height: 14px;
   margin: 0;

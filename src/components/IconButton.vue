@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import Button from '@arco-design/web-vue/es/button'
-import '@arco-design/web-vue/es/button/style/css.js'
+import Button from './AppButton.vue'
 import AppIcon, { type AppIconName } from './AppIcon.vue'
 
 withDefaults(defineProps<{

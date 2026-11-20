@@ -26,12 +26,10 @@ describe('theme assets', () => {
     expect(theme?.tokens.color).toMatchObject({ appBackground: '#fafafa', surfaceRaised: '#ffffff', text: '#333333', border: '#e8e8e8' })
   })
 
-  it('maps Arco primary states to the active theme accent', () => {
+  it('maps the active theme colors to app variables', () => {
     expect(cssVariables(builtInThemes.find(({ manifest }) => manifest.id === 'paper-white')!)).toMatchObject({
-      '--primary-3': '47, 113, 107',
-      '--primary-5': '47, 113, 107',
-      '--primary-6': '47, 113, 107',
-      '--primary-7': '47, 113, 107',
+      '--accent': '#2f716b',
+      '--surface-raised': '#ffffff',
     })
   })
 

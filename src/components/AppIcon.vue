@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { IconDelete } from '@arco-design/web-vue/es/icon'
 import logoAsset from '../assets/moyue-logo-256.png'
 
 export type AppIconName =
@@ -56,7 +55,6 @@ withDefaults(defineProps<{ name: AppIconName; size?: number; strokeWidth?: numbe
 
 <template>
   <img v-if="name === 'logo'" class="app-icon app-icon-logo" :src="logoAsset" :width="size" :height="size" alt="" aria-hidden="true" />
-  <IconDelete v-else-if="name === 'trash'" class="app-icon app-icon-arco" :size="size" :stroke-width="4" aria-hidden="true" focusable="false" />
   <svg
     v-else
     class="app-icon app-icon-vector"
@@ -73,7 +71,10 @@ withDefaults(defineProps<{ name: AppIconName; size?: number; strokeWidth?: numbe
     focusable="false"
     vector-effect="non-scaling-stroke"
   >
-    <template v-if="name === 'home'">
+    <template v-if="name === 'trash'">
+      <path d="M4 6h16M9 6V3h6v3m3 0-1 14H7L6 6m4 4v6m4-6v6" />
+    </template>
+    <template v-else-if="name === 'home'">
       <path d="m3.5 10.7 8.5-7 8.5 7" />
       <path d="M5.5 9.8v9.7h13V9.8M9.5 19.5v-5h5v5" />
     </template>

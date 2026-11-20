@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import Input from '@arco-design/web-vue/es/input'
-import Textarea from '@arco-design/web-vue/es/textarea'
-import '@arco-design/web-vue/es/input/style/css.js'
-import '@arco-design/web-vue/es/textarea/style/css.js'
+import Input from './AppInput.vue'
+import Textarea from './AppTextarea.vue'
 import type { MoyueTheme } from '../types'
 import AppIcon from './AppIcon.vue'
 
