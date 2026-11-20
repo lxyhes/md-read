@@ -5,9 +5,25 @@ import type { MarkdownUrlResolver } from '../markdown/shared'
 import AppIcon from './AppIcon.vue'
 import MarkdownContent from './MarkdownContent.vue'
 
-const props = defineProps<{ node: AsciiTreeNode; root?: boolean; depth?: number; compact?: boolean; directory?: boolean; horizontal?: boolean; resolveUrl?: MarkdownUrlResolver }>()
-const emit = defineEmits<{ 'open-link': [url: string] }>()
-const expanded = ref(props.root || !props.horizontal)
+type BranchExpansion = { open: boolean }
+const props = defineProps<{ node: AsciiTreeNode; root?: boolean; depth?: number; compact?: boolean; directory?: boolean; horizontal?: boolean; resolveUrl?: MarkdownUrlResolver; expandRequest?: BranchExpansion }>()
+const emit = defineEmits<{ 'open-link': [url: string]; 'open-image': [image: HTMLImageElement] }>()
+const branchDepth = props.depth ?? 0
+const expanded = ref(props.expandRequest?.open ?? Boolean(props.root || (!props.horizontal && !props.compact && branchDepth <= 1)))
+const expandRequest = ref(props.expandRequest)
+const branchDetails = ref<HTMLDetailsElement | null>(null)
+const canExpandAll = computed(() => !props.directory && (props.horizontal || props.compact)
+  && props.node.children.some(child => child.children.length > 0))
+const bulkOpen = computed(() => expandRequest.value?.open === true)
+const bulkAction = computed(() => bulkOpen.value ? '收起全部子节点' : '展开全部子节点')
+function applyExpandRequest(request: BranchExpansion) {
+  expanded.value = request.open
+  expandRequest.value = request
+  if (branchDetails.value) branchDetails.value.open = request.open
+}
+watch(() => props.expandRequest, request => {
+  if (request) applyExpandRequest(request)
+})
 const horizontalChildren = ref<HTMLElement | null>(null)
 const summaryOpen = ref(false)
 const summaryHover = ref(false)
@@ -15,7 +31,6 @@ const summaryTarget = ref<HTMLElement | null>(null)
 const summaryPopover = ref<HTMLElement | null>(null)
 const summaryPopoverStyle = ref<Record<string, string>>({})
 let hideTimer: number | undefined
-const branchDepth = props.depth ?? 0
 const isSummaryLeaf = (label: string) => !props.directory && (label.startsWith('内容：') || label.startsWith('导读：'))
 const summaryKind = (label: string) => label.startsWith('导读：') ? '导读' : '摘要'
 const summaryText = (label: string) => label.replace(/^(?:内容|导读)：/, '')
@@ -31,10 +46,20 @@ const rootLabel = computed(() => {
   const name = props.node.label.replace(/\.(?:md|markdown)$/i, '').trim()
   return name || props.node.label
 })
-const toggleHorizontalBranch = async () => {
+const toggleBranch = () => {
   expanded.value = !expanded.value
-  if (!expanded.value) return
-
+  if (!expanded.value) expandRequest.value = undefined
+  else if (props.horizontal && !props.root) void revealHorizontalChildren()
+}
+const toggleAll = () => {
+  const open = !bulkOpen.value
+  applyExpandRequest({ open })
+  if (open && props.horizontal && !props.root) void revealHorizontalChildren()
+}
+const resetBulkOnNativeClose = () => {
+  if (branchDetails.value && !branchDetails.value.open && bulkOpen.value) expandRequest.value = undefined
+}
+const revealHorizontalChildren = async () => {
   await nextTick()
   const children = horizontalChildren.value
   const canvas = children?.closest<HTMLElement>('.reader-mindmap-scroll')
@@ -124,6 +149,10 @@ const closeSummary = () => {
   summaryHover.value = false
   hideSummary()
 }
+const openSummaryImage = (image: HTMLImageElement) => {
+  closeSummary()
+  emit('open-image', image)
+}
 const onOutsidePointerDown = (event: PointerEvent) => {
   const target = event.target
   if (!(target instanceof Node) || summaryTarget.value?.contains(target) || summaryPopover.value?.contains(target)) return
@@ -155,31 +184,35 @@ onBeforeUnmount(() => {
 
 <template>
   <div v-if="root" class="tree-diagram" :class="{ 'is-compact': compact, 'is-directory': directory, 'is-horizontal': horizontal }">
-    <button class="tree-root" :class="{ collapsed: !expanded }" type="button" :title="node.label" :aria-label="node.label" :aria-expanded="expanded" @click="expanded = !expanded">
-      <AppIcon v-if="directory" name="chevron-right" :size="14" />
-      <AppIcon v-if="directory" name="folder" :size="16" />
-      <span class="tree-node-label">{{ rootLabel }}</span>
-    </button>
+    <div class="tree-root-row" :class="{ 'has-expand-all': canExpandAll }">
+      <button class="tree-root" :class="{ collapsed: !expanded }" type="button" :title="node.label" :aria-label="node.label" :aria-expanded="expanded" @click="toggleBranch">
+        <AppIcon v-if="directory" name="chevron-right" :size="14" />
+        <AppIcon v-if="directory" name="folder" :size="16" />
+        <span class="tree-node-label">{{ rootLabel }}</span>
+      </button>
+      <button v-if="canExpandAll" class="tree-expand-all" :class="{ 'is-expanded': bulkOpen }" type="button" :title="bulkAction" :aria-label="`${bulkAction}：${rootLabel}`" @click="toggleAll"><AppIcon name="chevrons-right" :size="16" /></button>
+    </div>
     <ul v-if="node.children.length && (directory || expanded)" v-show="expanded" class="tree-children tree-root-children" role="list">
-      <TreeDiagram v-for="(child, index) in node.children" :key="`${child.label}-${index}`" :node="child" :depth="branchDepth + 1" :compact="compact" :directory="directory" :horizontal="horizontal" :resolve-url="resolveUrl" @open-link="emit('open-link', $event)" />
+      <TreeDiagram v-for="(child, index) in node.children" :key="`${child.label}-${index}`" :node="child" :depth="branchDepth + 1" :compact="compact" :directory="directory" :horizontal="horizontal" :resolve-url="resolveUrl" :expand-request="expandRequest" @open-link="emit('open-link', $event)" @open-image="emit('open-image', $event)" />
     </ul>
   </div>
   <li v-else class="tree-item">
     <div v-if="node.children.length" class="tree-node-row">
-      <button v-if="horizontal" class="tree-branch-toggle" type="button" :aria-expanded="expanded" @click="toggleHorizontalBranch">
+      <button v-if="horizontal" class="tree-branch-toggle" type="button" :aria-expanded="expanded" @click="toggleBranch">
         <span class="tree-node-label">{{ nodeLabel }}</span>
         <span class="tree-branch-indicator" aria-hidden="true">{{ expanded ? '−' : '+' }}</span>
       </button>
-      <details v-else :open="!compact && branchDepth <= 1">
+      <details v-else ref="branchDetails" :open="expanded" @toggle="resetBulkOnNativeClose">
         <summary>
           <AppIcon v-if="directory" name="chevron-right" :size="14" />
           <AppIcon v-if="directory" name="folder" :size="16" />
           <span class="tree-node-label">{{ nodeLabel }}</span>
         </summary>
         <ul class="tree-children" role="list">
-          <TreeDiagram v-for="(child, index) in node.children" :key="`${child.label}-${index}`" :node="child" :depth="branchDepth + 1" :compact="compact" :directory="directory" :resolve-url="resolveUrl" @open-link="emit('open-link', $event)" />
+          <TreeDiagram v-for="(child, index) in node.children" :key="`${child.label}-${index}`" :node="child" :depth="branchDepth + 1" :compact="compact" :directory="directory" :resolve-url="resolveUrl" :expand-request="expandRequest" @open-link="emit('open-link', $event)" @open-image="emit('open-image', $event)" />
         </ul>
       </details>
+      <button v-if="canExpandAll" class="tree-expand-all" :class="{ 'is-expanded': bulkOpen }" type="button" :title="bulkAction" :aria-label="`${bulkAction}：${nodeLabel}`" @click="toggleAll"><AppIcon name="chevrons-right" :size="16" /></button>
       <a v-if="node.href" class="tree-timestamp-link" :href="node.href" target="_blank" rel="noreferrer" :aria-label="nodeLinkLabel(node.label)" :title="node.href" @click="openNodeLink">{{ linkText }}</a>
     </div>
     <div v-else class="tree-leaf-row">
@@ -197,12 +230,12 @@ onBeforeUnmount(() => {
       <a v-if="node.href" class="tree-timestamp-link" :href="node.href" target="_blank" rel="noreferrer" :aria-label="nodeLinkLabel(node.label)" :title="node.href" @click="openNodeLink">{{ linkText }}</a>
     </div>
     <ul v-if="horizontal && expanded && node.children.length" ref="horizontalChildren" class="tree-children tree-horizontal-children" role="list">
-      <TreeDiagram v-for="(child, index) in node.children" :key="`${child.label}-${index}`" :node="child" horizontal :resolve-url="resolveUrl" @open-link="emit('open-link', $event)" />
+      <TreeDiagram v-for="(child, index) in node.children" :key="`${child.label}-${index}`" :node="child" horizontal :resolve-url="resolveUrl" :expand-request="expandRequest" @open-link="emit('open-link', $event)" @open-image="emit('open-image', $event)" />
     </ul>
     <Teleport to="body">
-      <div v-if="isSummaryLeaf(node.label) && summaryVisible" ref="summaryPopover" class="tree-summary-popover" role="tooltip" :style="summaryPopoverStyle" @mouseenter="cancelHideSummary" @mouseleave="scheduleHideSummary">
+      <div v-if="isSummaryLeaf(node.label) && summaryVisible" ref="summaryPopover" class="tree-summary-popover" role="group" aria-label="完整内容" :style="summaryPopoverStyle" @mouseenter="cancelHideSummary" @mouseleave="scheduleHideSummary" @focusin="cancelHideSummary">
         <div class="tree-summary-popover-heading">完整内容</div>
-        <MarkdownContent class="tree-summary-markdown" :source="node.detail || summaryText(node.label)" :resolve-url="resolveUrl" @load.capture="positionSummary" />
+        <MarkdownContent class="tree-summary-markdown" :source="node.detail || summaryText(node.label)" :resolve-url="resolveUrl" preview-images @open-image="openSummaryImage" @load.capture="positionSummary" />
       </div>
     </Teleport>
   </li>

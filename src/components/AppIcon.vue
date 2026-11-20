@@ -38,6 +38,7 @@ export type AppIconName =
   | 'chevron-down'
   | 'chevron-left'
   | 'chevron-right'
+  | 'chevrons-right'
   | 'arrow-up'
   | 'arrow-down'
   | 'code'
@@ -195,6 +196,9 @@ withDefaults(defineProps<{ name: AppIconName; size?: number; strokeWidth?: numbe
     </template>
     <template v-else-if="name === 'chevron-right'">
       <path d="m9 6 6 6-6 6" />
+    </template>
+    <template v-else-if="name === 'chevrons-right'">
+      <path d="m5 6 6 6-6 6m8-12 6 6-6 6" />
     </template>
     <template v-else-if="name === 'arrow-up'">
       <path d="M12 19V5M7 10l5-5 5 5" />

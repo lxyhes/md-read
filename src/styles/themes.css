@@ -2816,7 +2816,19 @@ body.is-resizing-outline * {
 .tree-summary-markdown th,
 .tree-summary-markdown td { padding: 4px 7px; border-bottom: 1px solid var(--border); text-align: left; }
 .tree-summary-markdown th { color: var(--accent); font: 600 11px var(--ui-font); }
-.tree-summary-markdown img { max-width: 100%; height: auto; border-radius: 5px; }
+.tree-summary-markdown img { max-width: 100%; height: auto; border-radius: 5px; cursor: zoom-in; }
+.tree-summary-markdown .markdown-image-preview {
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  cursor: zoom-in;
+}
+.tree-summary-markdown .markdown-image-preview:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 .tree-item details .tree-children {
   margin-left: 6px;
   padding-left: 14px;
@@ -2956,6 +2968,46 @@ body.is-resizing-outline * {
   width: var(--node-width);
   border-color: color-mix(in srgb, var(--accent) 54%, var(--border));
 }
+.tree-root-row {
+  display: contents;
+}
+.tree-root-row.has-expand-all {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.is-horizontal .tree-root-row.has-expand-all {
+  flex: 0 0 var(--node-width);
+}
+.tree-root-row.has-expand-all > .tree-root {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+}
+.tree-expand-all {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+}
+.tree-expand-all:hover {
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+}
+.tree-expand-all.is-expanded > .app-icon {
+  transform: rotate(180deg);
+}
+.is-compact .tree-node-row > .tree-expand-all {
+  margin-top: 4px;
+}
+.tree-diagram:is(.is-horizontal, .is-compact) .tree-node-row:has(> .tree-expand-all):has(> .tree-timestamp-link) {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
 .reader-mindmap .is-horizontal .tree-children {
   position: relative;
   display: block;
@@ -3044,7 +3096,7 @@ body.is-resizing-outline * {
 .is-horizontal .tree-timestamp-link {
   margin: 0 6px 0 0;
 }
-.reader-mindmap :is(.reader-mindmap-scroll, .tree-branch-toggle):focus-visible {
+.reader-mindmap :is(.reader-mindmap-scroll, .tree-branch-toggle, .tree-expand-all):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }

@@ -8,6 +8,60 @@ import TreeDiagram from '../components/TreeDiagram.vue'
 import { markdownToTree } from '../asciiDiagram'
 import { resolveMarkdownAssetUrl } from '../fileService'
 
+it.each(['horizontal', 'compact'] as const)('toggles all descendants of only the selected %s branch', async (mode) => {
+  const node = markdownToTree('# Root\n\n## A\n\n### Child\n\n#### Deep\n\nDetails\n\n## B\n\n### Other\n\nOther details', 'Root')!
+  const host = document.createElement('div')
+  const app = createApp({ render: () => h(TreeDiagram, { node, root: true, [mode]: true }) })
+  app.mount(host)
+  try {
+    const branch = (text: string) => [...host.querySelectorAll<HTMLElement>(mode === 'horizontal' ? '.tree-branch-toggle' : 'summary')]
+      .find(button => button.querySelector('.tree-node-label')?.textContent === text)
+    const isExpanded = (text: string) => {
+      const button = branch(text)
+      return mode === 'horizontal'
+        ? button?.getAttribute('aria-expanded') === 'true'
+        : (button?.parentElement as HTMLDetailsElement | undefined)?.open === true
+    }
+    const toggleAll = async (text: string, action = '展开') => {
+      host.querySelector<HTMLButtonElement>(`button[aria-label="${action}全部子节点：${text}"]`)!.click()
+      await nextTick()
+    }
+
+    branch('A')!.click()
+    await nextTick()
+    expect(isExpanded('A')).toBe(true)
+    expect(isExpanded('Child')).toBe(false)
+    await toggleAll('A')
+    expect(isExpanded('Child')).toBe(true)
+    expect(isExpanded('Deep')).toBe(true)
+    expect(isExpanded('B')).toBe(false)
+
+    branch('B')!.click()
+    await nextTick()
+    await toggleAll('A', '收起')
+    expect(isExpanded('A')).toBe(false)
+    expect(isExpanded('Child')).toBe(false)
+    expect(isExpanded('Deep')).toBe(false)
+    expect(isExpanded('B')).toBe(true)
+
+    branch('A')!.click()
+    await nextTick()
+    expect(isExpanded('A')).toBe(true)
+    expect(isExpanded('Child')).toBe(false)
+    await toggleAll('A')
+    expect(isExpanded('Child')).toBe(true)
+    expect(isExpanded('Deep')).toBe(true)
+    await toggleAll('Root')
+    expect(isExpanded('Other')).toBe(true)
+    await toggleAll('Root', '收起')
+    expect(host.querySelector('.tree-root')?.getAttribute('aria-expanded')).toBe('false')
+    await toggleAll('Root')
+    expect(isExpanded('Other')).toBe(true)
+  } finally {
+    app.unmount()
+  }
+})
+
 it.each(['horizontal', 'compact'] as const)('renders a relative image in the %s mindmap using the same asset as the reader', async (mode) => {
   const path = 'notes/design.md'
   const source = '# Design\n\n## Reference\n\n![Preview](./images/example.png)'

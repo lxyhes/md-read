@@ -1428,6 +1428,22 @@ function openEditorPreviewImage(event: MouseEvent) {
   openViewer({ ...region, metadata: { ...(region.metadata ?? {}), url: source } })
 }
 
+function openMindmapImage(image: HTMLImageElement) {
+  const url = image.currentSrc || image.getAttribute('src')
+  if (!url || !store.currentDocument) return
+  openViewer({
+    id: 'mindmap-image',
+    documentId: store.currentDocument.id,
+    type: 'image',
+    index: 0,
+    textContent: image.alt,
+    sourceStart: 0,
+    sourceEnd: 0,
+    html: '',
+    metadata: { url },
+  })
+}
+
 function jumpToEditorHeading(item: HeadingItem) {
   const region = editorPreviewDocument.value?.regions.find(region => region.id === item.regionId)
   const source = editorSource.value
@@ -6507,12 +6523,12 @@ async function requestFullscreen() {
                 <div v-if="readerDisplayMode === 'mindmap' || readerDisplayMode === 'split'" class="reader-mindmap">
                   <div class="reader-mindmap-heading">
                     <h2>章节脉络</h2>
-                    <small v-if="currentMindmap">{{ readerDisplayMode === 'mindmap' ? '点击节点向右展开，滚动查看分支' : '点击章节展开或收起，点击摘要固定全文' }}</small>
+                    <small v-if="currentMindmap">点击节点展开一层，点击双箭头展开或收起整个分支</small>
                   </div>
                   <div v-if="currentMindmap && readerDisplayMode === 'mindmap'" class="reader-mindmap-scroll" role="region" aria-label="思维导图画布" tabindex="0">
-                    <TreeDiagram :node="currentMindmap" root horizontal :resolve-url="resolveMindmapUrl" @open-link="openExternalLink" />
+                    <TreeDiagram :node="currentMindmap" root horizontal :resolve-url="resolveMindmapUrl" @open-link="openExternalLink" @open-image="openMindmapImage" />
                   </div>
-                  <TreeDiagram v-else-if="currentMindmap" :node="currentMindmap" root compact :resolve-url="resolveMindmapUrl" @open-link="openExternalLink" />
+                  <TreeDiagram v-else-if="currentMindmap" :node="currentMindmap" root compact :resolve-url="resolveMindmapUrl" @open-link="openExternalLink" @open-image="openMindmapImage" />
                   <p v-else class="reader-mindmap-empty">请使用 Markdown 标题或独立加粗小标题来生成思维导图。</p>
                 </div>
               </div>
