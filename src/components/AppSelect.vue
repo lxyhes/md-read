@@ -9,7 +9,7 @@ const id = useId()
 
 <template>
   <label class="control-label" :for="id">{{ label }}</label>
-  <Select v-bind="$attrs" :id="id"><slot /></Select>
+  <Select v-bind="$attrs" :id="id" class="moyue-select" :bordered="false"><slot /></Select>
 </template>
 
 <style scoped>

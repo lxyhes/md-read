@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, getCurrentInstance, h, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { ConfigProvider, theme as antTheme, SelectOption as Option } from 'ant-design-vue'
+import { Bubble } from 'ant-design-x-vue'
 import zhCN from 'ant-design-vue/es/locale/zh_CN'
 import Select from './components/AppSelect.vue'
 import Button from './components/AppButton.vue'
@@ -6125,8 +6126,17 @@ async function requestFullscreen() {
               <div v-else-if="!activeKnowledgeConversation" class="knowledge-transcript-empty"><AppIcon name="sparkle" :size="20" /><strong>{{ activeKnowledgeSources.length ? '资料已经准备好' : '从一段新对话开始' }}</strong><span>{{ activeKnowledgeSources.length ? `本次可检索 ${activeKnowledgeSources.length} 篇资料。点一个建议，或直接输入问题。` : '选择资料后提问，答案会保留引用，之后可以继续聊。' }}</span><div v-if="knowledgePromptSuggestions.length" class="knowledge-prompts knowledge-empty-prompts"><span>可以这样问</span><button v-for="prompt in knowledgePromptSuggestions" :key="prompt" type="button" :disabled="aiBusy" @click="useKnowledgePrompt(prompt)">{{ prompt }}</button></div><button v-if="store.documents.length && !knowledgeDocuments.length" class="primary-button" type="button" :disabled="!knowledgeLoaded" @click="addAllKnowledgeSources">一键收录 {{ store.documents.length }} 篇现有文档</button><button v-else-if="!store.documents.length" class="primary-button" type="button" @click="openLibrary('all')">导入 Markdown 文档</button></div>
               <div v-else-if="!activeKnowledgeMessages.length" class="knowledge-transcript-empty"><AppIcon name="sparkle" :size="20" /><strong>{{ activeKnowledgeSources.length ? '资料已经准备好' : '还缺少本次资料' }}</strong><span>{{ activeKnowledgeSources.length ? `本次可检索 ${activeKnowledgeSources.length} 篇资料。点一个建议，或直接输入问题。` : '展开上方“本次资料”，选择文档后就可以开始问。' }}</span><div v-if="knowledgePromptSuggestions.length" class="knowledge-prompts knowledge-empty-prompts"><span>可以这样问</span><button v-for="prompt in knowledgePromptSuggestions" :key="prompt" type="button" :disabled="aiBusy" @click="useKnowledgePrompt(prompt)">{{ prompt }}</button></div></div>
               <article v-for="message in activeKnowledgeMessages" :key="message.id" class="knowledge-message" :class="`is-${message.role}`">
-                <div class="knowledge-message-label">{{ message.role === 'user' ? '你' : '墨阅' }}<time>{{ new Date(message.createdAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) }}</time></div>
-                <div class="knowledge-message-body" v-text="message.content" />
+                <Bubble
+                  :content="message.content"
+                  :placement="message.role === 'user' ? 'end' : 'start'"
+                  :class-names="{ content: 'knowledge-message-body' }"
+                  variant="outlined"
+                  shape="corner"
+                >
+                  <template #header>
+                    <div class="knowledge-message-label">{{ message.role === 'user' ? '你' : '墨阅' }}<time>{{ new Date(message.createdAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) }}</time></div>
+                  </template>
+                </Bubble>
                 <small v-if="message.keywordFallback" class="knowledge-ask-hint">本轮使用关键词检索</small>
                 <button v-if="message.role === 'assistant'" class="text-button knowledge-copy-answer" type="button" @click="copyKnowledgeAnswer(message)"><AppIcon name="copy" :size="12" />复制回答与引用</button>
                 <Collapse v-if="message.citations.length" class="knowledge-citations"><CollapseItem key="content">
@@ -6301,9 +6311,9 @@ async function requestFullscreen() {
             <div v-if="leftPanelTab === 'files'" class="file-browser-panel">
               <div class="file-location" :title="fileBrowserMode === 'tree' ? filesystemTree?.path : currentDirectory"><AppIcon name="folder" :size="15" :stroke-width="2" /><span>{{ fileBrowserMode === 'tree' ? '目录树' : currentDirectoryLabel }}</span><button class="file-tree-back" type="button" :aria-label="fileBrowserMode === 'tree' ? '切换到文档列表' : '切换到目录树'" @click="fileBrowserMode === 'tree' ? showDocumentList() : showDocumentTree()">{{ fileBrowserMode === 'tree' ? '列表' : '目录树' }}</button></div>
               <div class="file-filter-toolbar" aria-label="文件侧栏筛选">
-                <Select v-model:value="sidebarFilter" size="small" label="文件筛选方式" class="file-filter-select"><Option value="markdown">Markdown 文件</Option><Option value="hidden">包含隐藏文件</Option><Option value="all">全部文件</Option><Option value="glob">自定义 glob</Option></Select>
+                <Select v-model:value="sidebarFilter" size="small" label="文件筛选方式" class="file-filter-select" popup-class-name="file-control-dropdown"><Option value="markdown">Markdown 文件</Option><Option value="hidden">包含隐藏文件</Option><Option value="all">全部文件</Option><Option value="glob">自定义 glob</Option></Select>
+                <Select v-model:value="fileSort" size="small" label="文件排序方式" class="file-sort-select" popup-class-name="file-control-dropdown"><Option value="name">名称</Option><Option value="natural">自然顺序</Option><Option value="created">创建时间</Option><Option value="modified">修改时间</Option><Option value="size">文件大小</Option></Select>
                 <Input v-if="sidebarFilter === 'glob'" v-model="sidebarGlob" class="file-glob-input" allow-clear :input-attrs="{ 'aria-label': '自定义 glob' }" placeholder="例如 *.md" />
-                <Select v-model:value="fileSort" size="small" label="文件排序方式" class="file-sort-select"><Option value="name">名称</Option><Option value="natural">自然顺序</Option><Option value="created">创建时间</Option><Option value="modified">修改时间</Option><Option value="size">文件大小</Option></Select>
                 <div v-if="fileBrowserMode === 'tree'" class="file-tree-mix"><span>文件夹与文件混排</span><Switch v-model:checked="fileTreeMixFolders" size="small" aria-label="文件夹与文件混排" /></div>
               </div>
               <div v-if="fileBrowserMode === 'tree'" class="filesystem-tree-panel">

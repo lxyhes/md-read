@@ -2465,7 +2465,6 @@ body.is-resizing-outline * {
 .reader-meta-tools .font-picker-compact .ant-select {
   min-width: 112px;
   height: 30px;
-  padding: 4px 25px 4px 8px;
   border-color: color-mix(in srgb, var(--border) 88%, transparent);
   border-radius: 7px;
   background: color-mix(in srgb, var(--surface) 72%, transparent);
@@ -3131,12 +3130,12 @@ body.is-resizing-outline * {
   }
 }
 .reader-edit-actions { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
-.file-filter-toolbar { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 10px 8px; padding: 12px 0 10px; border-bottom: 1px solid var(--border); }
-.file-filter-toolbar .ant-select { width: 100%; min-width: 0; }
-.file-filter-toolbar .file-filter-select { grid-column: 1; grid-row: 1; }
-.file-filter-toolbar .file-sort-select { grid-column: 2; grid-row: 1; }
-.file-filter-toolbar .file-glob-input { grid-column: 1 / -1; }
-.file-tree-mix { display: flex; grid-column: 1 / -1; align-items: center; justify-content: space-between; gap: 8px; min-height: 24px; color: var(--muted); font: 12px var(--ui-font); }
+.file-filter-toolbar { display: flex; flex-wrap: wrap; gap: 10px 8px; padding: 12px 0 10px; border-bottom: 1px solid var(--border); }
+.file-filter-toolbar .ant-select { flex: 1 1 120px; min-width: 0; }
+.file-filter-toolbar .file-sort-select { flex-basis: 90px; }
+.file-filter-toolbar :is(.file-glob-input, .file-tree-mix) { flex: 0 0 100%; min-width: 0; }
+.file-control-dropdown { min-width: 140px; }
+.file-tree-mix { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 24px; color: var(--muted); font: 12px var(--ui-font); }
 .table-alignment-actions { display: flex; align-items: center; gap: 5px; margin: 0 0 10px; color: var(--muted); font: 10px var(--ui-font); }
 .table-alignment-actions button { min-width: 26px; padding: 4px 7px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface-raised); color: var(--ink); font: inherit; }
 .table-column-selection { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin: 0 0 10px; color: var(--muted); font: 10px var(--ui-font); }

@@ -1607,8 +1607,7 @@ a:active > .app-icon-vector { transform: scale(.92); }
   box-sizing: border-box;
 }
 .moyue-input-field > :is(.ant-input, .ant-input-affix-wrapper),
-.moyue-textarea-field > .moyue-textarea,
-.app-shell .ant-select-single.ant-select:not(.ant-select-customize-input) > .ant-select-selector {
+.moyue-textarea-field > .moyue-textarea {
   min-width: 0;
   border: 0;
   border-radius: inherit;
@@ -1617,6 +1616,14 @@ a:active > .app-icon-vector { transform: scale(.92); }
 }
 .moyue-input-field > :is(.ant-input, .ant-input-affix-wrapper) { flex: 1; }
 .moyue-textarea-field > .moyue-textarea { display: block; }
+.moyue-select.ant-select-single { display: flex; align-items: stretch; }
+.moyue-select.ant-select-single.ant-select:not(.ant-select-customize-input) > .ant-select-selector {
+  height: auto;
+  min-width: 0;
+  align-items: center;
+}
+.moyue-select.ant-select-single .ant-select-selection-search-input { height: 100%; }
+.moyue-select.ant-select-single.ant-select-open:not(.ant-select-show-search) .ant-select-selection-item { color: inherit; }
 .app-shell .ant-select-single .ant-select-arrow,
 .app-shell :is(.moyue-input-field, .moyue-textarea-field) .ant-input-clear-icon {
   color: var(--muted);
@@ -1681,12 +1688,14 @@ a:active > .app-icon-vector { transform: scale(.92); }
   color: var(--ink) !important;
   font: 500 12px/1.45 var(--ui-font) !important;
 }
-.ant-select-dropdown .ant-select-item-option-active,
 .ant-select-dropdown .ant-select-item-option-selected,
 .ant-dropdown-menu .ant-dropdown-menu-item-active,
 .ant-dropdown-menu .ant-dropdown-menu-item:hover {
   background: var(--accent-soft) !important;
   color: var(--ink) !important;
+}
+.ant-select-dropdown .ant-select-item-option-active:not(.ant-select-item-option-selected) {
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface-raised)) !important;
 }
 .app-shell .ant-btn {
   min-height: 34px;
@@ -3828,7 +3837,6 @@ body .app-shell.is-editor-studio .reader-layout {
 .app-shell .file-filter-toolbar .ant-select-single {
   height: 32px;
   min-height: 32px;
-  padding: 0 10px;
   border-radius: 6px;
   font-size: 12px;
 }

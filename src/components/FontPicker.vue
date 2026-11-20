@@ -75,11 +75,7 @@ const custom = computed(() => props.modelValue && !fontPresets.some((font) => fo
 .font-picker-compact { flex-shrink: 0; }
 .font-picker-compact .font-select-label { min-width: 0; gap: 7px; font-size: 12px; font-weight: 600; }
 .font-picker-compact :deep(.ant-select) { width: 118px; min-width: 118px; flex: 0 1 154px; }
-.font-picker-compact :deep(.ant-select-single) { min-height: 30px; padding-inline: 8px; }
-.font-picker-compact :deep(.ant-select-single) { display: flex; align-items: center; }
-.font-picker-compact :deep(.ant-select-selection-item),
-.font-picker-compact :deep(.ant-select-selection-search-input) { min-height: 0; padding-block: 0; line-height: 1.35; }
-.font-picker-compact :deep(.ant-select-selection-item) { justify-content: center; text-align: center; }
-.font-picker-compact :deep(.ant-select-arrow) { align-self: stretch; }
+.font-picker-compact :deep(.ant-select-single) { height: 30px; min-height: 30px; }
+.font-picker-compact :deep(.ant-select-selection-item) { text-align: center; }
 @media (max-width: 1180px) { .font-samples { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>
