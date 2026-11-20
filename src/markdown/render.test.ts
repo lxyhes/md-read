@@ -4,6 +4,42 @@ import { createApp, h, nextTick } from 'vue'
 import { renderMarkdownFragment } from './fragment'
 import { parseMarkdown } from '../parser'
 import RegionBlock from '../components/RegionBlock.vue'
+import TreeDiagram from '../components/TreeDiagram.vue'
+import { markdownToTree } from '../asciiDiagram'
+import { resolveMarkdownAssetUrl } from '../fileService'
+
+it.each(['horizontal', 'compact'] as const)('renders a relative image in the %s mindmap using the same asset as the reader', async (mode) => {
+  const path = 'notes/design.md'
+  const source = '# Design\n\n## Reference\n\n![Preview](./images/example.png)'
+  const imageUrl = 'blob:https://moyue.example/image'
+  const resolveUrl = (url: string) => resolveMarkdownAssetUrl(path, url, { 'notes/images/example.png': imageUrl })
+  const region = parseMarkdown(path, source, resolveUrl).regions.find(region => region.type === 'image')!
+  const node = markdownToTree(source, 'Design')!
+  const host = document.createElement('div')
+  document.body.append(host)
+  const app = createApp({
+    render: () => [
+      h(RegionBlock, { region, focused: false, active: false }),
+      h(TreeDiagram, { node, root: true, [mode]: true, resolveUrl }),
+    ],
+  })
+  app.mount(host)
+  try {
+    expect(host.querySelector('.image-region img')?.getAttribute('src')).toBe(imageUrl)
+    host.querySelector<HTMLElement>(mode === 'horizontal' ? '.tree-branch-toggle' : 'summary')!.click()
+    await nextTick()
+    const summary = host.querySelector<HTMLElement>('.tree-summary-leaf')!
+    expect(summary.textContent).toContain('图片')
+    summary.click()
+    await nextTick()
+    const image = document.querySelector('.tree-summary-markdown img')
+    expect(image?.getAttribute('src')).toBe(imageUrl)
+    expect(image?.getAttribute('alt')).toBe('Preview')
+  } finally {
+    app.unmount()
+    host.remove()
+  }
+})
 
 it('lets readers collapse and reopen a plain directory tree', async () => {
   const [region] = parseMarkdown('files.md', '├── 资料\n│   └── 笔记.txt\n└── 说明').regions

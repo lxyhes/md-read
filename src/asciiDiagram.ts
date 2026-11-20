@@ -51,6 +51,7 @@ function mindmapText(value: string) {
   if (/^[-+*•◦▪]\s*$/.test(line)) return ''
   return decoded
     .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/<img\b[^>]*>/gi, '')
     .replace(/\[(?:\*\*)?(\d{1,2}:\d{2})(?:\*\*)?\]\([^)]*\)/g, '[$1]')
     .replace(/\[(\d{1,2}:\d{2})\]\([^)]*\)/g, '[$1]')
     .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
