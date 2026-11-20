@@ -7,7 +7,7 @@ import { useReaderStore } from './stores/reader'
 
 vi.mock('./startup', () => ({ startupStylesReady: Promise.resolve() }))
 
-it('keeps the highlight on the visible reading line when scrolling to the bottom', async () => {
+it('keeps normal reading on native continuous scrolling', async () => {
   const pinia = createPinia()
   const store = useReaderStore(pinia)
   vi.spyOn(store, 'bootstrap').mockResolvedValue()
@@ -24,6 +24,10 @@ it('keeps the highlight on the visible reading line when scrolling to the bottom
       return [...blocks]
     })
     const viewport = host.querySelector<HTMLElement>('.reader-viewport')!
+    regions[0].click()
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', cancelable: true }))
+    expect(store.mode).toBe('normal')
+    expect(store.focusedRegionId).toBeNull()
     Object.defineProperties(viewport, { clientHeight: { value: 700 }, scrollHeight: { value: 900 } })
     viewport.getBoundingClientRect = () => new DOMRect(0, 0, 900, 700)
     const regionTops = [150, 370, 640, 750]
@@ -47,11 +51,11 @@ it('keeps the highlight on the visible reading line when scrolling to the bottom
 
     const wheel = new WheelEvent('wheel', { deltaY: 900, bubbles: true, cancelable: true })
     viewport.dispatchEvent(wheel)
-    expect(wheel.defaultPrevented).toBe(true)
-    expect(store.activeRegionId).toBe(regions[2].dataset.regionId)
+    expect(wheel.defaultPrevented).toBe(false)
+    expect(store.activeRegionId).toBe(regions[1].dataset.regionId)
 
     viewport.dispatchEvent(new WheelEvent('wheel', { deltaY: 900, bubbles: true, cancelable: true }))
-    expect(store.activeRegionId).toBe(regions[2].dataset.regionId)
+    expect(store.activeRegionId).toBe(regions[1].dataset.regionId)
   } finally {
     app.unmount()
     host.remove()

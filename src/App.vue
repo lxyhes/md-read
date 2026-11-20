@@ -4678,7 +4678,7 @@ function onKeydown(event: KeyboardEvent) {
     else if (store.mode === 'clean') toggleCleanMode()
     return
   }
-  if (view.value === 'reader' && event.key === 'Enter' && !isTypingTarget(event.target)) {
+  if (view.value === 'reader' && (store.mode === 'focus' || store.mode === 'region-focus') && event.key === 'Enter' && !isTypingTarget(event.target)) {
     event.preventDefault()
     const id = store.activeRegionId ?? readerRegions.value[0]?.id
     if (id) {
@@ -5272,6 +5272,10 @@ function onReaderWheel(event: WheelEvent) {
     readerScrollTargetId = null
     return
   }
+  if (store.mode === 'normal') {
+    readerScrollTargetId = null
+    return
+  }
   const activeId = store.focusedRegionId ?? store.activeRegionId ?? regionAtScrollPosition(viewport, document.id)
   const active = [...viewport.querySelectorAll<HTMLElement>('[data-region-id]')].find((element) => element.dataset.regionId === activeId)
   const viewportRect = viewport.getBoundingClientRect()
@@ -5358,6 +5362,7 @@ function commitReaderScroll(element: HTMLElement, documentId: string, percent: n
 }
 
 function focusRegion(region: ReaderRegion) {
+  if (store.mode !== 'focus' && store.mode !== 'region-focus') return
   selectionToolbar.value = null
   readerScrollTargetId = null
   if (store.mode === 'focus') {

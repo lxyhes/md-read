@@ -104,7 +104,7 @@ npm run dev
 | `Ctrl / Cmd + O` | 打开 Markdown 文件 |
 | `Ctrl / Cmd + Tab` | 切换下一个文档 |
 | `F` | 进入 / 退出专注模式 |
-| `Enter` / `Space` | 聚焦当前阅读区域 |
+| `Enter` / `Space` | 在专注模式中聚焦当前阅读区域 |
 | `↑` / `↓` | 切换阅读区域 |
 | `Esc` | 退出聚焦或关闭查看器 |
 

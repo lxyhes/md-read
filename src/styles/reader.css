@@ -933,17 +933,17 @@
   border-left-color: transparent !important;
 }
 .app-shell.is-region-focus .region-block:not(.focused).focus-distance-1 {
-  opacity: .42;
+  opacity: 1;
   filter: blur(.45px);
   transform: scale(.998);
 }
 .app-shell.is-region-focus .region-block:not(.focused).focus-distance-2 {
-  opacity: .23;
+  opacity: .8;
   filter: blur(.95px);
   transform: scale(.992);
 }
 .app-shell.is-region-focus .region-block:not(.focused).focus-distance-3 {
-  opacity: .10;
+  opacity: .4;
   filter: blur(1.45px);
   transform: scale(.985);
 }
@@ -1893,17 +1893,17 @@ button:focus-visible,
   border-left-color: transparent;
 }
 .app-shell.is-focus.has-focus-region .reader-content .region-block:not(.focused).focus-distance-1 {
-  opacity: .46;
+  opacity: 1;
   filter: blur(.45px);
   transform: scale(.998);
 }
 .app-shell.is-focus.has-focus-region .reader-content .region-block:not(.focused).focus-distance-2 {
-  opacity: .25;
+  opacity: .8;
   filter: blur(.9px);
   transform: scale(.994);
 }
 .app-shell.is-focus.has-focus-region .reader-content .region-block:not(.focused).focus-distance-3 {
-  opacity: .14;
+  opacity: .4;
   filter: blur(1.25px);
   transform: scale(.988);
 }

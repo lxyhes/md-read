@@ -2037,14 +2037,17 @@ a:active > .app-icon-vector { transform: scale(.92); }
   border-left-color: transparent !important;
   border-radius: 12px !important;
 }
-.app-shell .reader-content .region-block:hover {
+.app-shell:is(.is-focus, .is-region-focus) .reader-content .region-block:hover {
   background: color-mix(in srgb, var(--accent) 4%, transparent) !important;
 }
-.app-shell .reader-content .region-block.active,
+.app-shell:not(.is-focus, .is-region-focus) .reader-content .region-block:is(.active, :hover) {
+  background: transparent !important;
+}
+.app-shell:is(.is-focus, .is-region-focus) .reader-content .region-block.active,
 .app-shell.is-region-focus .reader-content .region-block.focused {
   background: color-mix(in srgb, var(--accent) 8%, transparent) !important;
 }
-.app-shell .reader-content .region-block.active:not(.region-code, .region-table)::before,
+.app-shell:is(.is-focus, .is-region-focus) .reader-content .region-block.active:not(.region-code, .region-table)::before,
 .app-shell.is-region-focus .reader-content .region-block.focused:not(.region-code, .region-table)::before {
   position: absolute;
   inset: 6px auto 6px 2px;
@@ -2055,8 +2058,7 @@ a:active > .app-icon-vector { transform: scale(.92); }
   content: "";
 }
 .app-shell .reader-content .region-block:is(.region-code, .region-table),
-.app-shell .reader-content .region-block:is(.region-code, .region-table):hover,
-.app-shell .reader-content .region-block:is(.region-code, .region-table).active,
+.app-shell:is(.is-focus, .is-region-focus) .reader-content .region-block:is(.region-code, .region-table):is(:hover, .active),
 .app-shell.is-region-focus .reader-content .region-block:is(.region-code, .region-table).focused {
   background: transparent !important;
 }
@@ -3125,6 +3127,9 @@ body .app-shell.is-editor-studio .reader-layout {
   padding-bottom: 96px !important;
 }
 .app-shell:not(.is-focus) .reader-content:is(.reader-display-markdown, .reader-display-split) {
+  padding-bottom: 24px !important;
+}
+.app-shell.is-region-focus .reader-content:is(.reader-display-markdown, .reader-display-split) {
   padding-bottom: var(--reader-end-padding, 96px) !important;
 }
 
