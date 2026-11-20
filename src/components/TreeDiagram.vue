@@ -30,10 +30,23 @@ const summaryHover = ref(false)
 const summaryTarget = ref<HTMLElement | null>(null)
 const summaryPopover = ref<HTMLElement | null>(null)
 const summaryPopoverStyle = ref<Record<string, string>>({})
+const summaryPreview = ref<HTMLElement | null>(null)
+const previewClipped = ref(false)
 let hideTimer: number | undefined
 const isSummaryLeaf = (label: string) => !props.directory && (label.startsWith('内容：') || label.startsWith('导读：'))
-const summaryKind = (label: string) => label.startsWith('导读：') ? '导读' : '摘要'
 const summaryText = (label: string) => label.replace(/^(?:内容|导读)：/, '')
+const showFullContentLink = computed(() => previewClipped.value
+  || props.node.label.endsWith('…')
+  || /!\[[^\]]*\]|<img\b/i.test(props.node.detail ?? ''))
+watch(summaryPreview, (preview, _, onCleanup) => {
+  if (!preview) return
+  const measure = () => { previewClipped.value = preview.scrollHeight > preview.clientHeight }
+  measure()
+  if (typeof ResizeObserver === 'undefined') return
+  const observer = new ResizeObserver(measure)
+  observer.observe(preview)
+  onCleanup(() => observer.disconnect())
+}, { flush: 'post' })
 const summaryVisible = computed(() => summaryOpen.value || summaryHover.value)
 const nodeLinkLabel = (label: string) => `打开章节链接：${label}`
 const linkText = computed(() => props.node.href ? props.node.linkText || '↗' : '')
@@ -46,30 +59,39 @@ const rootLabel = computed(() => {
   const name = props.node.label.replace(/\.(?:md|markdown)$/i, '').trim()
   return name || props.node.label
 })
-const toggleBranch = () => {
+const toggleBranch = (event: MouseEvent) => {
+  const restorePosition = captureNodePosition(event)
   expanded.value = !expanded.value
   if (!expanded.value) expandRequest.value = undefined
-  else if (props.horizontal && !props.root) void revealHorizontalChildren()
+  restorePosition?.()
 }
-const toggleAll = () => {
+const toggleAll = (event: MouseEvent) => {
+  const restorePosition = captureNodePosition(event)
   const open = !bulkOpen.value
   applyExpandRequest({ open })
-  if (open && props.horizontal && !props.root) void revealHorizontalChildren()
+  restorePosition?.()
 }
 const resetBulkOnNativeClose = () => {
   if (branchDetails.value && !branchDetails.value.open && bulkOpen.value) expandRequest.value = undefined
 }
-const revealHorizontalChildren = async () => {
-  await nextTick()
-  const children = horizontalChildren.value
-  const canvas = children?.closest<HTMLElement>('.reader-mindmap-scroll')
-  const firstNode = children?.querySelector(':scope > li > :is(.tree-node-row, .tree-leaf-row)')
-  if (!canvas || !firstNode) return
+const captureNodePosition = (event: MouseEvent) => {
+  const button = event.currentTarget
+  if (!props.horizontal || !(button instanceof HTMLElement)) return
+  const canvas = button.closest<HTMLElement>('.reader-mindmap-scroll')
+  if (!canvas) return
+  const viewport = canvas.closest<HTMLElement>('.reader-viewport')
+  const top = button.getBoundingClientRect().top
+  return () => nextTick(() => {
+    const shift = button.getBoundingClientRect().top - top
+    if (viewport && Math.abs(shift) >= 1) viewport.scrollBy({ top: shift, behavior: 'instant' })
 
-  const bounds = canvas.getBoundingClientRect()
-  const nodeBounds = firstNode.getBoundingClientRect()
-  const offset = Math.min(nodeBounds.left - bounds.left, nodeBounds.right - bounds.right + 8)
-  if (offset > 8) canvas.scrollLeft += offset
+    const firstNode = horizontalChildren.value?.querySelector(':scope > li > :is(.tree-node-row, .tree-leaf-row)')
+    if (!firstNode) return
+    const bounds = canvas.getBoundingClientRect()
+    const nodeBounds = firstNode.getBoundingClientRect()
+    const offset = Math.min(nodeBounds.left - bounds.left, nodeBounds.right - bounds.right + 8)
+    if (offset > 8) canvas.scrollLeft += offset
+  })
 }
 const openNodeLink = (event: MouseEvent) => {
   event.preventDefault()
@@ -198,7 +220,7 @@ onBeforeUnmount(() => {
   </div>
   <li v-else class="tree-item">
     <div v-if="node.children.length" class="tree-node-row">
-      <button v-if="horizontal" class="tree-branch-toggle" type="button" :aria-expanded="expanded" @click="toggleBranch">
+      <button v-if="horizontal" class="tree-branch-toggle" type="button" :title="expanded ? '收起当前层' : '展开一层'" :aria-expanded="expanded" @click="toggleBranch">
         <span class="tree-node-label">{{ nodeLabel }}</span>
         <span class="tree-branch-indicator" aria-hidden="true">{{ expanded ? '−' : '+' }}</span>
       </button>
@@ -218,8 +240,8 @@ onBeforeUnmount(() => {
     <div v-else class="tree-leaf-row">
       <span class="tree-leaf" :class="{ 'tree-summary-leaf': isSummaryLeaf(node.label), 'is-summary-open': summaryOpen }" :title="isSummaryLeaf(node.label) ? '悬浮查看完整内容，点击固定' : node.label" :tabindex="isSummaryLeaf(node.label) ? 0 : undefined" :role="isSummaryLeaf(node.label) ? 'button' : undefined" :aria-expanded="isSummaryLeaf(node.label) ? summaryVisible : undefined" @mouseenter="showSummary" @mouseleave="scheduleHideSummary" @focus="showSummary" @blur="scheduleHideSummary" @click="toggleSummary" @keydown.enter.prevent="toggleSummary" @keydown.space.prevent="toggleSummary" @keydown.esc="summaryOpen = false; hideSummary()">
         <template v-if="isSummaryLeaf(node.label)">
-          <span class="tree-leaf-kicker">{{ summaryKind(node.label) }}</span>
-          <span class="tree-leaf-text">{{ summaryText(nodeLabel) }}</span>
+          <span ref="summaryPreview" class="tree-leaf-text">{{ summaryText(nodeLabel) }}</span>
+          <span v-if="showFullContentLink" class="tree-leaf-more">查看全文</span>
         </template>
         <template v-else-if="directory">
           <AppIcon name="file" :size="16" />
