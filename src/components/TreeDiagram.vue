@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { AsciiTreeNode } from '../asciiDiagram'
+import AppIcon from './AppIcon.vue'
 
-const props = defineProps<{ node: AsciiTreeNode; root?: boolean; depth?: number; compact?: boolean }>()
+const props = defineProps<{ node: AsciiTreeNode; root?: boolean; depth?: number; compact?: boolean; directory?: boolean }>()
 const emit = defineEmits<{ 'open-link': [url: string] }>()
 const expanded = ref(true)
 const summaryOpen = ref(false)
@@ -14,7 +15,7 @@ const summaryHtml = ref('')
 let summarySource = ''
 let hideTimer: number | undefined
 const branchDepth = props.depth ?? 0
-const isSummaryLeaf = (label: string) => label.startsWith('内容：') || label.startsWith('导读：')
+const isSummaryLeaf = (label: string) => !props.directory && (label.startsWith('内容：') || label.startsWith('导读：'))
 const summaryKind = (label: string) => label.startsWith('导读：') ? '导读' : '摘要'
 const summaryText = (label: string) => label.replace(/^(?:内容|导读)：/, '')
 const summaryVisible = computed(() => summaryOpen.value || summaryHover.value)
@@ -25,6 +26,7 @@ const nodeLabel = computed(() => linkStart.value >= 0
   ? `${props.node.label.slice(0, linkStart.value)}${props.node.label.slice(linkStart.value + linkText.value.length)}`.trim()
   : props.node.label)
 const rootLabel = computed(() => {
+  if (props.directory) return props.node.label
   const name = props.node.label.replace(/\.(?:md|markdown)$/i, '').trim()
   return Array.from(name).length > 28 ? `${Array.from(name).slice(0, 28).join('')}…` : name
 })
@@ -141,18 +143,26 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-if="root" class="tree-diagram" :class="{ 'is-compact': compact }" role="tree">
-    <button class="tree-root" :class="{ collapsed: !expanded }" type="button" :title="node.label" :aria-label="node.label" :aria-expanded="expanded" @click="expanded = !expanded"><span class="tree-node-label">{{ rootLabel }}</span></button>
-    <ul v-if="expanded && node.children.length" class="tree-children tree-root-children">
-      <TreeDiagram v-for="(child, index) in node.children" :key="`${child.label}-${index}`" :node="child" :depth="branchDepth + 1" :compact="compact" @open-link="emit('open-link', $event)" />
+  <div v-if="root" class="tree-diagram" :class="{ 'is-compact': compact, 'is-directory': directory }" :role="directory ? undefined : 'tree'">
+    <button class="tree-root" :class="{ collapsed: !expanded }" type="button" :title="node.label" :aria-label="node.label" :aria-expanded="expanded" @click="expanded = !expanded">
+      <AppIcon v-if="directory" name="chevron-right" :size="14" />
+      <AppIcon v-if="directory" name="folder" :size="16" />
+      <span class="tree-node-label">{{ rootLabel }}</span>
+    </button>
+    <ul v-if="node.children.length && (directory || expanded)" v-show="expanded" class="tree-children tree-root-children" :role="directory ? 'list' : undefined">
+      <TreeDiagram v-for="(child, index) in node.children" :key="`${child.label}-${index}`" :node="child" :depth="branchDepth + 1" :compact="compact" :directory="directory" @open-link="emit('open-link', $event)" />
     </ul>
   </div>
-  <li v-else class="tree-item" role="treeitem">
+  <li v-else class="tree-item" :role="directory ? undefined : 'treeitem'">
     <div v-if="node.children.length" class="tree-node-row">
       <details :open="!compact && branchDepth <= 1">
-        <summary><span class="tree-node-label">{{ nodeLabel }}</span></summary>
-        <ul class="tree-children">
-          <TreeDiagram v-for="(child, index) in node.children" :key="`${child.label}-${index}`" :node="child" :depth="branchDepth + 1" :compact="compact" @open-link="emit('open-link', $event)" />
+        <summary>
+          <AppIcon v-if="directory" name="chevron-right" :size="14" />
+          <AppIcon v-if="directory" name="folder" :size="16" />
+          <span class="tree-node-label">{{ nodeLabel }}</span>
+        </summary>
+        <ul class="tree-children" :role="directory ? 'list' : undefined">
+          <TreeDiagram v-for="(child, index) in node.children" :key="`${child.label}-${index}`" :node="child" :depth="branchDepth + 1" :compact="compact" :directory="directory" @open-link="emit('open-link', $event)" />
         </ul>
       </details>
       <a v-if="node.href" class="tree-timestamp-link" :href="node.href" target="_blank" rel="noreferrer" :aria-label="nodeLinkLabel(node.label)" :title="node.href" @click="openNodeLink">{{ linkText }}</a>
@@ -162,6 +172,10 @@ onBeforeUnmount(() => {
         <template v-if="isSummaryLeaf(node.label)">
           <span class="tree-leaf-kicker">{{ summaryKind(node.label) }}</span>
           <span class="tree-leaf-text">{{ summaryText(nodeLabel) }}</span>
+        </template>
+        <template v-else-if="directory">
+          <AppIcon name="file" :size="16" />
+          <span class="tree-node-label">{{ nodeLabel }}</span>
         </template>
         <template v-else>{{ nodeLabel }}</template>
       </span>

@@ -21,8 +21,8 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import AppIcon from './AppIcon.vue'
 import { parseWebPreviewAddress } from '../webPreviewAddress'
 
-const props = defineProps<{ url: string; session: string; name?: string; layoutKey?: string; compact?: boolean }>()
-const emit = defineEmits<{ close: []; external: [url: string]; navigate: [url: string]; 'open-web': [url: string] }>()
+const props = defineProps<{ url: string; session: string; name?: string; layoutKey?: string; compact?: boolean; draft?: { text: string; copied: Promise<boolean> } }>()
+const emit = defineEmits<{ close: []; external: [url: string]; navigate: [url: string]; 'open-web': [url: string]; 'draft-done': [] }>()
 const native = isTauri()
 const surface = ref<HTMLElement | null>(null)
 const frame = ref<HTMLIFrameElement | null>(null)
@@ -34,12 +34,14 @@ const loading = ref(true)
 const error = ref('')
 const delayed = ref(false)
 const feedback = ref('')
+const draftFeedback = ref('')
 const zoomKey = `moyue:web-preview-zoom:${props.session || 'web'}`
 const savedZoom = Number(localStorage.getItem(zoomKey) ?? 100)
 const zoomPercent = ref(Number.isInteger(savedZoom) && savedZoom >= 60 && savedZoom <= 150 ? savedZoom : 100)
 const zoomBusy = ref(false)
 let alive = true
 let ready = false
+const draftReady = ref(false)
 let resizeQueued = false
 let observer: ResizeObserver | undefined
 let timer: ReturnType<typeof setTimeout> | undefined
@@ -148,6 +150,41 @@ watch(() => props.layoutKey, scheduleResize, { flush: 'post' })
 watch(() => props.url, () => { if (ready) void open('open') })
 watch(currentUrl, (url) => { if (!addressFocused.value) address.value = url })
 
+watch([draftReady, () => props.draft], ([canFill, draft], _, onCleanup) => {
+  if (!canFill || !draft) return
+  const { text, copied } = draft
+  draftFeedback.value = ''
+  let pending = true
+  let retry: ReturnType<typeof setTimeout> | undefined
+  const deadline = setTimeout(() => void finish('unsupported'), 10000)
+  function stop() {
+    pending = false
+    clearTimeout(deadline)
+    clearTimeout(retry)
+  }
+  async function finish(result: string) {
+    if (!alive || !pending || props.draft !== draft) return
+    stop()
+    if (result === 'filled') draftFeedback.value = '已填入 AI 输入框'
+    else {
+      const canPaste = await copied
+      if (!alive || props.draft !== draft) return
+      const reason = result === 'occupied' ? '输入框已有内容' : '暂时无法自动填入'
+      draftFeedback.value = canPaste ? `${reason}，可按 Ctrl+V 或 ⌘V 粘贴选中文字` : `${reason}，请手动复制选中文字`
+    }
+    emit('draft-done')
+  }
+  async function attempt() {
+    const result = await invoke<string | null>('web_preview', { action: 'fill-draft', session: props.session, draft: text })
+      .catch(() => null)
+    if (!alive || !pending || props.draft !== draft) return
+    if (result === 'waiting') retry = setTimeout(attempt, 300)
+    else await finish(result ?? 'unsupported')
+  }
+  onCleanup(stop)
+  void attempt()
+})
+
 onMounted(async () => {
   if (native) {
     const subscriptions = await Promise.all([
@@ -170,6 +207,7 @@ onMounted(async () => {
   if (alive) {
     ready = true
     await open(props.session ? 'resume' : 'open')
+    if (alive && native) draftReady.value = true
   }
 })
 onUnmounted(() => {
@@ -207,6 +245,7 @@ onUnmounted(() => {
       </div>
       <div v-if="loading" class="web-preview-loading" role="status">正在加载网页…</div>
       <div v-else-if="feedback" class="web-preview-loading" role="status">{{ feedback }}</div>
+      <div v-if="draftFeedback" class="web-preview-loading" role="status">{{ draftFeedback }}</div>
     </header>
     <div ref="surface" class="web-preview-surface">
       <div v-if="error" class="web-preview-error" role="alert"><strong>网页暂时无法预览</strong><p>{{ error }}</p><button type="button" @click="emit('external', currentUrl)">用系统浏览器打开</button></div>

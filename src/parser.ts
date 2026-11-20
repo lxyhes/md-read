@@ -2,6 +2,7 @@ import type { HeadingItem, ReaderDocument, ReaderRegion, ReaderRegionType } from
 import { blockHtmlWithSourceIndent, renderFootnotes, renderVideoNode } from './markdown/render'
 import { createRenderContext, nodeText, renderMath, resolveMarkdownReferences, type MarkdownUrlResolver, type MdastNode } from './markdown/shared'
 import { formatPastedText, isLikelyProseBlock, normalizeMixedOrderedListSource } from './pasteMarkdown'
+import { asciiTreeToTree, isAsciiTreeBody } from './asciiDiagram'
 import { attachImageCaptions, isTimestampedParagraph, markdownProcessor as processor, normalizeArticleStrong, normalizeLatexDelimiters, normalizeMixedOrderedLists, promoteStandaloneImageLinks, promoteTimestampedParagraphs, removeEmptyListItems, restoreClipboardCodeCards, restoreSplitStepsLists } from './markdown/fragment'
 
 export type { MarkdownUrlResolver } from './markdown/shared'
@@ -59,10 +60,37 @@ function regionType(node: MdastNode): ReaderRegionType {
   return node.type as ReaderRegionType
 }
 
-function isProseCodeBlock(node: MdastNode) {
-  if (node.type !== 'code') return false
-  const language = node.lang?.trim() ?? ''
-  return (!language || /^(?:plain|plaintext|text|txt)$/i.test(language)) && isLikelyProseBlock(node.value ?? '')
+function codeTree(node: MdastNode) {
+  return node.type === 'code' && /^(?:plain|plaintext|text|txt|markdown|md)?$/i.test(node.lang?.trim() ?? '')
+    ? asciiTreeToTree(node.value ?? '')
+    : null
+}
+
+function restorePlainTrees(tree: MdastNode, source: string) {
+  const children = tree.children ?? []
+  const restored: MdastNode[] = []
+  const treeBody = (node: MdastNode) => {
+    if (node.type !== 'paragraph' && node.type !== 'code') return false
+    const { start, end } = node.position ?? {}
+    return start?.offset != null && end?.offset != null && isAsciiTreeBody(source.slice(start.offset, end.offset))
+  }
+
+  for (let index = 0; index < children.length; index += 1) {
+    const node = children[index]
+    if (!treeBody(node)) {
+      restored.push(node)
+      continue
+    }
+    let next = index + 1
+    while (next < children.length && treeBody(children[next])) next += 1
+    const start = node.position?.start
+    const end = children[next - 1].position?.end
+    const value = source.slice(start?.offset, end?.offset)
+    if (asciiTreeToTree(value)) restored.push({ type: 'code', value, position: { start, end } })
+    else restored.push(...children.slice(index, next))
+    index = next - 1
+  }
+  tree.children = restored
 }
 
 function restoreTimestampedLists(tree: MdastNode) {
@@ -161,7 +189,9 @@ function offsetNodePosition(node: MdastNode, offset: number): MdastNode {
 }
 
 function expandProseCodeBlock(node: MdastNode, source: string): MdastNode[] {
-  if (!isProseCodeBlock(node)) return [node]
+  const language = node.lang?.trim() ?? ''
+  if (node.type !== 'code' || !/^(?:plain|plaintext|text|txt)?$/i.test(language)
+    || !isLikelyProseBlock(node.value ?? '') || codeTree(node)) return [node]
   const value = formatPastedText(node.value ?? '')
   const innerTree = processor.parse(value) as unknown as MdastNode
   resolveMarkdownReferences(innerTree)
@@ -177,6 +207,7 @@ function expandProseCodeBlock(node: MdastNode, source: string): MdastNode[] {
 export function parseMarkdown(path: string, source: string, resolveUrl: MarkdownUrlResolver = (url) => url): ReaderDocument {
   const normalizedSource = normalizeMixedOrderedListSource(normalizeLatexDelimiters(source)).source
   const tree = processor.parse(normalizedSource) as unknown as MdastNode
+  restorePlainTrees(tree, normalizedSource)
   resolveMarkdownReferences(tree)
   promoteStandaloneImageLinks(tree)
   attachImageCaptions(tree)
@@ -219,7 +250,7 @@ export function parseMarkdown(path: string, source: string, resolveUrl: Markdown
       : blockHtmlWithSourceIndent(node, normalizedSource, resolveUrl, context)
     const region: ReaderRegion = {
       id, documentId, type, index: regions.length, textContent, sourceStart: start, sourceEnd: end,
-      html, metadata
+      html, metadata, asciiTree: type === 'code' ? codeTree(node) ?? undefined : undefined
     }
     regions.push(region)
     if (type === 'heading') {

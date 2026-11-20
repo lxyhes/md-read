@@ -222,22 +222,29 @@ function nodeDisplay(value: string) {
   return { key: parts[0] || value.trim(), label: parts.join('<br/>') || value.trim() }
 }
 
-const treeBranchPattern = /^([\s│|]*)(?:├──|└──|\+--|\\--)[ \t]*(.+?)\s*$/
+const treeBranchPattern = /^([\s│|]*)(?:[├└]─{2,}|\+--|\\--)[ \t]*(\S.*?)\s*$/
+const treeGuidePattern = /^[\s│|]*$/
+
+function treeLines(source: string) {
+  return source.replace(/(?:&#x20;|&#32;|&nbsp;)/gi, ' ').replace(/\t/g, '    ').split(/\r?\n/)
+}
+
+export function isAsciiTreeBody(source: string) {
+  return treeLines(source).every((line) => treeGuidePattern.test(line) || treeBranchPattern.test(line))
+}
 
 /** Parse Unicode directory trees into nested data instead of forcing them through Mermaid. */
 export function asciiTreeToTree(source: string): AsciiTreeNode | null {
-  const lines = source
-    .replace(/(?:&#x20;|&#32;|&nbsp;)/gi, ' ')
-    .replace(/\t/g, '    ')
-    .split(/\r?\n/)
-  const firstLine = lines.find((line) => line.trim())
-  if (!firstLine || treeBranchPattern.test(firstLine) || /^[\s│|]*$/.test(firstLine)) return null
+  const lines = treeLines(source)
+  const first = lines.findIndex((line) => !treeGuidePattern.test(line))
+  if (first < 0) return null
+  const rootless = treeBranchPattern.test(lines[first])
 
-  const root: AsciiTreeNode = { label: firstLine.trim(), children: [] }
+  const root: AsciiTreeNode = { label: rootless ? '目录树' : lines[first].trim(), children: [] }
   const stack: AsciiTreeNode[] = [root]
   let branchCount = 0
-  for (const line of lines.slice(lines.indexOf(firstLine) + 1)) {
-    if (!line.trim() || /^[\s│|]*$/.test(line)) continue
+  for (const line of lines.slice(first + (rootless ? 0 : 1))) {
+    if (treeGuidePattern.test(line)) continue
     const match = line.match(treeBranchPattern)
     if (!match) return null
     const depth = Math.max(1, Math.ceil(match[1].length / 4) + 1)
@@ -249,7 +256,7 @@ export function asciiTreeToTree(source: string): AsciiTreeNode | null {
     stack.push(node)
     branchCount += 1
   }
-  return branchCount ? root : null
+  return branchCount >= (rootless ? 2 : 1) ? root : null
 }
 
 /** Convert the small box-and-arrow diagrams commonly pasted into Markdown code blocks. */

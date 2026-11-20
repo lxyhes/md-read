@@ -41,16 +41,44 @@ fn preview_url(value: &str) -> Result<tauri::Url, String> {
     Ok(url)
 }
 
+fn ai_draft_origin(session: &str) -> Option<&'static str> {
+    match session {
+        "deepseek" => Some("https://chat.deepseek.com"),
+        "qwen" => Some("https://chat.qwen.ai"),
+        "kimi" => Some("https://www.kimi.com"),
+        "doubao" => Some("https://www.doubao.com"),
+        "yuanbao" => Some("https://yuanbao.tencent.com"),
+        "zhipu" => Some("https://chatglm.cn"),
+        _ => None,
+    }
+}
+
 #[tauri::command]
-pub async fn web_preview(app: tauri::AppHandle, webview: tauri::Webview, action: String, url: Option<String>, bounds: Option<Bounds>, session: String, zoom: Option<f64>) -> Result<Option<String>, String> {
+pub async fn web_preview(app: tauri::AppHandle, webview: tauri::Webview, action: String, url: Option<String>, bounds: Option<Bounds>, session: String, zoom: Option<f64>, draft: Option<String>) -> Result<Option<String>, String> {
     // Remote pages must never be able to control the reader or create other webviews.
     if webview.label() != "main" { return Err("仅阅读器可控制网页预览".into()); }
     let label = match session.as_str() {
         "" => LABEL.to_owned(),
-        "deepseek" | "qwen" | "kimi" | "doubao" | "yuanbao" | "zhipu" => format!("{AI_LABEL_PREFIX}{session}"),
+        session if ai_draft_origin(session).is_some() => format!("{AI_LABEL_PREFIX}{session}"),
         _ => return Err("未知网页会话".into()),
     };
     let result = match action.as_str() {
+        "fill-draft" => {
+            let origin = ai_draft_origin(&session).ok_or("仅支持内置 AI 网页")?;
+            let text = draft.filter(|text| !text.trim().is_empty()).ok_or("缺少选中文字")?;
+            let Some(view) = app.get_webview(&label) else { return Ok(Some("waiting".into())); };
+            if !view.url().is_ok_and(|url| url.origin().ascii_serialization() == origin) {
+                return Ok(Some("waiting".into()));
+            }
+            // Pass the selection as data and check the live origin again in case navigation raced with eval.
+            let script = format!("({})({origin:?}, {})", include_str!("ai_web_draft.js"),
+                serde_json::to_string(&text).map_err(|error| error.to_string())?);
+            let (sender, mut receiver) = tauri::async_runtime::channel(1);
+            view.eval_with_callback(script, move |value| {
+                let _ = sender.try_send(serde_json::from_str::<String>(&value).ok());
+            }).map_err(|error| error.to_string())?;
+            return Ok(receiver.recv().await.flatten());
+        }
         "address" => {
             let url = app.get_webview(&label).ok_or("网页预览未打开")?.url().map_err(|error| error.to_string())?;
             return preview_url(url.as_str()).map(|url| Some(url.into()));

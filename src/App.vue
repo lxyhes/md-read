@@ -106,6 +106,7 @@ type AiWebModel = (typeof domesticAiWebModels)[number]
 const aiWebPreviews = ref<{ id: AiWebModel['id']; name: string; url: string }[]>([])
 const activeAiWebId = ref<AiWebModel['id']>()
 const previousAiWebId = ref<AiWebModel['id']>()
+const aiWebDraft = shallowRef<{ session: AiWebModel['id']; text: string; copied: Promise<boolean> }>()
 const aiWebCompare = ref(true)
 const webPreviewContentWidth = ref(0)
 watch(view, (next) => { if (next !== 'reader') webPreviewUrl.value = '' })
@@ -337,7 +338,11 @@ const editorEmojiPickerOpen = ref(false)
 const editorAlwaysOnTop = ref(false)
 const webPreviewsBlocked = computed(() => Boolean(editorOpen.value || searchOpen.value || quickOpenOpen.value || viewer.value || wordCountOpen.value))
 const hasWebPreviews = computed(() => view.value === 'reader' && !webPreviewsBlocked.value && !activeAppDialog.value && Boolean(webPreviewUrl.value || aiWebPreviews.value.length))
-watch(hasWebPreviews, (visible) => { if (!visible) hideNativeWebPreviews() }, { flush: 'post', immediate: true })
+watch(hasWebPreviews, (visible) => {
+  if (visible) return
+  aiWebDraft.value = undefined
+  hideNativeWebPreviews()
+}, { flush: 'post', immediate: true })
 const canCompareAiWeb = computed(() => aiWebPreviews.value.length > 1 && webPreviewContentWidth.value >= 920)
 const visibleAiWebPreviews = computed(() => {
   const active = aiWebPreviews.value.find(({ id }) => id === activeAiWebId.value)
@@ -515,7 +520,7 @@ const searchPattern = computed(() => {
 })
 const searchPatternError = computed(() => Boolean(searchNeedle.value.trim()) && !searchPattern.value)
 const activeViewerRegion = computed(() => viewer.value?.region ?? null)
-const activeViewerTree = computed(() => viewer.value?.type === 'tree' ? asciiTreeToTree(viewer.value.region.textContent) : null)
+const activeViewerTree = computed(() => viewer.value?.type === 'tree' ? viewer.value.region.asciiTree : null)
 const viewerCanZoom = computed(() => (viewer.value?.type === 'mermaid' || viewer.value?.type === 'image') && viewerTab.value === 'preview')
 const viewerCanPan = computed(() => viewerCanZoom.value)
 const viewerStageStyle = computed<Record<string, string>>(() => ({
@@ -4426,6 +4431,7 @@ onMounted(() => {
   }, 60000)
   document.addEventListener('fullscreenchange', onFullscreenChange)
   document.addEventListener('click', onTabOutsideClick)
+  document.addEventListener('pointerdown', onSelectionOutsidePointerDown, true)
 })
 onUnmounted(() => {
   void persistEditorDraft()
@@ -4437,6 +4443,7 @@ onUnmounted(() => {
   window.removeEventListener('paste', onPaste)
   document.removeEventListener('fullscreenchange', onFullscreenChange)
   document.removeEventListener('click', onTabOutsideClick)
+  document.removeEventListener('pointerdown', onSelectionOutsidePointerDown, true)
   stopFocusTimer()
   stopNativeFileDrop?.()
   stopNativeFileOpen?.()
@@ -4665,10 +4672,10 @@ function onKeydown(event: KeyboardEvent) {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'o' && !isTypingTarget(event.target)) { event.preventDefault(); void openFile(); return }
   if (event.key === 'Escape') {
     event.preventDefault()
-    if (store.mode === 'focus' && store.focusedRegionId) clearRegionFocus()
+    if (selectionToolbar.value) dismissSelectionToolbar()
+    else if (store.mode === 'focus' && store.focusedRegionId) clearRegionFocus()
     else if (store.mode === 'region-focus' || store.mode === 'focus') exitFocusMode()
     else if (store.mode === 'clean') toggleCleanMode()
-    selectionToolbar.value = null
     return
   }
   if (view.value === 'reader' && event.key === 'Enter' && !isTypingTarget(event.target)) {
@@ -5381,12 +5388,12 @@ function resetViewerView() { viewerZoom.value = 1; viewerPan.value = { x: 0, y: 
 function openViewer(region: ReaderRegion) {
   const language = String(region.metadata?.language ?? 'text')
   const asciiDiagramCandidate = region.type === 'code' && /^(?:text|plaintext|markdown|md)$/i.test(language)
-  const generatedTree = asciiDiagramCandidate ? asciiTreeToTree(region.textContent) : null
-  const generatedDiagram = asciiDiagramCandidate ? asciiDiagramToMermaid(region.textContent) : null
+  const generatedTree = region.asciiTree ?? (asciiDiagramCandidate ? asciiTreeToTree(region.textContent) : null)
+  const generatedDiagram = !generatedTree && asciiDiagramCandidate ? asciiDiagramToMermaid(region.textContent) : null
   if (generatedTree) {
     viewer.value = {
       type: 'tree',
-      region: { ...region, metadata: { ...(region.metadata ?? {}), sourceCode: region.textContent, autoTree: true } },
+      region: { ...region, asciiTree: generatedTree, metadata: { ...(region.metadata ?? {}), sourceCode: region.textContent, autoTree: true } },
     }
   } else if (generatedDiagram) {
     viewer.value = {
@@ -5730,6 +5737,17 @@ function copyableSelectionHtml(range: Range) {
   return host.innerHTML.trim()
 }
 
+function dismissSelectionToolbar() {
+  selectionToolbar.value = null
+  window.getSelection()?.removeAllRanges()
+}
+
+function onSelectionOutsidePointerDown(event: PointerEvent) {
+  if (!selectionToolbar.value) return
+  if (event.target instanceof Element && event.target.closest('.selection-toolbar, .selection-ai-menu')) return
+  dismissSelectionToolbar()
+}
+
 async function captureSelection(event: MouseEvent) {
   await nextTick()
   const selection = window.getSelection()
@@ -5759,12 +5777,14 @@ function openAiWebModel(model: AiWebModel) {
 }
 
 function selectAiWebModel(id: AiWebModel['id']) {
+  if (aiWebDraft.value?.session !== id) aiWebDraft.value = undefined
   if (activeAiWebId.value === id) return
   previousAiWebId.value = activeAiWebId.value
   activeAiWebId.value = id
 }
 
 function closeAiWebModel(id: AiWebModel['id']) {
+  if (aiWebDraft.value?.session === id) aiWebDraft.value = undefined
   aiWebPreviews.value = aiWebPreviews.value.filter((preview) => preview.id !== id)
   if (id === activeAiWebId.value) {
     activeAiWebId.value = aiWebPreviews.value.find((preview) => preview.id === previousAiWebId.value)?.id
@@ -5781,12 +5801,9 @@ async function openAiWebModelForSelection(model: AiWebModel) {
 
   selectionToolbar.value = null
   openAiWebModel(model)
-  try {
-    await navigator.clipboard.writeText(selection.text)
-    notify('已复制选中文字，可粘贴到对话框')
-  } catch {
-    notify('无法访问剪贴板，请手动复制选中文字')
-  }
+  const copied = navigator.clipboard?.writeText(selection.text).then(() => true, () => false) ?? Promise.resolve(false)
+  if (isTauriRuntime()) aiWebDraft.value = { session: model.id, text: selection.text, copied }
+  else notify(await copied ? '已复制选中文字，可粘贴到对话框' : '无法访问剪贴板，请手动复制选中文字')
 }
 
 async function copySelection() {
@@ -6434,7 +6451,12 @@ async function requestFullscreen() {
                         <p v-if="editorPreviewResult.failed" class="editor-preview-error">预览暂时无法解析，请检查 Markdown 语法。</p>
                         <p v-else-if="!editorPreviewDocument" class="editor-preview-empty">从左侧开始写作，右侧会实时出现阅读效果。</p>
                         <template v-else>
-                          <div v-for="region in editorPreviewDocument.regions" :key="region.id" :data-editor-region-id="region.id" v-html="region.html" />
+                          <template v-for="region in editorPreviewDocument.regions" :key="region.id">
+                            <div v-if="region.asciiTree" :data-editor-region-id="region.id">
+                              <TreeDiagram :node="region.asciiTree" root directory />
+                            </div>
+                            <div v-else :data-editor-region-id="region.id" v-html="region.html" />
+                          </template>
                         </template>
                       </article>
                     </div>
@@ -6514,7 +6536,7 @@ async function requestFullscreen() {
           <button type="button" @click="beginAnnotation">批注</button>
           <button type="button" @click="searchSelection">搜索</button>
           <button type="button" @click="assist('translate')">翻译</button>
-          <ArcoDropdown>
+          <ArcoDropdown panel-class="reader-more-popover selection-ai-menu">
             <button type="button" @keydown.enter.stop>问 AI</button>
             <template #menu>
               <button v-for="model in domesticAiWebModels" :key="model.id" type="button"
@@ -6525,6 +6547,7 @@ async function requestFullscreen() {
           <button type="button" @click="copySelectionHtml">复制 HTML</button>
           <button type="button" @click="copySelectionMathMl">复制 MathML</button>
           <button type="button" @click="copySelection">复制纯文本</button>
+          <IconButton icon="close" size="sm" label="关闭选区工具栏" @keydown.enter.stop @click="dismissSelectionToolbar" />
         </div>
         <div v-if="wordCountOpen && store.currentDocument" class="overlay file-properties-overlay" @click.self="wordCountOpen = false"><div class="file-properties-dialog" role="dialog" aria-modal="true" aria-labelledby="word-count-title"><div class="file-properties-heading"><div><span class="section-kicker">文档统计</span><h2 id="word-count-title">{{ displayTitle(store.currentDocument.title) }}</h2></div><IconButton icon="close" size="sm" label="关闭字数统计" @click="wordCountOpen = false" /></div><dl class="file-properties-list"><div><dt>正文字符</dt><dd>{{ wordCountStats.characters }}</dd></div><div><dt>中英文词</dt><dd>{{ wordCountStats.words }}</dd></div><div><dt>源文件行</dt><dd>{{ wordCountStats.lines }}</dd></div><div><dt>正文块</dt><dd>{{ wordCountStats.blocks }}</dd></div><div><dt>标题</dt><dd>{{ wordCountStats.headings }}</dd></div></dl><div class="file-properties-actions"><Button class="ghost-button" type="secondary" @click="wordCountOpen = false">完成</Button></div></div></div>
       </section>
@@ -6601,6 +6624,7 @@ async function requestFullscreen() {
       <template v-else>
         <WebPreviewPanel v-for="preview in visibleAiWebPreviews" :key="preview.id"
           :url="preview.url" :session="preview.id" :name="preview.name" :layout-key="aiWebLayoutKey" :compact="visibleAiWebPreviews.length > 1"
+          :draft="aiWebDraft?.session === preview.id ? aiWebDraft : undefined" @draft-done="aiWebDraft = undefined"
           @close="closeAiWebModel(preview.id)" @navigate="preview.url = $event" @open-web="webPreviewUrl = $event" @external="openPreviewInBrowser" />
       </template>
     </WebPreviewDock>
@@ -6717,7 +6741,7 @@ async function requestFullscreen() {
           <Button type="text" size="small" :class="{ active: viewerTab === 'data' }" @click="viewerTab = 'data'">结构</Button>
         </nav>
         <div ref="viewerStage" class="viewer-stage" :class="{ 'is-pan-enabled': viewerCanPan, 'is-dragging': viewerDragging }" :style="viewerStageStyle" @wheel="onViewerWheel" @pointerdown="onViewerPointerDown" @pointermove="onViewerPointerMove" @pointerup="onViewerPointerUp" @pointercancel="onViewerPointerUp" @dblclick="onViewerDoubleClick">
-          <TreeDiagram v-if="viewer.type === 'tree' && activeViewerTree" :node="activeViewerTree" root @open-link="openExternalLink" />
+          <TreeDiagram v-if="viewer.type === 'tree' && activeViewerTree" :node="activeViewerTree" root directory @open-link="openExternalLink" />
           <MermaidBlock v-else-if="viewer.type === 'mermaid' && viewerTab === 'preview'" :code="String(viewer.region.metadata?.code ?? viewer.region.textContent)" :native-labels="Boolean(viewer.region.metadata?.autoDiagram)" large @rendered="fitViewer" />
           <div v-else-if="viewer.type === 'mermaid' && viewerTab === 'source'" class="viewer-source-panel">
             <div class="viewer-source-toolbar"><span>Mermaid 源码</span><Button type="text" size="small" @click="copyViewerSource"><AppIcon name="copy" :size="13" />复制源码</Button></div>

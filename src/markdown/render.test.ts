@@ -1,7 +1,42 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest'
+import { createApp, h, nextTick } from 'vue'
 import { renderMarkdownFragment } from './fragment'
 import { parseMarkdown } from '../parser'
+import RegionBlock from '../components/RegionBlock.vue'
+
+it('lets readers collapse and reopen a plain directory tree', async () => {
+  const [region] = parseMarkdown('files.md', '├── 资料\n│   └── 笔记.txt\n└── 说明').regions
+  const host = document.createElement('div')
+  const app = createApp({ render: () => h(RegionBlock, { region, focused: false, active: false }) })
+  app.mount(host)
+  try {
+    const rootToggle = host.querySelector<HTMLButtonElement>('.tree-root')!
+    const listing = host.querySelector<HTMLElement>('.tree-root-children')!
+    expect(rootToggle.getAttribute('aria-expanded')).toBe('true')
+    const folder = host.querySelector<HTMLDetailsElement>('details')!
+    const folderToggle = folder.querySelector<HTMLElement>('summary')!
+    expect(folderToggle.textContent).toBe('资料')
+    expect(folder.open).toBe(true)
+    expect(folder.textContent).toContain('笔记.txt')
+    folderToggle.click()
+    expect(folder.open).toBe(false)
+
+    rootToggle.click()
+    await nextTick()
+    expect(rootToggle.getAttribute('aria-expanded')).toBe('false')
+    expect(listing.style.display).toBe('none')
+
+    rootToggle.click()
+    await nextTick()
+    expect(listing.style.display).toBe('')
+    expect(folder.open).toBe(false)
+    folderToggle.click()
+    expect(folder.open).toBe(true)
+  } finally {
+    app.unmount()
+  }
+})
 
 it('keeps Markdown table alignment in reading view and example previews', () => {
   const source = '| 左 | 中 | 右 | 默认 |\n| :--- | :---: | ---: | --- |\n| A | B | C | D |'

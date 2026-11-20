@@ -4257,3 +4257,133 @@ body .app-shell.is-editor-studio .reader-layout {
     grid-template-rows: 34px 34px;
   }
 }
+
+.tree-diagram.is-directory {
+  --tree-indent: clamp(9px, 2vw, 14px);
+  --tree-guide: color-mix(in srgb, var(--accent) 22%, var(--border));
+  padding: 0;
+  border-color: var(--border);
+  border-radius: 9px;
+  background: var(--surface-raised);
+  font-size: clamp(13px, var(--reader-size, 16px) * .82, 16px);
+  line-height: 1.45;
+}
+
+.is-directory .tree-root {
+  width: 100%;
+  max-width: none;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 0;
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface-raised));
+}
+
+.is-directory .tree-root:not(.collapsed) {
+  border-bottom: 1px solid var(--border);
+}
+
+.is-directory .tree-root .tree-node-label {
+  white-space: normal;
+}
+
+.is-directory .tree-root::after,
+.is-directory .tree-item details > summary::before {
+  content: none;
+}
+
+.is-directory ul.tree-children,
+.app-shell .region-content .tree-diagram.is-directory ul.tree-children {
+  display: block;
+  margin: 0 0 0 8px;
+  padding: 0 0 0 var(--tree-indent);
+  border: 0;
+}
+
+.is-directory ul.tree-root-children,
+.app-shell .region-content .tree-diagram.is-directory ul.tree-root-children {
+  margin: 6px 10px 8px;
+}
+
+.is-directory ul.tree-children > li.tree-item,
+.app-shell .region-content .is-directory ul.tree-children > li.tree-item {
+  margin: 0;
+  padding: 0;
+}
+
+.is-directory .tree-children > .tree-item::before {
+  inset: 0 auto 0 calc(-1 * var(--tree-indent));
+  width: calc(var(--tree-indent) - 2px);
+  border: 0;
+  border-left: 1px solid var(--tree-guide);
+  background: linear-gradient(var(--tree-guide), var(--tree-guide)) left 13px / 100% 1px no-repeat;
+  pointer-events: none;
+}
+
+.is-directory .tree-children > .tree-item:last-child::before {
+  bottom: auto;
+  height: 14px;
+}
+
+.is-directory .tree-node-row > details {
+  flex: 1 1 auto;
+}
+
+.is-directory .tree-root,
+.tree-diagram.is-directory .tree-item .tree-node-row > details > summary,
+.is-directory .tree-leaf {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tree-diagram.is-directory .tree-item .tree-node-row > details > summary,
+.is-directory .tree-leaf {
+  min-height: 27px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  transform: none;
+  transition: none;
+}
+
+.tree-diagram.is-directory .tree-item .tree-node-row > details > summary {
+  font-weight: 600;
+}
+
+.is-directory .tree-leaf {
+  max-width: none;
+  padding-inline-start: 26px;
+  color: color-mix(in srgb, var(--ink) 77%, var(--muted));
+}
+
+.is-directory .app-icon {
+  flex: none;
+  color: var(--muted);
+}
+
+.is-directory :is(summary, .tree-leaf) > .app-icon {
+  align-self: flex-start;
+  margin-top: calc((1.45em - 16px) / 2);
+}
+
+.is-directory [data-icon="folder"] {
+  color: var(--accent);
+}
+
+.is-directory :is(.tree-root:not(.collapsed), details[open] > summary) > [data-icon="chevron-right"] {
+  transform: rotate(90deg);
+}
+
+.is-directory .tree-root:hover,
+.tree-diagram.is-directory .tree-item .tree-node-row > details > summary:hover {
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface-raised));
+}
+
+.is-directory :is(.tree-root, summary):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}

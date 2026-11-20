@@ -355,6 +355,32 @@ $$`)
     expect(asciiTreeToTree('普通文本')).toBeNull()
   })
 
+  it('finds a rootless directory tree between normal Markdown regions', () => {
+    const link = 'https://example.test/share'
+    const listing = [
+      '├── 线上课',
+      '│   └── 课堂笔记.txt',
+      '',
+      '├── 配套视频和资料',
+      '│   └── PPT',
+      '│       └── 课程讲义.pptx',
+      '└── 重要说明',
+    ].join('\n')
+    const source = `${link}\n\n${listing}\n\n普通正文`
+    const { regions } = parseMarkdown('resources.md', source)
+    expect(regions.map(region => region.type)).toEqual(['paragraph', 'code', 'paragraph'])
+    expect(regions[0].html).toContain(`href="${link}"`)
+    expect(source.slice(regions[1].sourceStart, regions[1].sourceEnd)).toBe(listing)
+    expect(regions[1].asciiTree?.label).toBe('目录树')
+    const folders = regions[1].asciiTree?.children
+    expect(folders?.[0].children[0].label).toBe('课堂笔记.txt')
+    expect(folders?.[1].children[0].children[0].label).toBe('课程讲义.pptx')
+    expect(regions[2].textContent).toBe('普通正文')
+
+    const fenced = parseMarkdown('resources.md', `\`\`\`text\n课程目录\n${listing}\n\`\`\``)
+    expect(fenced.regions[0].asciiTree?.label).toBe('课程目录')
+  })
+
   it('normalizes plain clipboard text into Markdown lists', () => {
     expect(formatPastedText('标题\r\n\r\n• 第一项\r\n2) 第二项\r\n\r\n')).toBe('标题\n\n- 第一项\n2. 第二项')
   })

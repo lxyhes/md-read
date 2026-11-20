@@ -1,3 +1,5 @@
+import type { AsciiTreeNode } from './asciiDiagram'
+
 export type ReaderRegionType =
   | 'heading'
   | 'paragraph'
@@ -29,6 +31,7 @@ export interface ReaderRegion {
   sourceEnd: number
   html: string
   metadata?: Record<string, unknown>
+  asciiTree?: AsciiTreeNode
 }
 
 export interface ReaderDocument {

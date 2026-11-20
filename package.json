@@ -10,7 +10,8 @@
     "test": "vitest run",
     "tauri": "tauri",
     "package:windows": "tauri build --bundles nsis",
-    "package:macos": "tauri build --bundles app,dmg"
+    "package:macos": "tauri build --bundles app,dmg",
+    "package:linux": "tauri build --bundles deb,appimage"
   },
   "dependencies": {
     "@arco-design/web-vue": "^2.59.0",

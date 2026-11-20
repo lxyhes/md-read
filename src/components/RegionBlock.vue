@@ -20,8 +20,8 @@ const wrapped = ref(true)
 const selectedCodeText = ref('')
 const activeCodeLine = ref('')
 let copyTimer: number | null = null
-const asciiTree = computed(() => asciiDiagramCandidate.value ? asciiTreeToTree(props.region.textContent) : null)
-const asciiDiagramCode = computed(() => asciiDiagramCandidate.value ? asciiDiagramToMermaid(props.region.textContent) : null)
+const asciiTree = computed(() => props.region.asciiTree ?? (asciiDiagramCandidate.value ? asciiTreeToTree(props.region.textContent) : null))
+const asciiDiagramCode = computed(() => !asciiTree.value && asciiDiagramCandidate.value ? asciiDiagramToMermaid(props.region.textContent) : null)
 const isDiagramLike = computed(() => Boolean(asciiTree.value || asciiDiagramCode.value))
 const codeLineCount = computed(() => Math.max(1, props.region.textContent.split(/\r?\n/).length))
 const focusDistanceClass = computed(() => `focus-distance-${Math.min(3, Math.max(0, props.focusDistance ?? 0))}`)
@@ -195,7 +195,7 @@ function handleContentClick(event: MouseEvent) {
       </component>
     </div>
       <div v-else-if="region.type === 'code' && asciiTree" class="region-content auto-tree-region" @click.stop>
-      <TreeDiagram :node="asciiTree" root @open-link="emit('open-link', $event)" />
+      <TreeDiagram :node="asciiTree" root directory @open-link="emit('open-link', $event)" />
     </div>
     <div v-else-if="region.type === 'code' && asciiDiagramCode" class="region-content auto-diagram-region" @click.stop="emit('openViewer')">
       <MermaidBlock :code="asciiDiagramCode" :theme-key="themeKey" native-labels />
