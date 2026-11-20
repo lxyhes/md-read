@@ -630,15 +630,21 @@ const headingIdByRegion = computed(() => {
   return result
 })
 const collapsedOutlineHeadingIds = ref<Set<string>>(new Set())
-const outlineExpansionOverride = ref<boolean | null>(null)
 const outlineRows = computed(() => {
   const needle = outlineQuery.value.trim().toLowerCase()
   const headings = store.currentDocument?.headings ?? []
-  const rows = headings.map((heading, index) => ({
-    heading,
-    hasChildren: headings[index + 1]?.depth > heading.depth,
-    collapsed: outlineExpansionOverride.value === false || (outlineExpansionOverride.value === null && collapsedOutlineHeadingIds.value.has(heading.id)),
-  }))
+  const parentDepths: number[] = []
+  const rows = headings.map((heading, index) => {
+    while (parentDepths.length && parentDepths[parentDepths.length - 1] >= heading.depth) parentDepths.pop()
+    const level = parentDepths.length
+    parentDepths.push(heading.depth)
+    return {
+      heading,
+      level,
+      hasChildren: headings[index + 1]?.depth > heading.depth,
+      collapsed: collapsedOutlineHeadingIds.value.has(heading.id),
+    }
+  })
   if (needle) return rows.filter(({ heading }) => heading.text.toLowerCase().includes(needle)).map((row) => ({ ...row, collapsed: false }))
 
   const visibleRows: typeof rows = []
@@ -677,6 +683,10 @@ const currentMindmap = computed(() => {
   const document = store.currentDocument
   return document ? markdownToTree(document.source, document.title) : null
 })
+function resolveMindmapUrl(url: string) {
+  const document = store.currentDocument
+  return document ? resolveMarkdownAssetUrl(document.path, url, store.getDocumentAssets(document.id)) : url
+}
 const editorPreviewResult = computed(() => {
   if (!editorSource.value.trim()) return { document: null, failed: false }
   try {
@@ -922,7 +932,6 @@ function countMatches(value: string, pattern: RegExp) {
 }
 
 function toggleOutlineHeading(headingId: string) {
-  outlineExpansionOverride.value = null
   const next = new Set(collapsedOutlineHeadingIds.value)
   if (next.has(headingId)) next.delete(headingId)
   else next.add(headingId)
@@ -930,8 +939,11 @@ function toggleOutlineHeading(headingId: string) {
 }
 
 function setOutlineExpansion(expanded: boolean) {
-  outlineExpansionOverride.value = expanded
-  collapsedOutlineHeadingIds.value = new Set()
+  const headings = store.currentDocument?.headings ?? []
+  const parentIds = expanded ? [] : headings
+    .filter((heading, index) => headings[index + 1]?.depth > heading.depth)
+    .map((heading) => heading.id)
+  collapsedOutlineHeadingIds.value = new Set(parentIds)
 }
 
 function rememberModalFocus() {
@@ -4521,7 +4533,6 @@ watch(currentDirectoryFiles, (files) => {
 })
 watch(() => store.currentDocumentId, () => {
   collapsedOutlineHeadingIds.value = new Set()
-  outlineExpansionOverride.value = null
   virtualMeasuredHeights.value = new Map()
   // Do not render the new document at the previous document's virtual offset.
   virtualScrollTop.value = 0
@@ -6268,15 +6279,15 @@ async function requestFullscreen() {
               </div>
             </div>
             <div v-else class="outline-view">
-              <Input v-model="outlineQuery" class="outline-search" allow-clear placeholder="筛选章节…" :input-attrs="{ 'aria-label': '筛选章节' }"><template #prefix><AppIcon name="search" :size="13" /></template></Input>
-              <div v-if="store.currentDocument?.headings.length" class="outline-actions" aria-label="大纲展开控制">
-                <div class="outline-action-group">
-                  <button type="button" title="展开全部章节" @click="setOutlineExpansion(true)"><AppIcon name="chevron-down" :size="11" />全部展开</button>
-                  <button type="button" title="折叠全部章节" @click="setOutlineExpansion(false)"><AppIcon name="chevron-right" :size="11" />全部折叠</button>
+              <div class="outline-toolbar">
+                <Input v-model="outlineQuery" class="outline-search" allow-clear placeholder="筛选…" :input-attrs="{ 'aria-label': '筛选章节' }"><template #prefix><AppIcon name="search" :size="13" /></template></Input>
+                <div v-if="store.currentDocument?.headings.length" class="outline-actions" role="group" aria-label="大纲展开控制">
+                  <IconButton icon="plus" size="sm" label="展开全部章节" @click="setOutlineExpansion(true)" />
+                  <IconButton icon="minus" size="sm" label="折叠全部章节" @click="setOutlineExpansion(false)" />
                 </div>
               </div>
               <nav class="outline-list" aria-label="当前文档大纲">
-                <div v-for="row in outlineRows" :key="row.heading.id" class="outline-row" :class="[`outline-depth-${Math.min(row.heading.depth, 3)}`, { active: store.activeHeadingId === row.heading.id }]" :style="{ paddingLeft: `${6 + (row.heading.depth - 1) * 14}px` }">
+                <div v-for="row in outlineRows" :key="row.heading.id" class="outline-row" :class="{ 'outline-root': row.level === 0, active: store.activeHeadingId === row.heading.id }" :style="{ '--outline-level': row.level }">
                   <button v-if="row.hasChildren" class="outline-toggle" type="button" :aria-expanded="!row.collapsed" :aria-label="`${row.collapsed ? '展开' : '折叠'} ${row.heading.text}`" @click="toggleOutlineHeading(row.heading.id)"><AppIcon :name="row.collapsed ? 'chevron-right' : 'chevron-down'" :size="12" /></button>
                   <span v-else class="outline-toggle-spacer" aria-hidden="true" />
                   <button class="outline-heading-button" :data-outline-id="row.heading.id" type="button" :class="{ active: store.activeHeadingId === row.heading.id }" :aria-current="store.activeHeadingId === row.heading.id ? 'location' : undefined" @click="scrollToHeading(row.heading.regionId)">{{ row.heading.text }}</button>
@@ -6494,8 +6505,14 @@ async function requestFullscreen() {
                 <div v-if="virtualRange.after" class="virtual-spacer" :style="{ height: `${virtualRange.after}px` }" aria-hidden="true" />
                 </div></div>
                 <div v-if="readerDisplayMode === 'mindmap' || readerDisplayMode === 'split'" class="reader-mindmap">
-                  <div class="reader-mindmap-heading"><span class="section-kicker">文章结构</span><strong>章节脉络</strong><small>{{ currentMindmap ? (readerDisplayMode === 'split' ? '章节默认收起；点击 + 查看摘要，点击时间跳转视频' : '章节卡片默认展开，深层分支默认收起；点击 − / + 查看下一层') : '这篇文档还没有可识别的标题' }}</small></div>
-                  <TreeDiagram v-if="currentMindmap" :node="currentMindmap" root :compact="readerDisplayMode === 'split'" @open-link="openExternalLink" />
+                  <div class="reader-mindmap-heading">
+                    <h2>章节脉络</h2>
+                    <small v-if="currentMindmap">{{ readerDisplayMode === 'mindmap' ? '点击节点向右展开，滚动查看分支' : '点击章节展开或收起，点击摘要固定全文' }}</small>
+                  </div>
+                  <div v-if="currentMindmap && readerDisplayMode === 'mindmap'" class="reader-mindmap-scroll" role="region" aria-label="思维导图画布" tabindex="0">
+                    <TreeDiagram :node="currentMindmap" root horizontal :resolve-url="resolveMindmapUrl" @open-link="openExternalLink" />
+                  </div>
+                  <TreeDiagram v-else-if="currentMindmap" :node="currentMindmap" root compact :resolve-url="resolveMindmapUrl" @open-link="openExternalLink" />
                   <p v-else class="reader-mindmap-empty">请使用 Markdown 标题或独立加粗小标题来生成思维导图。</p>
                 </div>
               </div>

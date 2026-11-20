@@ -159,6 +159,8 @@ Windows 打包需要在 Windows 上执行，产物位于 `src-tauri/target/relea
 
 ### Linux 打包
 
+在 Windows 上，启动 Docker Desktop 的 Linux 容器引擎后，双击项目根目录的 `一键打包Linux桌面端.bat`。首次会下载并构建 Debian 镜像，后续复用镜像。产物为 Linux x86-64 的 `.deb` 和 AppImage，输出到下方同一目录。
+
 在 Linux 或 WSL 中使用 Node.js 22.12+（推荐 22 或 24 LTS）和 Rust stable。Ubuntu／Debian 首次打包需安装系统依赖：
 
 ```bash

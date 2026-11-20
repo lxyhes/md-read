@@ -2997,20 +2997,16 @@ button:focus-visible,
   flex: 1 1 0;
   flex-direction: column;
 }
-.outline-search {
+.outline-toolbar {
   display: flex;
   align-items: center;
-  gap: 7px;
-  margin: 16px 0 8px;
-  padding: 7px 8px;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--surface-raised) 46%, transparent);
-  color: var(--accent);
+  flex: 0 0 auto;
+  gap: 4px;
+  margin-top: 12px;
 }
-.outline-search:focus-within {
-  border-color: color-mix(in srgb, var(--accent) 58%, var(--border));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 9%, transparent);
+.outline-toolbar .outline-search {
+  min-width: 0;
+  flex: 1;
 }
 .outline-search input {
   min-width: 0;
@@ -3031,39 +3027,12 @@ button:focus-visible,
 .outline-search button:hover { color: var(--accent); }
 .outline-actions {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 26px;
-  padding: 0 2px 8px;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
-  color: var(--muted);
-}
-.outline-action-group {
-  display: flex;
-  align-items: center;
   flex: 0 0 auto;
   gap: 2px;
 }
-.outline-actions button {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 3px 5px;
-  border: 1px solid transparent;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--muted);
-  font: 10px var(--ui-font);
-  white-space: nowrap;
-  transition: background-color .18s ease, border-color .18s ease, color .18s ease;
-}
-.outline-actions button:hover {
-  border-color: color-mix(in srgb, var(--accent) 26%, var(--border));
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-  color: var(--accent);
-}
-.outline-actions button .app-icon {
-  opacity: .78;
+.outline-actions .arco-btn.icon-button {
+  width: 24px;
+  min-width: 24px;
 }
 .outline-view .outline-list {
   min-height: 0;
@@ -3077,6 +3046,7 @@ button:focus-visible,
   display: flex;
   min-width: 0;
   align-items: stretch;
+  padding-inline-start: calc(6px + var(--outline-level) * 12px);
   border-radius: 7px;
   transition: background-color .18s ease, color .18s ease;
 }
@@ -3096,28 +3066,27 @@ button:focus-visible,
   background: var(--accent);
   content: "";
 }
-.outline-depth-1 .outline-heading-button { font-weight: 600; }
-.outline-depth-2 .outline-heading-button { font-weight: 500; }
-.outline-depth-3 .outline-heading-button { color: color-mix(in srgb, var(--muted) 92%, var(--ink)); }
-.outline-toggle,
+.outline-root .outline-heading-button { font-weight: 600; }
+.outline-list .outline-toggle,
 .outline-toggle-spacer {
-  display: grid;
-  width: 18px;
-  min-width: 18px;
-  height: auto;
-  padding: 0 !important;
-  place-items: center;
+  flex: 0 0 18px;
+}
+.outline-list .outline-toggle {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: calc(6px + (1.42em - 12px) / 2) 0 0;
   border-radius: 5px;
   color: color-mix(in srgb, var(--muted) 82%, var(--accent));
 }
-.outline-toggle:hover {
+.outline-list .outline-toggle:hover {
   background: color-mix(in srgb, var(--accent) 9%, transparent);
   color: var(--accent);
 }
 .outline-list .outline-heading-button {
   min-width: 0;
   flex: 1;
-  padding: 7px 5px 7px 0;
+  padding: 6px 5px 6px 0;
   overflow-wrap: anywhere;
   line-height: 1.42;
   transition: color .18s ease;

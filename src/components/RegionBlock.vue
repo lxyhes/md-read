@@ -5,6 +5,7 @@ import MermaidBlock from './MermaidBlock.vue'
 import TreeDiagram from './TreeDiagram.vue'
 import AppIcon from './AppIcon.vue'
 import IconButton from './IconButton.vue'
+import MarkdownContent from './MarkdownContent.vue'
 import { asciiDiagramToMermaid, asciiTreeToTree } from '../asciiDiagram'
 import { parseComparisonLayout } from '../comparisonLayout'
 import { renderMathMl } from '../markdown/shared'
@@ -184,7 +185,7 @@ function handleContentClick(event: MouseEvent) {
       <button class="inline-view-action region-copy-image" type="button" @click.stop="emit('copy-image')">复制为图片</button>
     </div>
     <div v-else-if="region.type === 'image'" class="region-content image-region" @click.stop="emit('openViewer')">
-      <div v-html="highlighted" />
+      <MarkdownContent :html="highlighted" />
     </div>
     <div v-else-if="region.type === 'video'" class="region-content video-region" @click.stop v-html="renderedHtml" />
     <div v-else-if="comparisonLayout" class="region-content">
@@ -221,7 +222,7 @@ function handleContentClick(event: MouseEvent) {
         </div>
         <div v-html="renderedHtml" />
       </div>
-      <div v-else v-html="renderedHtml" />
+      <MarkdownContent v-else :html="renderedHtml" />
       <div v-if="region.type === 'math'" class="math-copy-actions">
         <button class="inline-view-action" type="button" title="复制标准 MathML" @click.stop="copyMathMl">{{ copied ? '已复制 MathML' : '复制 MathML' }}</button>
         <button class="inline-view-action" type="button" @click.stop="emit('copy-image')">复制为图片</button>

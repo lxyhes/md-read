@@ -1,18 +1,19 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import type { AsciiTreeNode } from '../asciiDiagram'
+import type { MarkdownUrlResolver } from '../markdown/shared'
 import AppIcon from './AppIcon.vue'
+import MarkdownContent from './MarkdownContent.vue'
 
-const props = defineProps<{ node: AsciiTreeNode; root?: boolean; depth?: number; compact?: boolean; directory?: boolean }>()
+const props = defineProps<{ node: AsciiTreeNode; root?: boolean; depth?: number; compact?: boolean; directory?: boolean; horizontal?: boolean; resolveUrl?: MarkdownUrlResolver }>()
 const emit = defineEmits<{ 'open-link': [url: string] }>()
-const expanded = ref(true)
+const expanded = ref(props.root || !props.horizontal)
+const horizontalChildren = ref<HTMLElement | null>(null)
 const summaryOpen = ref(false)
 const summaryHover = ref(false)
 const summaryTarget = ref<HTMLElement | null>(null)
 const summaryPopover = ref<HTMLElement | null>(null)
 const summaryPopoverStyle = ref<Record<string, string>>({})
-const summaryHtml = ref('')
-let summarySource = ''
 let hideTimer: number | undefined
 const branchDepth = props.depth ?? 0
 const isSummaryLeaf = (label: string) => !props.directory && (label.startsWith('内容：') || label.startsWith('导读：'))
@@ -28,25 +29,36 @@ const nodeLabel = computed(() => linkStart.value >= 0
 const rootLabel = computed(() => {
   if (props.directory) return props.node.label
   const name = props.node.label.replace(/\.(?:md|markdown)$/i, '').trim()
-  return Array.from(name).length > 28 ? `${Array.from(name).slice(0, 28).join('')}…` : name
+  return name || props.node.label
 })
+const toggleHorizontalBranch = async () => {
+  expanded.value = !expanded.value
+  if (!expanded.value) return
+
+  await nextTick()
+  const children = horizontalChildren.value
+  const canvas = children?.closest<HTMLElement>('.reader-mindmap-scroll')
+  const firstNode = children?.querySelector(':scope > li > :is(.tree-node-row, .tree-leaf-row)')
+  if (!canvas || !firstNode) return
+
+  const bounds = canvas.getBoundingClientRect()
+  const nodeBounds = firstNode.getBoundingClientRect()
+  const offset = Math.min(nodeBounds.left - bounds.left, nodeBounds.right - bounds.right + 8)
+  if (offset > 8) canvas.scrollLeft += offset
+}
 const openNodeLink = (event: MouseEvent) => {
   event.preventDefault()
   event.stopPropagation()
   if (props.node.href) emit('open-link', props.node.href)
 }
-const loadSummaryHtml = async () => {
-  const source = props.node.detail || summaryText(props.node.label)
-  if (summarySource === source && summaryHtml.value) return
-  summarySource = source
-  const { renderMarkdownFragment } = await import('../markdown/fragment')
-  if (summarySource === source) summaryHtml.value = renderMarkdownFragment(source)
-}
-const toggleSummary = () => {
+const toggleSummary = (event: MouseEvent | KeyboardEvent) => {
   if (!isSummaryLeaf(props.node.label)) return
-  summaryOpen.value = !summaryOpen.value
-  if (summaryOpen.value) positionSummary()
-  else if (!summaryHover.value) hideSummary()
+  if (summaryOpen.value) {
+    closeSummary()
+    return
+  }
+  showSummary(event)
+  summaryOpen.value = true
 }
 const positionSummary = () => {
   const target = summaryTarget.value
@@ -81,7 +93,7 @@ const positionSummary = () => {
     maxHeight: `${availableHeight}px`,
   }
 }
-const showSummary = (event: MouseEvent | FocusEvent) => {
+const showSummary = (event: Event) => {
   const target = event.currentTarget
   if (!(target instanceof HTMLElement) || !isSummaryLeaf(props.node.label)) return
 
@@ -89,7 +101,6 @@ const showSummary = (event: MouseEvent | FocusEvent) => {
   summaryTarget.value = target
   summaryHover.value = true
   positionSummary()
-  void loadSummaryHtml()
   window.addEventListener('resize', positionSummary)
   window.addEventListener('scroll', positionSummary, true)
 }
@@ -130,7 +141,7 @@ watch(summaryOpen, (open) => {
     document.removeEventListener('keydown', onSummaryKeydown)
   }
 })
-watch([summaryVisible, summaryHtml], ([visible]) => {
+watch(summaryVisible, (visible) => {
   if (visible) positionSummary()
 }, { flush: 'post' })
 onBeforeUnmount(() => {
@@ -143,26 +154,30 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-if="root" class="tree-diagram" :class="{ 'is-compact': compact, 'is-directory': directory }" :role="directory ? undefined : 'tree'">
+  <div v-if="root" class="tree-diagram" :class="{ 'is-compact': compact, 'is-directory': directory, 'is-horizontal': horizontal }">
     <button class="tree-root" :class="{ collapsed: !expanded }" type="button" :title="node.label" :aria-label="node.label" :aria-expanded="expanded" @click="expanded = !expanded">
       <AppIcon v-if="directory" name="chevron-right" :size="14" />
       <AppIcon v-if="directory" name="folder" :size="16" />
       <span class="tree-node-label">{{ rootLabel }}</span>
     </button>
-    <ul v-if="node.children.length && (directory || expanded)" v-show="expanded" class="tree-children tree-root-children" :role="directory ? 'list' : undefined">
-      <TreeDiagram v-for="(child, index) in node.children" :key="`${child.label}-${index}`" :node="child" :depth="branchDepth + 1" :compact="compact" :directory="directory" @open-link="emit('open-link', $event)" />
+    <ul v-if="node.children.length && (directory || expanded)" v-show="expanded" class="tree-children tree-root-children" role="list">
+      <TreeDiagram v-for="(child, index) in node.children" :key="`${child.label}-${index}`" :node="child" :depth="branchDepth + 1" :compact="compact" :directory="directory" :horizontal="horizontal" :resolve-url="resolveUrl" @open-link="emit('open-link', $event)" />
     </ul>
   </div>
-  <li v-else class="tree-item" :role="directory ? undefined : 'treeitem'">
+  <li v-else class="tree-item">
     <div v-if="node.children.length" class="tree-node-row">
-      <details :open="!compact && branchDepth <= 1">
+      <button v-if="horizontal" class="tree-branch-toggle" type="button" :aria-expanded="expanded" @click="toggleHorizontalBranch">
+        <span class="tree-node-label">{{ nodeLabel }}</span>
+        <span class="tree-branch-indicator" aria-hidden="true">{{ expanded ? '−' : '+' }}</span>
+      </button>
+      <details v-else :open="!compact && branchDepth <= 1">
         <summary>
           <AppIcon v-if="directory" name="chevron-right" :size="14" />
           <AppIcon v-if="directory" name="folder" :size="16" />
           <span class="tree-node-label">{{ nodeLabel }}</span>
         </summary>
-        <ul class="tree-children" :role="directory ? 'list' : undefined">
-          <TreeDiagram v-for="(child, index) in node.children" :key="`${child.label}-${index}`" :node="child" :depth="branchDepth + 1" :compact="compact" :directory="directory" @open-link="emit('open-link', $event)" />
+        <ul class="tree-children" role="list">
+          <TreeDiagram v-for="(child, index) in node.children" :key="`${child.label}-${index}`" :node="child" :depth="branchDepth + 1" :compact="compact" :directory="directory" :resolve-url="resolveUrl" @open-link="emit('open-link', $event)" />
         </ul>
       </details>
       <a v-if="node.href" class="tree-timestamp-link" :href="node.href" target="_blank" rel="noreferrer" :aria-label="nodeLinkLabel(node.label)" :title="node.href" @click="openNodeLink">{{ linkText }}</a>
@@ -181,11 +196,13 @@ onBeforeUnmount(() => {
       </span>
       <a v-if="node.href" class="tree-timestamp-link" :href="node.href" target="_blank" rel="noreferrer" :aria-label="nodeLinkLabel(node.label)" :title="node.href" @click="openNodeLink">{{ linkText }}</a>
     </div>
+    <ul v-if="horizontal && expanded && node.children.length" ref="horizontalChildren" class="tree-children tree-horizontal-children" role="list">
+      <TreeDiagram v-for="(child, index) in node.children" :key="`${child.label}-${index}`" :node="child" horizontal :resolve-url="resolveUrl" @open-link="emit('open-link', $event)" />
+    </ul>
     <Teleport to="body">
       <div v-if="isSummaryLeaf(node.label) && summaryVisible" ref="summaryPopover" class="tree-summary-popover" role="tooltip" :style="summaryPopoverStyle" @mouseenter="cancelHideSummary" @mouseleave="scheduleHideSummary">
         <div class="tree-summary-popover-heading">完整内容</div>
-        <div v-if="summaryHtml" class="tree-summary-markdown" v-html="summaryHtml" />
-        <div v-else class="tree-summary-markdown tree-summary-loading">正在整理格式…</div>
+        <MarkdownContent class="tree-summary-markdown" :source="node.detail || summaryText(node.label)" :resolve-url="resolveUrl" @load.capture="positionSummary" />
       </div>
     </Teleport>
   </li>

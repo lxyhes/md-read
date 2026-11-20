@@ -77,6 +77,7 @@ function mindmapSummary(lines: string[]) {
   const cleanedLines = lines.filter((line) => !/^\s*[-+*•◦▪]\s*$/.test(line))
   const text = cleanedLines.map(mindmapText).filter(Boolean).join(' ')
   const full = cleanedLines.join('\n').trim()
+  if (!text && /!\[[^\]]*\]\(|<img\b/i.test(full)) return { preview: '图片', full }
   const characters = Array.from(text)
   return characters.length ? {
     preview: `${characters.slice(0, 72).join('')}${characters.length > 72 ? '…' : ''}`,

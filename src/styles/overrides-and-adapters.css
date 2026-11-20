@@ -3167,6 +3167,11 @@ body .app-shell.is-editor-studio .reader-layout {
   }
 }
 
+.app-shell .reader-viewport .reader-content.reader-display-mindmap {
+  width: calc(100% - clamp(24px, 4vw, 64px)) !important;
+  padding-block: 12px 28px !important;
+}
+
 /* Two-row reader header: title, search, and reading tools on row one; the
    second row is reserved for switching documents. */
 .app-shell:not(.is-editor-studio) .reader-main-column > .reader-tabbar {
