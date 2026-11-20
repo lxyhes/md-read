@@ -14,6 +14,10 @@
 
 当前问答入口和范围由 `App.vue` 管理，历史引用由 `knowledgeConversations.ts` 管理。第一版使用现有知识库布局。`Ctrl+K` 全文搜索仍是独立入口。 [问答入口](../src/App.vue#L3192) · [引用状态](../src/knowledgeConversations.ts#L201)
 
+### 问答界面的设计参考
+
+AI 知识库参考 Ant Design X 的会话设计。输入区采用 Sender 的布局，把多行输入、资料发送说明与提交操作放在同一容器。对话消息、快捷提问和历史列表分别可参考 Bubble、Prompts 与 Conversations。官方组件面向 React，墨阅用现有 Vue 组件实现这些交互。 [Ant Design X](https://ant-design-x.antgroup.com/index-cn) · [Sender 输入框](https://ant-design-x.antgroup.com/components/sender-cn)
+
 ## 2. 一次提问怎样找到证据
 
 ```text

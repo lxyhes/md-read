@@ -3,6 +3,7 @@ import Button from '@arco-design/web-vue/es/button'
 import Textarea from '@arco-design/web-vue/es/textarea'
 import '@arco-design/web-vue/es/button/style/css.js'
 import '@arco-design/web-vue/es/textarea/style/css.js'
+import AppIcon from './AppIcon.vue'
 
 defineProps<{ modelValue: string; disabled: boolean; busy: boolean; hasSources: boolean }>()
 const emit = defineEmits<{ 'update:modelValue': [value: string]; submit: [] }>()
@@ -24,6 +25,12 @@ function onKeydown(event: KeyboardEvent) {
       @update:model-value="emit('update:modelValue', $event)"
       @keydown="onKeydown"
     />
-    <Button class="primary-button" html-type="submit" :loading="busy" :disabled="disabled || busy || !hasSources || !modelValue.trim()">{{ busy ? '整理中…' : '发送问题' }}</Button>
+    <div class="knowledge-composer-footer">
+      <slot />
+      <Button class="primary-button" html-type="submit" :loading="busy" :disabled="disabled || busy || !hasSources || !modelValue.trim()">
+        <template v-if="!busy" #icon><AppIcon name="arrow-up" :size="15" /></template>
+        {{ busy ? '整理中…' : '发送问题' }}
+      </Button>
+    </div>
   </form>
 </template>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick, onMounted, ref, watch } from 'vue'
 import AppIcon from './AppIcon.vue'
+import ContentSkeleton from './ContentSkeleton.vue'
 
 export interface FileSystemTreeNode {
   path: string
@@ -85,21 +86,21 @@ watch(() => props.node.expanded, revealSelectedRow)
       :style="{ paddingLeft: `${4 + depth * 14}px` }"
       :title="node.path"
       :aria-current="!node.isDirectory && pathKey(node.path) === pathKey(selectedPath) ? 'page' : undefined"
-      :aria-expanded="node.isDirectory ? node.expanded : undefined"
-      :aria-label="node.isDirectory ? `${node.expanded ? '收起' : '展开'} ${node.name}` : `打开 ${node.name}`"
+      :aria-expanded="node.isDirectory ? node.expanded || node.loading : undefined"
+      :aria-label="node.isDirectory ? `${node.loading ? '正在读取' : node.expanded ? '收起' : '展开'} ${node.name}` : `打开 ${node.name}`"
       @click="selectNode"
       @contextmenu="openContextMenu"
       @keydown="onKeydown"
     >
-      <span class="filesystem-tree-chevron"><AppIcon v-if="node.isDirectory" :name="node.expanded ? 'chevron-down' : 'chevron-right'" :size="11" /></span>
+      <span class="filesystem-tree-chevron"><AppIcon v-if="node.isDirectory" :name="node.expanded || node.loading ? 'chevron-down' : 'chevron-right'" :size="11" /></span>
       <AppIcon :name="node.isDirectory ? 'folder' : 'file'" :size="13" />
       <span class="filesystem-tree-name">{{ node.name }}</span>
-      <span v-if="node.loading" class="filesystem-tree-loading">读取中</span>
     </button>
     <div v-if="node.expanded && node.error" class="filesystem-tree-error" :style="{ paddingLeft: `${34 + depth * 14}px` }">{{ node.error }}</div>
-    <div v-if="node.expanded && node.children?.length" class="filesystem-tree-children">
+    <ContentSkeleton v-if="node.loading" :label="`正在读取 ${node.name}`" layout="compact" :rows="3" :style="{ paddingLeft: `${34 + depth * 14}px` }" />
+    <div v-else-if="node.expanded && node.children?.length" class="filesystem-tree-children">
       <FileSystemTree v-for="child in node.children" :key="child.path" :node="child" :depth="depth + 1" :selected-path="selectedPath" @toggle="emit('toggle', $event)" @open="emit('open', $event)" @contextmenu="(event, item) => emit('contextmenu', event, item)" />
     </div>
-    <div v-else-if="node.isDirectory && node.expanded && !node.loading && !node.error" class="filesystem-tree-empty" :style="{ paddingLeft: `${34 + depth * 14}px` }">空目录</div>
+    <div v-else-if="node.isDirectory && node.expanded && !node.error" class="filesystem-tree-empty" :style="{ paddingLeft: `${34 + depth * 14}px` }">空目录</div>
   </div>
 </template>

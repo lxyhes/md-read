@@ -2266,11 +2266,6 @@ button:focus-visible,
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.filesystem-tree-loading {
-  margin-left: auto;
-  color: var(--accent);
-  font: 9px var(--mono);
-}
 .filesystem-tree-error,
 .filesystem-tree-empty {
   padding-top: 5px;

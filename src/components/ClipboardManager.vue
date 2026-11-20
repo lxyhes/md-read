@@ -6,6 +6,7 @@ import Input from '@arco-design/web-vue/es/input'
 import '@arco-design/web-vue/es/button/style/css.js'
 import '@arco-design/web-vue/es/input/style/css.js'
 import AppIcon from './AppIcon.vue'
+import ContentSkeleton from './ContentSkeleton.vue'
 import { confirmAppAction } from '../appDialog'
 import { loadDurableData, saveDurableData } from '../persistence'
 
@@ -87,6 +88,7 @@ const captureEnabled = ref(typeof localStorage === 'undefined' || localStorage.g
 const selectedId = ref<string | null>(items.value[0]?.id ?? null)
 const copiedId = ref<string | null>(null)
 const isReading = ref(false)
+const historyLoading = ref(true)
 const lastReadAt = ref<number | null>(null)
 const errorMessage = ref('')
 const statusMessage = ref('')
@@ -158,7 +160,7 @@ async function readClipboardSignature(): Promise<NativeClipboardSignature | null
 }
 
 async function checkClipboard(manual = false) {
-  if ((!captureEnabled.value && !manual) || isReading.value) return
+  if (historyLoading.value || (!captureEnabled.value && !manual) || isReading.value) return
   isReading.value = true
   errorMessage.value = ''
   try {
@@ -291,9 +293,16 @@ function formatTime(timestamp: number) {
 }
 
 onMounted(async () => {
-  items.value = (await loadDurableData(STORAGE_KEY, validStoredItems)) ?? []
-  selectedId.value = items.value[0]?.id ?? null
-  lastSignature = items.value[0]?.signature ?? ''
+  try {
+    items.value = (await loadDurableData(STORAGE_KEY, validStoredItems)) ?? []
+    selectedId.value = items.value[0]?.id ?? null
+    lastSignature = items.value[0]?.signature ?? ''
+  } catch {
+    errorMessage.value = '读取剪贴板历史失败'
+    return
+  } finally {
+    historyLoading.value = false
+  }
   startPolling()
 })
 onUnmounted(() => {
@@ -324,8 +333,8 @@ onUnmounted(() => {
     <div class="clipboard-toolbar">
       <div class="clipboard-toolbar-status"><span class="status-pulse" :class="{ paused: !captureEnabled }" /><span>{{ captureStatus }}</span><small v-if="lastReadAt">· {{ formatTime(lastReadAt) }} 更新</small></div>
       <div class="clipboard-toolbar-actions">
-        <Button class="clipboard-quiet-action" type="text" @click="checkClipboard(true)"><AppIcon name="sync" :size="13" />立即读取</Button>
-        <Button class="clipboard-quiet-action" type="text" @click="toggleCapture"><AppIcon :name="captureEnabled ? 'eye' : 'close'" :size="13" />{{ captureEnabled ? '暂停监测' : '恢复监测' }}</Button>
+        <Button class="clipboard-quiet-action" type="text" :disabled="historyLoading" @click="checkClipboard(true)"><AppIcon name="sync" :size="13" />立即读取</Button>
+        <Button class="clipboard-quiet-action" type="text" :disabled="historyLoading" @click="toggleCapture"><AppIcon :name="captureEnabled ? 'eye' : 'close'" :size="13" />{{ captureEnabled ? '暂停监测' : '恢复监测' }}</Button>
         <Button class="clipboard-clear-action" type="text" status="danger" :disabled="!items.length || !items.some((item) => !item.pinned)" @click="clearHistory"><AppIcon name="trash" :size="13" />清空未置顶</Button>
       </div>
     </div>
@@ -345,7 +354,8 @@ onUnmounted(() => {
           <label class="clipboard-search"><AppIcon name="search" :size="13" /><Input v-model="query" allow-clear placeholder="搜索历史内容…" :input-attrs="{ type: 'search', 'aria-label': '搜索剪贴板历史' }" /></label>
         </div>
 
-        <div v-if="filteredItems.length" class="clipboard-list">
+        <ContentSkeleton v-if="historyLoading" class="clipboard-list" label="正在读取剪贴板历史" :rows="5" />
+        <div v-else-if="filteredItems.length" class="clipboard-list">
           <article v-for="item in filteredItems" :key="item.id" class="clipboard-item" :class="{ selected: selectedId === item.id, pinned: item.pinned }" tabindex="0" @click="selectItem(item)" @keydown.enter="selectItem(item)">
             <div class="clipboard-item-marker" :class="item.kind"><AppIcon :name="item.kind === 'image' ? 'image' : 'type'" :size="14" /></div>
             <div class="clipboard-item-body">
@@ -371,7 +381,8 @@ onUnmounted(() => {
 
       <aside class="clipboard-detail" aria-label="剪贴板详情">
         <div class="clipboard-detail-heading"><span class="section-kicker">当前内容</span><span>{{ pinnedCount }} 条置顶</span></div>
-        <div v-if="selectedItem" class="clipboard-detail-card">
+        <ContentSkeleton v-if="historyLoading" class="clipboard-detail-card" label="正在读取剪贴板内容" layout="text" :rows="5" />
+        <div v-else-if="selectedItem" class="clipboard-detail-card">
           <div class="clipboard-detail-type"><span class="clipboard-detail-type-icon" :class="selectedItem.kind"><AppIcon :name="selectedItem.kind === 'image' ? 'image' : 'type'" :size="16" /></span><span><strong>{{ selectedItem.kind === 'image' ? '图片剪贴板' : '文本剪贴板' }}</strong><small>{{ formatTime(selectedItem.createdAt) }}</small></span></div>
           <div v-if="selectedItem.kind === 'image'" class="clipboard-detail-image"><img :src="selectedItem.imageDataUrl" alt="选中的剪贴板图片" /></div>
           <pre v-else class="clipboard-detail-text">{{ selectedItem.text }}</pre>

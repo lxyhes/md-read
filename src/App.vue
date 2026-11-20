@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, getCurrentInstance, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
+import { computed, defineAsyncComponent, getCurrentInstance, h, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import Select, { Option } from '@arco-design/web-vue/es/select'
 import '@arco-design/web-vue/es/select/style/css.js'
 import List, { ListItem } from '@arco-design/web-vue/es/list'
@@ -51,6 +51,7 @@ import { interfaceFont } from './fonts'
 import { defaultTokens } from './themes'
 import type { FileSystemTreeNode } from './components/FileSystemTree.vue'
 import ClipboardManager from './components/ClipboardManager.vue'
+import ContentSkeleton from './components/ContentSkeleton.vue'
 import { cachePastedRemoteImages, copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, downloadMarkdownImages, exportDocumentWithPandoc, importDocumentWithPandoc, importMarkdownAsset, importMarkdownAssetFromPath, listDirectoryFiles, listFileSystemEntries, markdownPathExists, openFileSystemDirectory, openMarkdownDirectory, openMarkdownFile, openMarkdownFolderAt, organizeMarkdownAssets, readMarkdownExportAssets, readMarkdownPath, removeMarkdownAsset, renameMarkdownAsset, renameMarkdownPath, resolveMarkdownAssetUrl, resolveMarkdownPath, saveBinaryExportFile, saveClipboardImage, saveExportFile, saveMarkdownFile, savePdfExportFile, selectDocxReference, selectFileSystemDirectory, selectMarkdownFolder, splitMarkdownLinkTarget, uploadMarkdownImage, watchDirectoryPath, watchMarkdownPath, writeMarkdownFile, type PandocExportFormat, type WorkspaceFile } from './fileService'
 import type { Annotation, HeadingItem, ReaderDocument, ReaderRegion, ViewerType } from './types'
 import { escapeHtml, isQuarkImageUrl, renderMathMl } from './markdown/shared'
@@ -88,8 +89,14 @@ import logoAsset from './assets/moyue-logo-256.png'
 const FocusAmbiencePicker = defineAsyncComponent(() => import('./components/FocusAmbiencePicker.vue'))
 const ThemeCenter = defineAsyncComponent(() => import('./components/ThemeCenter.vue'))
 const ViewerCode = defineAsyncComponent(() => import('./components/ViewerCode.vue'))
-const MarkdownEditor = defineAsyncComponent(() => import('./components/MarkdownEditor.vue'))
-const FileSystemTree = defineAsyncComponent(() => import('./components/FileSystemTree.vue'))
+const MarkdownEditor = defineAsyncComponent({
+  loader: () => import('./components/MarkdownEditor.vue'),
+  loadingComponent: () => h(ContentSkeleton, { class: 'editor-loading-skeleton', label: '正在加载 Markdown 编辑器', layout: 'text', rows: 8 }),
+})
+const FileSystemTree = defineAsyncComponent({
+  loader: () => import('./components/FileSystemTree.vue'),
+  loadingComponent: () => h(ContentSkeleton, { label: '正在加载目录树', layout: 'compact' }),
+})
 
 type View = 'library' | 'reader' | 'clipboard' | 'favorites' | 'knowledge' | 'notes' | 'themes' | 'settings'
 type BusyAction = 'file' | 'folder' | 'drop' | 'paste' | 'paste-save' | 'paste-image' | 'pandoc' | 'delete' | null
@@ -436,6 +443,7 @@ const editorMarkdownNormalization = computed(() => makeImplicitMarkdownHeadingsE
 const exportOpen = ref(false)
 const deleteConfirmation = ref<{ files: FileTreeEntry[] } | null>(null)
 const selectedFilePaths = ref<string[]>([])
+const fileListLoading = ref(false)
 let fileTreeRequest = 0
 let directoryWatcher: (() => void) | null = null
 let directoryWatchRequest = 0
@@ -3913,7 +3921,7 @@ async function loadFilesystemNode(node: FileSystemTreeNode) {
 }
 
 async function toggleFilesystemNode(node: FileSystemTreeNode) {
-  if (!node.isDirectory) return
+  if (!node.isDirectory || node.loading) return
   if (node.children === null) await loadFilesystemNode(node)
   node.expanded = !node.expanded
 }
@@ -4141,8 +4149,8 @@ async function openFilesystemTreeForFile(file: FileTreeEntry) {
   }
   filesystemTreeScope.value = 'system'
   filesystemTreeTarget.value = file.path
-  const root = createFilesystemNode(rootPath, fileNameOf(rootPath) || rootPath, true)
-  filesystemTree.value = root
+  filesystemTree.value = createFilesystemNode(rootPath, fileNameOf(rootPath) || rootPath, true)
+  const root = filesystemTree.value
   await expandFilesystemTree(root)
   notify(root.error ? '当前目录文档树已打开，但目录读取受限' : '已打开当前目录的文档树')
 }
@@ -4931,6 +4939,7 @@ async function chooseQuickOpenResult(file: FileTreeEntry) {
 async function refreshFileTree() {
   const path = store.currentDocument?.path
   const request = ++fileTreeRequest
+  fileListLoading.value = !!path && isRealDocumentPath(path) && filesystemFilesDirectory.value !== currentDirectory.value
   if (!path) { filesystemFiles.value = []; filesystemFilesDirectory.value = null; return }
   try {
     const files = await listDirectoryFiles(path)
@@ -4940,6 +4949,8 @@ async function refreshFileTree() {
     }
   } catch {
     if (request === fileTreeRequest) { filesystemFiles.value = []; filesystemFilesDirectory.value = null }
+  } finally {
+    if (request === fileTreeRequest) fileListLoading.value = false
   }
 }
 function scheduleDirectoryRefresh() {
@@ -6096,7 +6107,8 @@ async function requestFullscreen() {
               <button class="text-button" type="button" :disabled="aiBusy || knowledgeRefreshing" @click="refreshKnowledgeSources">{{ knowledgeRefreshing ? '正在刷新资料…' : '刷新资料' }}</button>
             </div>
             <div ref="knowledgeTranscriptRef" class="knowledge-transcript" aria-live="polite" aria-label="对话记录">
-              <div v-if="!activeKnowledgeConversation" class="knowledge-transcript-empty"><AppIcon name="sparkle" :size="20" /><strong>{{ activeKnowledgeSources.length ? '资料已经准备好' : '从一段新对话开始' }}</strong><span>{{ activeKnowledgeSources.length ? `本次可检索 ${activeKnowledgeSources.length} 篇资料。点一个建议，或直接输入问题。` : '选择资料后提问，答案会保留引用，之后可以继续聊。' }}</span><div v-if="knowledgePromptSuggestions.length" class="knowledge-prompts knowledge-empty-prompts"><span>可以这样问</span><button v-for="prompt in knowledgePromptSuggestions" :key="prompt" type="button" :disabled="aiBusy" @click="useKnowledgePrompt(prompt)">{{ prompt }}</button></div><button v-if="store.documents.length && !knowledgeDocuments.length" class="primary-button" type="button" :disabled="!knowledgeLoaded" @click="addAllKnowledgeSources">一键收录 {{ store.documents.length }} 篇现有文档</button><button v-else-if="!store.documents.length" class="primary-button" type="button" @click="openLibrary('all')">导入 Markdown 文档</button></div>
+              <ContentSkeleton v-if="!knowledgeLoaded" label="正在读取对话内容" />
+              <div v-else-if="!activeKnowledgeConversation" class="knowledge-transcript-empty"><AppIcon name="sparkle" :size="20" /><strong>{{ activeKnowledgeSources.length ? '资料已经准备好' : '从一段新对话开始' }}</strong><span>{{ activeKnowledgeSources.length ? `本次可检索 ${activeKnowledgeSources.length} 篇资料。点一个建议，或直接输入问题。` : '选择资料后提问，答案会保留引用，之后可以继续聊。' }}</span><div v-if="knowledgePromptSuggestions.length" class="knowledge-prompts knowledge-empty-prompts"><span>可以这样问</span><button v-for="prompt in knowledgePromptSuggestions" :key="prompt" type="button" :disabled="aiBusy" @click="useKnowledgePrompt(prompt)">{{ prompt }}</button></div><button v-if="store.documents.length && !knowledgeDocuments.length" class="primary-button" type="button" :disabled="!knowledgeLoaded" @click="addAllKnowledgeSources">一键收录 {{ store.documents.length }} 篇现有文档</button><button v-else-if="!store.documents.length" class="primary-button" type="button" @click="openLibrary('all')">导入 Markdown 文档</button></div>
               <div v-else-if="!activeKnowledgeMessages.length" class="knowledge-transcript-empty"><AppIcon name="sparkle" :size="20" /><strong>{{ activeKnowledgeSources.length ? '资料已经准备好' : '还缺少本次资料' }}</strong><span>{{ activeKnowledgeSources.length ? `本次可检索 ${activeKnowledgeSources.length} 篇资料。点一个建议，或直接输入问题。` : '展开上方“本次资料”，选择文档后就可以开始问。' }}</span><div v-if="knowledgePromptSuggestions.length" class="knowledge-prompts knowledge-empty-prompts"><span>可以这样问</span><button v-for="prompt in knowledgePromptSuggestions" :key="prompt" type="button" :disabled="aiBusy" @click="useKnowledgePrompt(prompt)">{{ prompt }}</button></div></div>
               <article v-for="message in activeKnowledgeMessages" :key="message.id" class="knowledge-message" :class="`is-${message.role}`">
                 <div class="knowledge-message-label">{{ message.role === 'user' ? '你' : '墨阅' }}<time>{{ new Date(message.createdAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) }}</time></div>
@@ -6114,23 +6126,26 @@ async function requestFullscreen() {
                   </div>
                 </CollapseItem></Collapse>
               </article>
-              <p v-if="aiBusy" class="knowledge-working"><span class="knowledge-working-dot" />正在检索本次资料并整理答案…</p>
+              <ContentSkeleton v-if="aiBusy" class="knowledge-message is-assistant knowledge-answer-skeleton" label="正在检索本次资料并整理答案" layout="text" :rows="3" />
             </div>
             <div v-if="activeKnowledgeMessages.length && knowledgePromptSuggestions.length" class="knowledge-prompts"><span>继续问</span><button v-for="prompt in knowledgePromptSuggestions" :key="prompt" type="button" :disabled="aiBusy" @click="useKnowledgePrompt(prompt)">{{ prompt }}</button></div>
             <p v-if="aiError" class="knowledge-ai-error" role="alert">{{ aiError }} · 问题仍保留在输入框，可检查配置后重试。</p>
-            <KnowledgeComposer v-model="knowledgeQuestion" :disabled="!knowledgeLoaded || knowledgeRefreshing" :busy="aiBusy" :has-sources="!!activeKnowledgeSources.length" @submit="askKnowledge" />
-            <p class="knowledge-ask-hint">{{ aiSettings.enabled ? '本轮问题、最近两轮对话和命中的原文片段会发送到设置中的 AI 服务。' : '当前只做本地检索；启用 AI 后可根据命中原文整理回答。' }}</p>
+            <KnowledgeComposer v-model="knowledgeQuestion" :disabled="!knowledgeLoaded || knowledgeRefreshing" :busy="aiBusy" :has-sources="!!activeKnowledgeSources.length" @submit="askKnowledge">
+              <p class="knowledge-ask-hint">{{ aiSettings.enabled ? '本轮问题、最近两轮对话和命中的原文片段会发送到设置中的 AI 服务。' : '当前只做本地检索；启用 AI 后可根据命中原文整理回答。' }}</p>
+            </KnowledgeComposer>
           </section>
           <aside class="knowledge-history" aria-label="最近对话与当前资料">
             <div class="knowledge-history-heading"><div><span class="section-kicker">回到这里</span><h2>最近对话</h2></div><button class="icon-button" type="button" aria-label="新建对话" title="新建对话" :disabled="aiBusy || !knowledgeLoaded" @click="createKnowledgeConversation()"><AppIcon name="plus" :size="15" /></button></div>
             <p class="knowledge-activity"><AppIcon name="sparkle" :size="13" />近 7 天 {{ knowledgeActivitySummary.activeDays }} 天提问 · {{ knowledgeActivitySummary.answers }} 次 AI 回答</p>
             <Input v-model="knowledgeHistoryQuery" allow-clear  class="knowledge-history-search" aria-label="搜索历史对话" placeholder="搜索标题或对话内容…" />
-            <div v-if="sortedKnowledgeConversations.length" class="knowledge-history-list"><article v-for="conversation in sortedKnowledgeConversations" :key="conversation.id" class="knowledge-history-item" :class="{ active: conversation.id === activeKnowledgeConversationId }"><button class="knowledge-history-select" type="button" :disabled="aiBusy" @click="selectKnowledgeConversation(conversation.id)"><strong>{{ conversation.title }}</strong><small>{{ conversation.messages.filter(message => message.role === 'user').length }} 个问题 · {{ conversation.sourceIds.length }} 个知识源</small><time>{{ new Date(conversation.updatedAt).toLocaleDateString('zh-CN') }}</time></button><button class="knowledge-history-delete" type="button" :disabled="aiBusy" :aria-label="`删除对话：${conversation.title}`" title="删除对话" @click="deleteKnowledgeConversationById(conversation.id)"><AppIcon name="trash" :size="13" /></button></article></div>
+            <ContentSkeleton v-if="!knowledgeLoaded" label="正在读取最近对话" :rows="3" />
+            <div v-else-if="sortedKnowledgeConversations.length" class="knowledge-history-list"><article v-for="conversation in sortedKnowledgeConversations" :key="conversation.id" class="knowledge-history-item" :class="{ active: conversation.id === activeKnowledgeConversationId }"><button class="knowledge-history-select" type="button" :disabled="aiBusy" @click="selectKnowledgeConversation(conversation.id)"><strong>{{ conversation.title }}</strong><small>{{ conversation.messages.filter(message => message.role === 'user').length }} 个问题 · {{ conversation.sourceIds.length }} 个知识源</small><time>{{ new Date(conversation.updatedAt).toLocaleDateString('zh-CN') }}</time></button><button class="knowledge-history-delete" type="button" :disabled="aiBusy" :aria-label="`删除对话：${conversation.title}`" title="删除对话" @click="deleteKnowledgeConversationById(conversation.id)"><AppIcon name="trash" :size="13" /></button></article></div>
             <p v-else class="knowledge-history-empty">{{ knowledgeHistoryQuery.trim() ? '没有找到匹配的对话，试试其他关键词。' : '提问后，对话会保存在这里，方便下次接着聊。' }}</p>
             <section class="knowledge-source-preview" aria-label="本次资料">
               <div class="knowledge-source-preview-heading"><div><span class="section-kicker">本次资料</span><strong>{{ activeKnowledgeSources.length }} 篇可检索</strong></div><button class="text-button" type="button" @click="openKnowledgeManager">管理全部 {{ store.documents.length }} 篇</button></div>
               <p v-if="missingKnowledgeSourceCount" class="knowledge-preview-warning">另有 {{ missingKnowledgeSourceCount }} 篇来源已不可用，历史引用仍保留。</p>
-              <div v-if="activeKnowledgeSources.length" class="knowledge-source-preview-list">
+              <ContentSkeleton v-if="!knowledgeLoaded" label="正在读取对话资料" layout="compact" :rows="2" />
+              <div v-else-if="activeKnowledgeSources.length" class="knowledge-source-preview-list">
                 <div v-for="document in activeKnowledgeSources.slice(0, 4)" :key="document.id" class="knowledge-source-preview-row"><AppIcon name="file" :size="13" /><span :title="displayTitle(document.title)">{{ displayTitle(document.title) }}</span></div>
                 <Collapse v-if="activeKnowledgeSources.length > 4" class="knowledge-source-overflow"><CollapseItem key="content"><template #header>查看其余 {{ activeKnowledgeSources.length - 4 }} 篇</template><div v-for="document in activeKnowledgeSources.slice(4)" :key="document.id" class="knowledge-source-preview-row"><AppIcon name="file" :size="13" /><span :title="displayTitle(document.title)">{{ displayTitle(document.title) }}</span></div></CollapseItem></Collapse>
               </div>
@@ -6281,6 +6296,7 @@ async function requestFullscreen() {
                 <div v-if="filesystemTree" class="filesystem-tree" :aria-label="filesystemTreeScope === 'system' ? '当前目录文档树' : '当前目录已载入文档'"><FileSystemTree :node="filesystemTree" :selected-path="filesystemTreeTarget" @toggle="toggleFilesystemNode" @open="openFilesystemTreeNode" @contextmenu="openFilesystemContextMenu" /></div>
                 <p v-else class="file-browser-note"><AppIcon name="info" :size="13" />打开 Markdown 文件后显示所在目录</p>
               </div>
+              <ContentSkeleton v-else-if="fileListLoading" class="file-loading-skeleton" label="正在读取文件列表" :rows="5" />
               <div v-else class="file-list-shell">
                 <div v-if="batchDeletableFiles.length" class="file-list-toolbar">
                   <Checkbox class="file-select-all-arco" :model-value="allFilesSelected" :indeterminate="selectedFiles.length > 0 && !allFilesSelected" aria-label="全选可移除文档" @change="toggleAllFileSelection">全选</Checkbox>
@@ -6507,7 +6523,7 @@ async function requestFullscreen() {
               <nav v-if="!editorOpen && store.mode === 'clean' && (store.currentDocument?.headings.length ?? 0) > 0" class="reading-progress-rail" aria-label="阅读进度导航"><span class="reading-progress-rail-caption">{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}%</span><div class="reading-progress-rail-track"><span class="reading-progress-rail-fill" :style="{ height: `${(currentProgress?.scrollPercent ?? 0) * 100}%` }" /><button v-for="(heading, index) in store.currentDocument?.headings" :key="heading.id" type="button" class="reading-progress-marker" :class="{ active: store.activeHeadingId === heading.id }" :style="{ top: headingRailPosition(index) }" :aria-label="`跳转到 ${heading.text}`" :title="heading.text" @click.stop="scrollToHeading(heading.regionId)"><i /><span>{{ heading.text }}</span></button></div></nav>
               <div v-if="!editorOpen" class="reader-content" :class="[`reader-display-${readerDisplayMode}`, { 'is-course-outline': compactCourseOutline }]">
                 <div v-if="readerDisplayMode === 'html'" class="reader-html-preview">
-                  <p v-if="readerHtmlPreviewLoading" class="reader-html-preview-status" role="status">正在生成网页预览…</p>
+                  <ContentSkeleton v-if="readerHtmlPreviewLoading" class="reader-html-preview-skeleton" label="正在生成网页预览" layout="text" :rows="9" />
                   <div v-else-if="readerHtmlPreviewError" class="reader-html-preview-status" role="alert"><span>{{ readerHtmlPreviewError }}</span><button type="button" @click="showReaderHtmlPreview">重试</button></div>
                   <iframe v-else-if="readerHtmlPreview" ref="readerHtmlFrame" :srcdoc="readerHtmlPreview"
                     title="HTML 网页预览" sandbox="allow-same-origin" @load="onReaderHtmlLoad" />
@@ -6824,6 +6840,10 @@ async function requestFullscreen() {
 </template>
 
 <style scoped>
+.file-loading-skeleton { min-height: 0; overflow: auto; }
+.knowledge-answer-skeleton { width: min(28rem, 88%); }
+.reader-html-preview-skeleton { width: min(100%, var(--reader-width, 760px)); margin-inline: auto; padding: 32px clamp(16px, 5vw, 48px); }
+.editor-loading-skeleton { padding: 20px clamp(16px, 5vw, 48px); }
 .ai-web-switcher { display: flex; flex: none; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 5px 8px; border-bottom: 1px solid var(--border); background: var(--surface); font: 12px var(--ui-font); }
 .ai-web-tabs { display: flex; flex: 1 1 160px; min-width: 0; gap: 4px; overflow-x: auto; }
 .ai-web-tab, .ai-web-layout { display: flex; align-items: center; flex: none; border: 1px solid var(--border); border-radius: 6px; white-space: nowrap; }
