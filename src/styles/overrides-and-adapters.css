@@ -1604,6 +1604,94 @@ a:active > .app-icon-vector { transform: scale(.92); }
 }
 .moyue-select.ant-select-single .ant-select-selection-search-input { height: 100%; }
 .moyue-select.ant-select-single.ant-select-open:not(.ant-select-show-search) .ant-select-selection-item { color: inherit; }
+/* Packaged WKWebView can lose Ant Design's runtime-injected CSS. Keep single-select
+   layout self-contained so the selected value never spills over adjacent controls. */
+.app-shell .moyue-select.ant-select-single {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  overflow: hidden;
+  vertical-align: middle;
+}
+.app-shell .moyue-select.ant-select-single > .ant-select-selector {
+  display: flex;
+  flex: 1 1 auto;
+  align-self: stretch;
+  align-items: center;
+  box-sizing: border-box;
+  min-width: 0;
+  height: auto;
+  overflow: hidden;
+}
+.app-shell .moyue-select.ant-select-single .ant-select-selection-search,
+.app-shell .moyue-select.ant-select-single .ant-select-selection-search-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: auto;
+}
+.app-shell .moyue-select.ant-select-single .ant-select-selection-search-input {
+  margin: 0;
+  padding: 0 22px 0 8px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font: 12px/32px var(--ui-font);
+}
+.app-shell .moyue-select.ant-select-single .ant-select-selection-item,
+.app-shell .moyue-select.ant-select-single .ant-select-selection-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 0 22px 0 8px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+.app-shell .moyue-select.ant-select-single .ant-select-arrow {
+  position: absolute;
+  top: 50%;
+  right: 7px;
+  display: inline-flex;
+  align-items: center;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.app-shell .moyue-select.ant-select-single .ant-select-arrow .anticon {
+  display: inline-flex;
+  font-size: 10px;
+}
+.app-shell .file-tree-mix .ant-switch {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  box-sizing: border-box;
+  width: 28px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--border);
+  vertical-align: middle;
+}
+.app-shell .file-tree-mix .ant-switch .ant-switch-handle {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--surface-raised);
+  transition: transform .2s ease;
+}
+.app-shell .file-tree-mix .ant-switch.ant-switch-checked { background: var(--accent); }
+.app-shell .file-tree-mix .ant-switch.ant-switch-checked .ant-switch-handle { transform: translateX(12px); }
 .app-shell .ant-select-single .ant-select-arrow,
 .app-shell :is(.moyue-input-field, .moyue-textarea-field) .ant-input-clear-icon {
   color: var(--muted);
@@ -1715,6 +1803,56 @@ a:active > .app-icon-vector { transform: scale(.92); }
   height: calc(var(--settings-control-height) - 2px);
   padding-inline: var(--settings-control-inset);
   font: inherit;
+}
+/* Static fallback for Ant Design popups when the packaged WebView drops CSS-in-JS. */
+.ant-dropdown,
+.ant-select-dropdown {
+  position: absolute !important;
+  z-index: 1050;
+  box-sizing: border-box;
+}
+.ant-dropdown-menu,
+.ant-menu {
+  box-sizing: border-box;
+  margin: 0 !important;
+  padding: 4px 0 !important;
+  border-radius: 8px;
+  background: var(--surface-raised);
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--app-bg) 28%, transparent);
+  list-style: none !important;
+  font: 12px/1.45 var(--ui-font);
+}
+:is(.ant-dropdown-menu-item, .ant-menu-item) {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  min-height: 32px;
+  padding: 4px 12px !important;
+  border-radius: 6px;
+  color: var(--ink);
+  list-style: none !important;
+  cursor: pointer;
+}
+:is(.ant-dropdown-menu-item, .ant-menu-item) :is(.ant-dropdown-menu-item-icon, .ant-menu-item-icon) {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+.ant-select-dropdown {
+  overflow: hidden;
+  padding: 4px 0;
+  font: 12px/1.45 var(--ui-font);
+}
+.ant-select-dropdown .ant-select-item {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: 30px;
+  padding: 4px 12px;
+  color: var(--ink);
+  list-style: none;
+  white-space: nowrap;
 }
 .ant-select-dropdown,
 .ant-dropdown-menu {
