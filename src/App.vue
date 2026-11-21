@@ -140,9 +140,14 @@ const outlinePanelDefaultWidth = typeof window !== 'undefined' && window.innerWi
 const savedOutlinePanelWidth = Number(localStorage.getItem('moyue:outline-panel-width'))
 const outlinePanelWidth = ref(Number.isFinite(savedOutlinePanelWidth) ? Math.min(outlinePanelMaxWidth, Math.max(outlinePanelMinWidth, savedOutlinePanelWidth)) : outlinePanelDefaultWidth)
 const outlinePanelCollapsed = ref(localStorage.getItem('moyue:outline-panel-collapsed') === 'true')
+const outlinePanelPreview = ref(false)
+const outlinePanelPreviewPosition = ref({ top: 0, left: 0 })
+const outlinePanel = ref<HTMLElement | null>(null)
 const outlinePanelExpandButton = ref<HTMLButtonElement | null>(null)
 const outlinePanelToggleButton = ref<HTMLButtonElement | null>(null)
 const outlinePanelResizing = ref(false)
+let outlinePanelHoverTimer: number | undefined
+let outlinePanelPointerInside = false
 let outlineResizeStart: { x: number; width: number; handle: HTMLElement } | null = null
 const readerViewport = ref<HTMLElement | null>(null)
 type SearchModal = 'search' | 'quick-open'
@@ -202,6 +207,7 @@ const FAVORITES_KEY = 'moyue:favorites'
 const KNOWLEDGE_DOCUMENTS_KEY = 'moyue:knowledge-documents'
 const PERSONAL_NOTES_KEY = 'moyue:personal-notes'
 const AI_SETTINGS_KEY = 'moyue:ai-settings'
+const TRANSLATION_PROVIDER_KEY = 'moyue:translation-provider'
 const MISSING_KNOWLEDGE_FILES_KEY = 'moyue:knowledge-missing-files'
 const ACTIVE_KNOWLEDGE_CONVERSATION_KEY = 'moyue:knowledge-active-conversation'
 const advancedDefaults: AdvancedSettings = { showReadingProgress: true, defaultExtension: 'md', defaultCodeLanguage: 'text', rememberCodeLanguage: true, emojiAutocomplete: true, autoLink: true, rememberRecent: true, dropBehavior: 'insert', picListEndpoint: 'http://127.0.0.1:36677/upload', picListKey: '', epubChapterDepth: 3, referenceDocx: '', printPageSize: 'A4', printMargin: 18, printHeader: '', printFooter: '', printBackground: true, spellcheck: true, typewriterMode: false, editorAutoSave: false, remoteImagePrivacy: true, relativeImagePathPrefix: false }
@@ -287,6 +293,8 @@ const aiModelsBusy = ref(false)
 const ollamaModels = ref<string[]>([])
 const aiStatus = ref<'idle' | 'checking' | 'connected' | 'saved' | 'error'>('idle')
 const aiError = ref('')
+let aiSettingsRevision = 0
+let ollamaModelsRequest = 0
 const orderedRecentFolders = computed(() => orderRecentFolders(recentFolders.value))
 const viewer = ref<{ type: ViewerType; region: ReaderRegion } | null>(null)
 const viewerTab = ref<'preview' | 'source' | 'data'>('preview')
@@ -303,6 +311,8 @@ const viewerDragging = ref(false)
 const viewerStage = ref<HTMLElement | null>(null)
 let viewerPointer = { x: 0, y: 0 }
 const customProvider = ref('')
+const translationProviderBusy = ref(true)
+const translationProviderError = ref('')
 const busyAction = ref<BusyAction>(null)
 const exporting = ref(false)
 type DocumentIssue = {
@@ -3262,7 +3272,7 @@ async function removeUnavailableKnowledgeSources() {
   notify(`已移除 ${removed} 个不可用来源；历史引用和摘录仍保留`)
 }
 async function requestAi(messages: AiMessage[]) {
-  const settings = aiSettings.value
+  const settings = { ...aiSettings.value }
   if (!settings.baseUrl.trim() || !settings.model.trim()) throw new Error('请先填写 AI 服务地址和模型名')
   const payload = aiPayload(settings, messages)
   if (isTauriRuntime()) {
@@ -3282,50 +3292,104 @@ async function requestAi(messages: AiMessage[]) {
   return { text, model: settings.model, provider: settings.provider }
 }
 async function loadOllamaModels(reportError = true) {
-  if (aiSettings.value.provider !== 'ollama' || aiModelsBusy.value || !aiSettings.value.baseUrl.trim()) return
+  const { provider, baseUrl } = aiSettings.value
+  if (provider !== 'ollama' || aiModelsBusy.value) return
+  if (!baseUrl.trim()) {
+    if (reportError) aiError.value = '请先填写 AI 服务地址，再读取模型'
+    return
+  }
+  const request = ++ollamaModelsRequest
   aiModelsBusy.value = true
   if (reportError) aiError.value = ''
   try {
-    if (isTauriRuntime()) ollamaModels.value = await invoke<string[]>('ollama_models', { baseUrl: aiSettings.value.baseUrl })
+    let models: string[]
+    if (isTauriRuntime()) models = await invoke<string[]>('ollama_models', { baseUrl })
     else {
-      const response = await fetch(ollamaTagsEndpoint(aiSettings.value.baseUrl), { signal: AbortSignal.timeout(10000) })
+      const response = await fetch(ollamaTagsEndpoint(baseUrl), { signal: AbortSignal.timeout(10000) })
       const body = await response.json()
       if (!response.ok) throw new Error(`Ollama 服务返回 ${response.status}`)
-      ollamaModels.value = ollamaModelNames(body)
+      models = ollamaModelNames(body)
     }
-    if (!ollamaModels.value.length) throw new Error('Ollama 中还没有已安装的模型')
-    if (!aiSettings.value.model.trim()) aiSettings.value.model = ollamaModels.value[0]
+    if (request !== ollamaModelsRequest) return
+    if (!models.length) throw new Error('Ollama 中还没有已安装的模型')
+    ollamaModels.value = models
+    if (!aiSettings.value.model.trim()) aiSettings.value.model = models[0]
   } catch (error) {
+    if (request !== ollamaModelsRequest) return
     ollamaModels.value = []
     if (reportError) aiError.value = error instanceof Error ? error.message : '读取 Ollama 模型失败'
-  } finally { aiModelsBusy.value = false }
+  } finally {
+    if (request === ollamaModelsRequest) aiModelsBusy.value = false
+  }
 }
+watch([() => aiSettings.value.provider, () => aiSettings.value.baseUrl], () => {
+  ollamaModelsRequest += 1
+  ollamaModels.value = []
+  aiModelsBusy.value = false
+}, { flush: 'sync' })
+watch([() => aiSettings.value.provider, () => aiSettings.value.baseUrl, () => aiSettings.value.model, () => aiSettings.value.apiKey], () => {
+  aiSettingsRevision += 1
+  aiStatus.value = 'idle'
+  aiError.value = ''
+}, { flush: 'sync' })
 watch([view, settingsTab, () => aiSettings.value.provider], ([currentView, currentTab, provider]) => {
   if (currentView === 'settings' && currentTab === 'reading' && provider === 'ollama') void loadOllamaModels(false)
 })
 async function testAiConnection() {
   if (aiBusy.value) return
+  const revision = aiSettingsRevision
   aiBusy.value = true
   aiStatus.value = 'checking'
   aiError.value = ''
   try {
     await requestAi([{ role: 'user', content: '请只回复：连接成功' }])
+    if (revision !== aiSettingsRevision) return
     aiStatus.value = 'connected'
     notify('AI 服务连接成功')
   } catch (error) {
+    if (revision !== aiSettingsRevision) return
     aiStatus.value = 'error'
     aiError.value = error instanceof Error ? error.message : 'AI 服务连接失败'
   } finally { aiBusy.value = false }
 }
 async function loadPersistedAiSettings() {
+  const revision = aiSettingsRevision
   try {
     const saved = await loadAppSetting<Partial<AiSettings>>(AI_SETTINGS_KEY)
-    if (saved) aiSettings.value = { ...defaultAiSettings, ...saved, apiKey: '' }
+    if (saved && revision === aiSettingsRevision) aiSettings.value = { ...defaultAiSettings, ...saved, apiKey: '' }
   } catch { /* The synchronous local fallback is already active. */ }
 }
+async function loadTranslationProvider() {
+  try {
+    const saved = await loadAppSetting<string>(TRANSLATION_PROVIDER_KEY)
+    if (typeof saved === 'string') customProvider.value = saved
+  } catch {
+    translationProviderError.value = '无法读取已保存的服务标识'
+  } finally {
+    translationProviderBusy.value = false
+  }
+}
+async function saveTranslationProvider() {
+  if (translationProviderBusy.value) return
+  translationProviderBusy.value = true
+  translationProviderError.value = ''
+  const identifier = customProvider.value.trim()
+  try {
+    await saveAppSetting(TRANSLATION_PROVIDER_KEY, identifier)
+    customProvider.value = identifier
+    notify(identifier ? '服务标识已保存' : '服务标识已清除')
+  } catch {
+    translationProviderError.value = '服务标识保存失败，请检查本地存储权限后重试'
+  } finally {
+    translationProviderBusy.value = false
+  }
+}
 async function saveAiSettings() {
+  const revision = aiSettingsRevision
   aiError.value = ''
-  if (!(await persistAiSettings(aiSettings.value))) {
+  const saved = await persistAiSettings(aiSettings.value)
+  if (revision !== aiSettingsRevision) return
+  if (!saved) {
     aiStatus.value = 'error'
     aiError.value = 'AI 服务配置保存失败，请检查应用存储权限'
     return
@@ -3409,6 +3473,7 @@ async function askKnowledge() {
       await finish(`已在本次资料中找到 ${matches.length} 条原文。开启 AI 回答后，我可以帮你归纳；当前先保留可核对的引用。`)
       return
     }
+    const revision = aiSettingsRevision
     aiStatus.value = 'checking'
     try {
       const priorMessages = recentKnowledgeContext(currentConversation.messages.slice(0, -1))
@@ -3422,11 +3487,14 @@ async function askKnowledge() {
       const day = localDayKey()
       try { knowledgeActivity.value = await recordKnowledgeAnswer(day) }
       catch { knowledgeActivity.value = { ...knowledgeActivity.value, [day]: (knowledgeActivity.value[day] ?? 0) + 1 } }
-      aiStatus.value = 'connected'
+      if (revision === aiSettingsRevision) aiStatus.value = 'connected'
     } catch (error) {
-      aiStatus.value = 'error'
-      aiError.value = error instanceof Error ? error.message : 'AI 回答失败'
-      await finish(`AI 服务暂时不可用：${aiError.value}。可以先查看本轮原文，或在输入框中重试。`)
+      const message = error instanceof Error ? error.message : 'AI 回答失败'
+      if (revision === aiSettingsRevision) {
+        aiStatus.value = 'error'
+        aiError.value = message
+      }
+      await finish(`AI 服务暂时不可用：${message}。可以先查看本轮原文，或在输入框中重试。`)
       knowledgeQuestion.value = question
     }
   } finally { aiBusy.value = false }
@@ -3521,10 +3589,63 @@ function setOutlinePanelWidth(width: number) {
   localStorage.setItem('moyue:outline-panel-width', String(outlinePanelWidth.value))
 }
 function toggleOutlinePanel() {
+  closeOutlinePanelPreview()
   outlinePanelCollapsed.value = !outlinePanelCollapsed.value
   localStorage.setItem('moyue:outline-panel-collapsed', String(outlinePanelCollapsed.value))
   void nextTick(() => (outlinePanelCollapsed.value ? outlinePanelExpandButton : outlinePanelToggleButton).value?.focus())
 }
+function cancelOutlinePanelHoverTimer() {
+  window.clearTimeout(outlinePanelHoverTimer)
+  outlinePanelHoverTimer = undefined
+}
+function scheduleOutlinePanelPreview(event: PointerEvent) {
+  if (event.pointerType !== 'mouse') return
+  enterOutlinePanel(event)
+  if (!outlinePanelCollapsed.value || editorOpen.value || outlinePanelPreview.value) return
+  cancelOutlinePanelHoverTimer()
+  outlinePanelHoverTimer = window.setTimeout(() => {
+    outlinePanelHoverTimer = undefined
+    const trigger = outlinePanelExpandButton.value
+    const panel = outlinePanel.value
+    if (!trigger || !panel) return
+    const triggerBounds = trigger.getBoundingClientRect()
+    const panelBounds = panel.getBoundingClientRect()
+    outlinePanelPreviewPosition.value = {
+      top: Math.max(0, Math.ceil(triggerBounds.bottom - panelBounds.top)),
+      left: Math.max(0, Math.floor(triggerBounds.left - panelBounds.left)),
+    }
+    outlinePanelPreview.value = true
+  }, 140)
+}
+function enterOutlinePanel(event: PointerEvent) {
+  if (event.pointerType !== 'mouse') return
+  outlinePanelPointerInside = true
+  if (outlinePanelPreview.value) cancelOutlinePanelHoverTimer()
+}
+function leaveOutlinePanel(event: PointerEvent) {
+  if (event.pointerType !== 'mouse') return
+  outlinePanelPointerInside = false
+  scheduleOutlinePanelPreviewClose()
+}
+function scheduleOutlinePanelPreviewClose() {
+  if (outlinePanelPointerInside) return
+  cancelOutlinePanelHoverTimer()
+  if (!outlinePanelPreview.value) return
+  outlinePanelHoverTimer = window.setTimeout(() => {
+    outlinePanelHoverTimer = undefined
+    const active = document.activeElement
+    if (active !== outlinePanelExpandButton.value && active?.matches(':focus-visible') && outlinePanel.value?.contains(active)) return
+    closeOutlinePanelPreview()
+  }, 180)
+}
+function closeOutlinePanelPreview() {
+  cancelOutlinePanelHoverTimer()
+  outlinePanelPreview.value = false
+}
+watch([view, readerSidebarAvailable, editorOpen, outlinePanelCollapsed], () => {
+  outlinePanelPointerInside = false
+  closeOutlinePanelPreview()
+})
 function toggleReaderOutline() {
   if (!outlinePanelCollapsed.value && leftPanelTab.value === 'outline') {
     toggleOutlinePanel()
@@ -4544,6 +4665,7 @@ onMounted(() => {
   void migrateEditorDrafts()
   void loadDurableData('moyue:clipboard-history', value => Array.isArray(value) ? value : null)
   void loadPersistedAiSettings()
+  void loadTranslationProvider()
   void loadKnowledgeWorkspace()
   void loadPersonalNotes()
   void bindNativeFileDrop()
@@ -4562,6 +4684,7 @@ onUnmounted(() => {
   if (!isTauriRuntime()) window.removeEventListener('beforeunload', protectUnsavedEditor)
   if (editorAutoSaveTimer !== null) window.clearInterval(editorAutoSaveTimer)
   stopOutlinePanelResize()
+  cancelOutlinePanelHoverTimer()
   stopEditorSplitResize()
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('paste', onPaste)
@@ -4787,6 +4910,17 @@ function onKeydown(event: KeyboardEvent) {
       closeTabMenus()
       return
     }
+  }
+  if (event.key === 'Escape' && outlinePanelPreview.value) {
+    event.preventDefault()
+    if (fileContextMenu.value) {
+      closeTabMenus()
+      return
+    }
+    const restoreFocus = outlinePanel.value?.contains(document.activeElement)
+    closeOutlinePanelPreview()
+    if (restoreFocus) outlinePanelExpandButton.value?.focus()
+    return
   }
   if (view.value === 'reader' && !isTypingTarget(event.target) && (event.ctrlKey || event.metaKey)) {
     const isZoomIn = event.key === '+' || event.key === '=' || event.key === 'Add' || event.code === 'Equal' || event.code === 'NumpadAdd'
@@ -6053,6 +6187,7 @@ async function assist(kind: 'translate' | 'explain') {
     return
   }
   selectionToolbar.value = null
+  const revision = aiSettingsRevision
   aiBusy.value = true
   aiStatus.value = 'checking'
   aiError.value = ''
@@ -6074,12 +6209,15 @@ async function assist(kind: 'translate' | 'explain') {
       title: titleForKnowledgeQuestion(`${kind === 'translate' ? '翻译' : '解释'}：${selected.text.slice(0, 80)}`),
       messages: [userMessage, assistantMessage], updatedAt: Date.now(),
     })
-    aiStatus.value = 'connected'
+    if (revision === aiSettingsRevision) aiStatus.value = 'connected'
     view.value = 'knowledge'
   } catch (error) {
-    aiStatus.value = 'error'
-    aiError.value = error instanceof Error ? error.message : 'AI 请求失败'
-    notify(aiError.value)
+    const message = error instanceof Error ? error.message : 'AI 请求失败'
+    if (revision === aiSettingsRevision) {
+      aiStatus.value = 'error'
+      aiError.value = message
+    }
+    notify(message)
   } finally { aiBusy.value = false }
 }
 function beginAnnotation() { if (!selectionToolbar.value) return; annotationEditor.value = { text: selectionToolbar.value.text, regionId: selectionToolbar.value.regionId }; annotationNote.value = ''; selectionToolbar.value = null }
@@ -6397,16 +6535,26 @@ async function requestFullscreen() {
           </template>
         </Modal>
         <div class="reader-layout" :class="{ 'focus-layout': store.mode === 'focus', 'clean-layout': store.mode === 'clean', 'split-layout': readerDisplayMode === 'split', 'html-layout': readerDisplayMode === 'html', 'context-open': readerContextVisible, 'outline-panel-collapsed': outlinePanelCollapsed, 'is-resizing-outline': outlinePanelResizing }" :style="{ '--outline-panel-width': `${outlinePanelWidth}px`, gridTemplateColumns: readerWebPreviewColumns }">
-          <aside v-if="readerSidebarAvailable" id="reader-sidebar" class="outline-panel" :class="{ 'is-collapsed': outlinePanelCollapsed }">
-            <button v-if="outlinePanelCollapsed" ref="outlinePanelExpandButton" class="outline-panel-expand" type="button" title="展开阅读侧栏" aria-label="展开阅读侧栏" :aria-expanded="!outlinePanelCollapsed" aria-controls="reader-sidebar" @click="toggleOutlinePanel"><AppIcon name="chevron-right" :size="13" /></button>
-            <template v-else>
-            <div class="outline-resizer" role="separator" tabindex="0" aria-orientation="vertical" aria-label="调整阅读侧栏宽度；拖窄可收起，双击恢复默认宽度，按 Enter 收起" :aria-valuemin="outlinePanelMinWidth" :aria-valuemax="outlinePanelMaxWidth" :aria-valuenow="outlinePanelWidth" :aria-valuetext="`${outlinePanelWidth}px`" title="拖动调整宽度；拖窄可收起；双击恢复默认宽度" @pointerdown="startOutlinePanelResize" @dblclick="resetOutlinePanelWidth" @keydown="onOutlinePanelResizeKeydown" />
+          <aside v-if="readerSidebarAvailable" id="reader-sidebar" ref="outlinePanel" class="outline-panel"
+            :class="{ 'is-collapsed': outlinePanelCollapsed, 'is-previewing': outlinePanelPreview }"
+            :style="outlinePanelPreview ? {
+              '--outline-preview-top': `${outlinePanelPreviewPosition.top}px`,
+              '--outline-preview-left': `${outlinePanelPreviewPosition.left}px`,
+            } : undefined"
+            @pointerenter="enterOutlinePanel" @pointerleave="leaveOutlinePanel" @focusout="scheduleOutlinePanelPreviewClose">
+            <template v-if="!outlinePanelCollapsed || outlinePanelPreview">
+            <div v-if="!outlinePanelCollapsed" class="outline-resizer" role="separator" tabindex="0" aria-orientation="vertical" aria-label="调整阅读侧栏宽度；拖窄可收起，双击恢复默认宽度，按 Enter 收起" :aria-valuemin="outlinePanelMinWidth" :aria-valuemax="outlinePanelMaxWidth" :aria-valuenow="outlinePanelWidth" :aria-valuetext="`${outlinePanelWidth}px`" title="拖动调整宽度；拖窄可收起；双击恢复默认宽度" @pointerdown="startOutlinePanelResize" @dblclick="resetOutlinePanelWidth" @keydown="onOutlinePanelResizeKeydown" />
             <div class="panel-heading panel-switcher">
               <div class="panel-tabs" role="tablist" aria-label="阅读侧栏">
             <button type="button" :class="{ active: leftPanelTab === 'files' }" @click="leftPanelTab = 'files'">文件 <span>{{ currentDirectoryFiles.length }}</span></button>
                 <button type="button" :class="{ active: leftPanelTab === 'outline' }" @click="leftPanelTab = 'outline'">大纲</button>
               </div>
-              <button ref="outlinePanelToggleButton" class="text-button outline-panel-toggle" type="button" title="收起阅读侧栏" aria-label="收起阅读侧栏" :aria-expanded="!outlinePanelCollapsed" aria-controls="reader-sidebar" @click="toggleOutlinePanel"><AppIcon name="chevron-right" :size="12" />收起</button>
+              <button ref="outlinePanelToggleButton" class="text-button outline-panel-toggle" type="button"
+                :title="outlinePanelPreview ? '固定阅读侧栏' : '收起阅读侧栏'"
+                :aria-label="outlinePanelPreview ? '固定阅读侧栏' : '收起阅读侧栏'"
+                aria-expanded="true" aria-controls="reader-sidebar" @click="toggleOutlinePanel">
+                <AppIcon :name="outlinePanelPreview ? 'pin' : 'sidebar-layout'" :size="14" />{{ outlinePanelPreview ? '固定' : '收起' }}
+              </button>
             </div>
             <div v-if="leftPanelTab === 'files'" class="file-browser-panel">
               <div class="file-location" :title="fileBrowserMode === 'tree' ? filesystemTree?.path : currentDirectory"><AppIcon name="folder" :size="15" /><span>{{ fileBrowserMode === 'tree' ? '目录树' : currentDirectoryLabel }}</span><button class="file-tree-back" type="button" :aria-label="fileBrowserMode === 'tree' ? '切换到文档列表' : '切换到目录树'" @click="fileBrowserMode === 'tree' ? showDocumentList() : showDocumentTree()">{{ fileBrowserMode === 'tree' ? '列表' : '目录树' }}</button></div>
@@ -6500,6 +6648,11 @@ async function requestFullscreen() {
                 </div>
                 <div v-if="!editorOpen" class="reader-meta-tools">
                   <div class="reader-edit-actions">
+                    <button v-if="readerSidebarAvailable && outlinePanelCollapsed" ref="outlinePanelExpandButton" class="outline-panel-expand" type="button"
+                      title="悬停预览，点击展开阅读侧栏" aria-label="展开阅读侧栏" :aria-expanded="outlinePanelPreview" aria-controls="reader-sidebar"
+                      @pointerenter="scheduleOutlinePanelPreview" @pointerleave="leaveOutlinePanel" @click="toggleOutlinePanel">
+                      <AppIcon name="sidebar-layout" :size="16" />
+                    </button>
                     <button type="button" :class="{ active: editorOpen }" @click="editorOpen ? closeEditor() : openEditor()">{{ editorOpen ? '阅读' : '编辑' }}</button>
                     <button v-if="!isRealDocumentPath(store.currentDocument?.path ?? '')" class="save-pasted-button" type="button" :disabled="savingDocument" @click="saveCurrentDocument">{{ savingDocument ? '保存中…' : '保存 Markdown' }}</button>
                     <AppDropdown class="reader-more-menu">
@@ -6757,11 +6910,11 @@ async function requestFullscreen() {
             <div><p class="section-kicker">偏好设置</p><h1>把阅读，调成<br /><em>自己的样子。</em></h1></div>
             <span class="settings-save-note">阅读偏好会自动保存</span>
           </div>
-          <div class="settings-tabs">
-            <Button :class="{ active: settingsTab === 'reading' }" type="secondary" @click="settingsTab = 'reading'">阅读偏好</Button>
-            <Button :class="{ active: settingsTab === 'editing' }" type="secondary" @click="settingsTab = 'editing'">编辑与导出</Button>
-            <Button :class="{ active: settingsTab === 'shortcuts' }" type="secondary" @click="settingsTab = 'shortcuts'">快捷键</Button>
-            <Button :class="{ active: settingsTab === 'extensions' }" type="secondary" @click="settingsTab = 'extensions'">插件扩展</Button>
+          <div class="settings-tabs" role="group" aria-label="设置分类">
+            <Button :class="{ active: settingsTab === 'reading' }" :aria-pressed="settingsTab === 'reading'" type="secondary" @click="settingsTab = 'reading'">阅读偏好</Button>
+            <Button :class="{ active: settingsTab === 'editing' }" :aria-pressed="settingsTab === 'editing'" type="secondary" @click="settingsTab = 'editing'">编辑与导出</Button>
+            <Button :class="{ active: settingsTab === 'shortcuts' }" :aria-pressed="settingsTab === 'shortcuts'" type="secondary" @click="settingsTab = 'shortcuts'">快捷键</Button>
+            <Button :class="{ active: settingsTab === 'extensions' }" :aria-pressed="settingsTab === 'extensions'" type="secondary" @click="settingsTab = 'extensions'">插件扩展</Button>
             <Button type="secondary" @click="notify('文件关联设置将在桌面端接入')">文件关联</Button>
             <Button type="secondary" @click="notify('同步与备份暂不启用')">同步与备份</Button>
           </div>
@@ -6792,8 +6945,18 @@ async function requestFullscreen() {
         <div v-show="settingsTab === 'editing'" class="settings-card"><span class="section-kicker">图片上传</span><h2>PicList</h2><label class="setting-input">服务地址<Input v-model="advancedSettings.picListEndpoint" placeholder="http://127.0.0.1:36677/upload" /></label><label class="setting-input">接口密钥<InputPassword v-model:value="advancedSettings.picListKey" placeholder="可选" /></label><p class="muted-copy">仅连接本机 PicList 服务；图片不会经过墨阅服务器。</p></div>
         <div v-show="settingsTab === 'editing'" class="settings-card"><span class="section-kicker">图片路径</span><h2>相对路径</h2><Checkbox class="setting-check" v-model:checked="advancedSettings.relativeImagePathPrefix">新插入的本地图片路径以 <code>./</code> 开头</Checkbox><p class="muted-copy">应用于导入、粘贴、拖入、下载、整理和重命名；已有引用保持不变。</p></div>
         <div v-show="settingsTab === 'editing'" class="settings-card"><span class="section-kicker">远程图片</span><h2>兼容与隐私</h2><Checkbox class="setting-check" v-model:checked="advancedSettings.remoteImagePrivacy">不向图片服务发送来源信息</Checkbox><p class="muted-copy">默认采用浏览器标准策略，兼容需要来源信息的图床；启用后会以 no-referrer 请求远程图片。</p></div>
-        <div v-show="settingsTab === 'editing'" class="settings-card"><span class="section-kicker">导出</span><h2>电子书与打印</h2><p class="muted-copy">HTML / EPUB / PDF / 长图跟随当前主题与排版；桌面端 DOCX / LaTeX 使用 Pandoc；EPUB 内嵌图像、视频和字幕，保留公式、脚注和链接。</p><label class="setting-input">Word 样式模板（可选 .docx）<Input :model-value="advancedSettings.referenceDocx" readonly placeholder="使用 Pandoc 默认样式" /></label><div class="setting-actions"><Button class="ghost-button" type="secondary" @click="chooseDocxReference">选择模板</Button><Button v-if="advancedSettings.referenceDocx" class="ghost-button" type="secondary" @click="advancedSettings.referenceDocx = ''">恢复默认</Button></div><label class="setting-row"><span>EPUB 目录层级 <b>H{{ advancedSettings.epubChapterDepth }}</b></span><Slider v-model:value="advancedSettings.epubChapterDepth" :min="1" :max="6" /></label><div class="setting-form-grid"><div class="setting-input"><span>纸张</span><Select v-model:value="advancedSettings.printPageSize" label="纸张"><Option value="A4">A4</Option><Option value="Letter">Letter</Option></Select></div><label class="setting-input">页边距（mm）<InputNumber v-model:value="advancedSettings.printMargin" :min="8" :max="40" /></label><label class="setting-input">页眉<Input v-model="advancedSettings.printHeader" /></label><label class="setting-input">页脚<Input v-model="advancedSettings.printFooter" /></label></div><Checkbox class="setting-check" v-model:checked="advancedSettings.printBackground">打印主题背景</Checkbox></div>
-        <div v-show="settingsTab === 'reading'" class="settings-card"><span class="section-kicker">阅读</span><h2>阅读偏好</h2><label class="setting-row"><span>正文宽度 <b>{{ store.readerSettings.width }}px</b></span><Slider :value="store.readerSettings.width" :min="620" :max="1280" :step="10" @update:value="changeSetting('width', Number($event))" /></label><label class="setting-row"><span>字号 <b>{{ store.readerSettings.fontSize }}px</b></span><Slider :value="store.readerSettings.fontSize" :min="15" :max="24" :step="1" @update:value="changeSetting('fontSize', Number($event))" /></label><label class="setting-row"><span>行距 <b>{{ store.readerSettings.lineHeight }}</b></span><Slider :value="store.readerSettings.lineHeight" :min="1.4" :max="2.2" :step=".05" @update:value="changeSetting('lineHeight', Number($event))" /></label><div class="setting-toggle-row"><span>显示阅读进度</span><Switch v-model:checked="advancedSettings.showReadingProgress" aria-label="显示阅读进度" /></div><div class="setting-toggle-row"><span>专注阅读</span><Switch :checked="store.mode === 'focus'" :disabled="!store.currentDocument" aria-label="专注阅读" @change="toggleFocusMode" /></div></div><div v-show="settingsTab === 'reading'" class="settings-card"><span class="section-kicker">辅助功能</span><h2>翻译与解释</h2><p class="muted-copy">使用适配器连接你自己的翻译或解释服务；配置后可从划词工具栏调用。</p><label class="setting-input">服务标识<Input v-model="customProvider" placeholder="例如：local-llm / my-translator" /></label><Button class="primary-button" type="primary" @click="notify(customProvider ? '适配器标识已保存' : '保持未配置状态')"><template #icon><AppIcon name="check" :size="14" /></template>保存配置</Button></div><div v-show="settingsTab === 'shortcuts'" class="settings-card shortcuts-card"><span class="section-kicker">快捷操作</span><h2>快捷键</h2><div class="shortcut-row"><span>全局搜索</span><kbd>Ctrl / Cmd + K</kbd></div><div class="shortcut-row"><span>当前文档搜索</span><kbd>Ctrl / Cmd + F</kbd></div><div class="shortcut-row"><span>阅读缩放</span><kbd>Ctrl / Cmd + + / -</kbd></div><div class="shortcut-row"><span>专注模式</span><kbd>F</kbd></div><div class="shortcut-row"><span>退出聚焦</span><kbd>Esc</kbd></div><div class="shortcut-row"><span>切换区域</span><kbd>↑ ↓</kbd></div></div><div v-show="settingsTab === 'extensions'" class="settings-card extensions-card"><div class="extensions-head"><div><span class="section-kicker">插件中心</span><h2>插件扩展</h2></div><Button class="ghost-button" type="secondary" @click="notify('插件运行时将在后续版本启用')"><template #icon><AppIcon name="plugin" :size="14" /></template>打开插件目录</Button></div><div class="extension-filter"><AppIcon name="search" :size="14" /><span>按需扩展阅读能力</span></div><div class="extension-list"><div class="extension-item"><span class="extension-icon purple"><AppIcon name="sparkle" :size="17" /></span><span><b>AI 阅读助手</b><small>总结、解释与问答适配器</small></span><Button type="secondary" @click="notify('请先在翻译与解释中配置服务')">配置</Button></div><div class="extension-item"><span class="extension-icon green"><AppIcon name="download" :size="17" /></span><span><b>导出增强</b><small>为阅读内容准备更多导出格式</small></span><Button type="secondary" @click="notify('导出增强将在下一阶段接入')">安装</Button></div><div class="extension-item"><span class="extension-icon pink"><AppIcon name="components" :size="17" /></span><span><b>思维导图</b><small>把长文转换为结构化视图</small></span><Button type="secondary" @click="notify('插件运行时暂未启用')">安装</Button></div></div></div></div></section>
+        <div v-show="settingsTab === 'editing'" class="settings-card"><span class="section-kicker">导出</span><h2>电子书与打印</h2><p class="muted-copy">HTML / EPUB / PDF / 长图跟随当前主题与排版；桌面端 DOCX / LaTeX 使用 Pandoc；EPUB 内嵌图像、视频和字幕，保留公式、脚注和链接。</p><label class="setting-input">Word 样式模板（可选 .docx）<Input :model-value="advancedSettings.referenceDocx" readonly placeholder="使用 Pandoc 默认样式" /></label><div class="setting-actions"><Button class="ghost-button" type="secondary" @click="chooseDocxReference">选择模板</Button><Button v-if="advancedSettings.referenceDocx" class="ghost-button" type="secondary" @click="advancedSettings.referenceDocx = ''">恢复默认</Button></div><label class="setting-row"><span>EPUB 目录层级 <b>H{{ advancedSettings.epubChapterDepth }}</b></span><Slider v-model:value="advancedSettings.epubChapterDepth" aria-label-for-handle="EPUB 目录层级" :min="1" :max="6" /></label><div class="setting-form-grid"><div class="setting-input"><span>纸张</span><Select v-model:value="advancedSettings.printPageSize" label="纸张"><Option value="A4">A4</Option><Option value="Letter">Letter</Option></Select></div><label class="setting-input">页边距（mm）<InputNumber v-model:value="advancedSettings.printMargin" :min="8" :max="40" /></label><label class="setting-input">页眉<Input v-model="advancedSettings.printHeader" /></label><label class="setting-input">页脚<Input v-model="advancedSettings.printFooter" /></label></div><Checkbox class="setting-check" v-model:checked="advancedSettings.printBackground">打印主题背景</Checkbox></div>
+        <div v-show="settingsTab === 'reading'" class="settings-card"><span class="section-kicker">阅读</span><h2>阅读偏好</h2><label class="setting-row"><span>正文宽度 <b>{{ store.readerSettings.width }}px</b></span><Slider :value="store.readerSettings.width" aria-label-for-handle="正文宽度" :min="620" :max="1280" :step="10" @update:value="changeSetting('width', Number($event))" /></label><label class="setting-row"><span>字号 <b>{{ store.readerSettings.fontSize }}px</b></span><Slider :value="store.readerSettings.fontSize" aria-label-for-handle="字号" :min="15" :max="24" :step="1" @update:value="changeSetting('fontSize', Number($event))" /></label><label class="setting-row"><span>行距 <b>{{ store.readerSettings.lineHeight }}</b></span><Slider :value="store.readerSettings.lineHeight" aria-label-for-handle="行距" :min="1.4" :max="2.2" :step=".05" @update:value="changeSetting('lineHeight', Number($event))" /></label><div class="setting-toggle-row"><span>显示阅读进度</span><Switch v-model:checked="advancedSettings.showReadingProgress" aria-label="显示阅读进度" /></div><div class="setting-toggle-row"><span>专注阅读</span><Switch :checked="store.mode === 'focus'" :disabled="!store.currentDocument" aria-label="专注阅读" @change="toggleFocusMode" /></div></div><div v-show="settingsTab === 'reading'" class="settings-card translation-settings-card">
+          <span class="section-kicker">辅助功能</span>
+          <h2>翻译与解释</h2>
+          <p class="muted-copy">服务标识保存在本机。划词翻译和解释使用下方配置的 AI 服务。</p>
+          <label class="setting-input">服务标识<Input v-model="customProvider" :disabled="translationProviderBusy" placeholder="例如：local-llm / my-translator" /></label>
+          <Button class="primary-button" type="primary" :disabled="translationProviderBusy" @click="saveTranslationProvider">
+            <template #icon><AppIcon name="check" :size="14" /></template>保存配置
+          </Button>
+          <Alert v-if="translationProviderError" class="ai-settings-alert" type="error" show-icon :message="translationProviderError" />
+        </div>
+        <div v-show="settingsTab === 'shortcuts'" class="settings-card shortcuts-card"><span class="section-kicker">快捷操作</span><h2>快捷键</h2><div class="shortcut-row"><span>全局搜索</span><kbd>Ctrl / Cmd + K</kbd></div><div class="shortcut-row"><span>当前文档搜索</span><kbd>Ctrl / Cmd + F</kbd></div><div class="shortcut-row"><span>阅读缩放</span><kbd>Ctrl / Cmd + + / -</kbd></div><div class="shortcut-row"><span>专注模式</span><kbd>F</kbd></div><div class="shortcut-row"><span>退出聚焦</span><kbd>Esc</kbd></div><div class="shortcut-row"><span>切换区域</span><kbd>↑ ↓</kbd></div></div><div v-show="settingsTab === 'extensions'" class="settings-card extensions-card"><div class="extensions-head"><div><span class="section-kicker">插件中心</span><h2>插件扩展</h2></div><Button class="ghost-button" type="secondary" @click="notify('插件运行时将在后续版本启用')"><template #icon><AppIcon name="plugin" :size="14" /></template>打开插件目录</Button></div><div class="extension-filter"><AppIcon name="search" :size="14" /><span>按需扩展阅读能力</span></div><div class="extension-list"><div class="extension-item"><span class="extension-icon purple"><AppIcon name="sparkle" :size="17" /></span><span><b>AI 阅读助手</b><small>总结、解释与问答适配器</small></span><Button type="secondary" @click="notify('请先在翻译与解释中配置服务')">配置</Button></div><div class="extension-item"><span class="extension-icon green"><AppIcon name="download" :size="17" /></span><span><b>导出增强</b><small>为阅读内容准备更多导出格式</small></span><Button type="secondary" @click="notify('导出增强将在下一阶段接入')">安装</Button></div><div class="extension-item"><span class="extension-icon pink"><AppIcon name="components" :size="17" /></span><span><b>思维导图</b><small>把长文转换为结构化视图</small></span><Button type="secondary" @click="notify('插件运行时暂未启用')">安装</Button></div></div></div></div></section>
       <ClipboardManager v-show="view === 'clipboard'" @notify="notify" />
     </main>
     <WebPreviewDock v-if="hasWebPreviews" :columns="!webPreviewUrl && visibleAiWebPreviews.length === 2 ? 2 : 1"

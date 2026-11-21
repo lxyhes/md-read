@@ -368,7 +368,7 @@
   max-width: none;
   margin: 0 auto;
   padding: 0;
-  overflow-x: auto;
+  flex-wrap: wrap;
   border: 0;
   border-bottom: 1px solid var(--border);
   border-radius: 0;
@@ -376,10 +376,15 @@
   box-shadow: none;
 }
 .app-shell:not(.is-focus) .settings-tabs button {
+  display: inline-flex;
   flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
   min-width: 112px;
-  padding: 15px 18px 13px;
-  border-bottom: 2px solid transparent;
+  height: 40px;
+  padding: 0 18px;
+  border: 0;
+  border-block: 2px solid transparent;
   border-radius: 0;
   font-size: 11px;
 }
@@ -389,6 +394,9 @@
   background: transparent;
   color: var(--ink);
   box-shadow: none;
+}
+.app-shell:not(.is-focus) .settings-tabs button:focus-visible {
+  outline-offset: -2px;
 }
 .app-shell:not(.is-focus) .settings-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -400,7 +408,7 @@
 /* Reading controls first, typography second, service setup after the reader's core preferences. */
 .app-shell:not(.is-focus) .settings-grid > :nth-child(9) { order: 1; grid-column: 1 / -1; }
 .app-shell:not(.is-focus) .settings-grid > :nth-child(2) { order: 2; }
-.app-shell:not(.is-focus) .settings-grid > :nth-child(10) { order: 3; }
+.app-shell:not(.is-focus) .settings-grid > .translation-settings-card { order: 3; grid-column: 1 / -1; }
 .app-shell:not(.is-focus) .settings-grid > :nth-child(1) { order: 4; grid-column: 1 / -1; }
 .app-shell:not(.is-focus) .settings-save-note {
   align-self: center;
@@ -421,6 +429,7 @@
   font-family: var(--ink-serif, inherit);
   font-size: 22px;
 }
+.app-shell:not(.is-focus) .settings-card > h2 + .muted-copy { min-height: 0; }
 .app-shell:not(.is-focus) .settings-grid .font-settings-card,
 .app-shell:not(.is-focus) .settings-grid .shortcuts-card,
 .app-shell:not(.is-focus) .settings-grid .extensions-card {
@@ -496,6 +505,18 @@
   outline-offset: 3px;
 }
 
+@media (max-width: 900px) {
+  .app-shell:not(.is-focus) .settings-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .app-shell:not(.is-focus) .settings-tabs button {
+    min-width: 0;
+    padding-inline: 6px;
+    white-space: normal;
+  }
+}
+
 @media (max-width: 760px) {
   .app-shell:not(.is-focus) .settings-page .page-heading {
     min-height: 150px;
@@ -508,6 +529,12 @@
   }
   .app-shell:not(.is-focus) .settings-page .page-heading h1 {
     white-space: normal;
+  }
+}
+
+@media (max-width: 520px) {
+  .app-shell:not(.is-focus) .settings-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

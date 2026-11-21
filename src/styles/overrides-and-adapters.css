@@ -1530,13 +1530,6 @@ a:active > .app-icon-vector { transform: scale(.92); }
   background: transparent;
   box-shadow: none;
 }
-.app-shell .setting-row .ant-slider {
-  width: 100%;
-}
-.app-shell .setting-row .ant-slider span {
-  display: inline-block;
-  margin-bottom: 0;
-}
 .app-shell .editor-find-row > .moyue-input-field {
   flex: 1;
   min-width: 180px;
@@ -1661,6 +1654,67 @@ a:active > .app-icon-vector { transform: scale(.92); }
   box-sizing: border-box;
   min-height: 34px;
   font: 12px/1.4 var(--ui-font);
+}
+.settings-page {
+  --settings-control-height: 38px;
+  --settings-control-inset: 12px;
+  --settings-control-width: 680px;
+}
+.app-shell .settings-page .setting-input {
+  min-width: 0;
+}
+.app-shell .settings-page :is(.ai-settings-card .setting-input, .translation-settings-card .setting-input, .setting-row, .setting-toggle-row) {
+  max-width: var(--settings-control-width);
+}
+.app-shell .settings-page .ai-settings-card > .setting-input {
+  margin-block: 16px 0;
+}
+.app-shell .settings-page .setting-row > span {
+  align-items: baseline;
+  gap: 12px;
+}
+.app-shell .settings-page .setting-row b {
+  font-size: 12px;
+  white-space: nowrap;
+}
+.app-shell .settings-page .setting-row .ant-slider {
+  margin: 8px 6px 0;
+}
+.app-shell .settings-page .setting-input :is(.moyue-input-field, .ant-input-affix-wrapper, .ant-select-single, .ant-input-number),
+.app-shell .settings-page .ai-model-picker > .ant-btn {
+  min-height: var(--settings-control-height);
+}
+.app-shell .settings-page .setting-input > :is(.moyue-input-field, .ant-input-affix-wrapper) {
+  padding-inline: var(--settings-control-inset);
+}
+.app-shell .settings-page .setting-input > .ant-input-affix-wrapper {
+  font: inherit;
+}
+.app-shell .settings-page .setting-input > .ant-input-affix-wrapper > .ant-input {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+}
+.app-shell .settings-page .setting-input .ant-select-single {
+  margin-top: 0;
+  padding-inline: 0;
+}
+.app-shell .settings-page .setting-input .ant-select-single.ant-select > .ant-select-selector {
+  padding-inline: var(--settings-control-inset);
+  border: 0;
+  font: inherit;
+}
+.app-shell .settings-page .setting-input .ant-select-single .ant-select-selection-search {
+  inset-inline-start: var(--settings-control-inset);
+}
+.app-shell .settings-page .setting-input > .ant-input-number {
+  width: 100%;
+}
+.app-shell .settings-page .setting-input .ant-input-number-input {
+  height: calc(var(--settings-control-height) - 2px);
+  padding-inline: var(--settings-control-inset);
+  font: inherit;
 }
 .ant-select-dropdown,
 .ant-dropdown-menu {
@@ -2712,13 +2766,6 @@ html:has(.reader-page), body:has(.reader-page), #app:has(.reader-page) { min-wid
 .outline-panel-toggle:focus-visible {
   background: color-mix(in srgb, var(--accent) 9%, transparent);
 }
-.outline-panel-toggle .app-icon {
-  transform: rotate(180deg);
-  transition: transform .18s ease;
-}
-.outline-panel-toggle:hover .app-icon {
-  transform: rotate(180deg) translateX(-2px);
-}
 @media (max-width: 1080px) {
   .app-shell:not(.is-focus) .reader-layout.outline-panel-collapsed.context-open:not(.focus-layout):not(.clean-layout) {
     grid-template-columns: minmax(0, 1fr);
@@ -2730,8 +2777,7 @@ html:has(.reader-page), body:has(.reader-page), #app:has(.reader-page) { min-wid
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .app-shell:not(.is-focus) .reader-layout:not(.is-resizing-outline),
-  .outline-panel-toggle .app-icon {
+  .app-shell:not(.is-focus) .reader-layout:not(.is-resizing-outline) {
     transition: none;
   }
 }
@@ -3602,6 +3648,18 @@ body .app-shell.is-editor-studio .reader-layout {
   }
 }
 
+@container reader-main (1100px < width < 1280px) {
+  .app-shell .outline-panel-collapsed .reader-meta-topbar .reader-reading-actions .reader-command-trigger {
+    min-width: 34px;
+    width: 34px;
+    flex-basis: 34px;
+    padding: 7px;
+  }
+  .app-shell .outline-panel-collapsed .reader-meta-topbar .reader-command-trigger > :is(span:not(.app-icon), kbd) {
+    display: none;
+  }
+}
+
 /* Preserve the reader card; only restore the comparison content's columns. */
 .app-shell .reader-content .region-content .reader-comparison-layout {
   display: grid;
@@ -3666,7 +3724,7 @@ body .app-shell.is-editor-studio .reader-layout {
   }
 }
 
-/* The collapsed outline leaves only a quiet handle on the content edge. */
+/* The sidebar preview floats below its toolbar control. */
 .app-shell:not(.is-editor-studio):not(.is-focus) .reader-layout.outline-panel-collapsed:not(.context-open):not(.focus-layout):not(.clean-layout) {
   grid-template-columns: minmax(0, 1fr) !important;
 }
@@ -3678,7 +3736,7 @@ body .app-shell.is-editor-studio .reader-layout {
 .app-shell:not(.is-editor-studio):not(.is-focus) .reader-layout > .outline-panel.is-collapsed {
   position: absolute;
   inset: 0 auto 0 0;
-  z-index: 2;
+  z-index: 8;
   display: block;
   box-sizing: border-box;
   width: 0;
@@ -3689,35 +3747,37 @@ body .app-shell.is-editor-studio .reader-layout {
   background: transparent;
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .outline-panel.is-collapsed .outline-panel-expand {
-  position: absolute;
-  top: 50%;
-  right: -18px;
+.app-shell:not(.is-editor-studio):not(.is-focus) .reader-layout > .outline-panel.is-collapsed.is-previewing {
+  --outline-preview-width: min(max(224px, var(--outline-panel-width, 204px)), 80%);
   display: flex;
-  width: 18px;
-  height: 44px;
+  inset-block-start: var(--outline-preview-top);
+  inset-inline-start: min(var(--outline-preview-left), calc(100% - var(--outline-preview-width)));
+  height: auto;
+  width: var(--outline-preview-width);
+  padding: 12px 12px 16px !important;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 10px 0 28px color-mix(in srgb, var(--ink) 12%, transparent);
+}
+.outline-panel.is-previewing .panel-tabs button {
+  white-space: nowrap;
+}
+
+.app-shell .reader-meta-topbar .reader-edit-actions > .outline-panel-expand {
+  display: inline-flex;
+  flex: 0 0 30px;
   align-items: center;
   justify-content: center;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-left: 0;
-  border-radius: 0 10px 10px 0;
-  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  padding-inline: 0;
   color: var(--muted);
-  box-shadow: 3px 0 10px color-mix(in srgb, var(--ink) 8%, transparent);
-  transform: translateY(-50%);
 }
 
-.app-shell:not(.is-editor-studio):not(.is-focus) .outline-panel.is-collapsed .outline-panel-expand:hover,
-.app-shell:not(.is-editor-studio):not(.is-focus) .outline-panel.is-collapsed .outline-panel-expand:focus-visible {
+.app-shell .reader-meta-topbar .outline-panel-expand:is(:hover, :focus-visible, [aria-expanded="true"]) {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-  border-left: 0;
   background: color-mix(in srgb, var(--accent) 9%, transparent);
   color: var(--accent);
-}
-
-.app-shell:not(.is-editor-studio):not(.is-focus) .outline-panel.is-collapsed .outline-panel-expand .app-icon {
-  flex: 0 0 auto;
 }
 
 @media (max-width: 1180px) {
