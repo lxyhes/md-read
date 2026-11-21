@@ -1595,6 +1595,27 @@ a:active > .app-icon-vector { transform: scale(.92); }
   box-shadow: none;
 }
 .moyue-input-field > :is(.ant-input, .ant-input-affix-wrapper) { flex: 1; }
+/* Packaged WKWebView can drop Ant Design's runtime CSS: keep the input affix layout
+   self-contained so the search icon, clear (x) button stay aligned and hide correctly. */
+.ant-input-affix-wrapper {
+  display: inline-flex !important;
+  align-items: center !important;
+  box-sizing: border-box;
+}
+.ant-input-affix-wrapper > .ant-input { flex: 1 1 auto; min-width: 0; }
+.ant-input-affix-wrapper :is(.ant-input-prefix, .ant-input-suffix) {
+  display: inline-flex !important;
+  flex: none !important;
+  align-items: center !important;
+}
+.ant-input-clear-icon {
+  display: inline-flex !important;
+  flex: none !important;
+  align-items: center !important;
+  margin: 0 8px 0 auto !important;
+  color: var(--muted);
+}
+.ant-input-clear-icon-hidden { visibility: hidden !important; }
 .moyue-textarea-field > .moyue-textarea { display: block; }
 .moyue-select.ant-select-single { display: flex; align-items: stretch; }
 .moyue-select.ant-select-single.ant-select:not(.ant-select-customize-input) > .ant-select-selector {
