@@ -1,60 +1,146 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import {
+  AimOutlined,
+  AlignLeftOutlined,
+  AppstoreOutlined,
+  ArrowDownOutlined,
+  ArrowUpOutlined,
+  BoldOutlined,
+  BookOutlined,
+  CheckCircleOutlined,
+  CheckOutlined,
+  CloseOutlined,
+  CodeOutlined,
+  CompressOutlined,
+  CopyOutlined,
+  DeleteOutlined,
+  DoubleRightOutlined,
+  DownOutlined,
+  DownloadOutlined,
+  EditOutlined,
+  EllipsisOutlined,
+  ExpandAltOutlined,
+  ExportOutlined,
+  EyeOutlined,
+  FileOutlined,
+  FileTextOutlined,
+  FolderOpenOutlined,
+  FolderOutlined,
+  FontSizeOutlined,
+  FullscreenExitOutlined,
+  FullscreenOutlined,
+  HistoryOutlined,
+  HomeOutlined,
+  InfoCircleOutlined,
+  ItalicOutlined,
+  LeftOutlined,
+  LinkOutlined,
+  MinusOutlined,
+  OrderedListOutlined,
+  PictureOutlined,
+  PlusOutlined,
+  ProfileOutlined,
+  PushpinFilled,
+  PushpinOutlined,
+  ReadOutlined,
+  RightOutlined,
+  ScissorOutlined,
+  SearchOutlined,
+  SettingOutlined,
+  SnippetsOutlined,
+  StarFilled,
+  StarOutlined,
+  SyncOutlined,
+  TableOutlined,
+  UnorderedListOutlined,
+  UpOutlined,
+  UploadOutlined,
+  ZoomInOutlined,
+  ZoomOutOutlined,
+} from '@ant-design/icons-vue'
 import logoAsset from '../assets/moyue-logo-256.png'
 
-export type AppIconName =
-  | 'logo'
-  | 'home'
-  | 'library'
-  | 'folder'
-  | 'clipboard'
-  | 'history'
-  | 'star'
-  | 'sparkle'
-  | 'note'
-  | 'palette'
-  | 'plugin'
-  | 'settings'
-  | 'focus'
-  | 'eye'
-  | 'fullscreen'
-  | 'file'
-  | 'trash'
-  | 'close'
-  | 'plus'
-  | 'minus'
-  | 'search'
-  | 'external'
-  | 'reader'
-  | 'sync'
-  | 'expand'
-  | 'more'
-  | 'download'
-  | 'upload'
-  | 'copy'
-  | 'edit'
-  | 'check'
-  | 'chevron-up'
-  | 'chevron-down'
-  | 'chevron-left'
-  | 'chevron-right'
-  | 'chevrons-right'
-  | 'arrow-up'
-  | 'arrow-down'
-  | 'code'
-  | 'table'
-  | 'image'
-  | 'info'
-  | 'type'
-  | 'components'
+const icons = {
+  home: HomeOutlined,
+  library: BookOutlined,
+  folder: FolderOutlined,
+  'folder-open': FolderOpenOutlined,
+  clipboard: ProfileOutlined,
+  history: HistoryOutlined,
+  star: StarOutlined,
+  'star-filled': StarFilled,
+  pin: PushpinOutlined,
+  'pin-filled': PushpinFilled,
+  note: FileTextOutlined,
+  settings: SettingOutlined,
+  focus: AimOutlined,
+  eye: EyeOutlined,
+  fullscreen: FullscreenOutlined,
+  'fullscreen-exit': FullscreenExitOutlined,
+  file: FileOutlined,
+  trash: DeleteOutlined,
+  close: CloseOutlined,
+  plus: PlusOutlined,
+  minus: MinusOutlined,
+  search: SearchOutlined,
+  external: ExportOutlined,
+  reader: ReadOutlined,
+  sync: SyncOutlined,
+  expand: ExpandAltOutlined,
+  fit: CompressOutlined,
+  'zoom-in': ZoomInOutlined,
+  'zoom-out': ZoomOutOutlined,
+  more: EllipsisOutlined,
+  download: DownloadOutlined,
+  upload: UploadOutlined,
+  copy: CopyOutlined,
+  edit: EditOutlined,
+  check: CheckOutlined,
+  'chevron-up': UpOutlined,
+  'chevron-down': DownOutlined,
+  'chevron-left': LeftOutlined,
+  'chevron-right': RightOutlined,
+  'chevrons-right': DoubleRightOutlined,
+  'arrow-up': ArrowUpOutlined,
+  'arrow-down': ArrowDownOutlined,
+  code: CodeOutlined,
+  table: TableOutlined,
+  image: PictureOutlined,
+  info: InfoCircleOutlined,
+  type: FontSizeOutlined,
+  components: AppstoreOutlined,
+  cut: ScissorOutlined,
+  paste: SnippetsOutlined,
+  bold: BoldOutlined,
+  italic: ItalicOutlined,
+  link: LinkOutlined,
+  quote: AlignLeftOutlined,
+  'ordered-list': OrderedListOutlined,
+  'unordered-list': UnorderedListOutlined,
+  'task-list': CheckCircleOutlined,
+}
 
-withDefaults(defineProps<{ name: AppIconName; size?: number; strokeWidth?: number }>(), {
-  size: 16,
-  strokeWidth: 1.75,
+export type AppIconName = keyof typeof icons | 'logo' | 'sparkle' | 'palette' | 'plugin'
+
+const props = withDefaults(defineProps<{ name: AppIconName; size?: number }>(), { size: 16 })
+const frameworkIcon = computed(() => {
+  const { name } = props
+  if (name === 'logo' || name === 'sparkle' || name === 'palette' || name === 'plugin') return undefined
+  return icons[name]
 })
 </script>
 
 <template>
   <img v-if="name === 'logo'" class="app-icon app-icon-logo" :src="logoAsset" :width="size" :height="size" alt="" aria-hidden="true" />
+  <component
+    :is="frameworkIcon"
+    v-else-if="frameworkIcon"
+    class="app-icon app-icon-vector"
+    :data-icon="name"
+    :style="{ '--app-icon-size': size + 'px' }"
+    aria-hidden="true"
+  />
   <svg
     v-else
     class="app-icon app-icon-vector"
@@ -64,48 +150,15 @@ withDefaults(defineProps<{ name: AppIconName; size?: number; strokeWidth?: numbe
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
-    :stroke-width="strokeWidth"
+    stroke-width="1.75"
     stroke-linecap="round"
     stroke-linejoin="round"
     aria-hidden="true"
     focusable="false"
-    vector-effect="non-scaling-stroke"
   >
-    <template v-if="name === 'trash'">
-      <path d="M4 6h16M9 6V3h6v3m3 0-1 14H7L6 6m4 4v6m4-6v6" />
-    </template>
-    <template v-else-if="name === 'home'">
-      <path d="m3.5 10.7 8.5-7 8.5 7" />
-      <path d="M5.5 9.8v9.7h13V9.8M9.5 19.5v-5h5v5" />
-    </template>
-    <template v-else-if="name === 'library'">
-      <path d="M4.5 5.5A1.5 1.5 0 0 1 6 4h12a1.5 1.5 0 0 1 1.5 1.5v13A1.5 1.5 0 0 1 18 20H6a1.5 1.5 0 0 1-1.5-1.5v-13Z" />
-      <path d="M8 4v16M11.5 8H16M11.5 12H16M11.5 16H14" />
-    </template>
-    <template v-else-if="name === 'folder'">
-      <path d="M3.5 6.5A1.5 1.5 0 0 1 5 5h5l2 2h7a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5v-11Z" />
-      <path d="M3.5 10h17" />
-    </template>
-    <template v-else-if="name === 'clipboard'">
-      <rect x="5" y="4.5" width="14" height="17" rx="2" />
-      <rect x="9" y="2.5" width="6" height="4" rx="1" fill="var(--app-bg)" />
-      <path d="M8.5 11h7M8.5 15h5" />
-    </template>
-    <template v-else-if="name === 'history'">
-      <path d="M4.5 11a7.5 7.5 0 1 0 2.2-5.3" />
-      <path d="M4.5 5.5v4h4" />
-      <path d="M12 7.7V12l3 1.8" />
-    </template>
-    <template v-else-if="name === 'star'">
-      <path d="m12 3 2.7 5.4 5.9.9-4.3 4.2 1 5.8-5.3-2.8-5.3 2.8 1-5.8-4.3-4.2 5.9-.9L12 3Z" />
-    </template>
-    <template v-else-if="name === 'sparkle'">
+    <template v-if="name === 'sparkle'">
       <path d="m12 3 1.7 5.3L19 10l-5.3 1.7L12 17l-1.7-5.3L5 10l5.3-1.7L12 3Z" />
       <path d="m19 16 .6 1.9L21.5 18l-1.9.6L19 20.5l-.6-1.9-1.9-.6 1.9-.6L19 16Z" />
-    </template>
-    <template v-else-if="name === 'note'">
-      <path d="M5 3.5h10l4 4v13H5v-17Z" />
-      <path d="M14 3.5v4h5M8 12h8M8 16h5" />
     </template>
     <template v-else-if="name === 'palette'">
       <path d="M12 4a8 8 0 1 0 0 16h1.2a1.8 1.8 0 0 0 1.3-3.1 1.8 1.8 0 0 1 1.3-3.1H17a3 3 0 0 0 3-3A6.8 6.8 0 0 0 12 4Z" />
@@ -115,122 +168,6 @@ withDefaults(defineProps<{ name: AppIconName; size?: number; strokeWidth?: numbe
     </template>
     <template v-else-if="name === 'plugin'">
       <path d="M9 5V4a2 2 0 0 1 4 0v1h5a1 1 0 0 1 1 1v4h1a2 2 0 0 1 0 4h-1v5a1 1 0 0 1-1 1h-4v-1a2 2 0 0 0-4 0v1H5a1 1 0 0 1-1-1v-5h1a2 2 0 0 0 0-4H4V6a1 1 0 0 1 1-1h4Z" />
-    </template>
-    <template v-else-if="name === 'settings'">
-      <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z" />
-      <path d="m19.4 15 .1.1a2 2 0 0 1-2.8 2.8l-.1-.1a2 2 0 0 0-3.4 1.4v.2a2 2 0 0 1-4 0v-.2a2 2 0 0 0-3.4-1.4l-.1.1a2 2 0 0 1-2.8-2.8l.1-.1A2 2 0 0 0 3.7 12a2 2 0 0 0-.7-1.5 2 2 0 0 1 2.8-2.8l.1.1A2 2 0 0 0 9.3 6.4v-.2a2 2 0 0 1 4 0v.2a2 2 0 0 0 3.4 1.4l.1-.1a2 2 0 0 1 2.8 2.8l-.1.1A2 2 0 0 0 20.3 12a2 2 0 0 0-.9 3Z" />
-    </template>
-    <template v-else-if="name === 'focus'">
-      <circle cx="12" cy="12" r="6.5" />
-      <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
-      <path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2" />
-    </template>
-    <template v-else-if="name === 'eye'">
-      <path d="M3.5 12s3-5 8.5-5 8.5 5 8.5 5-3 5-8.5 5-8.5-5-8.5-5Z" />
-      <circle cx="12" cy="12" r="2.2" />
-    </template>
-    <template v-else-if="name === 'fullscreen'">
-      <path d="M8 4H4v4M16 4h4v4M8 20H4v-4M20 16v4h-4" />
-    </template>
-    <template v-else-if="name === 'file'">
-      <path d="M6 3.5h8l4 4v13H6v-17Z" />
-      <path d="M14 3.5v4h4" />
-    </template>
-    <template v-else-if="name === 'close'">
-      <path d="m6 6 12 12M18 6 6 18" />
-    </template>
-    <template v-else-if="name === 'plus'">
-      <path d="M12 5v14M5 12h14" />
-    </template>
-    <template v-else-if="name === 'minus'">
-      <path d="M5 12h14" />
-    </template>
-    <template v-else-if="name === 'search'">
-      <circle cx="10.8" cy="10.8" r="6.4" />
-      <path d="m16 16 4.2 4.2" />
-    </template>
-    <template v-else-if="name === 'external'">
-      <path d="M13 5h6v6M19 5l-8 8" />
-      <path d="M18 13v5.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H11" />
-    </template>
-    <template v-else-if="name === 'reader'">
-      <path d="M5 4.5h10l4 4v11H5v-15Z" />
-      <path d="M15 4.5v4h4M8 12h8M8 15.5h5" />
-    </template>
-    <template v-else-if="name === 'sync'">
-      <path d="M20 7v4h-4M4 17v-4h4" />
-      <path d="M18.2 11A6.5 6.5 0 0 0 6.1 7.4L4 9M5.8 13A6.5 6.5 0 0 0 17.9 16.6L20 15" />
-    </template>
-    <template v-else-if="name === 'expand'">
-      <path d="m9 5-4 4M5 5v4h4M15 19l4-4M19 19v-4h-4" />
-    </template>
-    <template v-else-if="name === 'more'">
-      <circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none" />
-      <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
-      <circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none" />
-    </template>
-    <template v-else-if="name === 'download'">
-      <path d="M12 3v11M8 10l4 4 4-4M5 19h14" />
-    </template>
-    <template v-else-if="name === 'upload'">
-      <path d="M12 15V4M8 8l4-4 4 4M5 19h14" />
-    </template>
-    <template v-else-if="name === 'copy'">
-      <rect x="8" y="8" width="11" height="12" rx="1.5" />
-      <path d="M6 16H5a1.5 1.5 0 0 1-1.5-1.5v-9A1.5 1.5 0 0 1 5 4h8.5A1.5 1.5 0 0 1 15 5.5V7" />
-    </template>
-    <template v-else-if="name === 'edit'">
-      <path d="m5 16-.8 4 4-.8L19 8.4 15.6 5 5 16Z" />
-      <path d="m13.8 6.8 3.4 3.4M4.2 20h4" />
-    </template>
-    <template v-else-if="name === 'check'">
-      <path d="m5 12.5 4.2 4.2L19 7" />
-    </template>
-    <template v-else-if="name === 'chevron-up'">
-      <path d="m6 14 6-6 6 6" />
-    </template>
-    <template v-else-if="name === 'chevron-down'">
-      <path d="m6 10 6 6 6-6" />
-    </template>
-    <template v-else-if="name === 'chevron-left'">
-      <path d="m15 6-6 6 6 6" />
-    </template>
-    <template v-else-if="name === 'chevron-right'">
-      <path d="m9 6 6 6-6 6" />
-    </template>
-    <template v-else-if="name === 'chevrons-right'">
-      <path d="m5 6 6 6-6 6m8-12 6 6-6 6" />
-    </template>
-    <template v-else-if="name === 'arrow-up'">
-      <path d="M12 19V5M7 10l5-5 5 5" />
-    </template>
-    <template v-else-if="name === 'arrow-down'">
-      <path d="M12 5v14M7 14l5 5 5-5" />
-    </template>
-    <template v-else-if="name === 'code'">
-      <path d="m9 7-5 5 5 5M15 7l5 5-5 5" />
-    </template>
-    <template v-else-if="name === 'table'">
-      <rect x="4" y="5" width="16" height="14" rx="1.5" />
-      <path d="M4 10h16M4 14.5h16M10 5v14" />
-    </template>
-    <template v-else-if="name === 'image'">
-      <rect x="4" y="5" width="16" height="14" rx="2" />
-      <circle cx="9" cy="10" r="1.3" />
-      <path d="m5.5 17 4.2-4 3 2.5 2.1-2 3.7 3.5" />
-    </template>
-    <template v-else-if="name === 'info'">
-      <circle cx="12" cy="12" r="8.5" />
-      <path d="M12 10.5v5M12 7.5v.2" />
-    </template>
-    <template v-else-if="name === 'type'">
-      <path d="M5 5h14M12 5v14M8 19h8" />
-    </template>
-    <template v-else-if="name === 'components'">
-      <rect x="4" y="4" width="6" height="6" rx="1" />
-      <rect x="14" y="4" width="6" height="6" rx="1" />
-      <rect x="4" y="14" width="6" height="6" rx="1" />
-      <rect x="14" y="14" width="6" height="6" rx="1" />
     </template>
   </svg>
 </template>

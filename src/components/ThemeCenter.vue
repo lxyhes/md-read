@@ -79,8 +79,8 @@ async function onThemeFile(event: Event) {
       <div><h1>主题中心</h1><p class="theme-page-lede">先选一种主题，再调整颜色与组件样式。</p></div>
       <div class="toolbar-actions">
         <input ref="themeInput" type="file" accept=".moyue-theme,.zip" hidden @change="onThemeFile" />
-        <Button class="ghost-button" type="secondary" @click="themeInput?.click()"><AppIcon name="upload" :size="14" />导入主题包</Button>
-        <Button class="primary-button" type="primary" :disabled="!themeDraft" @click="downloadTheme"><AppIcon name="download" :size="14" />导出当前主题</Button>
+        <Button class="ghost-button" type="secondary" @click="themeInput?.click()"><template #icon><AppIcon name="upload" :size="14" /></template>导入主题包</Button>
+        <Button class="primary-button" type="primary" :disabled="!themeDraft" @click="downloadTheme"><template #icon><AppIcon name="download" :size="14" /></template>导出当前主题</Button>
       </div>
     </div>
     <div class="theme-center-toolbar">

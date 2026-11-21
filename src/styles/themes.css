@@ -803,7 +803,7 @@
     overflow: hidden;
   }
 
-  .app-shell:not(.is-focus) .command-trigger span {
+  .app-shell:not(.is-focus) .command-trigger > span:not(.app-icon) {
     display: none;
   }
 

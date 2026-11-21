@@ -53,7 +53,7 @@ defineExpose({ close: () => setVisible(false) })
   >
     <slot />
     <template #overlay>
-      <div v-if="visible" ref="panel" :class="props.panelClass" :role="props.panelClass.includes('rail-more-popover') ? 'menu' : undefined" @click.stop="closeAfterAction">
+      <div v-if="visible" ref="panel" :class="props.panelClass" @click.stop="closeAfterAction">
         <slot name="menu" />
       </div>
     </template>

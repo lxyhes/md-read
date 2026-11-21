@@ -30,7 +30,7 @@ button { border: 0; color: inherit; cursor: pointer; }
 .main-shell.with-web-preview .topbar { gap: 10px; padding-left: 18px; padding-right: 18px; }
 .main-shell.with-web-preview .crumbs { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .main-shell.with-web-preview .command-trigger { min-width: 32px; width: 32px; flex: 0 0 32px; padding: 7px; }
-.main-shell.with-web-preview .command-trigger > :is(span, kbd) { display: none; }
+.main-shell.with-web-preview .command-trigger > :is(span:not(.app-icon), kbd) { display: none; }
 .topbar { height: 72px; flex: 0 0 72px; display: flex; align-items: center; gap: 24px; padding: 0 34px; border-bottom: 1px solid var(--border); transition: opacity .5s; z-index: 4; }.topbar.faded { opacity: 0; pointer-events: none; }
 .crumbs { display: flex; align-items: center; gap: 12px; min-width: 235px; font-family: var(--ui-font); }.crumbs strong { font-size: 13px; font-weight: 600; }.crumb-separator { color: var(--muted); }.eyebrow { color: var(--muted); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
 .command-trigger { display: flex; justify-content: space-between; align-items: center; max-width: 420px; min-width: 260px; flex: 1; margin-left: auto; padding: 11px 13px; border: 1px solid var(--border); border-radius: 10px; background: color-mix(in srgb, var(--surface) 70%, transparent); color: var(--muted); text-align: left; font: 12px var(--ui-font); }.command-trigger:hover { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); color: var(--ink); }.command-trigger kbd, kbd { padding: 3px 6px; border: 1px solid var(--border); border-radius: 5px; color: var(--muted); font: 10px var(--mono); }
@@ -389,7 +389,6 @@ html, body, #app { background: var(--app-bg, #070d22); }
 .document-card-main h3 { padding-right: 24px; }
 .card-star { position: absolute; top: 15px; right: 15px; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; background: transparent; color: var(--muted); }
 .card-star:hover, .card-star.active { background: color-mix(in srgb, var(--accent) 13%, transparent); color: var(--accent); }
-.card-star.active .app-icon { fill: currentColor; }
 .collection-page { padding-top: 58px; }
 .collection-intro { max-width: 480px; margin: 0; color: var(--muted); font: 13px/1.8 var(--ui-font); }
 .collection-count { display: flex; align-items: center; gap: 8px; padding: 10px 13px; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border)); border-radius: 9px; color: var(--accent); font: 11px var(--ui-font); }
@@ -434,6 +433,7 @@ html, body, #app { background: var(--app-bg, #070d22); }
 .knowledge-page-actions .collection-count { white-space: nowrap; }
 .knowledge-workspace .knowledge-ask { min-width: 0; max-width: none; margin: 0; padding: 18px; }
 .knowledge-ask-heading { display: flex; align-items: start; justify-content: space-between; gap: 20px; }
+.knowledge-ask-heading > .text-button { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .knowledge-ask-heading h2 { margin: 8px 0 0; font-size: 20px; font-weight: 400; }
 .knowledge-ai-status { display: inline-block; margin-top: 7px; color: var(--accent); font: 10px var(--ui-font); }
 .knowledge-source-scope { margin-top: 17px; border: 1px solid var(--border); border-radius: 9px; background: color-mix(in srgb, var(--surface-raised) 55%, transparent); }
@@ -569,8 +569,6 @@ html, body, #app { background: var(--app-bg, #070d22); }
 .knowledge-manager-actions .ghost-button, .knowledge-manager-actions .danger-button, .knowledge-manager-actions .primary-button { min-height: 34px; padding: 0 10px; white-space: nowrap; }
 .knowledge-manager-actions .danger-button { background: transparent; }
 .knowledge-manager-actions button:disabled { cursor: not-allowed; opacity: .45; transform: none; }
-.knowledge-empty-prompts { justify-content: center; margin-top: 2px; }
-.knowledge-empty-prompts > span { width: 100%; margin: 0; text-align: center; }
 @media (min-width: 1100px) and (min-height: 800px) {
   .knowledge-page .knowledge-workspace { height: max(420px, calc(100vh - 250px)); align-items: stretch; }
   .knowledge-page .knowledge-ask { display: flex; height: 100%; flex-direction: column; min-height: 0; }
@@ -586,16 +584,15 @@ html, body, #app { background: var(--app-bg, #070d22); }
 .knowledge-composer-footer { display: flex; align-items: center; justify-content: flex-end; gap: 8px 14px; flex-wrap: wrap; padding: 8px 10px; border-top: 1px solid var(--border); }
 .knowledge-composer-footer .knowledge-ask-hint { flex: 1 1 240px; margin: 0; font-size: 11px; line-height: 1.5; }
 .knowledge-ask-form button:disabled { opacity: .45; cursor: not-allowed; }
-.knowledge-prompts { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 11px; }
+.knowledge-prompts { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 10px 0 8px; }
+.knowledge-prompts .ant-btn { min-height: 26px; height: auto; padding: 4px 8px; white-space: normal; text-align: left; }
 .knowledge-prompts > span { margin-right: 2px; color: var(--muted); font: 10px var(--ui-font); }
-.knowledge-prompts button { padding: 6px 9px; border: 1px solid var(--border); border-radius: 7px; background: transparent; color: var(--muted); font: 10px var(--ui-font); }
-.knowledge-prompts button:hover { border-color: var(--accent); color: var(--accent); }
 .knowledge-ask-hint { margin: 10px 0 0; color: var(--muted); font: 10px var(--ui-font); }
 .knowledge-answer { display: flex; gap: 11px; margin-top: 17px; padding: 14px; border-top: 1px solid var(--border); color: var(--muted); font: 11px/1.6 var(--ui-font); }
 .knowledge-answer-mark { display: grid; place-items: center; width: 27px; height: 27px; flex: 0 0 27px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); }
 .knowledge-answer strong { color: var(--ink); font-weight: 600; }
 .knowledge-generated-answer { margin-top: 11px; padding: 12px 13px; border-left: 2px solid var(--accent); background: color-mix(in srgb, var(--accent) 7%, transparent); color: var(--ink); font: 12px/1.75 var(--ui-font); white-space: pre-wrap; }
-.knowledge-ai-error { margin: 8px 0 0; color: #c76a6a; font: 10px/1.5 var(--ui-font); }
+.knowledge-ai-error { margin: 8px 0; overflow-wrap: anywhere; }
 .knowledge-match-list { display: grid; gap: 6px; margin-top: 10px; }
 .knowledge-match { display: flex; align-items: stretch; gap: 2px; width: 100%; border: 1px solid var(--border); border-radius: 8px; background: color-mix(in srgb, var(--surface-raised) 65%, transparent); }
 .knowledge-match:hover { border-color: var(--accent); color: var(--ink); }

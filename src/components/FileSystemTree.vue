@@ -93,7 +93,7 @@ watch(() => props.node.expanded, revealSelectedRow)
       @keydown="onKeydown"
     >
       <span class="filesystem-tree-chevron"><AppIcon v-if="node.isDirectory" :name="node.expanded || node.loading ? 'chevron-down' : 'chevron-right'" :size="11" /></span>
-      <AppIcon :name="node.isDirectory ? 'folder' : 'file'" :size="13" />
+      <AppIcon :name="node.isDirectory ? (node.expanded ? 'folder-open' : 'folder') : 'file'" :size="13" />
       <span class="filesystem-tree-name">{{ node.name }}</span>
     </button>
     <div v-if="node.expanded && node.error" class="filesystem-tree-error" :style="{ paddingLeft: `${34 + depth * 14}px` }">{{ node.error }}</div>

@@ -223,11 +223,11 @@ onUnmounted(() => {
         <AppIcon name="external" :size="16" /><strong :title="title">{{ name ?? title }}</strong>
         <div v-if="native" class="web-preview-zoom" role="group" aria-label="网页缩放">
           <button type="button" aria-label="缩小网页" title="缩小网页" :disabled="loading || !!error || zoomBusy || zoomPercent <= 60"
-            @keydown.enter.stop @click="changeZoom(zoomPercent - 10)"><AppIcon name="minus" :size="14" /></button>
+            @keydown.enter.stop @click="changeZoom(zoomPercent - 10)"><AppIcon name="zoom-out" :size="14" /></button>
           <button type="button" title="恢复网页缩放至 100%" :aria-label="`当前缩放 ${zoomPercent}%，恢复默认`"
             :disabled="loading || !!error || zoomBusy || zoomPercent === 100" @keydown.enter.stop @click="changeZoom(100)">{{ zoomPercent }}%</button>
           <button type="button" aria-label="放大网页" title="放大网页" :disabled="loading || !!error || zoomBusy || zoomPercent >= 150"
-            @keydown.enter.stop @click="changeZoom(zoomPercent + 10)"><AppIcon name="plus" :size="14" /></button>
+            @keydown.enter.stop @click="changeZoom(zoomPercent + 10)"><AppIcon name="zoom-in" :size="14" /></button>
         </div>
         <button type="button" :aria-label="`关闭${name ?? '网页预览'}`" title="关闭" @keydown.enter.stop @click="emit('close')"><AppIcon name="close" :size="17" /></button>
       </div>

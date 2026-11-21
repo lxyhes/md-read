@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, type Component } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { computePosition, flip, shift } from '@floating-ui/dom'
-import AppIcon from './AppIcon.vue'
+import AppIcon, { type AppIconName } from './AppIcon.vue'
 
-export type ContextAction = { label: string; action: () => unknown; icon?: Component; shortcut?: string; disabled?: boolean }
+export type ContextAction = { label: string; action: () => unknown; icon?: AppIconName; shortcut?: string; disabled?: boolean }
 type ActionGroup = { label: string; items: ContextAction[] }
 
 const props = defineProps<{ clipboard: ContextAction[]; format: ContextAction[]; groups: ActionGroup[] }>()
@@ -69,10 +69,10 @@ function navigate(event: KeyboardEvent) {
 <template>
   <div class="editor-context-actions" @keydown="navigate" @pointerdown.prevent>
     <div class="context-grid context-section" role="group" aria-label="剪贴板和删除" @pointerenter="openGroup = ''">
-      <button v-for="item in clipboard" :key="item.label" type="button" role="menuitem" :aria-label="item.label" :title="item.label" :disabled="item.disabled" @click="run(item)"><component :is="item.icon" aria-hidden="true" /></button>
+      <button v-for="item in clipboard" :key="item.label" type="button" role="menuitem" :aria-label="item.label" :title="item.label" :disabled="item.disabled" @click="run(item)"><AppIcon v-if="item.icon" :name="item.icon" :size="15" /></button>
     </div>
     <div class="context-grid context-section" role="group" aria-label="常用格式" @pointerenter="openGroup = ''">
-      <button v-for="item in format" :key="item.label" type="button" role="menuitem" :aria-label="item.label" :title="item.shortcut ? `${item.label} (${item.shortcut})` : item.label" @click="run(item)"><component :is="item.icon" aria-hidden="true" /></button>
+      <button v-for="item in format" :key="item.label" type="button" role="menuitem" :aria-label="item.label" :title="item.shortcut ? `${item.label} (${item.shortcut})` : item.label" @click="run(item)"><AppIcon v-if="item.icon" :name="item.icon" :size="15" /></button>
     </div>
     <div class="context-section">
       <div v-for="group in groups" :key="group.label">

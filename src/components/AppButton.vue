@@ -13,7 +13,7 @@ defineProps<{
 <template>
   <Button
     :type="type === 'primary' || type === 'text' || type === 'dashed' ? type : 'default'"
-    :class="[type && `moyue-btn-${type}`, status && `moyue-btn-status-${status}`]"
+    :class="[type && `moyue-btn-${type}`, status && `moyue-btn-status-${status}`, { 'moyue-btn-with-icon': $slots.icon }]"
     :danger="status === 'danger'"
     :size="size === 'large' ? 'large' : size === 'small' || size === 'mini' ? 'small' : 'middle'"
     :shape="shape === 'round' || shape === 'circle' ? shape : undefined"

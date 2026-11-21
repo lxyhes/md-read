@@ -72,3 +72,45 @@ it.each(['Markdown', 'HTML'])('shows the saved content when returning to %s duri
     expect(mode === 'HTML' ? html() : host.querySelector('.reader-markdown')?.textContent).toContain('After saving')
   })
 })
+
+it('keeps a failed save visible and retries without losing the draft', async () => {
+  const pinia = createPinia()
+  const store = useReaderStore(pinia)
+  vi.spyOn(store, 'bootstrap').mockResolvedValue()
+  await store.addOpenedFiles([{ path: 'retry-save.md', source: '# Original' }], { persist: false })
+  const replace = vi.spyOn(store, 'replaceDocumentSource').mockRejectedValueOnce(new Error('存储暂不可写'))
+
+  const host = document.createElement('div')
+  document.body.append(host)
+  const app = createApp(App).use(pinia)
+  app.mount(host)
+  unmount = () => app.unmount()
+
+  const edit = await vi.waitFor(() => {
+    const button = [...host.querySelectorAll('button')].find(item => item.textContent?.trim() === '编辑')
+    expect(button).toBeDefined()
+    return button!
+  })
+  edit.click()
+  const editor = await vi.waitFor(() => {
+    const input = host.querySelector<HTMLTextAreaElement>('[data-test="editor"]')
+    expect(input).not.toBeNull()
+    return input!
+  })
+  editor.value = '# Draft to keep'
+  editor.dispatchEvent(new Event('input'))
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true }))
+
+  const retry = await vi.waitFor(() => {
+    const alert = host.querySelector('.reader-operation-alert')
+    expect(alert?.textContent).toContain('存储暂不可写')
+    return [...alert!.querySelectorAll('button')].find(button => button.textContent?.trim() === '重试保存')!
+  })
+  expect(editor.value).toBe('# Draft to keep')
+  retry.click()
+  await vi.waitFor(() => {
+    expect(replace).toHaveBeenCalledTimes(2)
+    expect(store.currentDocument?.source).toBe('# Draft to keep')
+    expect(host.querySelector('.reader-operation-alert')).toBeNull()
+  })
+})

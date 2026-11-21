@@ -11,11 +11,9 @@ where node >nul 2>&1 || goto :missing_node
 where npm >nul 2>&1 || goto :missing_node
 where cargo >nul 2>&1 || goto :missing_rust
 
-if not exist "node_modules" (
-  echo 首次打包，正在安装项目依赖...
-  call npm ci
-  if errorlevel 1 goto :failed
-)
+echo 正在按锁文件安装项目依赖...
+call npm ci
+if errorlevel 1 goto :failed
 
 echo 正在生成 Windows .exe，请勿关闭此窗口...
 call npm run package:windows

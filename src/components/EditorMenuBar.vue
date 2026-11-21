@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick, ref } from 'vue'
 import AppDropdown from './AppDropdown.vue'
+import AppIcon from './AppIcon.vue'
 
 type Item = { label?: string; action?: () => void; shortcut?: string; disabled?: boolean; separator?: boolean; checkable?: boolean; checked?: boolean; children?: Item[] }
 type Group = { label: string; items: Item[] }
@@ -96,7 +97,7 @@ function select(item: Item, group: string, nested = false) {
           <div role="menu" :aria-label="group.label" @keydown="navigate($event, group.label)">
             <template v-for="(item, index) in group.items" :key="item.label ?? `separator-${index}`">
               <div v-if="item.separator" class="editor-menu-separator" role="separator" />
-              <button v-else :data-submenu-key="item.children ? `${group.label}:${index}` : undefined" :data-submenu-trigger="item.children ? 'true' : undefined" :role="item.checkable ? 'menuitemcheckbox' : 'menuitem'" :aria-haspopup="item.children ? 'menu' : undefined" :aria-expanded="item.children ? submenu?.key === `${group.label}:${index}` : undefined" type="button" :aria-checked="item.checkable ? item.checked : undefined" :disabled="item.disabled" @mouseenter="item.children ? showSubmenu(group.label, item, index, $event.currentTarget as HTMLButtonElement) : (submenu = null)" @click="item.children ? showSubmenu(group.label, item, index, $event.currentTarget as HTMLButtonElement) : select(item, group.label)"><span class="editor-menu-label"><i v-if="item.checkable" aria-hidden="true">{{ item.checked ? '✓' : '' }}</i>{{ item.label }}</span><kbd v-if="item.shortcut">{{ item.shortcut }}</kbd><span v-if="item.children" class="editor-menu-chevron" aria-hidden="true">›</span></button>
+              <button v-else :data-submenu-key="item.children ? `${group.label}:${index}` : undefined" :data-submenu-trigger="item.children ? 'true' : undefined" :role="item.checkable ? 'menuitemcheckbox' : 'menuitem'" :aria-haspopup="item.children ? 'menu' : undefined" :aria-expanded="item.children ? submenu?.key === `${group.label}:${index}` : undefined" type="button" :aria-checked="item.checkable ? item.checked : undefined" :disabled="item.disabled" @mouseenter="item.children ? showSubmenu(group.label, item, index, $event.currentTarget as HTMLButtonElement) : (submenu = null)" @click="item.children ? showSubmenu(group.label, item, index, $event.currentTarget as HTMLButtonElement) : select(item, group.label)"><span class="editor-menu-label"><span v-if="item.checkable" class="editor-menu-check" aria-hidden="true"><AppIcon v-if="item.checked" name="check" :size="12" /></span>{{ item.label }}</span><kbd v-if="item.shortcut">{{ item.shortcut }}</kbd><AppIcon v-if="item.children" name="chevron-right" class="editor-menu-chevron" :size="12" /></button>
             </template>
           </div>
         </template>
@@ -105,11 +106,11 @@ function select(item: Item, group: string, nested = false) {
     <slot />
     <Teleport to="body">
       <div v-if="submenu" class="editor-menu-subpopover" role="menu" :aria-label="submenu.label" :style="{ left: `${submenu.left}px`, top: `${submenu.top}px`, width: `${submenu.width}px` }" @mousedown.stop @pointerdown.stop @click.stop @keydown="navigate($event, submenu.group, true)">
-        <button class="editor-menu-submenu-back" type="button" role="menuitem" @click="closeSubmenu"><span aria-hidden="true">‹</span>{{ submenu.label }}<small>返回</small></button>
+        <button class="editor-menu-submenu-back" type="button" role="menuitem" @click="closeSubmenu"><AppIcon name="chevron-left" :size="12" />{{ submenu.label }}<small>返回</small></button>
         <div class="editor-menu-separator" role="separator" />
         <template v-for="(item, index) in submenu.items" :key="item.label ?? `separator-${index}`">
           <div v-if="item.separator" class="editor-menu-separator" role="separator" />
-          <button v-else :role="item.checkable ? 'menuitemcheckbox' : 'menuitem'" type="button" :aria-checked="item.checkable ? item.checked : undefined" :disabled="item.disabled" @click="select(item, submenu.group, true)"><span class="editor-menu-label"><i v-if="item.checkable" aria-hidden="true">{{ item.checked ? '✓' : '' }}</i>{{ item.label }}</span><kbd v-if="item.shortcut">{{ item.shortcut }}</kbd></button>
+          <button v-else :role="item.checkable ? 'menuitemcheckbox' : 'menuitem'" type="button" :aria-checked="item.checkable ? item.checked : undefined" :disabled="item.disabled" @click="select(item, submenu.group, true)"><span class="editor-menu-label"><span v-if="item.checkable" class="editor-menu-check" aria-hidden="true"><AppIcon v-if="item.checked" name="check" :size="12" /></span>{{ item.label }}</span><kbd v-if="item.shortcut">{{ item.shortcut }}</kbd></button>
         </template>
       </div>
     </Teleport>
@@ -130,12 +131,12 @@ function select(item: Item, group: string, nested = false) {
 .editor-menu-popover button:disabled { opacity: .4; }
 .editor-menu-subpopover button:disabled { opacity: .4; }
 .editor-menu-subpopover .editor-menu-submenu-back { justify-content: flex-start; gap: 8px; font-weight: 600; }
-.editor-menu-submenu-back > span { color: var(--accent); font-size: 18px; }
+.editor-menu-submenu-back > .app-icon { color: var(--accent); }
 .editor-menu-submenu-back small { margin-left: auto; color: var(--muted); font: 11px var(--ui-font); }
 .editor-menu-popover kbd { color: var(--muted); font: 11px var(--ui-font); }
 .editor-menu-subpopover kbd { color: var(--muted); font: 11px var(--ui-font); }
 .editor-menu-label { display: inline-flex; align-items: center; gap: 7px; }
-.editor-menu-label i { display: inline-grid; width: 12px; place-items: center; color: var(--accent); font: 700 12px var(--ui-font); font-style: normal; }
-.editor-menu-chevron { margin-left: auto; color: var(--muted); font: 18px/1 var(--ui-font); }
+.editor-menu-check { display: inline-grid; width: 12px; place-items: center; color: var(--accent); }
+.editor-menu-chevron { margin-left: auto; color: var(--muted); }
 .editor-menu-separator { height: 1px; margin: 5px 6px; background: var(--border); }
 </style>

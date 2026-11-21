@@ -2156,7 +2156,6 @@ button:focus-visible,
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.tab-context-menu button,
 .file-context-menu button {
   display: flex;
   align-items: center;
@@ -2169,12 +2168,10 @@ button:focus-visible,
   text-align: left;
   font: 10px var(--ui-font);
 }
-.tab-context-menu button:hover:not(:disabled),
 .file-context-menu button:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent) 11%, transparent);
   color: var(--ink);
 }
-.tab-context-menu button:disabled,
 .file-context-menu button:disabled {
   cursor: not-allowed;
   opacity: .38;
@@ -2276,28 +2273,6 @@ button:focus-visible,
 .filesystem-tree-error {
   color: #c96c6c;
 }
-.file-properties-dialog {
-  width: min(540px, calc(100vw - 48px));
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  background: var(--surface);
-  box-shadow: 0 24px 80px rgba(0,0,0,.4);
-}
-.file-properties-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 20px 22px 16px;
-  border-bottom: 1px solid var(--border);
-}
-.file-properties-heading h2 {
-  margin: 8px 0 0;
-  color: var(--ink);
-  font: 400 17px/1.3 var(--ui-font);
-  word-break: break-word;
-}
 .file-properties-list {
   margin: 0;
   padding: 8px 22px 13px;
@@ -2321,20 +2296,6 @@ button:focus-visible,
   overflow-wrap: anywhere;
   color: var(--ink);
   font: 10px/1.5 var(--mono);
-}
-.file-properties-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 14px 22px 18px;
-  background: color-mix(in srgb, var(--surface-raised) 42%, transparent);
-}
-.file-delete-message {
-  margin: 0;
-  padding: 19px 22px 17px;
-  color: var(--muted);
-  font: 12px/1.6 var(--ui-font);
-  overflow-wrap: anywhere;
 }
 .reader-tab-status {
   flex: 0 0 auto;
@@ -2383,7 +2344,6 @@ button:focus-visible,
 }
 .tab-reopen-button:hover:not(:disabled) { background: var(--accent-soft); }
 .tab-reopen-button:disabled { cursor: not-allowed; opacity: .42; }
-.tab-context-menu button:last-child { border-top: 1px solid var(--border); margin-top: 4px; }
 
 /* Clean reading removes chrome while preserving the exact scroll position. */
 .app-shell.is-clean .global-nav {

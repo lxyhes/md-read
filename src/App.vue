@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, getCurrentInstance, h, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
-import { ConfigProvider, theme as antTheme, SelectOption as Option } from 'ant-design-vue'
+import { Alert, ConfigProvider, Dropdown, Modal, theme as antTheme, SelectOption as Option } from 'ant-design-vue'
 import { Bubble } from 'ant-design-x-vue'
 import zhCN from 'ant-design-vue/es/locale/zh_CN'
 import Select from './components/AppSelect.vue'
@@ -29,6 +29,7 @@ import MermaidBlock from './components/MermaidBlock.vue'
 import TreeDiagram from './components/TreeDiagram.vue'
 import AppIcon from './components/AppIcon.vue'
 import AppDialog from './components/AppDialog.vue'
+import AppActionMenu from './components/AppActionMenu.vue'
 import KnowledgeComposer from './components/KnowledgeComposer.vue'
 import IconButton from './components/IconButton.vue'
 import FontPicker from './components/FontPicker.vue'
@@ -38,7 +39,6 @@ import EditorMenuBar from './components/EditorMenuBar.vue'
 import MarkdownSyntaxGuide from './components/MarkdownSyntaxGuide.vue'
 import { insertSyntaxExample, type SyntaxExample } from './markdown/syntaxGuide'
 import EditorContextActions, { type ContextAction } from './components/EditorContextActions.vue'
-import { BoldOutlined, CheckCircleOutlined, CodeOutlined, CopyOutlined, DeleteOutlined, ItalicOutlined, LinkOutlined, OrderedListOutlined, SnippetsOutlined, AlignLeftOutlined, ScissorOutlined, UnorderedListOutlined } from '@ant-design/icons-vue'
 import AppDropdown from './components/AppDropdown.vue'
 import { interfaceFont } from './fonts'
 import { defaultTokens } from './themes'
@@ -305,7 +305,19 @@ let viewerPointer = { x: 0, y: 0 }
 const customProvider = ref('')
 const busyAction = ref<BusyAction>(null)
 const exporting = ref(false)
-const exportError = ref('')
+type DocumentIssue = {
+  documentId: string
+  editing: boolean
+  title: string
+  detail: string
+  retry: () => void
+}
+const saveIssue = shallowRef<DocumentIssue>()
+const exportIssue = shallowRef<DocumentIssue>()
+
+function operationIssue(documentId: string, editing: boolean, title: string, error: unknown, retry: () => void): DocumentIssue {
+  return { documentId, editing, title, detail: error instanceof Error ? error.message : String(error), retry }
+}
 const draggingFiles = ref(false)
 const leftPanelTab = ref<'files' | 'outline'>('files')
 const contextPanelOpen = ref(false)
@@ -352,12 +364,26 @@ const tabContextMenu = ref<{ documentId: string; x: number; y: number } | null>(
 const fileContextMenu = ref<{ file: FileTreeEntry; x: number; y: number } | null>(null)
 const fileContextMenuElement = ref<HTMLElement | null>(null)
 const fileProperties = ref<FileTreeEntry | null>(null)
+const deleteConfirmation = ref<{ files: FileTreeEntry[] } | null>(null)
+const railToolsOpen = ref(false)
+const railToolsTrigger = ref<HTMLButtonElement>()
+const readerMoreTrigger = ref<HTMLButtonElement>()
+const railTools = [
+  { key: 'clipboard', label: '剪贴板', icon: 'clipboard' },
+  { key: 'knowledge', label: 'AI 知识库', icon: 'library' },
+  { key: 'notes', label: '笔记', icon: 'edit' },
+  { key: 'themes', label: '主题', icon: 'palette' },
+  { key: 'plugins', label: '插件（即将上线）', icon: 'plugin' },
+] as const
+let tabMenuTrigger: HTMLElement | null = null
+let fileMenuTrigger: HTMLElement | null = null
+let readerModalTrigger: HTMLElement | null = null
 const editorOpen = ref(false)
 const editorToolbarVisible = ref(true)
 const editorStatusbarVisible = ref(true)
 const editorEmojiPickerOpen = ref(false)
 const editorAlwaysOnTop = ref(false)
-const webPreviewsBlocked = computed(() => Boolean(editorOpen.value || searchOpen.value || quickOpenOpen.value || viewer.value || wordCountOpen.value))
+const webPreviewsBlocked = computed(() => Boolean(editorOpen.value || searchOpen.value || quickOpenOpen.value || viewer.value || wordCountOpen.value || fileProperties.value || deleteConfirmation.value))
 const hasWebPreviews = computed(() => view.value === 'reader' && !webPreviewsBlocked.value && !activeAppDialog.value && Boolean(webPreviewUrl.value || aiWebPreviews.value.length))
 watch(hasWebPreviews, (visible) => {
   if (visible) return
@@ -401,6 +427,11 @@ const editorMode = ref<'write' | 'split' | 'rich' | 'preview'>(savedEditorMode &
 const editorOutlineOpen = ref(localStorage.getItem('moyue:editor-outline-open') !== 'false')
 const editorDocumentPath = ref('')
 const editorDocumentId = ref('')
+function matchesDocumentIssue(issue: DocumentIssue | undefined): issue is DocumentIssue {
+  return !!issue && issue.documentId === store.currentDocumentId && issue.editing === editorOpen.value
+}
+const visibleSaveIssue = computed(() => matchesDocumentIssue(saveIssue.value) ? saveIssue.value : undefined)
+const visibleExportIssue = computed(() => matchesDocumentIssue(exportIssue.value) ? exportIssue.value : undefined)
 const editorBackupError = ref('')
 const editorConflict = ref(false)
 let editorAutoSaveTimer: number | null = null
@@ -455,7 +486,6 @@ const editorEmojiSuggestions = computed(() => {
 })
 const editorMarkdownNormalization = computed(() => makeImplicitMarkdownHeadingsExplicit(editorSource.value))
 const exportOpen = ref(false)
-const deleteConfirmation = ref<{ files: FileTreeEntry[] } | null>(null)
 const selectedFilePaths = ref<string[]>([])
 const fileListLoading = ref(false)
 let fileTreeRequest = 0
@@ -1258,7 +1288,7 @@ const editorMenuGroups = computed<EditorMenuGroup[]>(() => {
       separator,
       { label: editorStatusbarVisible.value ? '隐藏状态栏' : '显示状态栏', checkable: true, checked: editorStatusbarVisible.value, action: () => { editorStatusbarVisible.value = !editorStatusbarVisible.value } },
       { label: editorToolbarVisible.value ? '隐藏工具栏' : '显示工具栏', checkable: true, checked: editorToolbarVisible.value, action: () => { editorToolbarVisible.value = !editorToolbarVisible.value } },
-      { label: '字数统计', action: () => { wordCountOpen.value = true } },
+      { label: '字数统计', action: openWordCount },
       separator,
       { label: '窗口', children: [
         { label: '切换全屏', shortcut: 'F11', action: () => void requestFullscreen() },
@@ -1490,6 +1520,7 @@ function isRealDocumentPath(path: string) {
 function saveEditor() {
   const document = store.documents.find(item => item.id === editorDocumentId.value)
   if (!document || !editorOpen.value || editorSaving.value) return
+  saveIssue.value = undefined
   editorSaveTask.value = persistEditorChanges(document).finally(() => { editorSaveTask.value = null })
 }
 
@@ -1516,7 +1547,7 @@ async function persistEditorChanges(document: ReaderDocument) {
       editorConflict.value = String(error).includes('其他程序修改')
       await persistEditorDraft()
     }
-    notify(String(error instanceof Error ? error.message : error))
+    saveIssue.value = operationIssue(documentId, true, 'Markdown 保存失败', error, saveEditor)
     return false
   }
 }
@@ -2848,20 +2879,20 @@ async function pasteIntoEditor(plain = false) {
 }
 
 const editorContextClipboard = computed<ContextAction[]>(() => [
-  { label: '剪切', icon: ScissorOutlined, disabled: !editorContextMenu.value?.hasSelection, action: () => copyEditorSelection(true) },
-  { label: '复制', icon: CopyOutlined, disabled: !editorContextMenu.value?.hasSelection, action: () => copyEditorSelection() },
-  { label: '粘贴', icon: SnippetsOutlined, action: () => pasteIntoEditor() },
-  { label: '删除当前行', icon: DeleteOutlined, action: deleteEditorLine },
+  { label: '剪切', icon: 'cut', disabled: !editorContextMenu.value?.hasSelection, action: () => copyEditorSelection(true) },
+  { label: '复制', icon: 'copy', disabled: !editorContextMenu.value?.hasSelection, action: () => copyEditorSelection() },
+  { label: '粘贴', icon: 'paste', action: () => pasteIntoEditor() },
+  { label: '删除当前行', icon: 'trash', action: deleteEditorLine },
 ])
 const editorContextFormat: ContextAction[] = [
-  { label: '粗体', icon: BoldOutlined, shortcut: 'Ctrl+B', action: () => wrapEditorSelection('**', '**', '粗体') },
-  { label: '斜体', icon: ItalicOutlined, shortcut: 'Ctrl+I', action: () => wrapEditorSelection('*', '*', '斜体') },
-  { label: '行内代码', icon: CodeOutlined, action: () => wrapEditorSelection('`', '`', '代码') },
-  { label: '链接', icon: LinkOutlined, shortcut: 'Ctrl+K', action: insertEditorLink },
-  { label: '引用', icon: AlignLeftOutlined, action: () => prefixEditorLines('> ') },
-  { label: '有序列表', icon: OrderedListOutlined, action: () => prefixEditorLines('1. ') },
-  { label: '无序列表', icon: UnorderedListOutlined, action: () => prefixEditorLines('- ') },
-  { label: '任务列表', icon: CheckCircleOutlined, action: () => prefixEditorLines('- [ ] ') },
+  { label: '粗体', icon: 'bold', shortcut: 'Ctrl+B', action: () => wrapEditorSelection('**', '**', '粗体') },
+  { label: '斜体', icon: 'italic', shortcut: 'Ctrl+I', action: () => wrapEditorSelection('*', '*', '斜体') },
+  { label: '行内代码', icon: 'code', action: () => wrapEditorSelection('`', '`', '代码') },
+  { label: '链接', icon: 'link', shortcut: 'Ctrl+K', action: insertEditorLink },
+  { label: '引用', icon: 'quote', action: () => prefixEditorLines('> ') },
+  { label: '有序列表', icon: 'ordered-list', action: () => prefixEditorLines('1. ') },
+  { label: '无序列表', icon: 'unordered-list', action: () => prefixEditorLines('- ') },
+  { label: '任务列表', icon: 'task-list', action: () => prefixEditorLines('- [ ] ') },
 ]
 const editorContextGroups = [
   { label: '剪贴板', items: [
@@ -2944,9 +2975,11 @@ async function renderDocumentPng(document: ReaderDocument) {
 
 async function exportDocument(format: 'markdown' | 'html' | 'html-clean' | 'image' | PandocExportFormat) {
   const document = exportSnapshot()
-  if (!document || exporting.value) return
+  const documentId = store.currentDocumentId
+  if (!document || !documentId || exporting.value) return
+  const editing = editorOpen.value
   exporting.value = true
-  exportError.value = ''
+  exportIssue.value = undefined
   try {
     let path: string | null = null
     if (isTauriRuntime() && ['docx', 'latex', 'odt', 'rtf', 'mediawiki'].includes(format)) {
@@ -2972,8 +3005,7 @@ async function exportDocument(format: 'markdown' | 'html' | 'html-clean' | 'imag
     }
     if (path) notify(`已导出：${path}`)
   } catch (error) {
-    exportError.value = String(error instanceof Error ? error.message : error)
-    notify(exportError.value)
+    exportIssue.value = operationIssue(documentId, editing, '导出失败', error, () => void exportDocument(format))
   } finally { exporting.value = false }
 }
 
@@ -2981,6 +3013,7 @@ async function saveCurrentDocument() {
   const document = store.currentDocument
   if (!document || isRealDocumentPath(document.path) || savingDocument.value) return
   savingDocument.value = true
+  saveIssue.value = undefined
   try {
     let source = document.source
     const path = isTauriRuntime()
@@ -3001,7 +3034,7 @@ async function saveCurrentDocument() {
     await renameReaderDocument(document.id, path, source)
     notify(imageDownloadFailed ? `Markdown 已保存，有图片未能存到同目录：${path}` : `Markdown 已保存：${path}`)
   } catch (error) {
-    notify(error instanceof Error ? error.message : 'Markdown 保存失败')
+    saveIssue.value = operationIssue(document.id, false, 'Markdown 保存失败', error, () => void saveCurrentDocument())
   } finally {
     savingDocument.value = false
   }
@@ -3013,9 +3046,11 @@ function printDocument() {
 
 async function exportPdfDocument(print = false) {
   const document = exportSnapshot()
-  if (!document || exporting.value) return
+  const documentId = store.currentDocumentId
+  if (!document || !documentId || exporting.value) return
+  const editing = editorOpen.value
   exporting.value = true
-  exportError.value = ''
+  exportIssue.value = undefined
   const settings = advancedSettings.value
   try {
     const html = createPrintHtml(await exportHtmlSource(document), settings)
@@ -3023,8 +3058,7 @@ async function exportPdfDocument(print = false) {
     const path = await savePdfExportFile(html, document.title || '文档')
     if (path) notify(`已导出 PDF：${path}`)
   } catch (error) {
-    exportError.value = error instanceof Error ? error.message : '打印 / PDF 导出失败'
-    notify(exportError.value)
+    exportIssue.value = operationIssue(documentId, editing, print ? '打印失败' : 'PDF 导出失败', error, () => void exportPdfDocument(print))
   } finally { exporting.value = false }
 }
 
@@ -3281,7 +3315,6 @@ async function testAiConnection() {
   } catch (error) {
     aiStatus.value = 'error'
     aiError.value = error instanceof Error ? error.message : 'AI 服务连接失败'
-    notify(aiError.value)
   } finally { aiBusy.value = false }
 }
 async function loadPersistedAiSettings() {
@@ -3295,7 +3328,6 @@ async function saveAiSettings() {
   if (!(await persistAiSettings(aiSettings.value))) {
     aiStatus.value = 'error'
     aiError.value = 'AI 服务配置保存失败，请检查应用存储权限'
-    notify(aiError.value)
     return
   }
   aiStatus.value = 'saved'
@@ -3773,6 +3805,40 @@ function tabLabel(document: { title: string; path: string }) {
   return fileNameOf(document.path)
 }
 
+function dismissRailTools() {
+  railToolsOpen.value = false
+  railToolsTrigger.value?.focus()
+}
+
+function chooseRailTool(key: string) {
+  dismissRailTools()
+  if (key === 'knowledge') openKnowledge()
+  else if (key === 'notes') openNotes()
+  else if (key === 'clipboard' || key === 'themes') view.value = key
+  else notify('插件市场将在下一阶段接入')
+}
+
+function dismissTabContextMenu() {
+  tabContextMenu.value = null
+  tabMenuTrigger?.focus()
+}
+
+function restoreReaderModalFocus() {
+  if (fileProperties.value || deleteConfirmation.value || wordCountOpen.value) return
+  const trigger = readerModalTrigger
+  readerModalTrigger = null
+  if (trigger?.isConnected) trigger.focus()
+}
+
+function openWordCount() {
+  const activeElement = document.activeElement as HTMLElement | null
+  const menuTrigger = editorOpen.value
+    ? document.querySelector<HTMLElement>('.editor-menu-trigger[aria-expanded="true"]')
+    : readerMoreTrigger.value
+  readerModalTrigger = menuTrigger ?? activeElement
+  wordCountOpen.value = true
+}
+
 function closeTabMenus() {
   tabListOpen.value = false
   tabSearchQuery.value = ''
@@ -3801,19 +3867,24 @@ function toggleTabList() {
   tabContextMenu.value = null
 }
 
-function openTabContextMenu(event: MouseEvent, documentId: string) {
+function openTabContextMenu(event: MouseEvent | KeyboardEvent, documentId: string) {
+  tabMenuTrigger = event.currentTarget as HTMLElement
+  const bounds = tabMenuTrigger.getBoundingClientRect()
+  const x = event instanceof MouseEvent && (event.clientX || event.clientY) ? event.clientX : bounds.left
+  const y = event instanceof MouseEvent && (event.clientX || event.clientY) ? event.clientY : bounds.bottom
   const width = 214
   const height = 194
-  tabListOpen.value = false
+  closeTabMenus()
   tabContextMenu.value = {
     documentId,
-    x: Math.min(event.clientX, Math.max(8, window.innerWidth - width - 8)),
-    y: Math.min(event.clientY, Math.max(8, window.innerHeight - height - 8)),
+    x: Math.max(8, Math.min(x, window.innerWidth - width - 8)),
+    y: Math.max(8, Math.min(y, window.innerHeight - height - 8)),
   }
 }
 
 function openFileContextMenu(event: MouseEvent, file: FileTreeEntry) {
   event.preventDefault()
+  fileMenuTrigger = event.currentTarget as HTMLElement
   closeTabMenus()
   fileContextMenu.value = {
     file,
@@ -4109,7 +4180,9 @@ function searchFileContextEntry() {
 function showFileProperties() {
   const file = fileContextMenu.value?.file
   fileContextMenu.value = null
-  if (file) fileProperties.value = file
+  if (!file) return
+  readerModalTrigger = fileMenuTrigger
+  fileProperties.value = file
 }
 
 async function copyFilePropertiesPath() {
@@ -4117,7 +4190,7 @@ async function copyFilePropertiesPath() {
   if (!file) return
   try {
     await writeTextToClipboard(file.path)
-    fileProperties.value = null
+    if (fileProperties.value === file) fileProperties.value = null
     notify('文件路径已复制')
   } catch {
     notify('复制失败，请检查剪贴板权限')
@@ -4387,7 +4460,7 @@ async function openFileContextDirectory(reveal = false) {
 async function deleteContextFile() {
   const file = fileContextMenu.value?.file
   fileContextMenu.value = null
-  if (file) await deleteFile(file)
+  if (file) await deleteFile(file, fileMenuTrigger)
 }
 
 function onTabAuxClick(event: MouseEvent, documentId: string) {
@@ -4401,9 +4474,10 @@ function hasTabsToRight(documentId: string) {
   return index >= 0 && index < store.openDocumentIds.length - 1
 }
 
-async function runTabMenuAction(action: 'close' | 'close-others' | 'close-right' | 'reopen') {
+async function runTabMenuAction(action: string) {
+  if (!['close', 'close-others', 'close-right', 'reopen'].includes(action)) return
   const documentId = tabContextMenu.value?.documentId
-  closeTabMenus()
+  dismissTabContextMenu()
   if (action === 'reopen') {
     await reopenLastClosedTab()
     return
@@ -4596,6 +4670,16 @@ watch(() => [store.activeHeadingId, leftPanelTab.value, store.mode], () => {
 
 function onKeydown(event: KeyboardEvent) {
   if (event.isComposing || event.keyCode === 229 || event.defaultPrevented) return
+  if (fileProperties.value || deleteConfirmation.value || wordCountOpen.value) {
+    // The modal takes focus after its entrance animation.
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      fileProperties.value = null
+      deleteConfirmation.value = null
+      wordCountOpen.value = false
+    }
+    return
+  }
   if (editorSyntaxGuideOpen.value) return
   if (tableEditor.value) {
     if (event.key === 'Escape') { event.preventDefault(); closeTableEditor() }
@@ -5163,10 +5247,12 @@ function toggleAllFileSelection() {
 function requestDeleteFiles(files: FileTreeEntry[]) {
   const deletableFiles = files.filter(isBatchDeletableFile)
   if (!deletableFiles.length || busyAction.value) return
+  readerModalTrigger = document.activeElement as HTMLElement | null
   deleteConfirmation.value = { files: deletableFiles }
 }
-async function deleteFile(file: FileTreeEntry) {
+async function deleteFile(file: FileTreeEntry, trigger: HTMLElement | null) {
   if (!isDeletableFile(file) || busyAction.value) return
+  readerModalTrigger = trigger
   deleteConfirmation.value = { files: [file] }
 }
 async function confirmDeleteFile() {
@@ -6036,16 +6122,14 @@ async function requestFullscreen() {
         <button class="rail-item" type="button" title="搜索文档" aria-label="搜索文档" @click="openSearch('all')"><AppIcon name="search" :size="20" /><span>搜索</span></button>
         <div class="rail-divider" />
         <button class="rail-item" :class="{ active: view === 'favorites' }" type="button" title="收藏夹" aria-label="收藏夹" @click="openFavorites"><AppIcon name="star" :size="20" /><span>收藏</span></button>
-        <AppDropdown panel-class="reader-more-popover rail-more-popover">
-          <button class="rail-item" :class="{ active: ['clipboard', 'knowledge', 'notes', 'themes'].includes(view) }" type="button" title="更多工具" aria-label="更多工具" aria-haspopup="menu"><AppIcon name="more" :size="20" /><span>更多</span></button>
-          <template #menu>
-            <button type="button" role="menuitem" @click="view = 'clipboard'"><AppIcon name="clipboard" :size="15" />剪贴板</button>
-            <button type="button" role="menuitem" @click="openKnowledge"><AppIcon name="library" :size="15" />AI 知识库</button>
-            <button type="button" role="menuitem" @click="openNotes"><AppIcon name="edit" :size="15" />笔记</button>
-            <button type="button" role="menuitem" @click="view = 'themes'"><AppIcon name="palette" :size="15" />主题</button>
-            <button type="button" role="menuitem" @click="notify('插件市场将在下一阶段接入')"><AppIcon name="plugin" :size="15" />插件（即将上线）</button>
+        <Dropdown v-model:open="railToolsOpen" :trigger="['click']" placement="bottomRight">
+          <button ref="railToolsTrigger" class="rail-item" :class="{ active: ['clipboard', 'knowledge', 'notes', 'themes'].includes(view) }" type="button" title="更多工具" aria-label="更多工具" aria-haspopup="menu" :aria-expanded="railToolsOpen" @keydown.down.prevent="railToolsOpen = true" @keydown.esc.stop="dismissRailTools"><AppIcon name="more" :size="20" /><span>更多</span></button>
+          <template #overlay>
+            <div class="rail-tools-menu">
+              <AppActionMenu v-if="railToolsOpen" label="更多工具" :actions="railTools" :active="view" @choose="chooseRailTool" @dismiss="dismissRailTools" />
+            </div>
           </template>
-        </AppDropdown>
+        </Dropdown>
         <div class="rail-spacer" />
         <button class="rail-item" :class="{ active: view === 'settings' }" type="button" title="设置" aria-label="设置" @click="view = 'settings'"><AppIcon name="settings" :size="20" /><span>设置</span></button>
       </div>
@@ -6054,11 +6138,11 @@ async function requestFullscreen() {
     <main class="main-shell" :class="{ 'with-web-preview': hasWebPreviews }">
       <header class="topbar" :class="{ faded: store.mode === 'focus' }">
         <div v-if="view !== 'reader'" class="crumbs"><strong>{{ view === 'themes' ? '主题空间' : view === 'clipboard' ? '剪贴板' : view === 'favorites' ? '收藏夹' : view === 'knowledge' ? 'AI 知识库' : view === 'notes' ? '个人笔记' : view === 'settings' ? '偏好设置' : '我的文档' }}</strong></div>
-        <button class="command-trigger" type="button" title="搜索：Ctrl/Cmd + K；快速打开：Ctrl/Cmd + P" @click="openSearch('all')"><AppIcon v-if="hasWebPreviews" name="search" :size="16" /><span>搜索文档、标题、内容</span><kbd>⌘ K</kbd></button>
+        <button class="command-trigger" type="button" aria-label="搜索文档、标题、内容" title="搜索：Ctrl/Cmd + K；快速打开：Ctrl/Cmd + P" @click="openSearch('all')"><AppIcon name="search" :size="16" /><span>搜索文档、标题、内容</span><kbd>⌘ K</kbd></button>
         <div class="top-actions">
           <IconButton icon="focus" label="专注阅读" :active="store.mode === 'focus'" @click="toggleFocusMode" />
           <IconButton icon="palette" label="切换主题" @click="view = 'themes'" />
-          <IconButton icon="fullscreen" :active="fullscreenActive" :label="fullscreenActive ? '退出全屏' : '全屏'" @click="requestFullscreen" />
+          <IconButton :icon="fullscreenActive ? 'fullscreen-exit' : 'fullscreen'" :active="fullscreenActive" :label="fullscreenActive ? '退出全屏' : '全屏'" @click="requestFullscreen" />
         </div>
       </header>
 
@@ -6082,7 +6166,7 @@ async function requestFullscreen() {
             </template>
           </AppDropdown>
           <AppDropdown v-if="isTauriRuntime() && orderedRecentFolders.length" panel-class="library-more-popover recent-folders-popover">
-            <Button class="ghost-button" type="secondary"><AppIcon name="history" :size="14" />最近文件夹</Button>
+            <Button class="ghost-button" type="secondary"><template #icon><AppIcon name="history" :size="14" /></template>最近文件夹</Button>
             <template #menu>
               <div class="recent-folders-heading"><div><strong>最近打开</strong><span class="recent-folder-count">· {{ orderedRecentFolders.length }} 个文件夹</span></div></div>
               <div class="recent-folder-list" aria-label="最近文件夹">
@@ -6097,7 +6181,7 @@ async function requestFullscreen() {
           <Button class="ghost-button" type="secondary" :loading="busyAction === 'folder'" :disabled="busyAction !== null" @click="openFolder"><template #icon><AppIcon name="folder" :size="14" /></template>打开文件夹</Button><Button class="primary-button" type="primary" :loading="busyAction === 'file'" :disabled="busyAction !== null" @click="openFile"><template #icon><AppIcon name="plus" :size="14" /></template>导入 Markdown</Button></div></div>
         <div class="document-grid reveal-3">
           <div v-if="librarySearchQuery.trim() && !filteredLibraryDocuments.length" class="library-empty"><AppIcon name="search" :size="20" /><strong>没有找到匹配的文档</strong><span>试试搜索其他 Markdown 名称</span></div>
-          <article v-for="document in filteredLibraryDocuments" :key="document.id" class="document-card"><button class="document-card-main" type="button" @click="chooseDocument(document.id)"><div class="card-topline"><span class="file-badge">MD</span><span>{{ document.id === store.documents[0]?.id ? '刚刚' : '本地文档' }}</span></div><h3>{{ displayTitle(document.title) }}</h3><p>{{ document.regions.length }} 个阅读区域 · {{ document.estimatedReadMinutes }} 分钟</p><div class="card-footer"><span>{{ document.path }}</span><span class="arrow"><AppIcon name="external" :size="14" /></span></div></button><button class="card-star" :class="{ active: favoriteDocumentIds.includes(document.id) }" type="button" :aria-label="favoriteDocumentIds.includes(document.id) ? '取消收藏' : '加入收藏夹'" :title="favoriteDocumentIds.includes(document.id) ? '取消收藏' : '加入收藏夹'" @click="toggleFavorite(document.id)"><AppIcon name="star" :size="15" /></button></article>
+          <article v-for="document in filteredLibraryDocuments" :key="document.id" class="document-card"><button class="document-card-main" type="button" @click="chooseDocument(document.id)"><div class="card-topline"><span class="file-badge">MD</span><span>{{ document.id === store.documents[0]?.id ? '刚刚' : '本地文档' }}</span></div><h3>{{ displayTitle(document.title) }}</h3><p>{{ document.regions.length }} 个阅读区域 · {{ document.estimatedReadMinutes }} 分钟</p><div class="card-footer"><span>{{ document.path }}</span><span class="arrow"><AppIcon name="external" :size="14" /></span></div></button><button class="card-star" :class="{ active: favoriteDocumentIds.includes(document.id) }" type="button" :aria-label="favoriteDocumentIds.includes(document.id) ? '取消收藏' : '加入收藏夹'" :title="favoriteDocumentIds.includes(document.id) ? '取消收藏' : '加入收藏夹'" @click="toggleFavorite(document.id)"><AppIcon :name="favoriteDocumentIds.includes(document.id) ? 'star-filled' : 'star'" :size="15" /></button></article>
           <button class="import-card" type="button" :disabled="busyAction !== null" @click="openFile"><span class="import-plus"><AppIcon name="plus" :size="22" /></span><span>{{ busyAction === 'file' ? '正在打开…' : '拖入 Markdown' }}<br /><small>或从本地打开</small></span></button>
           <button class="import-card" type="button" :disabled="busyAction !== null" @click="() => pasteFromClipboard()"><span class="import-plus"><AppIcon name="copy" :size="22" /></span><span>{{ busyAction === 'paste' ? '正在格式化…' : '粘贴内容' }}<br /><small>自动整理成 Markdown</small></span></button>
         </div>
@@ -6107,7 +6191,7 @@ async function requestFullscreen() {
       <section v-else-if="view === 'favorites'" class="page collection-page favorites-page">
         <div class="page-heading"><div><p class="section-kicker">我的空间</p><h1>把重要的内容，<br /><em>留在手边。</em></h1><p class="collection-intro">收藏常用文档，下一次打开时不用重新寻找。</p></div><span class="collection-count"><AppIcon name="star" :size="16" />{{ favoriteDocuments.length }} 个收藏</span></div>
         <div v-if="!favoriteDocuments.length" class="collection-empty"><AppIcon name="star" :size="24" /><strong>收藏夹还是空的</strong><span>在“我的文档”的卡片上点一下星标，就能收藏文档。</span><button class="primary-button" type="button" @click="openLibrary('all')">去看看文档</button></div>
-        <div v-else class="collection-grid"><article v-for="document in favoriteDocuments" :key="document.id" class="collection-card"><button class="collection-card-main" type="button" @click="chooseDocument(document.id)"><span class="file-badge">MD</span><h3>{{ displayTitle(document.title) }}</h3><p>{{ document.regions.length }} 个阅读区域 · {{ document.estimatedReadMinutes }} 分钟</p><small>{{ document.path }}</small></button><button class="collection-card-action" type="button" @click="toggleFavorite(document.id)"><AppIcon name="star" :size="13" />取消收藏</button></article></div>
+        <div v-else class="collection-grid"><article v-for="document in favoriteDocuments" :key="document.id" class="collection-card"><button class="collection-card-main" type="button" @click="chooseDocument(document.id)"><span class="file-badge">MD</span><h3>{{ displayTitle(document.title) }}</h3><p>{{ document.regions.length }} 个阅读区域 · {{ document.estimatedReadMinutes }} 分钟</p><small>{{ document.path }}</small></button><button class="collection-card-action" type="button" @click="toggleFavorite(document.id)"><AppIcon name="star-filled" :size="13" />取消收藏</button></article></div>
       </section>
 
       <section v-else-if="view === 'knowledge'" class="page collection-page knowledge-page">
@@ -6123,8 +6207,8 @@ async function requestFullscreen() {
             </div>
             <div ref="knowledgeTranscriptRef" class="knowledge-transcript" aria-live="polite" aria-label="对话记录">
               <ContentSkeleton v-if="!knowledgeLoaded" label="正在读取对话内容" />
-              <div v-else-if="!activeKnowledgeConversation" class="knowledge-transcript-empty"><AppIcon name="sparkle" :size="20" /><strong>{{ activeKnowledgeSources.length ? '资料已经准备好' : '从一段新对话开始' }}</strong><span>{{ activeKnowledgeSources.length ? `本次可检索 ${activeKnowledgeSources.length} 篇资料。点一个建议，或直接输入问题。` : '选择资料后提问，答案会保留引用，之后可以继续聊。' }}</span><div v-if="knowledgePromptSuggestions.length" class="knowledge-prompts knowledge-empty-prompts"><span>可以这样问</span><button v-for="prompt in knowledgePromptSuggestions" :key="prompt" type="button" :disabled="aiBusy" @click="useKnowledgePrompt(prompt)">{{ prompt }}</button></div><button v-if="store.documents.length && !knowledgeDocuments.length" class="primary-button" type="button" :disabled="!knowledgeLoaded" @click="addAllKnowledgeSources">一键收录 {{ store.documents.length }} 篇现有文档</button><button v-else-if="!store.documents.length" class="primary-button" type="button" @click="openLibrary('all')">导入 Markdown 文档</button></div>
-              <div v-else-if="!activeKnowledgeMessages.length" class="knowledge-transcript-empty"><AppIcon name="sparkle" :size="20" /><strong>{{ activeKnowledgeSources.length ? '资料已经准备好' : '还缺少本次资料' }}</strong><span>{{ activeKnowledgeSources.length ? `本次可检索 ${activeKnowledgeSources.length} 篇资料。点一个建议，或直接输入问题。` : '展开上方“本次资料”，选择文档后就可以开始问。' }}</span><div v-if="knowledgePromptSuggestions.length" class="knowledge-prompts knowledge-empty-prompts"><span>可以这样问</span><button v-for="prompt in knowledgePromptSuggestions" :key="prompt" type="button" :disabled="aiBusy" @click="useKnowledgePrompt(prompt)">{{ prompt }}</button></div></div>
+              <div v-else-if="!activeKnowledgeConversation" class="knowledge-transcript-empty"><AppIcon name="sparkle" :size="20" /><strong>{{ activeKnowledgeSources.length ? '资料已经准备好' : '从一段新对话开始' }}</strong><span>{{ activeKnowledgeSources.length ? `本次可检索 ${activeKnowledgeSources.length} 篇资料。点一个建议，或直接输入问题。` : '选择资料后提问，答案会保留引用，之后可以继续聊。' }}</span><button v-if="store.documents.length && !knowledgeDocuments.length" class="primary-button" type="button" :disabled="!knowledgeLoaded" @click="addAllKnowledgeSources">一键收录 {{ store.documents.length }} 篇现有文档</button><button v-else-if="!store.documents.length" class="primary-button" type="button" @click="openLibrary('all')">导入 Markdown 文档</button></div>
+              <div v-else-if="!activeKnowledgeMessages.length" class="knowledge-transcript-empty"><AppIcon name="sparkle" :size="20" /><strong>{{ activeKnowledgeSources.length ? '资料已经准备好' : '还缺少本次资料' }}</strong><span>{{ activeKnowledgeSources.length ? `本次可检索 ${activeKnowledgeSources.length} 篇资料。点一个建议，或直接输入问题。` : '展开上方“本次资料”，选择文档后就可以开始问。' }}</span></div>
               <article v-for="message in activeKnowledgeMessages" :key="message.id" class="knowledge-message" :class="`is-${message.role}`">
                 <Bubble
                   :content="message.content"
@@ -6152,8 +6236,11 @@ async function requestFullscreen() {
               </article>
               <ContentSkeleton v-if="aiBusy" class="knowledge-message is-assistant knowledge-answer-skeleton" label="正在检索本次资料并整理答案" layout="text" :rows="3" />
             </div>
-            <div v-if="activeKnowledgeMessages.length && knowledgePromptSuggestions.length" class="knowledge-prompts"><span>继续问</span><button v-for="prompt in knowledgePromptSuggestions" :key="prompt" type="button" :disabled="aiBusy" @click="useKnowledgePrompt(prompt)">{{ prompt }}</button></div>
-            <p v-if="aiError" class="knowledge-ai-error" role="alert">{{ aiError }} · 问题仍保留在输入框，可检查配置后重试。</p>
+            <div v-if="knowledgePromptSuggestions.length" class="knowledge-prompts" role="group" :aria-label="activeKnowledgeMessages.length ? '继续问' : '可以这样问'">
+              <span>{{ activeKnowledgeMessages.length ? '继续问' : '可以这样问' }}</span>
+              <Button v-for="prompt in knowledgePromptSuggestions" :key="prompt" size="small" :disabled="aiBusy || knowledgeRefreshing" @click="useKnowledgePrompt(prompt)">{{ prompt }}</Button>
+            </div>
+            <Alert v-if="aiError" class="knowledge-ai-error" type="error" show-icon :message="aiError" />
             <KnowledgeComposer v-model="knowledgeQuestion" :disabled="!knowledgeLoaded || knowledgeRefreshing" :busy="aiBusy" :has-sources="!!activeKnowledgeSources.length" @submit="askKnowledge">
               <p class="knowledge-ask-hint">{{ aiSettings.enabled ? '本轮问题、最近两轮对话和命中的原文片段会发送到设置中的 AI 服务。' : '当前只做本地检索；启用 AI 后可根据命中原文整理回答。' }}</p>
             </KnowledgeComposer>
@@ -6235,12 +6322,20 @@ async function requestFullscreen() {
           </div>
         </Teleport>
         <Teleport to="body">
-          <div v-if="tabContextMenu" class="tab-context-menu" :style="{ top: `${tabContextMenu.y}px`, left: `${tabContextMenu.x}px` }" role="menu" @click.stop>
+          <div v-if="tabContextMenu" class="tab-context-menu" :style="{ top: `${tabContextMenu.y}px`, left: `${tabContextMenu.x}px` }" @click.stop>
             <div class="tab-context-title">{{ tabLabel(store.documents.find((document) => document.id === tabContextMenu?.documentId) ?? { title: '文档', path: '' }) }}</div>
-            <button type="button" role="menuitem" @click="runTabMenuAction('close')">关闭标签</button>
-            <button type="button" role="menuitem" :disabled="store.openDocuments.length < 2" @click="runTabMenuAction('close-others')">关闭其他标签</button>
-            <button type="button" role="menuitem" :disabled="!hasTabsToRight(tabContextMenu.documentId)" @click="runTabMenuAction('close-right')">关闭右侧标签</button>
-            <button type="button" role="menuitem" :disabled="!recentlyClosedTabs.length" @click="runTabMenuAction('reopen')">重新打开上一个标签</button>
+            <AppActionMenu
+              :key="tabContextMenu.documentId"
+              label="标签页操作"
+              :actions="[
+                { key: 'close', label: '关闭标签' },
+                { key: 'close-others', label: '关闭其他标签', disabled: store.openDocuments.length < 2 },
+                { key: 'close-right', label: '关闭右侧标签', disabled: !hasTabsToRight(tabContextMenu.documentId) },
+                { key: 'reopen', label: '重新打开上一个标签', disabled: !recentlyClosedTabs.length },
+              ]"
+              @choose="runTabMenuAction"
+              @dismiss="dismissTabContextMenu"
+            />
           </div>
         </Teleport>
         <Teleport to="body">
@@ -6277,25 +6372,30 @@ async function requestFullscreen() {
             <button v-if="isDeletableFile(fileContextMenu.file)" type="button" role="menuitem" class="file-context-danger" @click="deleteContextFile"><AppIcon name="trash" :size="13" />从阅读空间移除</button>
           </div>
         </Teleport>
-        <Teleport to="body">
-          <div v-if="fileProperties" class="overlay file-properties-overlay" @click.self="fileProperties = null">
-            <div class="file-properties-dialog" role="dialog" aria-modal="true" aria-label="文件属性">
-              <div class="file-properties-heading"><div><span class="section-kicker">文件信息</span><h2>{{ fileProperties.name }}</h2></div><IconButton icon="close" size="sm" label="关闭文件属性" @click="fileProperties = null" /></div>
-              <dl class="file-properties-list"><div><dt>位置</dt><dd>{{ fileProperties.path }}</dd></div><div><dt>类型</dt><dd>{{ fileProperties.isDirectory ? '文件夹' : 'Markdown 文档' }}</dd></div><div><dt>状态</dt><dd>{{ fileStatus(fileProperties) }}</dd></div><div><dt>当前目录</dt><dd>{{ contextDirectoryPath(fileProperties) || '当前工作区' }}</dd></div></dl>
-              <div class="file-properties-actions"><Button class="ghost-button" type="secondary" @click="fileProperties = null">关闭</Button><Button class="primary-button" type="primary" @click="copyFilePropertiesPath"><template #icon><AppIcon name="copy" :size="13" /></template>复制文件路径</Button></div>
-            </div>
-          </div>
-        </Teleport>
-        <Teleport to="body">
-          <div v-if="deleteConfirmation" class="overlay file-delete-overlay" @click.self="deleteConfirmation = null">
-            <div class="file-properties-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-file-title">
-              <div class="file-properties-heading"><div><span class="section-kicker">移除文件</span><h2 id="delete-file-title">从阅读空间移除？</h2></div><IconButton icon="close" size="sm" label="取消移除" @click="deleteConfirmation = null" /></div>
-              <p v-if="deleteConfirmation.files.length === 1" class="file-delete-message">确定从 Moyue 阅读空间移除“{{ deleteConfirmation.files[0].name }}”？不会删除本地文件。</p>
-              <p v-else class="file-delete-message">确定从 Moyue 阅读空间移除 {{ deleteConfirmationSummary }}？不会删除本地文件。</p>
-              <div class="file-properties-actions"><Button class="ghost-button" type="secondary" @click="deleteConfirmation = null">取消</Button><Button type="primary" status="danger" @click="confirmDeleteFile">确认移除</Button></div>
-            </div>
-          </div>
-        </Teleport>
+        <Modal :open="!!fileProperties" title="文件属性" wrap-class-name="reader-detail-modal" :width="500" centered :after-close="restoreReaderModalFocus" @cancel="fileProperties = null">
+          <template v-if="fileProperties">
+            <p class="reader-detail-name">{{ fileProperties.name }}</p>
+            <dl class="file-properties-list">
+              <div><dt>位置</dt><dd>{{ fileProperties.path }}</dd></div>
+              <div><dt>类型</dt><dd>{{ fileProperties.isDirectory ? '文件夹' : 'Markdown 文档' }}</dd></div>
+              <div><dt>状态</dt><dd>{{ fileStatus(fileProperties) }}</dd></div>
+              <div><dt>当前目录</dt><dd>{{ contextDirectoryPath(fileProperties) || '当前工作区' }}</dd></div>
+            </dl>
+          </template>
+          <template #footer>
+            <Button type="secondary" @click="fileProperties = null">关闭</Button>
+            <Button type="primary" @click="copyFilePropertiesPath"><template #icon><AppIcon name="copy" :size="13" /></template>复制文件路径</Button>
+          </template>
+        </Modal>
+        <Modal :open="!!deleteConfirmation" title="从阅读空间移除？" wrap-class-name="reader-detail-modal" :width="500" centered :after-close="restoreReaderModalFocus" @cancel="deleteConfirmation = null">
+          <p v-if="deleteConfirmation" class="reader-remove-description">
+            确定从阅读空间移除{{ deleteConfirmation.files.length === 1 ? `“${deleteConfirmation.files[0].name}”` : ` ${deleteConfirmationSummary}` }}？本地文件会保留。
+          </p>
+          <template #footer>
+            <Button type="secondary" @click="deleteConfirmation = null">取消</Button>
+            <Button type="primary" status="danger" :disabled="busyAction !== null" @click="confirmDeleteFile">确认移除</Button>
+          </template>
+        </Modal>
         <div class="reader-layout" :class="{ 'focus-layout': store.mode === 'focus', 'clean-layout': store.mode === 'clean', 'split-layout': readerDisplayMode === 'split', 'html-layout': readerDisplayMode === 'html', 'context-open': readerContextVisible, 'outline-panel-collapsed': outlinePanelCollapsed, 'is-resizing-outline': outlinePanelResizing }" :style="{ '--outline-panel-width': `${outlinePanelWidth}px`, gridTemplateColumns: readerWebPreviewColumns }">
           <aside v-if="readerSidebarAvailable" id="reader-sidebar" class="outline-panel" :class="{ 'is-collapsed': outlinePanelCollapsed }">
             <button v-if="outlinePanelCollapsed" ref="outlinePanelExpandButton" class="outline-panel-expand" type="button" title="展开阅读侧栏" aria-label="展开阅读侧栏" :aria-expanded="!outlinePanelCollapsed" aria-controls="reader-sidebar" @click="toggleOutlinePanel"><AppIcon name="chevron-right" :size="13" /></button>
@@ -6309,7 +6409,7 @@ async function requestFullscreen() {
               <button ref="outlinePanelToggleButton" class="text-button outline-panel-toggle" type="button" title="收起阅读侧栏" aria-label="收起阅读侧栏" :aria-expanded="!outlinePanelCollapsed" aria-controls="reader-sidebar" @click="toggleOutlinePanel"><AppIcon name="chevron-right" :size="12" />收起</button>
             </div>
             <div v-if="leftPanelTab === 'files'" class="file-browser-panel">
-              <div class="file-location" :title="fileBrowserMode === 'tree' ? filesystemTree?.path : currentDirectory"><AppIcon name="folder" :size="15" :stroke-width="2" /><span>{{ fileBrowserMode === 'tree' ? '目录树' : currentDirectoryLabel }}</span><button class="file-tree-back" type="button" :aria-label="fileBrowserMode === 'tree' ? '切换到文档列表' : '切换到目录树'" @click="fileBrowserMode === 'tree' ? showDocumentList() : showDocumentTree()">{{ fileBrowserMode === 'tree' ? '列表' : '目录树' }}</button></div>
+              <div class="file-location" :title="fileBrowserMode === 'tree' ? filesystemTree?.path : currentDirectory"><AppIcon name="folder" :size="15" /><span>{{ fileBrowserMode === 'tree' ? '目录树' : currentDirectoryLabel }}</span><button class="file-tree-back" type="button" :aria-label="fileBrowserMode === 'tree' ? '切换到文档列表' : '切换到目录树'" @click="fileBrowserMode === 'tree' ? showDocumentList() : showDocumentTree()">{{ fileBrowserMode === 'tree' ? '列表' : '目录树' }}</button></div>
               <div class="file-filter-toolbar" aria-label="文件侧栏筛选">
                 <Select v-model:value="sidebarFilter" size="small" label="文件筛选方式" class="file-filter-select" popup-class-name="file-control-dropdown"><Option value="markdown">Markdown 文件</Option><Option value="hidden">包含隐藏文件</Option><Option value="all">全部文件</Option><Option value="glob">自定义 glob</Option></Select>
                 <Select v-model:value="fileSort" size="small" label="文件排序方式" class="file-sort-select" popup-class-name="file-control-dropdown"><Option value="name">名称</Option><Option value="natural">自然顺序</Option><Option value="created">创建时间</Option><Option value="modified">修改时间</Option><Option value="size">文件大小</Option></Select>
@@ -6324,12 +6424,12 @@ async function requestFullscreen() {
               <div v-else class="file-list-shell">
                 <div v-if="batchDeletableFiles.length" class="file-list-toolbar">
                   <Checkbox class="file-select-all" :checked="allFilesSelected" :indeterminate="selectedFiles.length > 0 && !allFilesSelected" aria-label="全选可移除文档" @change="toggleAllFileSelection">全选</Checkbox>
-                  <div class="file-list-actions"><span v-if="selectedFiles.length" class="file-selection-count" aria-live="polite">已选 {{ selectedFiles.length }}</span><Button v-if="selectedFiles.length" type="text" status="danger" size="mini" html-type="button" class="file-batch-delete" :disabled="busyAction !== null" @click="requestDeleteFiles(selectedFiles)"><AppIcon name="trash" :size="12" />删除</Button></div>
+                  <div class="file-list-actions"><span v-if="selectedFiles.length" class="file-selection-count" aria-live="polite">已选 {{ selectedFiles.length }}</span><Button v-if="selectedFiles.length" type="text" status="danger" size="mini" html-type="button" class="file-batch-delete" :disabled="busyAction !== null" @click="requestDeleteFiles(selectedFiles)"><template #icon><AppIcon name="trash" :size="12" /></template>删除</Button></div>
                 </div>
                 <div class="file-list" role="list" :aria-label="sidebarFilter === 'markdown' ? '当前文件夹中的 Markdown 文件' : '当前文件夹中的文件'">
                   <div role="listitem" v-for="file in currentDirectoryFiles" :key="file.path" class="file-item" :class="{ active: store.currentDocumentId === file.documentId, selected: isFileSelected(file), 'is-unloaded': !file.documentId }">
                     <Checkbox v-if="batchDeletableFiles.length && isBatchDeletableFile(file)" class="file-select" :aria-label="`选择 ${file.name}`" :checked="isFileSelected(file)" @click.stop @change="toggleFileSelection(file)" /><span v-else-if="batchDeletableFiles.length" class="file-select-spacer" aria-hidden="true" />
-                    <button type="button" class="file-item-open" :aria-label="file.documentId ? `打开 ${file.name}` : `载入 ${file.name}`" @click="openFileTreeEntry(file)" @contextmenu.prevent="openFileContextMenu($event, file)"><AppIcon name="file" :size="14" /><span class="file-item-copy"><strong>{{ file.name }}</strong><small>{{ fileStatus(file) }}</small></span><i v-if="store.currentDocumentId === file.documentId" class="file-active-mark" /></button><IconButton v-if="isDeletableFile(file)" class="file-delete" icon="trash" size="sm" :label="`删除 ${file.name}`" :disabled="busyAction !== null" @click="deleteFile(file)" />
+                    <button type="button" class="file-item-open" :aria-label="file.documentId ? `打开 ${file.name}` : `载入 ${file.name}`" @click="openFileTreeEntry(file)" @contextmenu.prevent="openFileContextMenu($event, file)"><AppIcon name="file" :size="14" /><span class="file-item-copy"><strong>{{ file.name }}</strong><small>{{ fileStatus(file) }}</small></span><i v-if="store.currentDocumentId === file.documentId" class="file-active-mark" /></button><IconButton v-if="isDeletableFile(file)" class="file-delete" icon="trash" size="sm" :label="`删除 ${file.name}`" :disabled="busyAction !== null" @click="deleteFile(file, $event.currentTarget as HTMLElement)" />
                   </div>
                 </div>
               </div>
@@ -6370,7 +6470,7 @@ async function requestFullscreen() {
             <template #tabs>
               <div class="reader-tabbar" aria-label="已打开文档">
                 <div ref="readerTabScroll" class="reader-tab-scroll" role="tablist" aria-label="已打开文档">
-                  <div v-for="document in store.openDocuments" :key="document.id" class="reader-tab" :class="{ active: store.currentDocumentId === document.id }" role="tab" :aria-selected="store.currentDocumentId === document.id" :aria-label="`打开 ${tabLabel(document)}`" :title="`${tabLabel(document)}\n${document.path}`" tabindex="0" @click="chooseDocument(document.id)" @contextmenu.prevent="openTabContextMenu($event, document.id)" @auxclick="onTabAuxClick($event, document.id)" @keydown.enter="chooseDocument(document.id)" @keydown.space.prevent="chooseDocument(document.id)">
+                  <div v-for="document in store.openDocuments" :key="document.id" class="reader-tab" :class="{ active: store.currentDocumentId === document.id }" role="tab" :aria-selected="store.currentDocumentId === document.id" :aria-label="`打开 ${tabLabel(document)}`" :title="`${tabLabel(document)}\n${document.path}`" tabindex="0" @click="chooseDocument(document.id)" @contextmenu.prevent="openTabContextMenu($event, document.id)" @keydown.shift.f10.prevent.stop="openTabContextMenu($event, document.id)" @auxclick="onTabAuxClick($event, document.id)" @keydown.enter="chooseDocument(document.id)" @keydown.space.prevent="chooseDocument(document.id)">
                     <span><AppIcon name="reader" :size="15" /></span>
                     <strong>{{ tabLabel(document) }}</strong>
                     <IconButton icon="close" size="sm" :label="`关闭 ${tabLabel(document)}`" :show-title="false" @click.stop="closeDocument(document.id)" />
@@ -6403,11 +6503,11 @@ async function requestFullscreen() {
                     <button type="button" :class="{ active: editorOpen }" @click="editorOpen ? closeEditor() : openEditor()">{{ editorOpen ? '阅读' : '编辑' }}</button>
                     <button v-if="!isRealDocumentPath(store.currentDocument?.path ?? '')" class="save-pasted-button" type="button" :disabled="savingDocument" @click="saveCurrentDocument">{{ savingDocument ? '保存中…' : '保存 Markdown' }}</button>
                     <AppDropdown class="reader-more-menu">
-                      <button type="button">更多</button>
+                      <button ref="readerMoreTrigger" aria-label="更多文档操作" type="button">更多</button>
                       <template #menu>
                         <button type="button" @click="toggleCleanMode">纯净阅读</button>
                         <button type="button" :class="{ active: contextPanelOpen }" @click="contextPanelOpen = !contextPanelOpen">{{ contextPanelOpen ? '收起阅读信息' : '查看阅读信息' }}</button>
-                        <button type="button" @click="wordCountOpen = true">字数统计</button>
+                        <button type="button" @click="openWordCount">字数统计</button>
                         <button type="button" @click="exportDocument('markdown')">导出 Markdown</button>
                         <button type="button" @click="exportDocument('html')">导出 HTML</button>
                         <button type="button" @click="exportDocument('html-clean')">导出无样式 HTML</button>
@@ -6454,12 +6554,12 @@ async function requestFullscreen() {
                       <button type="button" :disabled="readerAtTop" @click="scrollToTop">回到顶部</button>
                       <button type="button" :disabled="readerAtBottom" @click="scrollToBottom">到文末</button>
                     </div>
-                    <button class="command-trigger reader-command-trigger" type="button" title="搜索：Ctrl/Cmd + K；快速打开：Ctrl/Cmd + P" @click="openSearch('all')"><AppIcon name="search" :size="16" /><span>搜索文档、标题、内容</span><kbd>⌘ K</kbd></button>
+                    <button class="command-trigger reader-command-trigger" type="button" aria-label="搜索文档、标题、内容" title="搜索：Ctrl/Cmd + K；快速打开：Ctrl/Cmd + P" @click="openSearch('all')"><AppIcon name="search" :size="16" /><span>搜索文档、标题、内容</span><kbd>⌘ K</kbd></button>
                   </div>
                   <div class="top-actions reader-top-actions">
                     <IconButton icon="focus" label="专注阅读" :active="store.mode === 'focus'" @click="toggleFocusMode" />
                     <IconButton icon="palette" label="切换主题" @click="view = 'themes'" />
-                    <IconButton icon="fullscreen" :active="fullscreenActive" :label="fullscreenActive ? '退出全屏' : '全屏'" @click="requestFullscreen" />
+                    <IconButton :icon="fullscreenActive ? 'fullscreen-exit' : 'fullscreen'" :active="fullscreenActive" :label="fullscreenActive ? '退出全屏' : '全屏'" @click="requestFullscreen" />
                   </div>
                 </div>
                 <div v-else class="reader-editing-meta">
@@ -6472,13 +6572,21 @@ async function requestFullscreen() {
               </div>
             </template>
           </ReaderHeader>
+          <Alert v-if="visibleSaveIssue && !editorConflict" class="reader-operation-alert" type="error" show-icon closable :message="visibleSaveIssue.title" :description="visibleSaveIssue.detail" @close="saveIssue = undefined">
+            <template #action><Button size="small" @click="visibleSaveIssue.retry">重试保存</Button></template>
+          </Alert>
+          <Alert v-if="visibleExportIssue" class="reader-operation-alert" type="error" show-icon closable :message="visibleExportIssue.title" :description="visibleExportIssue.detail" @close="exportIssue = undefined">
+            <template #action><Button size="small" @click="visibleExportIssue.retry">重新导出</Button></template>
+          </Alert>
           <div class="reader-document-panes" :class="{ 'has-second-document': showSecondDocument }">
           <div class="reader-column">
             <div ref="readerViewport" class="reader-viewport" @scroll="onReaderScroll" @wheel="onReaderWheel" @pointerdown="onReaderPointerDown" @mouseup="captureSelection">
-              <div v-if="exportError || exporting" class="editor-safety-notice" :role="exportError ? 'alert' : 'status'"><span>{{ exportError || '正在生成完整导出文件…' }}</span><button v-if="exportError" type="button" @click="exportError = ''">关闭</button></div>
+              <div v-if="exporting" class="editor-safety-notice" role="status">正在生成完整导出文件…</div>
               <div v-if="editorOpen" class="editor-surface" :class="{ 'editor-typewriter-mode': advancedSettings.typewriterMode, 'is-course-outline': editorCourseOutline }" @contextmenu="openEditorContextMenu">
                 <div v-if="editorPreviewResult.failed" class="editor-safety-notice" role="alert">正文解析失败，草稿仍保留；请切换源码查看并重新打开文档。</div>
-                <div v-if="editorBackupError || editorConflict" class="editor-safety-notice" role="alert"><span>{{ editorBackupError || '原文件有外部修改：草稿已保留，不会直接覆盖' }}</span><button type="button" @click="saveEditorCopy">另存草稿副本</button></div>
+                <Alert v-if="editorBackupError || editorConflict" class="editor-operation-alert" type="warning" show-icon :message="editorBackupError || '原文件有外部修改'" :description="editorConflict ? '草稿已保留，请另存副本后合并。' : undefined">
+                  <template #action><Button size="small" @click="saveEditorCopy">另存草稿副本</Button></template>
+                </Alert>
                 <section v-if="editorFindOpen" class="editor-find-panel" aria-label="草稿查找替换" @keydown.esc.prevent.stop="closeEditorFind">
                   <div class="editor-find-row">
                     <Input ref="editorFindInput" v-model="editorFindQuery" aria-label="查找草稿内容" placeholder="查找当前草稿…" :aria-invalid="!!editorFindResult.error" @keydown.enter.prevent="navigateEditorFind($event.shiftKey ? -1 : 1)" />
@@ -6507,7 +6615,7 @@ async function requestFullscreen() {
                   <section v-show="editorMode !== 'preview'" class="editor-main-pane" :class="editorMode === 'rich' ? 'editor-rich-pane' : 'editor-source-pane'">
                     <MarkdownEditor ref="editorTextarea" v-model="editorSource" :live="editorMode === 'rich'" :spellcheck="advancedSettings.spellcheck" :typewriter="advancedSettings.typewriterMode" :focus-mode="editorFocusMode" :resolve-url="url => resolveEditorAssetUrl(editorDocumentPath, url)" @keydown="onEditorKeydown" @paste="onEditorPaste" @copy="onEditorLineClipboard($event, false)" @cut="onEditorLineClipboard($event, true)" @caret="updateEditorCursor" @history="editorUndoAvailable = $event.undo; editorRedoAvailable = $event.redo" @message="notify" @link="openExternalLink" />
                     <div v-if="editorEmojiSuggestions.length" class="editor-emoji-menu" role="listbox" aria-label="Emoji 建议"><button v-for="emoji in editorEmojiSuggestions" :key="emoji.code" type="button" @click="insertEditorEmoji(emoji.value)"><span>{{ emoji.value }}</span>:{{ emoji.code }}:</button></div>
-                    <div v-if="editorEmojiPickerOpen" class="editor-emoji-menu editor-symbol-menu" role="dialog" aria-label="表情与符号"><div class="editor-symbol-heading"><strong>表情与符号</strong><button type="button" aria-label="关闭表情与符号" @click="editorEmojiPickerOpen = false">×</button></div><div class="editor-symbol-grid"><button v-for="symbol in editorSymbolChoices" :key="symbol" type="button" :aria-label="`插入 ${symbol}`" @click="insertEditorSymbol(symbol)">{{ symbol }}</button></div></div>
+                    <div v-if="editorEmojiPickerOpen" class="editor-emoji-menu editor-symbol-menu" role="dialog" aria-label="表情与符号"><div class="editor-symbol-heading"><strong>表情与符号</strong><button type="button" aria-label="关闭表情与符号" @click="editorEmojiPickerOpen = false"><AppIcon name="close" :size="13" /></button></div><div class="editor-symbol-grid"><button v-for="symbol in editorSymbolChoices" :key="symbol" type="button" :aria-label="`插入 ${symbol}`" @click="insertEditorSymbol(symbol)">{{ symbol }}</button></div></div>
                   </section>
                   <div v-if="editorMode === 'split'" class="editor-split-divider" role="separator" tabindex="0" aria-orientation="vertical" :aria-valuemin="36" :aria-valuemax="70" :aria-valuenow="Math.round(editorSplitRatio)" aria-label="调整源码与预览宽度" @pointerdown="startEditorSplitResize" @keydown="onEditorSplitResizeKeydown"><span /></div>
                   <section v-if="editorMode === 'split' || editorMode === 'preview'" class="editor-preview-pane" aria-label="实时阅读预览">
@@ -6627,7 +6735,19 @@ async function requestFullscreen() {
           <button type="button" @click="copySelection">复制纯文本</button>
           <IconButton icon="close" size="sm" label="关闭选区工具栏" @keydown.enter.stop @click="dismissSelectionToolbar" />
         </div>
-        <div v-if="wordCountOpen && store.currentDocument" class="overlay file-properties-overlay" @click.self="wordCountOpen = false"><div class="file-properties-dialog" role="dialog" aria-modal="true" aria-labelledby="word-count-title"><div class="file-properties-heading"><div><span class="section-kicker">文档统计</span><h2 id="word-count-title">{{ displayTitle(store.currentDocument.title) }}</h2></div><IconButton icon="close" size="sm" label="关闭字数统计" @click="wordCountOpen = false" /></div><dl class="file-properties-list"><div><dt>正文字符</dt><dd>{{ wordCountStats.characters }}</dd></div><div><dt>中英文词</dt><dd>{{ wordCountStats.words }}</dd></div><div><dt>源文件行</dt><dd>{{ wordCountStats.lines }}</dd></div><div><dt>正文块</dt><dd>{{ wordCountStats.blocks }}</dd></div><div><dt>标题</dt><dd>{{ wordCountStats.headings }}</dd></div></dl><div class="file-properties-actions"><Button class="ghost-button" type="secondary" @click="wordCountOpen = false">完成</Button></div></div></div>
+        <Modal :open="wordCountOpen && !!store.currentDocument" title="字数统计" wrap-class-name="reader-detail-modal" :width="500" centered :after-close="restoreReaderModalFocus" @cancel="wordCountOpen = false">
+          <template v-if="store.currentDocument">
+            <p class="reader-detail-name">{{ displayTitle(store.currentDocument.title) }}</p>
+            <dl class="file-properties-list">
+              <div><dt>正文字符</dt><dd>{{ wordCountStats.characters }}</dd></div>
+              <div><dt>中英文词</dt><dd>{{ wordCountStats.words }}</dd></div>
+              <div><dt>源文件行</dt><dd>{{ wordCountStats.lines }}</dd></div>
+              <div><dt>正文块</dt><dd>{{ wordCountStats.blocks }}</dd></div>
+              <div><dt>标题</dt><dd>{{ wordCountStats.headings }}</dd></div>
+            </dl>
+          </template>
+          <template #footer><Button type="secondary" @click="wordCountOpen = false">完成</Button></template>
+        </Modal>
       </section>
 
       <ThemeCenter v-else-if="view === 'themes'" :themes="store.themes" :active-theme-id="store.activeThemeId" :active-theme="store.activeTheme" @apply="applyReaderTheme" @install="store.installTheme" @notify="notify" />
@@ -6658,7 +6778,7 @@ async function requestFullscreen() {
             <p v-if="knowledgeIndexError" class="ai-status-error" role="status">{{ knowledgeIndexError }}</p>
             <p v-else-if="knowledgeModelTested" class="ai-status-success" role="status">本地语义模型可用</p>
           </div>
-          <div class="ai-settings-actions"><Button class="ghost-button" type="secondary" @click="saveAiSettings"><AppIcon name="check" :size="14" />保存配置</Button><Button class="primary-button" type="primary" :disabled="aiBusy" @click="testAiConnection">{{ aiBusy ? '连接中…' : '测试连接' }}</Button></div><p v-if="aiStatus === 'saved'" class="ai-status-success" role="status">AI 服务配置已保存</p><p v-else-if="aiStatus === 'connected'" class="ai-status-success">AI 服务已连接，模型 {{ aiSettings.model }} 可用</p><p v-if="aiError" class="ai-status-error" role="alert">{{ aiError }}</p></div>
+          <div class="ai-settings-actions"><Button class="ghost-button" type="secondary" @click="saveAiSettings"><template #icon><AppIcon name="check" :size="14" /></template>保存配置</Button><Button class="primary-button" type="primary" :disabled="aiBusy" @click="testAiConnection">{{ aiBusy ? '连接中…' : '测试连接' }}</Button></div><p v-if="aiStatus === 'saved'" class="ai-status-success" role="status">AI 服务配置已保存</p><p v-else-if="aiStatus === 'connected'" class="ai-status-success">AI 服务已连接，模型 {{ aiSettings.model }} 可用</p><Alert v-if="aiError" class="ai-settings-alert" type="error" show-icon :message="aiError" /></div>
         <div v-show="settingsTab === 'reading'" class="settings-card font-settings-card">
           <div class="font-settings-heading"><div><span class="section-kicker">阅读偏好</span><h2>字体与排版</h2></div><span>自动保存</span></div>
           <FontPicker label="正文字体" :model-value="store.readerSettings.fontFamily" :fallback-family="defaultTokens.reader.fontFamily" @update:model-value="store.updateSettings({ fontFamily: $event })" />
@@ -6673,7 +6793,7 @@ async function requestFullscreen() {
         <div v-show="settingsTab === 'editing'" class="settings-card"><span class="section-kicker">图片路径</span><h2>相对路径</h2><Checkbox class="setting-check" v-model:checked="advancedSettings.relativeImagePathPrefix">新插入的本地图片路径以 <code>./</code> 开头</Checkbox><p class="muted-copy">应用于导入、粘贴、拖入、下载、整理和重命名；已有引用保持不变。</p></div>
         <div v-show="settingsTab === 'editing'" class="settings-card"><span class="section-kicker">远程图片</span><h2>兼容与隐私</h2><Checkbox class="setting-check" v-model:checked="advancedSettings.remoteImagePrivacy">不向图片服务发送来源信息</Checkbox><p class="muted-copy">默认采用浏览器标准策略，兼容需要来源信息的图床；启用后会以 no-referrer 请求远程图片。</p></div>
         <div v-show="settingsTab === 'editing'" class="settings-card"><span class="section-kicker">导出</span><h2>电子书与打印</h2><p class="muted-copy">HTML / EPUB / PDF / 长图跟随当前主题与排版；桌面端 DOCX / LaTeX 使用 Pandoc；EPUB 内嵌图像、视频和字幕，保留公式、脚注和链接。</p><label class="setting-input">Word 样式模板（可选 .docx）<Input :model-value="advancedSettings.referenceDocx" readonly placeholder="使用 Pandoc 默认样式" /></label><div class="setting-actions"><Button class="ghost-button" type="secondary" @click="chooseDocxReference">选择模板</Button><Button v-if="advancedSettings.referenceDocx" class="ghost-button" type="secondary" @click="advancedSettings.referenceDocx = ''">恢复默认</Button></div><label class="setting-row"><span>EPUB 目录层级 <b>H{{ advancedSettings.epubChapterDepth }}</b></span><Slider v-model:value="advancedSettings.epubChapterDepth" :min="1" :max="6" /></label><div class="setting-form-grid"><div class="setting-input"><span>纸张</span><Select v-model:value="advancedSettings.printPageSize" label="纸张"><Option value="A4">A4</Option><Option value="Letter">Letter</Option></Select></div><label class="setting-input">页边距（mm）<InputNumber v-model:value="advancedSettings.printMargin" :min="8" :max="40" /></label><label class="setting-input">页眉<Input v-model="advancedSettings.printHeader" /></label><label class="setting-input">页脚<Input v-model="advancedSettings.printFooter" /></label></div><Checkbox class="setting-check" v-model:checked="advancedSettings.printBackground">打印主题背景</Checkbox></div>
-        <div v-show="settingsTab === 'reading'" class="settings-card"><span class="section-kicker">阅读</span><h2>阅读偏好</h2><label class="setting-row"><span>正文宽度 <b>{{ store.readerSettings.width }}px</b></span><Slider :value="store.readerSettings.width" :min="620" :max="1280" :step="10" @update:value="changeSetting('width', Number($event))" /></label><label class="setting-row"><span>字号 <b>{{ store.readerSettings.fontSize }}px</b></span><Slider :value="store.readerSettings.fontSize" :min="15" :max="24" :step="1" @update:value="changeSetting('fontSize', Number($event))" /></label><label class="setting-row"><span>行距 <b>{{ store.readerSettings.lineHeight }}</b></span><Slider :value="store.readerSettings.lineHeight" :min="1.4" :max="2.2" :step=".05" @update:value="changeSetting('lineHeight', Number($event))" /></label><div class="setting-toggle-row"><span>显示阅读进度</span><Switch v-model:checked="advancedSettings.showReadingProgress" aria-label="显示阅读进度" /></div><div class="setting-toggle-row"><span>专注阅读</span><Switch :checked="store.mode === 'focus'" :disabled="!store.currentDocument" aria-label="专注阅读" @change="toggleFocusMode" /></div></div><div v-show="settingsTab === 'reading'" class="settings-card"><span class="section-kicker">辅助功能</span><h2>翻译与解释</h2><p class="muted-copy">使用适配器连接你自己的翻译或解释服务；配置后可从划词工具栏调用。</p><label class="setting-input">服务标识<Input v-model="customProvider" placeholder="例如：local-llm / my-translator" /></label><Button class="primary-button" type="primary" @click="notify(customProvider ? '适配器标识已保存' : '保持未配置状态')"><AppIcon name="check" :size="14" />保存配置</Button></div><div v-show="settingsTab === 'shortcuts'" class="settings-card shortcuts-card"><span class="section-kicker">快捷操作</span><h2>快捷键</h2><div class="shortcut-row"><span>全局搜索</span><kbd>Ctrl / Cmd + K</kbd></div><div class="shortcut-row"><span>当前文档搜索</span><kbd>Ctrl / Cmd + F</kbd></div><div class="shortcut-row"><span>阅读缩放</span><kbd>Ctrl / Cmd + + / -</kbd></div><div class="shortcut-row"><span>专注模式</span><kbd>F</kbd></div><div class="shortcut-row"><span>退出聚焦</span><kbd>Esc</kbd></div><div class="shortcut-row"><span>切换区域</span><kbd>↑ ↓</kbd></div></div><div v-show="settingsTab === 'extensions'" class="settings-card extensions-card"><div class="extensions-head"><div><span class="section-kicker">插件中心</span><h2>插件扩展</h2></div><Button class="ghost-button" type="secondary" @click="notify('插件运行时将在后续版本启用')"><AppIcon name="plugin" :size="14" />打开插件目录</Button></div><div class="extension-filter"><AppIcon name="search" :size="14" /><span>按需扩展阅读能力</span></div><div class="extension-list"><div class="extension-item"><span class="extension-icon purple"><AppIcon name="sparkle" :size="17" /></span><span><b>AI 阅读助手</b><small>总结、解释与问答适配器</small></span><Button type="secondary" @click="notify('请先在翻译与解释中配置服务')">配置</Button></div><div class="extension-item"><span class="extension-icon green"><AppIcon name="download" :size="17" /></span><span><b>导出增强</b><small>为阅读内容准备更多导出格式</small></span><Button type="secondary" @click="notify('导出增强将在下一阶段接入')">安装</Button></div><div class="extension-item"><span class="extension-icon pink"><AppIcon name="components" :size="17" /></span><span><b>思维导图</b><small>把长文转换为结构化视图</small></span><Button type="secondary" @click="notify('插件运行时暂未启用')">安装</Button></div></div></div></div></section>
+        <div v-show="settingsTab === 'reading'" class="settings-card"><span class="section-kicker">阅读</span><h2>阅读偏好</h2><label class="setting-row"><span>正文宽度 <b>{{ store.readerSettings.width }}px</b></span><Slider :value="store.readerSettings.width" :min="620" :max="1280" :step="10" @update:value="changeSetting('width', Number($event))" /></label><label class="setting-row"><span>字号 <b>{{ store.readerSettings.fontSize }}px</b></span><Slider :value="store.readerSettings.fontSize" :min="15" :max="24" :step="1" @update:value="changeSetting('fontSize', Number($event))" /></label><label class="setting-row"><span>行距 <b>{{ store.readerSettings.lineHeight }}</b></span><Slider :value="store.readerSettings.lineHeight" :min="1.4" :max="2.2" :step=".05" @update:value="changeSetting('lineHeight', Number($event))" /></label><div class="setting-toggle-row"><span>显示阅读进度</span><Switch v-model:checked="advancedSettings.showReadingProgress" aria-label="显示阅读进度" /></div><div class="setting-toggle-row"><span>专注阅读</span><Switch :checked="store.mode === 'focus'" :disabled="!store.currentDocument" aria-label="专注阅读" @change="toggleFocusMode" /></div></div><div v-show="settingsTab === 'reading'" class="settings-card"><span class="section-kicker">辅助功能</span><h2>翻译与解释</h2><p class="muted-copy">使用适配器连接你自己的翻译或解释服务；配置后可从划词工具栏调用。</p><label class="setting-input">服务标识<Input v-model="customProvider" placeholder="例如：local-llm / my-translator" /></label><Button class="primary-button" type="primary" @click="notify(customProvider ? '适配器标识已保存' : '保持未配置状态')"><template #icon><AppIcon name="check" :size="14" /></template>保存配置</Button></div><div v-show="settingsTab === 'shortcuts'" class="settings-card shortcuts-card"><span class="section-kicker">快捷操作</span><h2>快捷键</h2><div class="shortcut-row"><span>全局搜索</span><kbd>Ctrl / Cmd + K</kbd></div><div class="shortcut-row"><span>当前文档搜索</span><kbd>Ctrl / Cmd + F</kbd></div><div class="shortcut-row"><span>阅读缩放</span><kbd>Ctrl / Cmd + + / -</kbd></div><div class="shortcut-row"><span>专注模式</span><kbd>F</kbd></div><div class="shortcut-row"><span>退出聚焦</span><kbd>Esc</kbd></div><div class="shortcut-row"><span>切换区域</span><kbd>↑ ↓</kbd></div></div><div v-show="settingsTab === 'extensions'" class="settings-card extensions-card"><div class="extensions-head"><div><span class="section-kicker">插件中心</span><h2>插件扩展</h2></div><Button class="ghost-button" type="secondary" @click="notify('插件运行时将在后续版本启用')"><template #icon><AppIcon name="plugin" :size="14" /></template>打开插件目录</Button></div><div class="extension-filter"><AppIcon name="search" :size="14" /><span>按需扩展阅读能力</span></div><div class="extension-list"><div class="extension-item"><span class="extension-icon purple"><AppIcon name="sparkle" :size="17" /></span><span><b>AI 阅读助手</b><small>总结、解释与问答适配器</small></span><Button type="secondary" @click="notify('请先在翻译与解释中配置服务')">配置</Button></div><div class="extension-item"><span class="extension-icon green"><AppIcon name="download" :size="17" /></span><span><b>导出增强</b><small>为阅读内容准备更多导出格式</small></span><Button type="secondary" @click="notify('导出增强将在下一阶段接入')">安装</Button></div><div class="extension-item"><span class="extension-icon pink"><AppIcon name="components" :size="17" /></span><span><b>思维导图</b><small>把长文转换为结构化视图</small></span><Button type="secondary" @click="notify('插件运行时暂未启用')">安装</Button></div></div></div></div></section>
       <ClipboardManager v-show="view === 'clipboard'" @notify="notify" />
     </main>
     <WebPreviewDock v-if="hasWebPreviews" :columns="!webPreviewUrl && visibleAiWebPreviews.length === 2 ? 2 : 1"
@@ -6801,15 +6921,15 @@ async function requestFullscreen() {
             <small>{{ viewerSubtitle(viewer.type, viewer.region) }}</small>
           </div>
           <div class="viewer-actions">
-            <Button v-if="viewer.type === 'mermaid' && viewerTab === 'preview'" class="viewer-fit-button" type="text" size="small" title="适应窗口" @click="fitViewer"><AppIcon name="expand" :size="13" />适应</Button>
+            <Button v-if="viewer.type === 'mermaid' && viewerTab === 'preview'" class="viewer-fit-button" type="text" size="small" title="适应窗口" @click="fitViewer"><template #icon><AppIcon name="fit" :size="13" /></template>适应</Button>
             <div v-if="viewerCanZoom" class="viewer-zoom-group">
-              <IconButton icon="minus" size="sm" variant="surface" label="缩小" @click="setViewerZoom(viewerZoom - .1)" />
+              <IconButton icon="zoom-out" size="sm" variant="surface" label="缩小" @click="setViewerZoom(viewerZoom - .1)" />
               <Slider v-if="viewerTab === 'preview'" class="viewer-zoom-slider" :value="viewerZoom" :min=".1" :max="3" :step=".05" :tip-formatter="(value = 1) => `${Math.round(value * 100)}%`" :aria-label="viewer.type === 'image' ? '图片缩放' : '图表缩放'" @update:value="setViewerZoom(Number($event))" />
               <Button class="viewer-zoom-value" type="text" size="small" title="还原到 100%" @click="resetViewerView">{{ Math.round(viewerZoom * 100) }}%</Button>
-              <IconButton icon="plus" size="sm" variant="surface" label="放大" @click="setViewerZoom(viewerZoom + .1)" />
+              <IconButton icon="zoom-in" size="sm" variant="surface" label="放大" @click="setViewerZoom(viewerZoom + .1)" />
             </div>
             <span class="viewer-action-divider" />
-            <IconButton icon="fullscreen" size="sm" variant="surface" :label="viewerFullscreen ? '退出全屏' : '全屏查看'" @click="toggleViewerFullscreen" />
+            <IconButton :icon="viewerFullscreen ? 'fullscreen-exit' : 'fullscreen'" size="sm" variant="surface" :label="viewerFullscreen ? '退出全屏' : '全屏查看'" @click="toggleViewerFullscreen" />
             <IconButton icon="close" size="sm" variant="surface" label="关闭查看器" @click="closeViewer" />
           </div>
         </header>
@@ -6822,7 +6942,7 @@ async function requestFullscreen() {
           <TreeDiagram v-if="viewer.type === 'tree' && activeViewerTree" :node="activeViewerTree" root directory @open-link="openExternalLink" />
           <MermaidBlock v-else-if="viewer.type === 'mermaid' && viewerTab === 'preview'" :code="String(viewer.region.metadata?.code ?? viewer.region.textContent)" :native-labels="Boolean(viewer.region.metadata?.autoDiagram)" large @rendered="fitViewer" />
           <div v-else-if="viewer.type === 'mermaid' && viewerTab === 'source'" class="viewer-source-panel">
-            <div class="viewer-source-toolbar"><span>Mermaid 源码</span><Button type="text" size="small" @click="copyViewerSource"><AppIcon name="copy" :size="13" />复制源码</Button></div>
+            <div class="viewer-source-toolbar"><span>Mermaid 源码</span><Button type="text" size="small" @click="copyViewerSource"><template #icon><AppIcon name="copy" :size="13" /></template>复制源码</Button></div>
             <pre class="viewer-source">{{ mermaidSource() }}</pre>
           </div>
           <div v-else-if="viewer.type === 'mermaid'" class="viewer-source-panel">
@@ -6836,13 +6956,13 @@ async function requestFullscreen() {
         <footer class="viewer-footer">
           <div class="viewer-footer-hint"><kbd>ESC</kbd><span>{{ viewerCanPan ? (viewer.type === 'image' ? '滚轮缩放 · 拖动查看 · 双击还原' : '滚轮缩放 · 拖动查看 · 双击还原 · +/- 调整') : '返回正文' }}</span></div>
           <div class="viewer-footer-actions">
-            <Button v-if="viewer.type === 'mermaid'" type="text" size="small" @click="copyViewerSource"><AppIcon name="copy" :size="14" />复制源码</Button>
-            <Button v-if="viewer.type === 'mermaid' && viewerTab === 'preview'" type="text" size="small" @click="copyViewerHtml"><AppIcon name="copy" :size="14" />复制 HTML</Button>
-            <Button v-if="viewer.type === 'mermaid'" type="text" size="small" @click="exportViewer('svg')"><AppIcon name="download" :size="14" />导出 SVG</Button>
-            <Button v-if="viewer.type === 'mermaid'" type="text" size="small" @click="exportViewer('png')"><AppIcon name="download" :size="14" />导出 PNG</Button>
-            <Button v-if="viewer.type === 'mermaid'" type="text" size="small" @click="copyRegionAsImage(viewer.region)"><AppIcon name="copy" :size="14" />复制为图片</Button>
+            <Button v-if="viewer.type === 'mermaid'" type="text" size="small" @click="copyViewerSource"><template #icon><AppIcon name="copy" :size="14" /></template>复制源码</Button>
+            <Button v-if="viewer.type === 'mermaid' && viewerTab === 'preview'" type="text" size="small" @click="copyViewerHtml"><template #icon><AppIcon name="copy" :size="14" /></template>复制 HTML</Button>
+            <Button v-if="viewer.type === 'mermaid'" type="text" size="small" @click="exportViewer('svg')"><template #icon><AppIcon name="download" :size="14" /></template>导出 SVG</Button>
+            <Button v-if="viewer.type === 'mermaid'" type="text" size="small" @click="exportViewer('png')"><template #icon><AppIcon name="download" :size="14" /></template>导出 PNG</Button>
+            <Button v-if="viewer.type === 'mermaid'" type="text" size="small" @click="copyRegionAsImage(viewer.region)"><template #icon><AppIcon name="copy" :size="14" /></template>复制为图片</Button>
             <Button v-if="viewer.type === 'mermaid'" status="danger" type="text" size="small" @click="deleteViewerDiagram">删除图表</Button>
-            <Button v-if="viewer.type === 'code' || viewer.type === 'tree' || viewer.type === 'table'" type="text" size="small" @click="exportViewer()"><AppIcon name="download" :size="14" />导出文本</Button>
+            <Button v-if="viewer.type === 'code' || viewer.type === 'tree' || viewer.type === 'table'" type="text" size="small" @click="exportViewer()"><template #icon><AppIcon name="download" :size="14" /></template>导出文本</Button>
             <Button v-if="viewer.type === 'table'" type="text" size="small" @click="openTableEditor(viewer.region)">编辑表格</Button>
           </div>
         </footer>

@@ -25,10 +25,8 @@ if ! command -v cargo >/dev/null 2>&1; then
   fail
 fi
 
-if [[ ! -d "node_modules" ]]; then
-  echo "首次打包，正在安装项目依赖..."
-  npm ci || fail
-fi
+echo "正在按锁文件安装项目依赖..."
+npm ci || fail
 
 echo "正在生成 macOS .app/.dmg，请勿关闭此窗口..."
 npm run package:macos || fail

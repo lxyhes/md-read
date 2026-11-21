@@ -16,15 +16,13 @@ if ! command -v npm >/dev/null 2>&1; then
   exit 1
 fi
 
-if [[ ! -d "node_modules" ]]; then
-  echo "首次启动，正在安装项目依赖..."
-  npm install || {
-    echo
-    echo "依赖安装失败。"
-    read -k 1 "?按任意键退出..."
-    exit 1
-  }
-fi
+echo "正在按锁文件安装项目依赖..."
+npm ci || {
+  echo
+  echo "依赖安装失败。"
+  read -k 1 "?按任意键退出..."
+  exit 1
+}
 
 echo "正在构建最新前端资源..."
 npm run build || {

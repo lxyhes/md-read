@@ -155,7 +155,7 @@ npm run package:linux   # Linux：生成 .deb 和 AppImage
 
 Windows 打包需要在 Windows 上执行，产物位于 `src-tauri/target/release/bundle/`；macOS 打包需要在 macOS 上执行。推送 `v*` 标签或在 GitHub Actions 手动运行 `Build desktop packages`，也会分别生成 Windows 和 macOS 构建物供下载。
 
-也可以直接双击项目根目录的 `一键打包桌面端.bat`（Windows）或 `一键打包桌面端.command`（macOS）。脚本会在首次运行时自动安装依赖，完成后打开产物目录。
+也可以直接双击项目根目录的 `一键打包桌面端.bat`（Windows）或 `一键打包桌面端.command`（macOS）。每次打包前，脚本都会按锁文件安装依赖，打包完成后打开产物目录。
 
 ### Linux 打包
 

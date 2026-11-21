@@ -33,6 +33,15 @@ describe('theme assets', () => {
     })
   })
 
+  it('keeps primary color variables available to existing theme CSS', () => {
+    expect(cssVariables(builtInThemes.find(({ manifest }) => manifest.id === 'paper-white')!)).toMatchObject({
+      '--primary-3': '47, 113, 107',
+      '--primary-5': '47, 113, 107',
+      '--primary-6': '47, 113, 107',
+      '--primary-7': '47, 113, 107',
+    })
+  })
+
   it('collects every theme stylesheet in entry order', () => {
     expect(themeCss(customTheme())).toBe([
       '.reader { color: red; }',

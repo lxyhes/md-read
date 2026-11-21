@@ -1,10 +1,15 @@
-/* Icon system v2 — one optical grid, quiet ink-seal states, no font glyph fallbacks. */
 .app-icon-vector {
   overflow: visible;
   shape-rendering: geometricPrecision;
   transform-origin: center;
 }
-.app-icon-vector * { vector-effect: non-scaling-stroke; }
+.app-icon-vector.anticon {
+  width: var(--app-icon-size);
+  height: var(--app-icon-size);
+  vertical-align: middle;
+}
+.app-icon-vector.anticon > svg { width: 100%; height: 100%; }
+svg.app-icon-vector > * { vector-effect: non-scaling-stroke; }
 button > .app-icon-vector,
 a > .app-icon-vector {
   transition: opacity .16s ease, transform .16s cubic-bezier(.2, .8, .2, 1);
@@ -652,24 +657,6 @@ a:active > .app-icon-vector { transform: scale(.92); }
   max-height: min(70vh, 520px);
   overflow-y: auto;
 }
-.rail-more-popover button {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-height: 34px;
-  padding: 8px 10px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--muted);
-  font: 12px/1.45 var(--ui-font);
-  text-align: left;
-}
-.rail-more-popover button:hover {
-  background: var(--accent-soft);
-  color: var(--ink);
-}
 .reader-more-popover .font-picker-compact {
   justify-content: space-between;
   margin-bottom: 4px;
@@ -877,7 +864,7 @@ a:active > .app-icon-vector { transform: scale(.92); }
   .app-shell:not(.is-focus) .topbar {
     padding-inline: 16px;
   }
-  .app-shell:not(.is-focus) .command-trigger span {
+  .app-shell:not(.is-focus) .command-trigger > span:not(.app-icon) {
     max-width: 150px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1477,7 +1464,7 @@ a:active > .app-icon-vector { transform: scale(.92); }
 .app-shell .primary-button {
   font-size: 12px;
 }
-.app-shell :is(.reader-more-popover, .library-more-popover, .tab-context-menu, .file-context-menu, .editor-context-menu, .editor-emoji-menu, .editor-export-menu) button {
+.app-shell :is(.reader-more-popover, .library-more-popover, .file-context-menu, .editor-context-menu, .editor-emoji-menu, .editor-export-menu) button {
   min-height: 34px;
   padding: 8px 10px;
   border-radius: 6px;
@@ -1490,7 +1477,7 @@ a:active > .app-icon-vector { transform: scale(.92); }
   font-size: 13px;
   font-weight: 500;
 }
-.app-shell :is(.reader-more-popover, .library-more-popover, .tab-context-menu, .file-context-menu, .editor-context-menu, .editor-emoji-menu, .editor-export-menu) button:hover:not(:disabled) {
+.app-shell :is(.reader-more-popover, .library-more-popover, .file-context-menu, .editor-context-menu, .editor-emoji-menu, .editor-export-menu) button:hover:not(:disabled) {
   background: var(--accent-soft);
   color: var(--ink);
 }
@@ -1702,6 +1689,15 @@ a:active > .app-icon-vector { transform: scale(.92); }
   border-radius: 6px;
   font: 12px/1.35 var(--ui-font);
 }
+.ant-btn.moyue-btn-with-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.ant-btn.moyue-btn-with-icon.ant-btn-loading .ant-btn-loading-icon > .anticon {
+  margin-inline-end: 0;
+}
 .app-shell .moyue-btn-primary {
   border-color: var(--accent);
   background: var(--accent);
@@ -1753,33 +1749,6 @@ a:active > .app-icon-vector { transform: scale(.92); }
   background: transparent;
   color: var(--muted);
 }
-.file-properties-dialog .ant-btn {
-  min-height: 34px;
-  border-radius: 6px;
-  font: 12px/1.35 var(--ui-font);
-}
-.file-properties-dialog .moyue-btn-primary {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--app-bg);
-}
-.file-properties-dialog .moyue-btn-secondary {
-  border-color: var(--border);
-  background: transparent;
-  color: var(--muted);
-}
-.file-properties-dialog .ant-btn.icon-button {
-  border-color: transparent;
-  background: transparent;
-  color: var(--muted);
-  box-shadow: none;
-}
-.file-properties-dialog .ant-btn.icon-button:hover {
-  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--accent);
-}
-
 /* Button hover and active styles follow the selected Moyue theme. */
 :is(.app-shell, .ant-modal, .ant-dropdown) .ant-btn.moyue-btn-primary:not(.moyue-btn-status-danger):not(.moyue-btn-status-warning):not(.moyue-btn-status-success) {
   border-color: var(--accent);
@@ -1799,16 +1768,6 @@ a:active > .app-icon-vector { transform: scale(.92); }
 }
 :is(.app-shell, .ant-modal, .ant-dropdown) .moyue-btn-primary:not(.moyue-btn-status-danger):not(.moyue-btn-status-warning):not(.moyue-btn-status-success):not(:disabled):active {
   background: color-mix(in srgb, var(--accent) 72%, var(--ink));
-}
-:is(.file-properties-dialog) .moyue-btn-primary:not(:disabled):hover {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 85%, var(--ink));
-  color: var(--app-bg);
-}
-:is(.file-properties-dialog) .moyue-btn-secondary:not(:disabled):hover {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  color: var(--accent);
 }
 :is(.app-shell, .ant-modal, .ant-dropdown) :is(.moyue-btn-secondary, .moyue-btn-outline, .moyue-btn-dashed, .moyue-btn-text):not(.moyue-btn-status-danger):not(.moyue-btn-status-warning):not(.moyue-btn-status-success):not(:disabled):hover {
   border-color: var(--accent);
@@ -2354,10 +2313,8 @@ a:active > .app-icon-vector { transform: scale(.92); }
 .rail-item .app-icon-vector {
   width: 20px;
   height: 20px;
-  stroke-width: 1.75;
-  shape-rendering: geometricPrecision;
 }
-.rail-item > span {
+.rail-item > span:not(.app-icon) {
   font: 500 11px/1 var(--ui-font);
   white-space: nowrap;
 }
@@ -3336,6 +3293,16 @@ body .app-shell.is-editor-studio .reader-layout {
   max-width: 230px;
   margin-left: 0;
   padding-block: 7px;
+  gap: 6px;
+}
+
+.topbar > .command-trigger > span:not(.app-icon) {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .app-shell:not(.is-editor-studio):not(.is-focus) .topbar > .top-actions {
@@ -3630,7 +3597,7 @@ body .app-shell.is-editor-studio .reader-layout {
     padding: 7px;
   }
 
-  .app-shell:not(.is-editor-studio) .reader-meta-topbar .reader-command-trigger > :is(span, kbd) {
+  .app-shell:not(.is-editor-studio) .reader-meta-topbar .reader-command-trigger > :is(span:not(.app-icon), kbd) {
     display: none;
   }
 }
@@ -3761,7 +3728,7 @@ body .app-shell.is-editor-studio .reader-layout {
     padding: 7px;
   }
 
-  .app-shell:not(.is-editor-studio):not(.is-focus) .topbar > .command-trigger > :is(span, kbd) {
+  .app-shell:not(.is-editor-studio):not(.is-focus) .topbar > .command-trigger > :is(span:not(.app-icon), kbd) {
     display: none;
   }
 
@@ -4392,7 +4359,7 @@ body .app-shell.is-editor-studio .reader-layout {
   margin-top: calc((1.45em - 16px) / 2);
 }
 
-.is-directory [data-icon="folder"] {
+.is-directory .app-icon:is([data-icon="folder"], [data-icon="folder-open"]) {
   color: var(--accent);
 }
 
@@ -4408,4 +4375,40 @@ body .app-shell.is-editor-studio .reader-layout {
 .is-directory :is(.tree-root, summary):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
+}
+
+.rail-tools-menu { min-width: 168px; }
+.tab-context-menu .app-action-menu.ant-menu {
+  border: 0;
+  background: transparent;
+}
+.app-action-menu :is(.ant-menu-item, .ant-dropdown-menu-item) {
+  height: 32px;
+  margin-block: 2px;
+  line-height: 32px;
+}
+.app-action-menu :is(.ant-menu-item, .ant-dropdown-menu-item)[aria-disabled="true"] {
+  color: var(--muted) !important;
+  opacity: .62;
+}
+.app-action-menu :is(.ant-menu-item, .ant-dropdown-menu-item):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.app-action-menu :is(.ant-menu-item, .ant-dropdown-menu-item)[aria-current="page"] {
+  background: var(--accent-soft);
+}
+
+.reader-detail-modal .ant-modal-content { border: 1px solid var(--border); }
+.reader-detail-modal .ant-modal-title { padding-inline-end: 24px; }
+.reader-detail-modal .file-properties-list { padding: 4px 0; }
+.reader-detail-name, .reader-remove-description { margin: 0 0 8px; overflow-wrap: anywhere; }
+.reader-detail-name { color: var(--muted); font: 12px/1.55 var(--ui-font); }
+.reader-remove-description { line-height: 1.65; }
+.reader-operation-alert { flex-shrink: 0; margin: 8px 12px 0; }
+.editor-operation-alert { margin: 8px 12px; }
+.ai-settings-alert { margin-top: 12px; }
+:is(.reader-operation-alert, .editor-operation-alert, .ai-settings-alert, .knowledge-ai-error) .ant-alert-content {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }

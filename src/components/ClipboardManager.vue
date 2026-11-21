@@ -331,9 +331,9 @@ onUnmounted(() => {
     <div class="clipboard-toolbar">
       <div class="clipboard-toolbar-status"><span class="status-pulse" :class="{ paused: !captureEnabled }" /><span>{{ captureStatus }}</span><small v-if="lastReadAt">· {{ formatTime(lastReadAt) }} 更新</small></div>
       <div class="clipboard-toolbar-actions">
-        <Button class="clipboard-quiet-action" type="text" :disabled="historyLoading" @click="checkClipboard(true)"><AppIcon name="sync" :size="13" />立即读取</Button>
-        <Button class="clipboard-quiet-action" type="text" :disabled="historyLoading" @click="toggleCapture"><AppIcon :name="captureEnabled ? 'eye' : 'close'" :size="13" />{{ captureEnabled ? '暂停监测' : '恢复监测' }}</Button>
-        <Button class="clipboard-clear-action" type="text" status="danger" :disabled="!items.length || !items.some((item) => !item.pinned)" @click="clearHistory"><AppIcon name="trash" :size="13" />清空未置顶</Button>
+        <Button class="clipboard-quiet-action" type="text" :disabled="historyLoading" @click="checkClipboard(true)"><template #icon><AppIcon name="sync" :size="13" /></template>立即读取</Button>
+        <Button class="clipboard-quiet-action" type="text" :disabled="historyLoading" @click="toggleCapture"><template #icon><AppIcon :name="captureEnabled ? 'eye' : 'close'" :size="13" /></template>{{ captureEnabled ? '暂停监测' : '恢复监测' }}</Button>
+        <Button class="clipboard-clear-action" type="text" status="danger" :disabled="!items.length || !items.some((item) => !item.pinned)" @click="clearHistory"><template #icon><AppIcon name="trash" :size="13" /></template>清空未置顶</Button>
       </div>
     </div>
 
@@ -346,8 +346,8 @@ onUnmounted(() => {
         <div class="clipboard-filter-row">
           <div class="clipboard-filters" role="tablist" aria-label="剪贴板类型">
             <Button type="text" :class="{ active: filter === 'all' }" @click="filter = 'all'">全部 <b>{{ items.length }}</b></Button>
-            <Button type="text" :class="{ active: filter === 'text' }" @click="filter = 'text'"><AppIcon name="type" :size="12" />文本 <b>{{ textCount }}</b></Button>
-            <Button type="text" :class="{ active: filter === 'image' }" @click="filter = 'image'"><AppIcon name="image" :size="12" />图片 <b>{{ imageCount }}</b></Button>
+            <Button type="text" :class="{ active: filter === 'text' }" @click="filter = 'text'"><template #icon><AppIcon name="type" :size="12" /></template>文本 <b>{{ textCount }}</b></Button>
+            <Button type="text" :class="{ active: filter === 'image' }" @click="filter = 'image'"><template #icon><AppIcon name="image" :size="12" /></template>图片 <b>{{ imageCount }}</b></Button>
           </div>
           <label class="clipboard-search"><AppIcon name="search" :size="13" /><Input v-model="query" allow-clear placeholder="搜索历史内容…" :input-attrs="{ type: 'search', 'aria-label': '搜索剪贴板历史' }" /></label>
         </div>
@@ -357,14 +357,14 @@ onUnmounted(() => {
           <article v-for="item in filteredItems" :key="item.id" class="clipboard-item" :class="{ selected: selectedId === item.id, pinned: item.pinned }" tabindex="0" @click="selectItem(item)" @keydown.enter="selectItem(item)">
             <div class="clipboard-item-marker" :class="item.kind"><AppIcon :name="item.kind === 'image' ? 'image' : 'type'" :size="14" /></div>
             <div class="clipboard-item-body">
-              <div class="clipboard-item-meta"><span>{{ item.kind === 'image' ? '图片' : '文本' }}</span><time>{{ formatTime(item.createdAt) }}</time><span v-if="item.pinned" class="clipboard-pinned-label"><AppIcon name="star" :size="10" />置顶</span></div>
+              <div class="clipboard-item-meta"><span>{{ item.kind === 'image' ? '图片' : '文本' }}</span><time>{{ formatTime(item.createdAt) }}</time><span v-if="item.pinned" class="clipboard-pinned-label"><AppIcon name="pin-filled" :size="10" />置顶</span></div>
               <p v-if="item.kind === 'text'">{{ textPreview(item.text ?? '') }}</p>
               <div v-else class="clipboard-image-preview"><img :src="item.imageDataUrl" alt="剪贴板图片" loading="lazy" /></div>
               <small v-if="item.kind === 'text'">{{ textLines(item.text ?? '') }} 行 · {{ (item.text ?? '').length }} 字符</small>
               <small v-else>PNG 图片 · 点击查看详情</small>
             </div>
             <div class="clipboard-item-actions">
-              <button type="button" :aria-label="item.pinned ? '取消置顶' : '置顶'" :title="item.pinned ? '取消置顶' : '置顶'" :class="{ active: item.pinned }" @click.stop="togglePin(item)"><AppIcon name="star" :size="14" /></button>
+              <button type="button" :aria-label="item.pinned ? '取消置顶' : '置顶'" :title="item.pinned ? '取消置顶' : '置顶'" :class="{ active: item.pinned }" @click.stop="togglePin(item)"><AppIcon :name="item.pinned ? 'pin-filled' : 'pin'" :size="14" /></button>
               <button type="button" :aria-label="copiedId === item.id ? '已复制' : '复制回系统剪贴板'" :title="copiedId === item.id ? '已复制' : '复制回系统剪贴板'" @click.stop="copyItem(item)"><AppIcon :name="copiedId === item.id ? 'check' : 'copy'" :size="14" /></button>
               <button type="button" aria-label="删除" title="删除" @click.stop="removeItem(item)"><AppIcon name="trash" :size="14" /></button>
             </div>
