@@ -122,7 +122,7 @@ function select(item: Item, group: string, nested = false) {
 .editor-menu-group { position: relative; }
 .editor-menu-trigger { padding: 7px 12px; border-radius: 5px; background: transparent; color: var(--ink); font: 13px var(--ui-font); }
 .editor-menu-trigger:hover, .editor-menu-trigger[aria-expanded='true'] { background: var(--accent-soft); }
-.editor-menu-popover { position: absolute; z-index: 30; top: 100%; left: 0; min-width: 200px; max-height: min(65vh, 540px); overflow-y: auto; padding: 5px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); box-shadow: 0 10px 28px #0003; }
+.editor-menu-bar :deep(.editor-menu-popover) { min-width: 200px; max-height: min(65vh, 540px); overflow-y: auto; padding: 5px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); box-shadow: 0 10px 28px #0003; }
 .editor-menu-subpopover { position: fixed; z-index: 1000; min-width: min(220px, calc(100vw - 16px)); max-width: calc(100vw - 16px); max-height: min(65vh, 540px); overflow: auto; padding: 5px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); box-shadow: 0 10px 28px #0003; }
 .editor-menu-popover button { display: flex; align-items: center; justify-content: space-between; gap: 24px; width: 100%; padding: 8px 10px; border-radius: 4px; background: transparent; color: var(--ink); font: 13px var(--ui-font); text-align: left; white-space: nowrap; }
 .editor-menu-subpopover button { display: flex; align-items: center; justify-content: space-between; gap: 24px; width: 100%; padding: 8px 10px; border-radius: 4px; background: transparent; color: var(--ink); font: 13px var(--ui-font); text-align: left; white-space: nowrap; }
