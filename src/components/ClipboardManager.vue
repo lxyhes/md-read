@@ -95,7 +95,7 @@ let lastClipboardMarker = ''
 let lastSignature = items.value[0]?.signature ?? ''
 let statusTimer: number | null = null
 let persistTimer: number | null = null
-let persistChain = Promise.resolve()
+let persistChain = Promise.resolve(true)
 
 const platformLabel = computed(() => {
   const agent = typeof navigator === 'undefined' ? '' : navigator.userAgent
@@ -114,6 +114,7 @@ const filteredItems = computed(() => {
 
 const selectedItem = computed(() => items.value.find((item) => item.id === selectedId.value) ?? null)
 const pinnedCount = computed(() => items.value.filter((item) => item.pinned).length)
+const unpinnedCount = computed(() => items.value.length - pinnedCount.value)
 const textCount = computed(() => items.value.filter((item) => item.kind === 'text').length)
 const imageCount = computed(() => items.value.filter((item) => item.kind === 'image').length)
 const captureStatus = computed(() => captureEnabled.value ? '正在监测系统剪贴板' : '监测已暂停')
@@ -122,8 +123,12 @@ function persistNow() {
   const ordered = [...items.value].sort((left, right) => Number(right.pinned) - Number(left.pinned) || right.createdAt - left.createdAt)
   items.value = ordered.slice(0, MAX_ITEMS)
   const snapshot = [...items.value]
-  persistChain = persistChain.then(() => saveDurableData(STORAGE_KEY, snapshot)).catch(() => {
+  persistChain = persistChain.then(async () => {
+    await saveDurableData(STORAGE_KEY, snapshot)
+    return true
+  }).catch(() => {
     errorMessage.value = '剪贴板历史保存失败，请检查应用存储空间'
+    return false
   })
   return persistChain
 }
@@ -267,11 +272,12 @@ function removeItem(item: ClipboardRecord) {
 }
 
 async function clearHistory() {
-  if (!items.value.length || !(await confirmAppAction({ title: '清空剪贴板历史？', description: '未置顶的历史记录会被清空，置顶内容会保留。', confirmLabel: '清空历史', destructive: true }))) return
+  if (!unpinnedCount.value || !(await confirmAppAction({ title: '清空剪贴板历史？', description: '未置顶的历史记录会被清空，置顶内容会保留。', confirmLabel: '清空历史', destructive: true }))) return
+  const removed = unpinnedCount.value
+  if (!removed) return
   items.value = items.value.filter((item) => item.pinned)
   selectedId.value = items.value[0]?.id ?? null
-  persist()
-  flash('未置顶历史已清空')
+  if (await persistNow()) flash(`已清空 ${removed} 条未置顶记录`)
 }
 
 function selectItem(item: ClipboardRecord) {
@@ -333,7 +339,7 @@ onUnmounted(() => {
       <div class="clipboard-toolbar-actions">
         <Button class="clipboard-quiet-action" type="text" :disabled="historyLoading" @click="checkClipboard(true)"><template #icon><AppIcon name="sync" :size="13" /></template>立即读取</Button>
         <Button class="clipboard-quiet-action" type="text" :disabled="historyLoading" @click="toggleCapture"><template #icon><AppIcon :name="captureEnabled ? 'eye' : 'close'" :size="13" /></template>{{ captureEnabled ? '暂停监测' : '恢复监测' }}</Button>
-        <Button class="clipboard-clear-action" type="text" status="danger" :disabled="!items.length || !items.some((item) => !item.pinned)" @click="clearHistory"><template #icon><AppIcon name="trash" :size="13" /></template>清空未置顶</Button>
+        <Button class="clipboard-clear-action" type="text" status="danger" :disabled="!unpinnedCount" @click="clearHistory"><template #icon><AppIcon name="trash" :size="13" /></template>清空未置顶</Button>
       </div>
     </div>
 
@@ -349,7 +355,9 @@ onUnmounted(() => {
             <Button type="text" :class="{ active: filter === 'text' }" @click="filter = 'text'"><template #icon><AppIcon name="type" :size="12" /></template>文本 <b>{{ textCount }}</b></Button>
             <Button type="text" :class="{ active: filter === 'image' }" @click="filter = 'image'"><template #icon><AppIcon name="image" :size="12" /></template>图片 <b>{{ imageCount }}</b></Button>
           </div>
-          <label class="clipboard-search"><AppIcon name="search" :size="13" /><Input v-model="query" allow-clear placeholder="搜索历史内容…" :input-attrs="{ type: 'search', 'aria-label': '搜索剪贴板历史' }" /></label>
+          <Input v-model="query" class="clipboard-search" allow-clear placeholder="搜索历史内容…" :input-attrs="{ 'aria-label': '搜索剪贴板历史' }">
+            <template #prefix><AppIcon name="search" :size="13" /></template>
+          </Input>
         </div>
 
         <ContentSkeleton v-if="historyLoading" class="clipboard-list" label="正在读取剪贴板历史" :rows="5" />
@@ -419,7 +427,11 @@ onUnmounted(() => {
 .clipboard-workspace { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(260px, .7fr); gap: 20px; margin-top: 27px; }
 .clipboard-library { min-width: 0; }.clipboard-library-heading { justify-content: space-between; gap: 20px; }.clipboard-library-heading h2 { margin: 7px 0 0; color: var(--ink); font-size: 24px; font-weight: 400; letter-spacing: -.035em; }.clipboard-library-heading h2 b { margin-left: 5px; color: var(--accent); font: 11px var(--mono); }.clipboard-counts { gap: 10px; color: var(--muted); font: 11px var(--ui-font); }.clipboard-counts span + span { padding-left: 10px; border-left: 1px solid var(--border); }
 .clipboard-filter-row { justify-content: space-between; gap: 14px; margin: 20px 0 10px; }.clipboard-filters { display: inline-flex; gap: 3px; padding: 3px; border: 1px solid var(--border); border-radius: 8px; background: color-mix(in srgb, var(--surface) 75%, transparent); }.clipboard-filters button { display: inline-flex; align-items: center; gap: 5px; padding: 7px 9px; border-radius: 5px; background: transparent; color: var(--muted); font-size: 10px; }.clipboard-filters button:hover, .clipboard-filters button.active { background: color-mix(in srgb, var(--accent) 17%, var(--surface)); color: var(--ink); }.clipboard-filters b { color: var(--accent); font: 9px var(--mono); }
-.clipboard-search { display: flex; min-width: 180px; align-items: center; gap: 7px; padding: 8px 9px; border: 1px solid var(--border); border-radius: 7px; background: color-mix(in srgb, var(--surface) 74%, transparent); color: var(--muted); }.clipboard-search:focus-within { border-color: color-mix(in srgb, var(--accent) 60%, var(--border)); }.clipboard-search :deep(.moyue-input-field) { min-width: 0; flex: 1; padding: 0; border: 0; background: transparent; box-shadow: none; }.clipboard-search :deep(.ant-input) { padding: 0; background: transparent; color: var(--ink); font: 12px var(--ui-font); }.clipboard-search :deep(.ant-input::placeholder) { color: var(--muted); }
+.clipboard-search { width: 196px; height: 42px; padding-inline: 10px; }
+.clipboard-search :deep(.ant-input-affix-wrapper) { width: 100%; gap: 7px; padding: 0; }
+.clipboard-search :deep(.ant-input-prefix) { margin: 0; color: var(--muted); }
+.clipboard-search :deep(.ant-input) { appearance: none; padding: 0; border: 0; outline: none; background: transparent; box-shadow: none; }
+.clipboard-search :deep(.ant-input::placeholder) { color: var(--muted); }
 .clipboard-list { display: grid; border-top: 1px solid var(--border); }.clipboard-item { position: relative; display: flex; min-width: 0; gap: 11px; padding: 14px 4px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; outline: none; transition: background .18s ease, padding .18s ease; }.clipboard-item:hover, .clipboard-item:focus-visible, .clipboard-item.selected { padding-inline: 10px; background: color-mix(in srgb, var(--accent) 7%, var(--surface-raised)); }.clipboard-item.pinned { box-shadow: inset 2px 0 var(--accent); }.clipboard-item-marker { display: grid; width: 29px; height: 29px; flex: 0 0 29px; place-items: center; margin-top: 1px; border-radius: 6px; background: color-mix(in srgb, var(--accent) 13%, var(--surface)); color: var(--accent); }.clipboard-item-marker.image { color: color-mix(in srgb, #d88cbd 78%, var(--accent)); background: color-mix(in srgb, #d88cbd 12%, var(--surface)); }.clipboard-item-body { min-width: 0; flex: 1; }.clipboard-item-meta { gap: 8px; color: var(--muted); font: 11px var(--ui-font); }.clipboard-item-meta time { margin-left: auto; color: color-mix(in srgb, var(--muted) 76%, transparent); }.clipboard-pinned-label { display: inline-flex; align-items: center; gap: 3px; color: var(--accent); }.clipboard-item-body p { display: -webkit-box; max-width: 100%; margin: 7px 0 5px; overflow: hidden; color: var(--ink); font: 13px/1.55 var(--ui-font); -webkit-box-orient: vertical; -webkit-line-clamp: 3; }.clipboard-item-body > small { color: var(--muted); font: 10px var(--mono); }.clipboard-image-preview { height: 116px; margin: 8px 0 6px; overflow: hidden; border-radius: 7px; background: color-mix(in srgb, var(--app-bg) 36%, var(--surface)); }.clipboard-image-preview img { display: block; width: 100%; height: 100%; object-fit: contain; }.clipboard-item-actions { display: flex; align-self: center; gap: 2px; opacity: 0; transition: opacity .18s ease; }.clipboard-item:hover .clipboard-item-actions, .clipboard-item:focus-within .clipboard-item-actions, .clipboard-item.selected .clipboard-item-actions { opacity: 1; }.clipboard-item-actions button { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 5px; background: transparent; color: var(--muted); }.clipboard-item-actions button:hover, .clipboard-item-actions button.active { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
 .clipboard-empty { display: grid; min-height: 320px; place-content: center; justify-items: center; gap: 9px; border: 1px dashed var(--border); border-radius: 12px; color: var(--muted); text-align: center; }.clipboard-empty-icon { display: grid; width: 48px; height: 48px; place-items: center; border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border)); border-radius: 14px 14px 14px 5px; background: color-mix(in srgb, var(--accent) 9%, transparent); color: var(--accent); }.clipboard-empty strong { color: var(--ink); font: 600 12px var(--ui-font); }.clipboard-empty p { margin: 0; font: 10px var(--ui-font); }
 .clipboard-detail { min-width: 0; padding-left: 20px; border-left: 1px solid var(--border); }.clipboard-detail-heading { justify-content: space-between; gap: 12px; }.clipboard-detail-heading > span:last-child { color: var(--muted); font: 11px var(--ui-font); }.clipboard-detail-card { margin-top: 14px; padding: 16px 0 0; border-top: 1px solid var(--border); background: transparent; }.clipboard-detail-type { gap: 9px; }.clipboard-detail-type-icon { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 6px; background: color-mix(in srgb, var(--accent) 15%, var(--surface)); color: var(--accent); }.clipboard-detail-type-icon.image { color: #d88cbd; background: color-mix(in srgb, #d88cbd 13%, var(--surface)); }.clipboard-detail-type strong, .clipboard-detail-type small { display: block; }.clipboard-detail-type strong { color: var(--ink); font: 600 12px var(--ui-font); }.clipboard-detail-type small { margin-top: 3px; color: var(--muted); font: 10px var(--mono); }.clipboard-detail-text { max-height: 270px; margin: 18px 0 12px; padding: 12px 0; overflow: auto; border-block: 1px solid var(--border); background: transparent; color: var(--ink); white-space: pre-wrap; word-break: break-word; font: 12px/1.65 var(--mono); }.clipboard-detail-image { display: grid; min-height: 170px; max-height: 300px; margin: 18px 0 12px; place-items: center; overflow: hidden; border: 1px solid var(--border); background: color-mix(in srgb, var(--app-bg) 35%, transparent); }.clipboard-detail-image img { display: block; width: 100%; height: 100%; max-height: 300px; object-fit: contain; }.clipboard-copy-button { display: flex; width: 100%; align-items: center; justify-content: center; gap: 6px; padding: 10px; border-radius: 5px; background: var(--accent); color: var(--app-bg); font-size: 11px; font-weight: 700; }.clipboard-copy-button:hover { filter: brightness(1.08); transform: translateY(-1px); }.clipboard-detail-note { display: flex; gap: 7px; margin-top: 13px; color: var(--muted); font: 11px/1.55 var(--ui-font); }.clipboard-detail-note .app-icon { flex: 0 0 auto; margin-top: 1px; color: var(--accent); }.clipboard-detail-empty { display: grid; min-height: 190px; place-content: center; justify-items: center; gap: 9px; color: var(--muted); text-align: center; font: 11px var(--ui-font); }.clipboard-detail-empty .app-icon { color: var(--accent); }.clipboard-message { gap: 7px; margin-top: 18px; color: #72cbb0; font: 11px var(--ui-font); }.clipboard-message.error { color: #e98b8b; }.clipboard-message .app-icon { flex: 0 0 auto; }.clipboard-privacy-note { justify-content: center; gap: 9px; margin-top: 27px; color: var(--muted); font: 11px var(--ui-font); }.note-line { width: 32px; height: 1px; background: var(--accent); }
@@ -429,6 +441,5 @@ onUnmounted(() => {
 .clipboard-quiet-action, .clipboard-clear-action, .clipboard-copy-button, .clipboard-filters button { min-height: 34px; font-size: 12px; }
 .clipboard-toolbar-status small { font-size: 11px; }
 .clipboard-filters b { font-size: 11px; }
-.clipboard-search input { font-size: 12px; }
 .clipboard-item-body > small, .clipboard-empty p, .clipboard-detail-type small { font-size: 11px; }
 </style>
