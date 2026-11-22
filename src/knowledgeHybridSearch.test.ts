@@ -35,6 +35,16 @@ describe('hybrid knowledge retrieval', () => {
     expect(result.matches[0].context).toContain('项目 | 值\nTLS | 443')
   })
 
+  it('uses the specific paragraph matched by the vector within a section', () => {
+    const document = parseMarkdown('access.md', '# 运维\n\n周会安排在周一。\n\n打印机放在二楼。\n\n账户停用期限为一天。')
+    const [match] = searchKnowledgeHybrid([document], [{
+      document, chunks: knowledgeChunks(document), vectors: [axis(0), axis(1), axis(2)],
+    }], '同事走了账号多久关掉', axis(2)).matches
+    expect(match.snippet).toBe('账户停用期限为一天。')
+    expect(match.context).toContain('账户停用期限为一天。')
+    expect(citationRegionId(citationsForMatches([match])[0], [document])).toBe(document.regions.at(-1)?.id)
+  })
+
   it('repeats table headers across chunks and validates vector dimensions', () => {
     const rows = Array.from({ length: 30 }, (_, index) => `| ${index} | ${'检查记录'.repeat(10)} |`).join('\n')
     const document = parseMarkdown('records.md', `# 检查记录\n\n| 行号 | 内容 |\n| --- | --- |\n${rows}`)

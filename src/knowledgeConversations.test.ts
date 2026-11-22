@@ -54,15 +54,15 @@ describe('knowledge conversation helpers', () => {
     expect(messagesForKnowledgeQuestion([question], '如何回滚？').at(-1)?.content).toBe('如何回滚？')
   })
 
-  it('keeps only valid citations actually used by an AI answer', () => {
-    const citations = [1, 2].map((index) => ({ index, documentId: 'doc', documentTitle: 'Doc', documentPath: 'doc.md', regionId: `region-${index}`, excerpt: 'Excerpt', sourceHash: 'hash' }))
-    expect(validatedKnowledgeAnswer('First [1], invalid [9].', citations)).toEqual({ content: 'First [1], invalid .', citations: [citations[0]] })
-    expect(validatedKnowledgeAnswer('{"claims":[{"text":"First fact","citations":[1,9]},{"text":"Unsupported","citations":[9]}],"insufficient":false}', citations))
-      .toEqual({ content: '• First fact [1]', citations: [citations[0]] })
+  it('keeps only complete quotes from the cited passage', () => {
+    const citations = ['重试次数为三次。发布前必须审批。', '生产环境不允许跳过审批。'].map((excerpt, offset) => ({ index: offset + 1, documentId: 'doc', documentTitle: 'Doc', documentPath: 'doc.md', regionId: `region-${offset}`, excerpt, sourceHash: 'hash' }))
+    expect(validatedKnowledgeAnswer('{"claims":[{"text":"重试次数为三次。","citations":[1,2,9]},{"text":"重试次数为十次。","citations":[1]},{"text":"允许跳过审批。","citations":[2]}],"insufficient":false}', citations))
+      .toEqual({ content: '• 重试次数为三次。 [1]\n现有资料无法确认其余部分。', citations: [citations[0]] })
     expect(validatedKnowledgeAnswer('```json\n{"claims":[],"insufficient":true}\n```', citations))
       .toEqual({ content: '现有资料不足以回答这个问题。', citations: [] })
-    expect(validatedKnowledgeAnswer('A confident but unsupported answer.', citations))
-      .toEqual({ content: '现有资料不足以生成可核对的回答。', citations: [] })
+    for (const content of ['重试次数为三次。 [1]', '{"claims":[{"text":"重试次数为三次。","citations":[1]}', '{"claims":[{"text":"重试次数为十次。","citations":[1]}],"insufficient":false}']) {
+      expect(validatedKnowledgeAnswer(content, citations)).toEqual({ content: '现有资料不足以生成可核对的回答。', citations: [] })
+    }
   })
 
   it('keeps only available unique sources for a new conversation', () => {

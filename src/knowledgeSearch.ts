@@ -18,7 +18,7 @@ function termsFor(value: string) {
   const chineseTerms = chineseRuns.flatMap((run) => run.length <= 2
     ? [run]
     : Array.from({ length: run.length - 1 }, (_, index) => run.slice(index, index + 2)))
-  return [...words, ...chineseTerms].filter((term) => term.length > 1 && !STOP_TERMS.has(term))
+  return [...words, ...chineseTerms.filter((term) => term.length > 1)].filter((term) => !STOP_TERMS.has(term))
 }
 
 function queryTermsFor(query: string) {

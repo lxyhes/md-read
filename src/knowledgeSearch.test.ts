@@ -3,6 +3,12 @@ import { parseMarkdown } from './parser'
 import { searchKnowledge } from './knowledgeSearch'
 
 describe('knowledge search', () => {
+  it('matches single-character numbers and identifiers as complete tokens', () => {
+    const document = parseMarkdown('limits.md', '重试次数为 3，对应变量为 x。\n\n超时为 30 秒，对应变量为 xx。')
+    for (const query of ['3', 'X']) {
+      expect(searchKnowledge([document], query).map(match => match.snippet)).toEqual(['重试次数为 3，对应变量为 x。'])
+    }
+  })
   it('keeps supporting text beyond the old 150-character preview', () => {
     const document = parseMarkdown('long.md', `# 说明\n\n知识库${'需要检查资料内容。'.repeat(30)}最终结论：必须保留原文。`)
     const match = searchKnowledge([document], '知识库')[0]

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref } from 'vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
 import { Dropdown } from 'ant-design-vue'
 
-const props = withDefaults(defineProps<{ panelClass?: string; popupContainer?: string | HTMLElement; position?: 'bl' | 'br' }>(), {
+const props = withDefaults(defineProps<{ panelClass?: string; popupContainer?: string | HTMLElement; position?: 'bl' | 'br' | 'tl' | 'tr'; focusOnOpen?: boolean }>(), {
   panelClass: 'reader-more-popover',
   position: 'bl',
 })
@@ -10,6 +10,18 @@ const emit = defineEmits<{ 'visible-change': [visible: boolean] }>()
 const visible = ref(false)
 let opener: HTMLElement | null = null
 const panel = ref<HTMLElement | null>(null)
+const placements = { bl: 'bottomLeft', br: 'bottomRight', tl: 'topLeft', tr: 'topRight' } as const
+watch(panel, (element, _, onCleanup) => {
+  if (!props.focusOnOpen || !element) return
+  // The portal mounts before the dropdown finishes its first layout.
+  const observer = new ResizeObserver(([entry]) => {
+    if (!entry.contentRect.width) return
+    observer.disconnect()
+    if (visible.value && element.isConnected) element.focus({ preventScroll: true })
+  })
+  observer.observe(element)
+  onCleanup(() => observer.disconnect())
+}, { flush: 'post' })
 
 function closeOnEscape(event: KeyboardEvent) {
   if (event.key !== 'Escape' || event.defaultPrevented) return
@@ -46,14 +58,14 @@ defineExpose({ close: () => setVisible(false) })
 <template>
   <Dropdown
     :trigger="['click']"
-    :placement="props.position === 'br' ? 'bottomRight' : 'bottomLeft'"
+    :placement="placements[props.position]"
     :get-popup-container="popupContainer"
     :open="visible"
     @open-change="setVisible"
   >
-    <slot />
+    <slot :open="visible" />
     <template #overlay>
-      <div v-if="visible" ref="panel" :class="props.panelClass" @click.stop="closeAfterAction">
+      <div v-if="visible" ref="panel" :class="props.panelClass" :tabindex="props.focusOnOpen ? -1 : undefined" @click.stop="closeAfterAction">
         <slot name="menu" />
       </div>
     </template>

@@ -16,6 +16,7 @@ src-tauri/target/
 .rustup-task/
 
 # Local environment and application data
+.workbuddy/
 .env
 .env.*
 !.env.example

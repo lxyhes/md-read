@@ -17,18 +17,21 @@ function onKeydown(event: KeyboardEvent) {
   <form class="knowledge-ask-form" @submit.prevent="!disabled && !busy && hasSources && modelValue.trim() && emit('submit')">
     <Textarea
       :model-value="modelValue"
-      :textarea-attrs="{ rows: 3, 'aria-label': '询问知识库' }"
-      :placeholder="hasSources ? '输入问题，Enter 发送，Shift + Enter 换行…' : '先在「本次资料」中选择文档…'"
+      :textarea-attrs="{ autoSize: { minRows: 2, maxRows: 6 }, 'aria-label': '询问知识库', 'aria-keyshortcuts': 'Enter Shift+Enter' }"
+      :placeholder="hasSources ? '询问本次资料…' : '先选择本次资料…'"
       :disabled="disabled || busy"
       @update:model-value="emit('update:modelValue', $event)"
       @keydown="onKeydown"
     />
     <div class="knowledge-composer-footer">
-      <slot />
-      <Button class="primary-button" html-type="submit" :loading="busy" :disabled="disabled || busy || !hasSources || !modelValue.trim()">
-        <template v-if="!busy" #icon><AppIcon name="arrow-up" :size="15" /></template>
-        {{ busy ? '整理中…' : '发送问题' }}
-      </Button>
+      <slot name="sources" />
+      <div class="knowledge-composer-controls">
+        <slot name="mode" />
+        <slot name="voice" />
+        <Button class="knowledge-send" shape="circle" html-type="submit" :aria-label="busy ? '整理中' : '发送问题'" :title="busy ? '整理中' : '发送问题'" :loading="busy" :disabled="disabled || busy || !hasSources || !modelValue.trim()">
+          <template v-if="!busy" #icon><AppIcon name="arrow-up" :size="17" /></template>
+        </Button>
+      </div>
     </div>
   </form>
 </template>

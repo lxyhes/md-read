@@ -1535,7 +1535,7 @@ a:active > .app-icon-vector { transform: scale(.92); }
   min-width: 180px;
   text-align: left;
 }
-.app-shell :is(.knowledge-source-scope, .knowledge-citations, .knowledge-citation, .knowledge-source-overflow).ant-collapse {
+.app-shell :is(.knowledge-citations, .knowledge-citation, .knowledge-source-overflow).ant-collapse {
   border-color: var(--border);
   background: var(--surface);
   color: var(--ink);
@@ -2066,7 +2066,6 @@ a:active > .app-icon-vector { transform: scale(.92); }
 .app-shell .recent-folder-action {
   font-size: 12px;
 }
-.app-shell .knowledge-source-scope summary,
 .app-shell .knowledge-source-warning,
 .app-shell .knowledge-source-warning .text-button,
 .app-shell .knowledge-scope-list label,

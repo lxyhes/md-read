@@ -1,6 +1,8 @@
 export type AiProvider = 'ollama' | 'openai-compatible'
 export type AiRole = 'system' | 'user' | 'assistant'
 export type AiMessage = { role: AiRole; content: string }
+export type AiReasoning = string | boolean
+export const openAiReasoningLevels = ['low', 'medium', 'high'] as const
 
 export type AiSettings = {
   enabled: boolean
@@ -31,6 +33,23 @@ export function ollamaTagsEndpoint(baseUrl: string) {
   return `${base}/api/tags`
 }
 
+export function ollamaShowEndpoint(baseUrl: string) {
+  return ollamaTagsEndpoint(baseUrl).replace(/\/tags$/, '/show')
+}
+
+export function ollamaReasoningLevels(payload: unknown): AiReasoning[] {
+  const values = (payload as { thinking?: { values?: unknown } } | null)?.thinking?.values
+  if (!Array.isArray(values)) return []
+  const supported = values.filter((value): value is AiReasoning =>
+    typeof value === 'boolean' || (typeof value === 'string' && !!value.trim()))
+  return supported.some(value => value !== false) ? [...new Set(supported)] : []
+}
+
+export function aiTemperature(settings: Pick<AiSettings, 'provider' | 'model'>, reasoning?: AiReasoning) {
+  if (settings.provider === 'openai-compatible' && (reasoning !== undefined || /^(?:gpt-[56](?:[.-]|$)|o[134](?:-|$))/i.test(settings.model.trim()))) return undefined
+  return 0.2
+}
+
 export function ollamaModelNames(payload: unknown) {
   if (!payload || typeof payload !== 'object' || !Array.isArray((payload as { models?: unknown }).models)) return []
   return (payload as { models: Array<{ name?: unknown }> }).models
@@ -38,10 +57,11 @@ export function ollamaModelNames(payload: unknown) {
     .filter(Boolean)
 }
 
-export function aiPayload(settings: Pick<AiSettings, 'provider' | 'model'>, messages: AiMessage[]) {
+export function aiPayload(settings: Pick<AiSettings, 'provider' | 'model'>, messages: AiMessage[], reasoning?: AiReasoning) {
+  const common = { model: settings.model.trim(), messages, stream: false }
   return settings.provider === 'ollama'
-    ? { model: settings.model.trim(), messages, stream: false, options: { temperature: 0.2 } }
-    : { model: settings.model.trim(), messages, stream: false, temperature: 0.2 }
+    ? { ...common, options: { temperature: aiTemperature(settings) }, ...(reasoning !== undefined && { think: reasoning }) }
+    : { ...common, ...(reasoning !== undefined && { reasoning_effort: reasoning }), temperature: aiTemperature(settings, reasoning) }
 }
 
 export function aiResponseText(provider: AiProvider, payload: unknown) {

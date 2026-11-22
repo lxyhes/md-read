@@ -29,9 +29,9 @@ AI 知识库参考 Ant Design X 的会话设计。输入区采用 Sender 的布�
   原文结果，或交给现有 AI 问答生成带引用的回答
 ```
 
-1. **按 Markdown 结构建索引。** 从 `ReaderRegion` 和标题深度取得标题路径与正文。合并同一小节的短段落，保留每段的 `regionId`。表格、代码块独立处理。必须拆长表格时重复表头，必须拆长代码时按行拆，继续映射到原阅读区域。起始目标是每块约 400–800 中文字符，允许完整保留较短的表格和代码块。文档输入带标题路径，查询输入按 Qwen 模型卡带检索任务指令。以评测结果调整大小。 [阅读区域类型](../src/types.ts) · [HiChunk 研究](https://aclanthology.org/2026.acl-long.1372/) · [Qwen 模型卡](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B)
+1. **按 Markdown 结构建索引。** 从 `ReaderRegion` 和标题深度取得标题路径与正文。每个语义块对应一个阅读区域，短段落独立建索引。必须拆长表格时重复表头，必须拆长代码时按行拆，继续映射到原阅读区域。文档输入带标题路径，查询输入按 Qwen 模型卡带检索任务指令。 [阅读区域类型](../src/types.ts) · [Qwen 模型卡](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B)
 2. **候选比最终引用多。** 每路先取约 24 条，按倒数排名融合（RRF），避免直接相加两套尺度不同的分数。复用正文精确匹配信号，让型号、数字和代码标识符命中有机会保住靠前位置；按证据去重，并在最终 8 条里兼顾同一小节的必要上下文和跨文档覆盖。现有检索的文档配额在合并后再应用，候选阶段先保留可能有用的段落。24 和 8 是原型起点。 [墨阅关键词实现](../src/knowledgeSearch.ts#L219) · [QMD 对照方案](https://github.com/tobi/qmd#benchmarking)
-3. **检索块用于找位置，引用落到可见原文。** 选中合并块后，定位一个最相关的 `ReaderRegion`；证据确实分散在多个区域时，分别给出引用。摘要类问题保留现有的章节覆盖思路，并把本轮最好证据和上下文打包；让原文摘录与点击位置对应。`KnowledgeCitation` 沿用现有字段。 [引用构造](../src/knowledgeConversations.ts#L120)
+3. **检索块用于找位置，引用落到可见原文。** 命中块直接定位其 `ReaderRegion`。相邻段落可用于理解问题，回答中的摘录须由对应引用支持。摘要类问题继续从多个章节选取原文。`KnowledgeCitation` 沿用现有字段。 [引用构造](../src/knowledgeConversations.ts#L120)
 
 ## 3. 索引怎么存、怎么更新
 

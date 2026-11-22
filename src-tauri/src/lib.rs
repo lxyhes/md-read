@@ -471,6 +471,8 @@ struct AiChatRequest {
     model: String,
     api_key: Option<String>,
     messages: Vec<AiChatMessage>,
+    reasoning: Option<serde_json::Value>,
+    temperature: Option<f64>,
 }
 
 #[derive(Serialize)]
@@ -487,14 +489,19 @@ fn parse_ollama_models(body: &str) -> Result<Vec<String>, String> {
         .map(str::trim).filter(|name| !name.is_empty()).map(str::to_string).collect())
 }
 
-#[tauri::command]
-async fn ollama_models(base_url: String) -> Result<Vec<String>, String> {
+fn ollama_metadata_endpoint(base_url: &str, endpoint: &str) -> Result<reqwest::Url, String> {
     let mut url = reqwest::Url::parse(base_url.trim()).map_err(|error| format!("Ollama 服务地址无效：{error}"))?;
     if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none() || !url.username().is_empty() {
         return Err("Ollama 服务地址必须是 HTTP 或 HTTPS 地址，且不能包含用户名密码".into());
     }
     let base_path = url.path().trim_end_matches('/').trim_end_matches("/api/chat").trim_end_matches("/api/tags");
-    url.set_path(&format!("{base_path}/api/tags"));
+    url.set_path(&format!("{base_path}/api/{endpoint}"));
+    Ok(url)
+}
+
+#[tauri::command]
+async fn ollama_models(base_url: String) -> Result<Vec<String>, String> {
+    let url = ollama_metadata_endpoint(&base_url, "tags")?;
     let response = reqwest::Client::builder().timeout(std::time::Duration::from_secs(10)).build()
         .map_err(|error| format!("创建 Ollama 请求失败：{error}"))?
         .get(url).send().await.map_err(|error| format!("连接 Ollama 失败：{error}"))?;
@@ -502,6 +509,57 @@ async fn ollama_models(base_url: String) -> Result<Vec<String>, String> {
     let body = response.text().await.map_err(|error| format!("读取 Ollama 响应失败：{error}"))?;
     if !status.is_success() { return Err(format!("Ollama 服务返回 {status}")); }
     parse_ollama_models(&body)
+}
+
+#[tauri::command]
+async fn ollama_model_thinking(base_url: String, model: String) -> Result<serde_json::Value, String> {
+    let url = ollama_metadata_endpoint(&base_url, "show")?;
+    let response = reqwest::Client::builder().timeout(std::time::Duration::from_secs(10)).build()
+        .map_err(|error| format!("创建 Ollama 请求失败：{error}"))?
+        .post(url).json(&serde_json::json!({ "model": model.trim() })).send().await
+        .and_then(|response| response.error_for_status())
+        .map_err(|error| format!("无法读取 Ollama 模型能力：{error}"))?;
+    let payload: serde_json::Value = response.json().await.map_err(|error| format!("Ollama 响应不是有效 JSON：{error}"))?;
+    Ok(serde_json::json!({ "thinking": payload.get("thinking") }))
+}
+
+#[tauri::command]
+fn prepare_knowledge_voice(webview: tauri::Webview) -> Result<(), String> {
+    if webview.label() != "main" { return Err("仅阅读器可使用实时语音".into()); }
+    #[cfg(target_os = "macos")]
+    if !media_permission::ready() { return Err("当前 WebKit 未能隔离网页预览的麦克风权限。".into()); }
+    Ok(())
+}
+
+#[tauri::command]
+async fn start_knowledge_voice(webview: tauri::Webview, api_key: String, sdp: String) -> Result<String, String> {
+    use reqwest::multipart::{Form, Part};
+    prepare_knowledge_voice(webview)?;
+    if api_key.trim().is_empty() || !sdp.starts_with("v=0") || sdp.len() > 100_000 {
+        return Err("实时语音连接参数无效".into());
+    }
+    let session = serde_json::json!({
+        "type": "realtime", "model": "gpt-realtime", "output_modalities": ["audio"],
+        "audio": {
+            "input": {
+                "transcription": { "model": "gpt-4o-mini-transcribe", "language": "zh" },
+                "turn_detection": { "type": "server_vad", "create_response": false, "interrupt_response": true }
+            },
+            "output": { "voice": "marin" }
+        }
+    });
+    let offer = Part::text(sdp).mime_str("application/sdp").map_err(|error| error.to_string())?;
+    let config = Part::text(session.to_string()).mime_str("application/json").map_err(|error| error.to_string())?;
+    let response = reqwest::Client::builder().redirect(reqwest::redirect::Policy::none())
+        .timeout(std::time::Duration::from_secs(20)).build().map_err(|error| error.to_string())?
+        .post("https://api.openai.com/v1/realtime/calls").bearer_auth(api_key.trim())
+        .multipart(Form::new().part("sdp", offer).part("session", config))
+        .send().await.map_err(|error| format!("无法连接实时语音服务：{error}"))?;
+    let status = response.status();
+    if !status.is_success() { return Err(format!("实时语音服务返回 {status}")); }
+    let answer = response.text().await.map_err(|error| format!("无法读取语音连接响应：{error}"))?;
+    if !answer.starts_with("v=0") { return Err("实时语音服务未返回有效的 SDP".into()); }
+    Ok(answer)
 }
 
 #[tauri::command]
@@ -531,11 +589,19 @@ async fn ai_chat(request: AiChatRequest) -> Result<AiChatResponse, String> {
         "role": message.role,
         "content": message.content,
     })).collect();
-    let payload = if provider == "ollama" {
-        serde_json::json!({ "model": &model, "messages": messages, "stream": false, "options": { "temperature": 0.2 } })
+    let mut payload = serde_json::json!({ "model": &model, "messages": messages, "stream": false });
+    if provider == "ollama" {
+        payload["options"] = serde_json::json!({ "temperature": request.temperature.unwrap_or(0.2) });
+        if let Some(value) = request.reasoning.filter(|value| value.is_boolean() || value.is_string()) {
+            payload["think"] = value;
+        }
     } else {
-        serde_json::json!({ "model": &model, "messages": messages, "stream": false, "temperature": 0.2 })
-    };
+        if let Some(value) = request.reasoning.filter(|value| matches!(value.as_str(), Some("low" | "medium" | "high"))) {
+            payload["reasoning_effort"] = value;
+        } else if let Some(temperature) = request.temperature {
+            payload["temperature"] = serde_json::json!(temperature);
+        }
+    }
     let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(120)).build()
         .map_err(|error| format!("创建 AI 请求失败：{error}"))?;
     let mut builder = client.post(endpoint).json(&payload);
@@ -947,6 +1013,8 @@ pub fn run() {
             file_open::focus_main_window(app);
         }))
         .setup(|app| {
+            #[cfg(target_os = "macos")]
+            media_permission::install(app);
             let cwd = std::env::current_dir()?;
             file_open::queue_files(app.handle(), file_open::markdown_paths(std::env::args().skip(1), &cwd));
             Ok(())
@@ -955,7 +1023,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
-        .invoke_handler(tauri::generate_handler![file_open::take_open_files, file_open::pick_markdown_files, knowledge_embedding::knowledge_embedding_digest, knowledge_embedding::knowledge_embed, tracked_directory, write_markdown_checked, remove_managed_asset, exit_app, allow_asset_directory, read_local_image, read_clipboard_image, read_clipboard_snapshot, read_clipboard_rich_text, read_clipboard_signature, write_clipboard_snapshot, read_remote_image, download_remote_image, upload_piclist_image, ollama_models, ai_chat, open_directory, reveal_file, open_external_url, web_preview::web_preview, pandoc_import_document, pandoc_export_document, export_html_to_pdf])
+        .invoke_handler(tauri::generate_handler![file_open::take_open_files, file_open::pick_markdown_files, knowledge_embedding::knowledge_embedding_digest, knowledge_embedding::knowledge_embed, tracked_directory, write_markdown_checked, remove_managed_asset, exit_app, allow_asset_directory, read_local_image, read_clipboard_image, read_clipboard_snapshot, read_clipboard_rich_text, read_clipboard_signature, write_clipboard_snapshot, read_remote_image, download_remote_image, upload_piclist_image, ollama_models, ollama_model_thinking, prepare_knowledge_voice, start_knowledge_voice, ai_chat, open_directory, reveal_file, open_external_url, web_preview::web_preview, pandoc_import_document, pandoc_export_document, export_html_to_pdf])
         .build(tauri::generate_context!())
         .expect("error while building Moyue application")
         .run(|_app, _event| {
@@ -968,6 +1036,9 @@ pub fn run() {
             }
         });
 }
+
+#[cfg(target_os = "macos")]
+mod media_permission;
 
 #[cfg(test)]
 mod tests {

@@ -53,38 +53,36 @@ export function messagesForKnowledgeQuestion(messages: KnowledgeMessage[], quest
 }
 
 export function validatedKnowledgeAnswer(content: string, citations: KnowledgeCitation[]) {
-  const valid = new Set(citations.map((citation) => citation.index))
+  const unverified = { content: '现有资料不足以生成可核对的回答。', citations: [] }
   const structured = content.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
+  let payload: { claims?: unknown; insufficient?: unknown } | null
   try {
-    const payload = JSON.parse(structured) as { claims?: unknown; insufficient?: unknown }
-    if (Array.isArray(payload.claims)) {
-      const used = new Set<number>()
-      const claims = payload.claims.flatMap((value) => {
-        if (!value || typeof value !== 'object') return []
-        const item = value as { text?: unknown; citations?: unknown }
-        if (typeof item.text !== 'string' || !Array.isArray(item.citations)) return []
-        const indexes = [...new Set(item.citations.filter((index): index is number =>
-          Number.isInteger(index) && valid.has(index as number)))]
-        const text = item.text.replace(/\[(\d+)\]/g, '').replace(/\s+/g, ' ').trim()
-        if (!text || !indexes.length) return []
-        indexes.forEach((index) => used.add(index))
-        return [`• ${text} ${indexes.map((index) => `[${index}]`).join('')}`]
-      })
-      if (claims.length) return { content: claims.join('\n'), citations: citations.filter((citation) => used.has(citation.index)) }
-      if (payload.insufficient === true) return { content: '现有资料不足以回答这个问题。', citations: [] }
-    }
-  } catch { /* Older and less capable models may still return cited plain text. */ }
+    payload = JSON.parse(structured) as typeof payload
+  } catch { return unverified }
+  if (!Array.isArray(payload?.claims) || typeof payload.insufficient !== 'boolean') return unverified
+  if (!payload.claims.length && payload.insufficient) return { content: '现有资料不足以回答这个问题。', citations: [] }
 
+  const normalize = (text: string) => text.replace(/\s+/g, ' ').trim()
+  const excerpts = new Map(citations.map(citation => {
+    const excerpt = normalize(citation.excerpt)
+    const sentences = excerpt.split(/(?<=[。！？!?])\s*|(?<=\.)\s+/u)
+    return [citation.index, new Set([excerpt, ...sentences.map(normalize)])] as const
+  }))
   const used = new Set<number>()
-  const safeContent = content.replace(/\[(\d+)\]/g, (marker, value: string) => {
-    const index = Number(value)
-    if (!valid.has(index)) return ''
-    used.add(index)
-    return marker
+  const claims = payload.claims.flatMap((value: unknown) => {
+    if (!value || typeof value !== 'object') return []
+    const claim = value as { text?: unknown; citations?: unknown }
+    if (typeof claim.text !== 'string' || !Array.isArray(claim.citations)) return []
+    const text = normalize(claim.text)
+    if (!text) return []
+    const indexes = [...new Set<number>(claim.citations)].filter(index => excerpts.get(index)?.has(text))
+    if (!indexes.length) return []
+    indexes.forEach(index => used.add(index))
+    return [`• ${text} ${indexes.map(index => `[${index}]`).join('')}`]
   })
-  if (!used.size) return { content: '现有资料不足以生成可核对的回答。', citations: [] }
-  const groundedLines = safeContent.split('\n').filter((line) => !line.trim() || /\[\d+\]/.test(line))
-  return { content: groundedLines.join('\n').trim(), citations: citations.filter((citation) => used.has(citation.index)) }
+  if (!claims.length) return unverified
+  if (payload.insufficient || claims.length < payload.claims.length) claims.push('现有资料无法确认其余部分。')
+  return { content: claims.join('\n'), citations: citations.filter(citation => used.has(citation.index)) }
 }
 
 export function titleForKnowledgeQuestion(question: string) {
@@ -164,21 +162,24 @@ export function citationRegionId(citation: KnowledgeCitation, documents: ReaderD
 
 export function migrateKnowledgeDocument(conversation: KnowledgeConversation, previous: ReaderDocument, next: ReaderDocument) {
   if (previous.id === next.id) return conversation
-  const regionIds = new Map(previous.regions.map((region, index) => [region.id, next.regions[index]?.id]))
   const sourceIds = [...new Set(conversation.sourceIds.map((id) => id === previous.id ? next.id : id))]
   const messages = conversation.messages.map((message) => ({
     ...message,
-    citations: message.citations.map((citation) => citation.documentId !== previous.id ? citation : {
-      ...citation,
-      documentId: next.id,
-      documentTitle: next.title,
-      documentPath: next.path,
-      regionId: regionIds.get(citation.regionId) ?? citation.regionId,
-    }),
+    citations: message.citations.map(citation => migrateKnowledgeCitation(citation, previous, next)),
   }))
   const changed = sourceIds.some((id, index) => id !== conversation.sourceIds[index])
     || messages.some((message, index) => message.citations.some((citation, citationIndex) => citation !== conversation.messages[index]?.citations[citationIndex]))
   return changed ? { ...conversation, sourceIds, messages, updatedAt: Date.now() } : conversation
+}
+
+export function migrateKnowledgeCitation(citation: KnowledgeCitation, previous: ReaderDocument, next: ReaderDocument): KnowledgeCitation {
+  if (citation.documentId !== previous.id || previous.id === next.id) return citation
+  const migrated = { ...citation, documentId: next.id, documentTitle: next.title, documentPath: next.path }
+  if (previous.sourceHash !== next.sourceHash) {
+    return { ...migrated, regionId: citationRegionId(migrated, [next]) ?? citation.regionId }
+  }
+  const index = previous.regions.findIndex(region => region.id === citation.regionId)
+  return { ...migrated, regionId: next.regions[index]?.id ?? citation.regionId }
 }
 
 export function localDayKey(date = new Date()) {
