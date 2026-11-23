@@ -25,3 +25,7 @@ export function pinRecentFolder(folders: readonly RecentFolder[], path: string, 
 export function removeRecentFolder(folders: readonly RecentFolder[], path: string): RecentFolder[] {
   return folders.filter((folder) => pathKey(folder.path) !== pathKey(path))
 }
+
+export function recentFolderContainsDocument(folderPath: string, documentPath: string) {
+  return pathKey(documentPath).startsWith(`${pathKey(folderPath)}/`)
+}

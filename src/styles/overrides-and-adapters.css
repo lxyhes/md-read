@@ -509,10 +509,12 @@ a:active > .app-icon-vector { transform: scale(.92); }
 
 .recent-folders-popover .recent-folder-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 46px 42px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  column-gap: 6px;
   align-items: center;
   min-width: 0;
   min-height: 52px;
+  padding-inline-end: 6px;
   overflow: hidden;
   border: 1px solid transparent;
   border-radius: 9px;
@@ -581,13 +583,18 @@ a:active > .app-icon-vector { transform: scale(.92); }
 }
 
 .recent-folders-popover .recent-folder-action.ant-btn {
-  width: 100%;
-  min-width: 0;
-  padding: 0;
+  width: auto;
+  min-inline-size: 42px;
+  padding: 0 8px;
   justify-content: center;
+  text-align: center;
   color: var(--muted);
   font-size: 11px;
   white-space: nowrap;
+}
+
+.recent-folders-popover .recent-folder-open + .recent-folder-action.ant-btn {
+  min-inline-size: 6em;
 }
 
 .recent-folders-popover .recent-folder-action.ant-btn:hover {
@@ -3111,6 +3118,15 @@ html:has(.reader-page), body:has(.reader-page), #app:has(.reader-page) { min-wid
   gap: 0;
 }
 
+@media (width > 860px) {
+  @container document-panes (min-width: 760px) {
+    .app-shell.is-editor-studio .has-second-document .editor-draft-layout:has(> .editor-draft-outline[open]) {
+      grid-template-columns: clamp(144px, 22%, 220px) minmax(0, 1fr);
+      column-gap: 24px;
+    }
+  }
+}
+
 .app-shell.is-editor-studio .editor-draft-layout:has(.editor-draft-outline:not([open])),
 .app-shell.is-editor-studio .editor-draft-layout:not(:has(.editor-draft-outline)) {
   grid-template-columns: minmax(0, 1fr);
@@ -3575,7 +3591,7 @@ body .app-shell.is-editor-studio .reader-layout {
   inset: auto;
 }
 
-.ant-dropdown:has(.reader-more-popover, .library-more-popover) :is(.reader-more-popover, .library-more-popover) button {
+.ant-dropdown:has(.reader-more-popover, .library-more-popover) :is(.reader-more-popover, .library-more-popover) button:not(:where(.recent-folder-action)) {
   width: 100%;
   padding: 8px 9px;
   border: 0;

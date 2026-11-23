@@ -6,6 +6,7 @@ import { builtInThemes, cssVariables, defaultTokens } from '../themes'
 import { interfaceFont } from '../fonts'
 import { parseMarkdown } from '../parser'
 const SESSION_KEY = 'moyue:reader-session'
+const HIDDEN_RECENT_DOCUMENTS_KEY = 'moyue:hidden-recent-documents'
 const THEME_KEY = 'moyue:theme'
 const THEME_STYLE_ID = 'moyue-active-theme'
 const DEFAULT_THEME_ID = 'paper-white'
@@ -18,12 +19,22 @@ function readSession() {
     return {}
   }
 }
+function readHiddenRecentDocuments() {
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem(HIDDEN_RECENT_DOCUMENTS_KEY) ?? '[]')
+    return new Set(Array.isArray(saved) ? saved.filter((id): id is string => typeof id === 'string') : [])
+  } catch {
+    return new Set<string>()
+  }
+}
 import type { Annotation, MoyueTheme, ReaderDocument, ReaderMode, ReaderSelection, ReadingProgress, ViewerState } from '../types'
 
 const sample = `# 一次安静的阅读\n\n墨阅把 Markdown 变成一个可以停留的空间。按 F 进入专注阅读。\n\n> 阅读不是把文字扫过去，而是给一个想法足够的时间。\n\n## Region Focus\n\n在专注模式中点击一个内容区域，其他内容会退到背景里。你可以用方向键在区域之间移动，按 Escape 回到整篇文档。\n\n\`\u0060\u0060typescript\ninterface ReadingRegion {\n  id: string\n  focus(): void\n}\n\`\u0060\u0060\n\n## 一张图表\n\n\`\u0060\u0060mermaid\nflowchart LR\n  A[打开文档] --> B[选择区域]\n  B --> C[沉浸阅读]\n  C --> D[回到正文]\n\`\u0060\u0060\n\n![一块留白](https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=1200&q=80)\n\n## 最后\n\n主题、图表和辅助信息都应该在需要时出现，不需要时安静地退场。`
 
 export const useReaderStore = defineStore('reader', () => {
   const documents = shallowRef<ReaderDocument[]>([])
+  const hiddenRecentDocuments = shallowRef(readHiddenRecentDocuments())
+  const recentDocuments = computed(() => documents.value.filter((document) => !hiddenRecentDocuments.value.has(document.id)))
   const documentAssets = new Map<string, Record<string, string>>()
   const restoredDocumentIds = new Set<string>()
   let openDocumentRequest = 0
@@ -45,6 +56,16 @@ export const useReaderStore = defineStore('reader', () => {
   const readerSettings = ref({ fontSize: savedSettings.fontSize, lineHeight: savedSettings.lineHeight, width: savedSettings.width, fontFamily: savedSettings.fontFamily, interfaceFontFamily: savedSettings.interfaceFontFamily })
   const currentDocument = computed(() => documents.value.find((document) => document.id === currentDocumentId.value) ?? null)
   const activeTheme = computed(() => themes.value.find((theme) => theme.manifest.id === activeThemeId.value) ?? themes.value[0])
+
+  function updateHiddenRecentDocuments(hide: readonly string[], show: readonly string[] = []) {
+    if (!hide.some((id) => !hiddenRecentDocuments.value.has(id)) && !show.some((id) => hiddenRecentDocuments.value.has(id))) return
+    const next = new Set(hiddenRecentDocuments.value)
+    for (const id of hide) next.add(id)
+    for (const id of show) next.delete(id)
+    hiddenRecentDocuments.value = next
+    try { localStorage.setItem(HIDDEN_RECENT_DOCUMENTS_KEY, JSON.stringify([...next])) }
+    catch (error) { console.warn('无法保存最近阅读列表', error) }
+  }
 
   function persistSession() {
     try {
@@ -137,6 +158,7 @@ export const useReaderStore = defineStore('reader', () => {
         catch (error) { console.warn('无法持久化 Markdown 元数据，本次仍继续打开文档', error) }
       }
     }
+    updateHiddenRecentDocuments([], openedIds)
     openDocumentIds.value = [...new Set([...openDocumentIds.value, ...openedIds])]
     await openDocument(openedIds[openedIds.length - 1])
     return files.length
@@ -195,6 +217,7 @@ export const useReaderStore = defineStore('reader', () => {
       })
     }
     if (id !== document.id) documentAssets.delete(id)
+    if (id !== document.id && hiddenRecentDocuments.value.has(id)) updateHiddenRecentDocuments([document.id], [id])
     const wasCurrent = currentDocumentId.value === id
     documents.value = [...documents.value.filter((item) => item.id !== id && item.id !== document.id), document]
     openDocumentIds.value = openDocumentIds.value.map((item) => item === id ? document.id : item)
@@ -247,13 +270,13 @@ export const useReaderStore = defineStore('reader', () => {
     openDocumentIds.value = (session.openDocumentIds ?? []).filter((id) => availableIds.has(id))
     if (!openDocumentIds.value.length) openDocumentIds.value = [documents.value[0].id]
     const initialId = session.currentDocumentId && openDocumentIds.value.includes(session.currentDocumentId) ? session.currentDocumentId : openDocumentIds.value[0]
-    await openDocument(initialId, { deferProgress: true })
+    await openDocument(initialId, { deferProgress: true, recordRecent: false })
   }
 
   async function importFiles() { return addOpenedFiles(await openMarkdownFile()) }
   async function importFolder() { return addOpenedFiles(await openMarkdownFolder()) }
 
-  async function openDocument(id: string, options: { deferProgress?: boolean } = {}) {
+  async function openDocument(id: string, options: { deferProgress?: boolean; recordRecent?: boolean } = {}) {
     const document = documents.value.find((item) => item.id === id)
     if (!document) return
     const request = ++openDocumentRequest
@@ -272,6 +295,7 @@ export const useReaderStore = defineStore('reader', () => {
       if (request !== openDocumentRequest) return
     }
     const keepCleanMode = mode.value === 'clean'
+    if (options.recordRecent !== false) updateHiddenRecentDocuments([], [id])
     if (!openDocumentIds.value.includes(id)) openDocumentIds.value.push(id)
     currentDocumentId.value = id
     persistSession()
@@ -319,7 +343,7 @@ export const useReaderStore = defineStore('reader', () => {
     openDocumentIds.value = openDocumentIds.value.filter((item) => item !== id)
     if (!wasCurrent) { persistSession(); return }
     const nextId = openDocumentIds.value[index] ?? openDocumentIds.value[index - 1] ?? null
-    if (nextId) await openDocument(nextId)
+    if (nextId) await openDocument(nextId, { recordRecent: false })
     else {
       currentDocumentId.value = null
       mode.value = 'normal'
@@ -338,12 +362,13 @@ export const useReaderStore = defineStore('reader', () => {
     documents.value = documents.value.filter((item) => item.id !== id)
     openDocumentIds.value = openDocumentIds.value.filter((item) => item !== id)
     await deleteDocument(id)
+    updateHiddenRecentDocuments([], [id])
     if (!wasCurrent) {
       persistSession()
       return
     }
     const nextId = openDocumentIds.value[openIndex] ?? openDocumentIds.value[openIndex - 1] ?? null
-    if (nextId) await openDocument(nextId)
+    if (nextId) await openDocument(nextId, { recordRecent: false })
     else {
       currentDocumentId.value = null
       mode.value = 'normal'
@@ -380,7 +405,7 @@ export const useReaderStore = defineStore('reader', () => {
 
   const openDocuments = computed(() => openDocumentIds.value.map((id) => documents.value.find((document) => document.id === id)).filter((document): document is ReaderDocument => Boolean(document)))
 
-  return { documents, openDocuments, openDocumentIds, currentDocumentId, currentDocument, mode, activeRegionId, focusedRegionId, activeHeadingId, selection, progress, annotations, themes, activeThemeId, activeTheme, readerSettings, bootstrap, importFiles, importFolder, addOpenedFiles, reloadDocument, replaceDocumentSource, renameDocument, openDocument, closeDocument, removeDocument, setProgress, setFocusedRegion, clearFocusedRegion, focusRegion, clearFocus, setMode, addAnnotation, removeAnnotation, applyTheme, installTheme, updateSettings, getDocumentAssets: (id: string) => documentAssets.get(id) ?? {} }
+  return { documents, recentDocuments, openDocuments, openDocumentIds, currentDocumentId, currentDocument, mode, activeRegionId, focusedRegionId, activeHeadingId, selection, progress, annotations, themes, activeThemeId, activeTheme, readerSettings, bootstrap, importFiles, importFolder, addOpenedFiles, reloadDocument, replaceDocumentSource, renameDocument, openDocument, closeDocument, removeDocument, removeRecentDocuments: (ids: readonly string[]) => updateHiddenRecentDocuments(ids), setProgress, setFocusedRegion, clearFocusedRegion, focusRegion, clearFocus, setMode, addAnnotation, removeAnnotation, applyTheme, installTheme, updateSettings, getDocumentAssets: (id: string) => documentAssets.get(id) ?? {} }
 })
 
 function readSettings() {

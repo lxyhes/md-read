@@ -31,6 +31,14 @@ describe('second document pane', () => {
     const app = createApp({ render: () => h(SecondDocumentPane, state) })
     app.mount(host)
     unmount = () => app.unmount()
+    const toggle = host.querySelector<HTMLButtonElement>('.second-document-outline-toggle')!
+    const outline = document.getElementById(toggle.getAttribute('aria-controls')!)!
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(outline.style.display).toBe('none')
+    toggle.click()
+    await nextTick()
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    expect(outline.style.display).not.toBe('none')
     const buttons = host.querySelectorAll<HTMLButtonElement>('nav[aria-label="对照文档大纲"] button')
     expect([...buttons].map(button => button.textContent)).toEqual(['Right', 'Part', 'Deep'])
     expect(buttons[1].style.paddingInlineStart).toBe('24px')
@@ -50,6 +58,13 @@ describe('second document pane', () => {
     const viewport = host.querySelector<HTMLElement>('.reader-viewport')!
     viewport.style.scrollPaddingTop = '34px'
     viewport.dispatchEvent(new Event('scroll'))
+    await nextTick()
+    expect(buttons[1].getAttribute('aria-current')).toBe('location')
+    toggle.click()
+    await nextTick()
+    expect(outline.style.display).toBe('none')
+    expect(host.querySelector('.reader-viewport')).toBe(viewport)
+    toggle.click()
     await nextTick()
     expect(buttons[1].getAttribute('aria-current')).toBe('location')
     await chooseDocument(host, 'plain')

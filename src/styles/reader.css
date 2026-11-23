@@ -2238,6 +2238,17 @@ button:focus-visible,
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--ink);
 }
+.filesystem-tree.is-moving-file,
+.filesystem-tree.is-moving-file .filesystem-tree-row {
+  cursor: grabbing;
+  user-select: none;
+}
+.filesystem-tree-row.drop-target {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+  color: var(--ink);
+}
 .filesystem-tree-row:focus-visible {
   outline: 1px solid var(--accent);
   outline-offset: -1px;

@@ -45,7 +45,7 @@ import { defaultTokens } from './themes'
 import type { FileSystemTreeNode } from './components/FileSystemTree.vue'
 import ClipboardManager from './components/ClipboardManager.vue'
 import ContentSkeleton from './components/ContentSkeleton.vue'
-import { cachePastedRemoteImages, copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, downloadMarkdownImages, exportDocumentWithPandoc, importDocumentWithPandoc, importMarkdownAsset, importMarkdownAssetFromPath, listDirectoryFiles, listFileSystemEntries, markdownPathExists, openFileSystemDirectory, openMarkdownDirectory, openMarkdownFile, openMarkdownFolderAt, organizeMarkdownAssets, readMarkdownExportAssets, readMarkdownPath, removeMarkdownAsset, renameMarkdownAsset, renameMarkdownPath, resolveMarkdownAssetUrl, resolveMarkdownPath, saveBinaryExportFile, saveClipboardImage, saveExportFile, saveMarkdownFile, savePdfExportFile, selectDocxReference, selectFileSystemDirectory, selectMarkdownFolder, splitMarkdownLinkTarget, uploadMarkdownImage, watchDirectoryPath, watchMarkdownPath, writeMarkdownFile, type PandocExportFormat, type WorkspaceFile } from './fileService'
+import { cachePastedRemoteImages, copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, downloadMarkdownImages, exportDocumentWithPandoc, importDocumentWithPandoc, importMarkdownAsset, importMarkdownAssetFromPath, listDirectoryFiles, listFileSystemEntries, markdownPathExists, moveFilePath, openFileSystemDirectory, openMarkdownDirectory, openMarkdownFile, openMarkdownFolderAt, organizeMarkdownAssets, readMarkdownExportAssets, readMarkdownPath, removeMarkdownAsset, renameMarkdownAsset, renameMarkdownPath, resolveMarkdownAssetUrl, resolveMarkdownPath, saveBinaryExportFile, saveClipboardImage, saveExportFile, saveMarkdownFile, savePdfExportFile, selectDocxReference, selectFileSystemDirectory, selectMarkdownFolder, splitMarkdownLinkTarget, uploadMarkdownImage, watchDirectoryPath, watchMarkdownPath, writeMarkdownFile, type PandocExportFormat, type WorkspaceFile } from './fileService'
 import type { Annotation, HeadingItem, ReaderDocument, ReaderRegion, ViewerType } from './types'
 import { escapeHtml, isQuarkImageUrl, renderMathMl } from './markdown/shared'
 import { makeImplicitMarkdownHeadingsExplicit, parseMarkdown } from './parser'
@@ -62,7 +62,7 @@ import { directoryFiles } from './directoryFiles'
 import { reconcileFilesystemEntries } from './filesystemTreeRefresh'
 import { parentFilesystemPath, relativeDocumentTreePath } from './filesystemTreeScope'
 import { localEditorImagePath } from './fileService'
-import { orderRecentFolders, pinRecentFolder, rememberRecentFolder, removeRecentFolder, type RecentFolder } from './recentFolders'
+import { orderRecentFolders, pinRecentFolder, recentFolderContainsDocument, rememberRecentFolder, removeRecentFolder, type RecentFolder } from './recentFolders'
 import { createExportCss, createPortableHtml } from './exportPresentation'
 import { createPrintHtml, printPortableHtml } from './exportPrint'
 import { embedExportImages, rasterizeExportImages } from './exportImages'
@@ -350,6 +350,11 @@ const fileTreeMixFolders = ref(localStorage.getItem('moyue:file-tree-mix-folders
 const filesystemTree = ref<FileSystemTreeNode | null>(null)
 const filesystemTreeTarget = ref('')
 const filesystemTreeScope = ref<'system' | 'workspace'>('workspace')
+const filesystemDropPath = ref('')
+const filesystemDragging = ref(false)
+let filesystemDrag: { file: FileTreeEntry; pointerId: number; x: number; y: number } | null = null
+let filesystemMoveTarget = ''
+const filesystemMovingSource = ref('')
 const filesystemFiles = ref<WorkspaceFile[]>([])
 const filesystemFilesDirectory = ref<string | null>(null)
 const tabListOpen = ref(false)
@@ -636,9 +641,10 @@ const groupedOpenDocuments = computed(() => {
 })
 const filteredLibraryDocuments = computed(() => {
   const needle = librarySearchQuery.value.trim().toLowerCase()
-  if (!needle) return store.documents
-  return store.documents.filter((document) => document.title.toLowerCase().includes(needle))
+  if (!needle) return store.recentDocuments
+  return store.recentDocuments.filter((document) => document.title.toLowerCase().includes(needle))
 })
+const continueReadingDocument = computed(() => store.recentDocuments.find((document) => document.id === store.currentDocumentId))
 const favoriteDocuments = computed(() => store.documents.filter((document) => favoriteDocumentIds.value.includes(document.id)))
 const knowledgeDocuments = computed(() => store.documents.filter((document) => knowledgeDocumentIds.value.includes(document.id)))
 const selectedKnowledgeSourceCount = computed(() => knowledgeDocuments.value.filter((document) => selectedKnowledgeSourceIds.value.includes(document.id)).length)
@@ -915,6 +921,17 @@ function toggleRecentFolderPin(path: string) {
 function removeSavedRecentFolder(path: string) {
   recentFolders.value = removeRecentFolder(recentFolders.value, path)
   persistRecentFolders()
+  const documents = store.recentDocuments.filter((document) => recentFolderContainsDocument(path, document.path))
+  store.removeRecentDocuments(documents.map((document) => document.id))
+}
+async function clearRecentReading() {
+  const ids = store.recentDocuments.map((document) => document.id)
+  if (!ids.length || !(await confirmAppAction({
+    title: '清空最近阅读？',
+    description: `将移除全部 ${ids.length} 条最近阅读记录。原文件、收藏、批注和阅读进度都会保留。`,
+    confirmLabel: '清空记录',
+  }))) return
+  store.removeRecentDocuments(ids)
 }
 function isHiddenFile(name: string) { return name.startsWith('.') || name.startsWith('~$') }
 function globRegExp(glob: string) {
@@ -1546,7 +1563,7 @@ function isRealDocumentPath(path: string) {
 
 function saveEditor() {
   const document = store.documents.find(item => item.id === editorDocumentId.value)
-  if (!document || !editorOpen.value || editorSaving.value) return
+  if (!document || !editorOpen.value || editorSaving.value || filePathKey(document.path) === filesystemMovingSource.value) return
   saveIssue.value = undefined
   editorSaveTask.value = persistEditorChanges(document).finally(() => { editorSaveTask.value = null })
 }
@@ -4301,6 +4318,10 @@ function canManageMarkdownEntry(file: FileTreeEntry) {
   return isTauriRuntime() && hasRealFilesystemPath(file.path) && isMarkdownEntry(file)
 }
 
+function canMoveFile(file: FileTreeEntry) {
+  return isTauriRuntime() && !file.isDirectory && hasRealFilesystemPath(file.path)
+}
+
 function filesystemNodeAt(path: string, node = filesystemTree.value): FileSystemTreeNode | null {
   if (!node) return null
   if (filesystemPathKey(node.path) === filesystemPathKey(path)) return node
@@ -4554,7 +4575,8 @@ async function syncFilesystemTreeTarget(path: string) {
   }
   const root = filesystemTree.value
   const rootKey = root ? filesystemPathKey(root.path) : ''
-  if (filesystemTreeScope.value !== 'system' || !root || rootKey !== filesystemPathKey(rootPath)) {
+  const movingWithinTree = path === filesystemMoveTarget && filesystemNodeAt(rootPath, root)
+  if (filesystemTreeScope.value !== 'system' || !root || (rootKey !== filesystemPathKey(rootPath) && !movingWithinTree)) {
     filesystemTree.value = createFilesystemNode(rootPath, fileNameOf(rootPath) || rootPath, true)
   }
   filesystemTreeScope.value = 'system'
@@ -4599,22 +4621,107 @@ async function renameFileContextEntry() {
 async function moveFileContextEntry() {
   const file = fileContextMenu.value?.file
   fileContextMenu.value = null
-  if (!file || !canManageMarkdownEntry(file)) return
+  if (!file || !canMoveFile(file) || busyAction.value) return
   const directory = await selectFileSystemDirectory()
-  if (!directory || filePathKey(directory) === filePathKey(fileDirectoryPath(file.path))) return
+  if (directory) await moveFileToDirectory(file, directory)
+}
+
+async function moveFileToDirectory(file: FileTreeEntry, directory: string) {
+  const sourceDirectory = fileDirectoryPath(file.path)
+  if (busyAction.value || !canMoveFile(file) || !hasRealFilesystemPath(directory) ||
+    filePathKey(directory) === filePathKey(sourceDirectory)) return
+  const sourceKey = filePathKey(file.path)
+  if (editorOpen.value && filePathKey(editorDocumentPath.value) === sourceKey && (editorDirty.value || editorSaving.value)) {
+    notify('请先完成当前草稿的保存，再移动文件')
+    return
+  }
   const nextPath = joinFilePath(directory, file.name)
-  if (busyAction.value) return
   busyAction.value = 'file'
+  filesystemMovingSource.value = sourceKey
+  filesystemMoveTarget = nextPath
   try {
-    const movedSource = await renameMarkdownPath(file.path, nextPath)
-    if (file.documentId) await renameReaderDocument(file.documentId, nextPath, movedSource ?? undefined)
+    const movedSource = await moveFilePath(file.path, nextPath)
+    const document = store.documents.find(item => filePathKey(item.path) === filePathKey(file.path))
+    let syncFailed = false
+    try {
+      if (editorOpen.value && filePathKey(editorDocumentPath.value) === sourceKey) {
+        editorDocumentPath.value = nextPath
+        if (movedSource !== null && !editorDirty.value) {
+          editorOriginalSource.value = movedSource
+          editorSource.value = movedSource
+          editorConflict.value = false
+        }
+      }
+      if (document) await renameReaderDocument(document.id, nextPath, movedSource ?? undefined)
+      if (filePathKey(filesystemTreeTarget.value) === filePathKey(file.path)) filesystemTreeTarget.value = nextPath
+    } catch (error) {
+      syncFailed = true
+      console.error('移动文件后同步阅读记录失败', error)
+    }
     await refreshFileTree()
-    await refreshFilesystemDirectory(fileDirectoryPath(file.path))
+    await refreshFilesystemDirectory(sourceDirectory)
     await refreshFilesystemDirectory(directory)
-    notify(`已移动到 ${directory}`)
+    const destination = filesystemNodeAt(directory)
+    if (destination) await expandFilesystemTree(destination)
+    notify(`已移动到 ${directory}${syncFailed ? '，但阅读记录同步失败' : ''}`)
   } catch (error) {
-    notify(error instanceof Error ? error.message : '移动文件失败')
-  } finally { busyAction.value = null }
+    notify(`${file.name} 移动失败：${error instanceof Error ? error.message : String(error)}`)
+  } finally {
+    filesystemMoveTarget = ''
+    filesystemMovingSource.value = ''
+    busyAction.value = null
+  }
+}
+
+function filesystemRowAt(target: EventTarget | null, tree: HTMLElement) {
+  const row = target instanceof Element ? target.closest<HTMLElement>('[data-filesystem-path]') : null
+  return row && tree.contains(row) ? row : null
+}
+
+function startFilesystemDrag(event: PointerEvent) {
+  if (event.button !== 0 || !event.isPrimary || event.pointerType !== 'mouse' ||
+    busyAction.value || filesystemTreeScope.value !== 'system') return
+  const row = filesystemRowAt(event.target, event.currentTarget as HTMLElement)
+  const path = row?.dataset.filesystemPath
+  if (!path) return
+  const file = { path, name: fileNameOf(path), isDirectory: row.classList.contains('directory') }
+  if (canMoveFile(file)) {
+    filesystemDrag = { file, pointerId: event.pointerId, x: event.clientX, y: event.clientY }
+  }
+}
+
+function filesystemDropDirectory(event: PointerEvent, source: FileTreeEntry) {
+  const hover = document.elementFromPoint(event.clientX, event.clientY)
+  const target = filesystemRowAt(hover, event.currentTarget as HTMLElement)
+  const path = target?.dataset.filesystemPath
+  return path && target.classList.contains('directory') && filePathKey(path) !== filePathKey(fileDirectoryPath(source.path)) ? path : ''
+}
+
+function updateFilesystemDrag(event: PointerEvent) {
+  const drag = filesystemDrag
+  if (!drag || drag.pointerId !== event.pointerId) return
+  if (!filesystemDragging.value) {
+    if (Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 5) return
+    const tree = event.currentTarget as HTMLElement
+    tree.setPointerCapture(event.pointerId)
+    filesystemDragging.value = true
+  }
+  filesystemDropPath.value = filesystemDropDirectory(event, drag.file)
+}
+
+function cancelFilesystemDrag(event: PointerEvent) {
+  if (filesystemDrag?.pointerId !== event.pointerId) return
+  filesystemDrag = null
+  filesystemDragging.value = false
+  filesystemDropPath.value = ''
+}
+
+function finishFilesystemDrag(event: PointerEvent) {
+  const drag = filesystemDrag
+  if (!drag || drag.pointerId !== event.pointerId) return
+  const directory = filesystemDragging.value ? filesystemDropDirectory(event, drag.file) : ''
+  cancelFilesystemDrag(event)
+  if (directory) void moveFileToDirectory(drag.file, directory)
 }
 
 async function duplicateFileContextEntry() {
@@ -6398,9 +6505,10 @@ async function requestFullscreen() {
       <section v-if="view === 'library'" class="page library-page">
         <div class="library-hero reveal-1">
           <div><p class="section-kicker">本地阅读</p><h1>让想法停留得更久。</h1><p class="hero-copy">离线打开、安静阅读，所有内容都留在你的设备上。</p></div>
-          <button v-if="store.currentDocument" class="hero-continue" type="button" @click="chooseDocument(store.currentDocument.id)"><span>继续阅读</span><strong>{{ displayTitle(store.currentDocument.title) }}</strong><small>{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}% 已读 · 约 {{ store.currentDocument.estimatedReadMinutes }} 分钟</small><AppIcon name="chevron-right" :size="16" /></button>
+          <button v-if="continueReadingDocument" class="hero-continue" type="button" @click="chooseDocument(continueReadingDocument.id)"><span>继续阅读</span><strong>{{ displayTitle(continueReadingDocument.title) }}</strong><small>{{ Math.round((currentProgress?.scrollPercent ?? 0) * 100) }}% 已读 · 约 {{ continueReadingDocument.estimatedReadMinutes }} 分钟</small><AppIcon name="chevron-right" :size="16" /></button>
         </div>
-        <div class="page-toolbar reveal-2"><div class="library-toolbar-heading"><div><h2>最近阅读 <span>{{ filteredLibraryDocuments.length }}<i v-if="librarySearchQuery.trim()"> / {{ store.documents.length }}</i></span></h2></div><Input v-model="librarySearchQuery" class="library-search" allow-clear placeholder="搜索已打开的 Markdown…" :input-attrs="{ 'aria-label': '按名称搜索已打开的 Markdown' }"><template #prefix><AppIcon name="search" :size="14" /></template></Input></div><div class="toolbar-actions">
+        <div class="page-toolbar reveal-2"><div class="library-toolbar-heading"><div><h2>最近阅读 <span>{{ filteredLibraryDocuments.length }}<i v-if="librarySearchQuery.trim()"> / {{ store.recentDocuments.length }}</i></span></h2></div><Input v-model="librarySearchQuery" class="library-search" allow-clear placeholder="搜索已打开的 Markdown…" :input-attrs="{ 'aria-label': '按名称搜索已打开的 Markdown' }"><template #prefix><AppIcon name="search" :size="14" /></template></Input></div><div class="toolbar-actions">
+          <Button v-if="store.recentDocuments.length" class="ghost-button" type="secondary" :disabled="busyAction !== null" @click="clearRecentReading">清空最近阅读</Button>
           <AppDropdown panel-class="library-more-popover">
             <Button class="ghost-button" type="secondary"><template #icon><AppIcon name="copy" :size="14" /></template>更多导入</Button>
             <template #menu>
@@ -6430,7 +6538,18 @@ async function requestFullscreen() {
           <Button class="ghost-button" type="secondary" :loading="busyAction === 'folder'" :disabled="busyAction !== null" @click="openFolder"><template #icon><AppIcon name="folder" :size="14" /></template>打开文件夹</Button><Button class="primary-button" type="primary" :loading="busyAction === 'file'" :disabled="busyAction !== null" @click="openFile"><template #icon><AppIcon name="plus" :size="14" /></template>导入 Markdown</Button></div></div>
         <div class="document-grid reveal-3">
           <div v-if="librarySearchQuery.trim() && !filteredLibraryDocuments.length" class="library-empty"><AppIcon name="search" :size="20" /><strong>没有找到匹配的文档</strong><span>试试搜索其他 Markdown 名称</span></div>
-          <article v-for="document in filteredLibraryDocuments" :key="document.id" class="document-card"><button class="document-card-main" type="button" @click="chooseDocument(document.id)"><div class="card-topline"><span class="file-badge">MD</span><span>{{ document.id === store.documents[0]?.id ? '刚刚' : '本地文档' }}</span></div><h3>{{ displayTitle(document.title) }}</h3><p>{{ document.regions.length }} 个阅读区域 · {{ document.estimatedReadMinutes }} 分钟</p><div class="card-footer"><span>{{ document.path }}</span><span class="arrow"><AppIcon name="external" :size="14" /></span></div></button><button class="card-star" :class="{ active: favoriteDocumentIds.includes(document.id) }" type="button" :aria-label="favoriteDocumentIds.includes(document.id) ? '取消收藏' : '加入收藏夹'" :title="favoriteDocumentIds.includes(document.id) ? '取消收藏' : '加入收藏夹'" @click="toggleFavorite(document.id)"><AppIcon :name="favoriteDocumentIds.includes(document.id) ? 'star-filled' : 'star'" :size="15" /></button></article>
+          <article v-for="document in filteredLibraryDocuments" :key="document.id" class="document-card">
+            <button class="document-card-main" type="button" @click="chooseDocument(document.id)">
+              <div class="card-topline"><span class="file-badge">MD</span><span>{{ document.id === store.recentDocuments[0]?.id ? '刚刚' : '本地文档' }}</span></div>
+              <h3>{{ displayTitle(document.title) }}</h3>
+              <p>{{ document.regions.length }} 个阅读区域 · {{ document.estimatedReadMinutes }} 分钟</p>
+              <div class="card-footer"><span>{{ document.path }}</span><span class="arrow"><AppIcon name="external" :size="14" /></span></div>
+            </button>
+            <div class="card-actions">
+              <button class="card-action" type="button" :aria-label="`从最近阅读移除 ${displayTitle(document.title)}`" title="从最近阅读移除" @click="store.removeRecentDocuments([document.id])"><AppIcon name="close" :size="13" /></button>
+              <button class="card-action" :class="{ active: favoriteDocumentIds.includes(document.id) }" type="button" :aria-label="favoriteDocumentIds.includes(document.id) ? '取消收藏' : '加入收藏夹'" :title="favoriteDocumentIds.includes(document.id) ? '取消收藏' : '加入收藏夹'" @click="toggleFavorite(document.id)"><AppIcon :name="favoriteDocumentIds.includes(document.id) ? 'star-filled' : 'star'" :size="15" /></button>
+            </div>
+          </article>
           <button class="import-card" type="button" :disabled="busyAction !== null" @click="openFile"><span class="import-plus"><AppIcon name="plus" :size="22" /></span><span>{{ busyAction === 'file' ? '正在打开…' : '拖入 Markdown' }}<br /><small>或从本地打开</small></span></button>
           <button class="import-card" type="button" :disabled="busyAction !== null" @click="() => pasteFromClipboard()"><span class="import-plus"><AppIcon name="copy" :size="22" /></span><span>{{ busyAction === 'paste' ? '正在格式化…' : '粘贴内容' }}<br /><small>自动整理成 Markdown</small></span></button>
         </div>
@@ -6673,7 +6792,7 @@ async function requestFullscreen() {
             <button type="button" role="menuitem" @click="showDocumentTreeForEntry(fileContextMenu.file)"><AppIcon name="library" :size="13" />文档树</button>
             <div class="file-context-divider" />
             <button v-if="canManageMarkdownEntry(fileContextMenu.file)" type="button" role="menuitem" @click="renameFileContextEntry"><AppIcon name="edit" :size="13" />重命名</button>
-            <button v-if="canManageMarkdownEntry(fileContextMenu.file)" type="button" role="menuitem" @click="moveFileContextEntry"><AppIcon name="folder" :size="13" />移动到目录</button>
+            <button v-if="canMoveFile(fileContextMenu.file)" type="button" role="menuitem" @click="moveFileContextEntry"><AppIcon name="folder" :size="13" />移动到目录</button>
             <button v-if="canManageMarkdownEntry(fileContextMenu.file)" type="button" role="menuitem" @click="duplicateFileContextEntry"><AppIcon name="copy" :size="13" />创建副本</button>
             <template v-if="isTauriRuntime() && hasRealFilesystemPath(fileContextMenu.file.path)">
               <button type="button" role="menuitem" @click="openFileContextDirectory()"><AppIcon name="folder" :size="13" />{{ fileContextMenu.file.isDirectory ? '打开文件夹' : '打开所在目录' }}</button>
@@ -6741,7 +6860,11 @@ async function requestFullscreen() {
                 <div v-if="fileBrowserMode === 'tree'" class="file-tree-mix"><span>文件夹与文件混排</span><Switch v-model:checked="fileTreeMixFolders" size="small" aria-label="文件夹与文件混排" /></div>
               </div>
               <div v-if="fileBrowserMode === 'tree'" class="filesystem-tree-panel">
-                <div v-if="filesystemTree" class="filesystem-tree" :aria-label="filesystemTreeScope === 'system' ? '当前目录文档树' : '当前目录已载入文档'"><FileSystemTree :node="filesystemTree" :selected-path="filesystemTreeTarget" @toggle="toggleFilesystemNode" @open="openFilesystemTreeNode" @contextmenu="openFilesystemContextMenu" /></div>
+                <div v-if="filesystemTree" class="filesystem-tree" :class="{ 'is-moving-file': filesystemDragging }" :aria-label="filesystemTreeScope === 'system' ? '当前目录文档树' : '当前目录已载入文档'"
+                  @dragstart.prevent @pointerdown="startFilesystemDrag" @pointermove="updateFilesystemDrag" @pointerup="finishFilesystemDrag"
+                  @pointerleave="!filesystemDragging && cancelFilesystemDrag($event)" @pointercancel="cancelFilesystemDrag" @lostpointercapture="cancelFilesystemDrag">
+                  <FileSystemTree :node="filesystemTree" :selected-path="filesystemTreeTarget" :drop-path="filesystemDropPath" @toggle="toggleFilesystemNode" @open="openFilesystemTreeNode" @contextmenu="openFilesystemContextMenu" />
+                </div>
                 <p v-else class="file-browser-note"><AppIcon name="info" :size="13" />打开 Markdown 文件后显示所在目录</p>
               </div>
               <ContentSkeleton v-else-if="fileListLoading" class="file-loading-skeleton" label="正在读取文件列表" :rows="5" />
@@ -6941,7 +7064,7 @@ async function requestFullscreen() {
                 <div class="editor-draft-layout">
                 <EditorOutline id="editor-draft-outline" v-if="editorPreviewDocument?.headings.length" :document="editorPreviewDocument" :cursor="editorCursorOffset" :open="editorOutlineOpen" @jump="jumpToEditorHeading" @toggle="editorOutlineOpen = $event" />
                 <div class="editor-workspace" :class="[`editor-mode-${editorMode}`, { 'is-resizing-split': editorSplitResizing }]" :style="editorMode === 'split' ? { '--editor-split-ratio': `${editorSplitRatio}%` } : undefined">
-                  <section v-show="editorMode !== 'preview'" class="editor-main-pane" :class="editorMode === 'rich' ? 'editor-rich-pane' : 'editor-source-pane'">
+                  <section v-show="editorMode !== 'preview'" class="editor-main-pane" :inert="filesystemMovingSource === filePathKey(editorDocumentPath)" :class="editorMode === 'rich' ? 'editor-rich-pane' : 'editor-source-pane'">
                     <MarkdownEditor ref="editorTextarea" v-model="editorSource" :live="editorMode === 'rich'" :spellcheck="advancedSettings.spellcheck" :typewriter="advancedSettings.typewriterMode" :focus-mode="editorFocusMode" :resolve-url="url => resolveEditorAssetUrl(editorDocumentPath, url)" @keydown="onEditorKeydown" @paste="onEditorPaste" @copy="onEditorLineClipboard($event, false)" @cut="onEditorLineClipboard($event, true)" @caret="updateEditorCursor" @history="editorUndoAvailable = $event.undo; editorRedoAvailable = $event.redo" @message="notify" @link="openExternalLink" />
                     <div v-if="editorEmojiSuggestions.length" class="editor-emoji-menu" role="listbox" aria-label="Emoji 建议"><button v-for="emoji in editorEmojiSuggestions" :key="emoji.code" type="button" @click="insertEditorEmoji(emoji.value)"><span>{{ emoji.value }}</span>:{{ emoji.code }}:</button></div>
                     <div v-if="editorEmojiPickerOpen" class="editor-emoji-menu editor-symbol-menu" role="dialog" aria-label="表情与符号"><div class="editor-symbol-heading"><strong>表情与符号</strong><button type="button" aria-label="关闭表情与符号" @click="editorEmojiPickerOpen = false"><AppIcon name="close" :size="13" /></button></div><div class="editor-symbol-grid"><button v-for="symbol in editorSymbolChoices" :key="symbol" type="button" :aria-label="`插入 ${symbol}`" @click="insertEditorSymbol(symbol)">{{ symbol }}</button></div></div>

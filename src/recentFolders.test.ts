@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { orderRecentFolders, pinRecentFolder, rememberRecentFolder, removeRecentFolder } from './recentFolders'
+import { orderRecentFolders, pinRecentFolder, recentFolderContainsDocument, rememberRecentFolder, removeRecentFolder } from './recentFolders'
 
 describe('recent folders', () => {
   it('deduplicates a reopened path and keeps its pin state', () => {
@@ -19,5 +19,11 @@ describe('recent folders', () => {
     const saved = pinRecentFolder([{ path: 'E:/notes', pinned: false, openedAt: 1 }], 'e:\\notes', true)
     expect(saved[0]?.pinned).toBe(true)
     expect(removeRecentFolder(saved, 'E:/notes')).toEqual([])
+  })
+
+  it('matches documents in nested folders without matching sibling folder names', () => {
+    expect(recentFolderContainsDocument('E:\\Notes\\', 'e:/notes/sub/report.md')).toBe(true)
+    expect(recentFolderContainsDocument('E:\\Notes', 'e:/notes-backup/report.md')).toBe(false)
+    expect(recentFolderContainsDocument('E:/', 'e:/notes/report.md')).toBe(true)
   })
 })

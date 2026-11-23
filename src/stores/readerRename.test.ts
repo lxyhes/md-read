@@ -100,6 +100,34 @@ describe('path-only document rename', () => {
 
 
 describe('restoring saved reader documents', () => {
+  it('keeps cleared recent entries hidden across restoration and shows them when reopened', async () => {
+    vi.stubGlobal('document', {
+      documentElement: { style: { setProperty: vi.fn() } },
+      getElementById: () => ({ textContent: '' }),
+    })
+    const first = parseMarkdown('first.md', '# First')
+    const second = parseMarkdown('second.md', '# Second')
+    const store = useReaderStore()
+    store.documents = [first, second]
+    await store.openDocument(first.id)
+    store.removeRecentDocuments([first.id])
+    expect(store.recentDocuments.map(item => item.id)).toEqual([second.id])
+    store.removeRecentDocuments([second.id])
+    expect(store.recentDocuments).toEqual([])
+    expect(store.currentDocument?.id).toBe(first.id)
+    expect(deleteDocument).not.toHaveBeenCalled()
+
+    vi.mocked(loadDocumentSnapshotsAsync).mockResolvedValue([first, second])
+    const restored = useReaderStore(createPinia())
+    await restored.bootstrap()
+    expect(restored.recentDocuments).toEqual([])
+    expect(restored.currentDocument?.id).toBe(first.id)
+    await restored.openDocument(first.id)
+    expect(restored.recentDocuments.map(item => item.id)).toEqual([first.id])
+    await restored.addOpenedFiles([first, second])
+    expect(restored.recentDocuments.map(item => item.id)).toEqual([first.id, second.id])
+  })
+
   it('opens a dragged document even when persistence hits a storage quota', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     vi.mocked(saveDocumentSnapshot).mockRejectedValueOnce(new Error('quota exceeded'))

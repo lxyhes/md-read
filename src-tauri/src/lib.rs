@@ -1,6 +1,7 @@
 use arboard::{Clipboard, ImageData};
 mod web_preview;
 mod file_open;
+mod file_move;
 #[cfg(target_os = "windows")]
 pub use file_open::run_picker_child;
 mod knowledge_embedding;
@@ -1023,7 +1024,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
-        .invoke_handler(tauri::generate_handler![file_open::take_open_files, file_open::pick_markdown_files, knowledge_embedding::knowledge_embedding_digest, knowledge_embedding::knowledge_embed, tracked_directory, write_markdown_checked, remove_managed_asset, exit_app, allow_asset_directory, read_local_image, read_clipboard_image, read_clipboard_snapshot, read_clipboard_rich_text, read_clipboard_signature, write_clipboard_snapshot, read_remote_image, download_remote_image, upload_piclist_image, ollama_models, ollama_model_thinking, prepare_knowledge_voice, start_knowledge_voice, ai_chat, open_directory, reveal_file, open_external_url, web_preview::web_preview, pandoc_import_document, pandoc_export_document, export_html_to_pdf])
+        .invoke_handler(tauri::generate_handler![file_open::take_open_files, file_open::pick_markdown_files, file_move::move_path_without_overwrite, file_move::move_markdown_with_assets, knowledge_embedding::knowledge_embedding_digest, knowledge_embedding::knowledge_embed, tracked_directory, write_markdown_checked, remove_managed_asset, exit_app, allow_asset_directory, read_local_image, read_clipboard_image, read_clipboard_snapshot, read_clipboard_rich_text, read_clipboard_signature, write_clipboard_snapshot, read_remote_image, download_remote_image, upload_piclist_image, ollama_models, ollama_model_thinking, prepare_knowledge_voice, start_knowledge_voice, ai_chat, open_directory, reveal_file, open_external_url, web_preview::web_preview, pandoc_import_document, pandoc_export_document, export_html_to_pdf])
         .build(tauri::generate_context!())
         .expect("error while building Moyue application")
         .run(|_app, _event| {

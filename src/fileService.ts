@@ -3,6 +3,7 @@ import { appDataDir, configDir } from '@tauri-apps/api/path'
 import { open, save } from '@tauri-apps/plugin-dialog'
 import { copyFile, mkdir, readDir, readFile, readTextFile, rename, stat, watch, writeFile, writeTextFile } from '@tauri-apps/plugin-fs'
 import { renderMarkdownFragment } from './markdown/fragment'
+import { markdownMediaDestinations } from './markdown/mediaDestinations'
 import { isQuarkImageUrl } from './markdown/shared'
 import { promoteClipboardImageLinks } from './pasteMarkdown'
 
@@ -576,6 +577,47 @@ export async function renameMarkdownPath(path: string, nextPath: string): Promis
   return updatedSource
 }
 
+export async function moveFilePath(path: string, nextPath: string): Promise<string | null> {
+  if (!isTauri()) throw new Error('浏览器预览无法移动文件，请使用桌面端打开')
+  if (/\.(md|markdown|qmd)$/i.test(path)) {
+    const source = await readTextFile(path)
+    const destination = normalizeLocalPath(dirnameOf(nextPath)).replace(/\/$/, '')
+    const assetFolder = `moved-${crypto.randomUUID()}`
+    const copies = new Map<string, string>()
+    const replacements: Array<{ from: number; to: number; url: string }> = []
+    for (const { from, to, url } of markdownMediaDestinations(source)) {
+      const asset = localEditorImagePath(path, url.trim())
+      if (!asset || (!isImagePath(asset) && !/\.(?:mp4|webm|mov|m4v|ogv|ogg|vtt)$/i.test(asset))
+        || !isLocalMarkdownAssetPath(path, asset)) continue
+      const insideDestination = isLocalMarkdownAssetPath(nextPath, asset)
+      if (insideDestination && localEditorImagePath(nextPath, url.trim()) === asset) continue
+      let relative = asset.slice(destination.length + 1)
+      if (!insideDestination) {
+        let copy = copies.get(asset)
+        if (!copy) {
+          if (!(await stat(asset).catch(() => null))?.isFile) continue
+          copy = `.moyue-assets/${assetFolder}/${copies.size + 1}-${asset.split('/').pop()}`
+          copies.set(asset, copy)
+        }
+        relative = copy
+      }
+      const suffix = source.slice(from, to).match(/[?#].*$/)?.[0] ?? ''
+      const encoded = relative.split('/').map(segment => encodeURIComponent(segment).replace(/[!'()*]/g, char => `%${char.charCodeAt(0).toString(16)}`)).join('/')
+      replacements.push({ from, to, url: withRelativePathPrefix(encoded, url.startsWith('./')) + suffix })
+    }
+    if (replacements.length) {
+      let nextSource = source
+      for (const { from, to, url } of replacements.sort((a, b) => b.from - a.from)) {
+        nextSource = nextSource.slice(0, from) + url + nextSource.slice(to)
+      }
+      await invoke('move_markdown_with_assets', { path, nextPath, expectedSource: source, nextSource, assetFolder, assets: [...copies.keys()] })
+      return nextSource
+    }
+  }
+  await invoke('move_path_without_overwrite', { path, nextPath })
+  return null
+}
+
 export async function copyMarkdownPath(path: string, nextPath: string): Promise<void> {
   if (!isTauri()) throw new Error('浏览器预览无法创建文件副本，请使用桌面端打开')
   if (!/\.(md|markdown|qmd)$/i.test(path) || !/\.(md|markdown|qmd)$/i.test(nextPath)) throw new Error('只能复制 Markdown / Quarto 文件')
@@ -746,7 +788,7 @@ async function moveRenamedMediaDirectory(path: string, nextPath: string): Promis
     try {
       if (!(await stat(folder.old)).isDirectory) continue
       await mkdir(dirnameOf(folder.next), { recursive: true })
-      await rename(folder.old, folder.next)
+      await invoke('move_path_without_overwrite', { path: folder.old, nextPath: folder.next })
       replacements.push({ old: folder.oldReference, next: folder.nextReference })
     } catch {
       // A missing or conflicting asset folder should not block file rename.

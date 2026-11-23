@@ -21,6 +21,7 @@ const props = withDefaults(defineProps<{
   node: FileSystemTreeNode
   depth?: number
   selectedPath?: string
+  dropPath?: string
 }>(), {
   depth: 0,
   selectedPath: '',
@@ -82,7 +83,8 @@ watch(() => props.node.expanded, revealSelectedRow)
       type="button"
       class="filesystem-tree-row"
       ref="selectedRow"
-      :class="{ directory: node.isDirectory, expanded: node.expanded, selected: pathKey(node.path) === pathKey(selectedPath) }"
+      :class="{ directory: node.isDirectory, expanded: node.expanded, selected: pathKey(node.path) === pathKey(selectedPath), 'drop-target': node.path === dropPath }"
+      :data-filesystem-path="node.path"
       :style="{ paddingLeft: `${4 + depth * 14}px` }"
       :title="node.path"
       :aria-current="!node.isDirectory && pathKey(node.path) === pathKey(selectedPath) ? 'page' : undefined"
@@ -99,7 +101,7 @@ watch(() => props.node.expanded, revealSelectedRow)
     <div v-if="node.expanded && node.error" class="filesystem-tree-error" :style="{ paddingLeft: `${34 + depth * 14}px` }">{{ node.error }}</div>
     <ContentSkeleton v-if="node.loading" :label="`正在读取 ${node.name}`" layout="compact" :rows="3" :style="{ paddingLeft: `${34 + depth * 14}px` }" />
     <div v-else-if="node.expanded && node.children?.length" class="filesystem-tree-children">
-      <FileSystemTree v-for="child in node.children" :key="child.path" :node="child" :depth="depth + 1" :selected-path="selectedPath" @toggle="emit('toggle', $event)" @open="emit('open', $event)" @contextmenu="(event, item) => emit('contextmenu', event, item)" />
+      <FileSystemTree v-for="child in node.children" :key="child.path" :node="child" :depth="depth + 1" :selected-path="selectedPath" :drop-path="dropPath" @toggle="emit('toggle', $event)" @open="emit('open', $event)" @contextmenu="(event, item) => emit('contextmenu', event, item)" />
     </div>
     <div v-else-if="node.isDirectory && node.expanded && !node.error" class="filesystem-tree-empty" :style="{ paddingLeft: `${34 + depth * 14}px` }">空目录</div>
   </div>
