@@ -32,13 +32,7 @@ it('preserves the migrated source and cites its new location when a pending answ
   app.mount(host)
   try {
     await vi.waitFor(() => expect(host.querySelector('.save-pasted-button')).not.toBeNull())
-    host.querySelector<HTMLButtonElement>('button[aria-label="更多工具"]')!.click()
-    const tool = await vi.waitFor(() => {
-      const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(item => item.textContent?.includes('AI 知识库'))
-      expect(item).toBeDefined()
-      return item!
-    })
-    tool.click()
+    host.querySelector<HTMLButtonElement>('.workspace-rail button[title="AI 知识库"]')!.click()
     await nextTick()
     const input = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="询问知识库"]')!
     input.value = '重试次数是多少？'

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, getCurrentInstance, h, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
-import { Alert, ConfigProvider, Dropdown, Modal, theme as antTheme, SelectOption as Option } from 'ant-design-vue'
+import { Alert, ConfigProvider, Modal, theme as antTheme, SelectOption as Option } from 'ant-design-vue'
 import { Bubble } from 'ant-design-x-vue'
 import zhCN from 'ant-design-vue/es/locale/zh_CN'
 import Select from './components/AppSelect.vue'
@@ -389,16 +389,7 @@ const fileContextMenu = ref<{ file: FileTreeEntry; x: number; y: number } | null
 const fileContextMenuElement = ref<HTMLElement | null>(null)
 const fileProperties = ref<FileTreeEntry | null>(null)
 const deleteConfirmation = ref<{ files: FileTreeEntry[] } | null>(null)
-const railToolsOpen = ref(false)
-const railToolsTrigger = ref<HTMLButtonElement>()
 const readerMoreTrigger = ref<HTMLButtonElement>()
-const railTools = [
-  { key: 'clipboard', label: '剪贴板', icon: 'clipboard' },
-  { key: 'knowledge', label: 'AI 知识库', icon: 'library' },
-  { key: 'notes', label: '笔记', icon: 'edit' },
-  { key: 'themes', label: '主题', icon: 'palette' },
-  { key: 'plugins', label: '插件（即将上线）', icon: 'plugin' },
-] as const
 let tabMenuTrigger: HTMLElement | null = null
 let fileMenuTrigger: HTMLElement | null = null
 let readerModalTrigger: HTMLElement | null = null
@@ -3648,10 +3639,9 @@ async function copyKnowledgeCitation(citation: KnowledgeCitation) {
 }
 function citationStatusLabel(citation: KnowledgeCitation) {
   const state = citationState(citation, store.documents)
-  if (state === 'updated') return '原文已更新 · 保存的是回答时摘录'
-  if (state === 'removed') return '来源文档已移除 · 保留回答时摘录'
-  if (state === 'position-missing') return '原文位置已变化 · 保留回答时摘录'
-  return '原文未变 · 点击定位'
+  if (state === 'updated') return '原文已更新，显示回答时的摘录'
+  if (state === 'removed') return '来源已移除，显示回答时的摘录'
+  if (state === 'position-missing') return '原文位置已变化，显示回答时的摘录'
 }
 async function openKnowledgeCitation(citation: KnowledgeCitation) {
   const regionId = citationRegionId(citation, store.documents)
@@ -4054,19 +4044,6 @@ function switchDocument(delta: number) {
 
 function tabLabel(document: { title: string; path: string }) {
   return fileNameOf(document.path)
-}
-
-function dismissRailTools() {
-  railToolsOpen.value = false
-  railToolsTrigger.value?.focus()
-}
-
-function chooseRailTool(key: string) {
-  dismissRailTools()
-  if (key === 'knowledge') openKnowledge()
-  else if (key === 'notes') openNotes()
-  else if (key === 'clipboard' || key === 'themes') view.value = key
-  else notify('插件市场将在下一阶段接入')
 }
 
 function dismissTabContextMenu() {
@@ -6477,14 +6454,11 @@ async function requestFullscreen() {
         <button class="rail-item" type="button" title="搜索文档" aria-label="搜索文档" @click="openSearch('all')"><AppIcon name="search" :size="20" /><span>搜索</span></button>
         <div class="rail-divider" />
         <button class="rail-item" :class="{ active: view === 'favorites' }" type="button" title="收藏夹" aria-label="收藏夹" @click="openFavorites"><AppIcon name="star" :size="20" /><span>收藏</span></button>
-        <Dropdown v-model:open="railToolsOpen" :trigger="['click']" placement="bottomRight">
-          <button ref="railToolsTrigger" class="rail-item" :class="{ active: ['clipboard', 'knowledge', 'notes', 'themes'].includes(view) }" type="button" title="更多工具" aria-label="更多工具" aria-haspopup="menu" :aria-expanded="railToolsOpen" @keydown.down.prevent="railToolsOpen = true" @keydown.esc.stop="dismissRailTools"><AppIcon name="more" :size="20" /><span>更多</span></button>
-          <template #overlay>
-            <div class="rail-tools-menu">
-              <AppActionMenu v-if="railToolsOpen" label="更多工具" :actions="railTools" :active="view" @choose="chooseRailTool" @dismiss="dismissRailTools" />
-            </div>
-          </template>
-        </Dropdown>
+        <button class="rail-item" :class="{ active: view === 'clipboard' }" :aria-current="view === 'clipboard' ? 'page' : undefined" type="button" title="剪贴板" @click="view = 'clipboard'"><AppIcon name="clipboard" :size="20" /><span>剪贴板</span></button>
+        <button class="rail-item" :class="{ active: view === 'knowledge' }" :aria-current="view === 'knowledge' ? 'page' : undefined" type="button" title="AI 知识库" @click="openKnowledge"><AppIcon name="library" :size="20" /><span>AI 知识库</span></button>
+        <button class="rail-item" :class="{ active: view === 'notes' }" :aria-current="view === 'notes' ? 'page' : undefined" type="button" title="笔记" @click="openNotes"><AppIcon name="edit" :size="20" /><span>笔记</span></button>
+        <button class="rail-item" :class="{ active: view === 'themes' }" :aria-current="view === 'themes' ? 'page' : undefined" type="button" title="主题" @click="view = 'themes'"><AppIcon name="palette" :size="20" /><span>主题</span></button>
+        <button class="rail-item" type="button" title="插件（即将上线）" aria-label="插件（即将上线）" @click="notify('插件市场将在下一阶段接入')"><AppIcon name="plugin" :size="20" /><span>插件<small>即将上线</small></span></button>
         <div class="rail-spacer" />
         <button class="rail-item" :class="{ active: view === 'settings' }" type="button" title="设置" aria-label="设置" @click="view = 'settings'"><AppIcon name="settings" :size="20" /><span>设置</span></button>
       </div>
@@ -6586,17 +6560,30 @@ async function requestFullscreen() {
                 <button v-if="message.role === 'assistant'" class="text-button knowledge-copy-answer" type="button" @click="copyKnowledgeAnswer(message)"><AppIcon name="copy" :size="12" />复制回答与引用</button>
                 <details v-if="message.citations.length" class="knowledge-citations">
                   <summary class="knowledge-citations-summary">
-                    <span>引用原文</span>
+                    <span class="knowledge-citations-title"><AppIcon name="quote" :size="14" />引用原文</span>
                     <small>{{ message.citations.length }} 条 · {{ new Set(message.citations.map(citation => citation.documentId)).size }} 篇资料</small>
                     <span class="knowledge-citations-toggle" aria-hidden="true" />
                     <AppIcon class="knowledge-citations-chevron" name="chevron-right" :size="12" aria-hidden="true" />
                   </summary>
                   <div class="knowledge-citations-list">
-                    <Collapse v-for="citation in message.citations" :key="`${message.id}-${citation.index}`" class="knowledge-citation"><CollapseItem key="content">
-                      <template #header><div class="knowledge-citation-top"><strong>[{{ citation.index }}] {{ displayTitle(citation.documentTitle) }}</strong><small>{{ citationStatusLabel(citation) }}</small></div><p class="knowledge-citation-preview">{{ citation.excerpt }}</p></template>
-                      <p class="knowledge-citation-full">{{ citation.excerpt }}</p>
-                      <div class="knowledge-citation-actions"><button class="text-button" type="button" :disabled="['removed', 'position-missing'].includes(citationState(citation, store.documents))" @click="openKnowledgeCitation(citation)"><AppIcon name="external" :size="12" />定位原文</button><button class="text-button" type="button" @click="copyKnowledgeCitation(citation)"><AppIcon name="copy" :size="12" />复制摘录</button></div>
-                    </CollapseItem></Collapse>
+                    <details v-for="citation in message.citations" :key="citation.index" class="knowledge-citation">
+                      <summary class="knowledge-citation-summary">
+                        <span class="knowledge-citation-index">[{{ citation.index }}]</span>
+                        <span class="knowledge-citation-text">
+                          <strong>{{ displayTitle(citation.documentTitle) }}</strong>
+                          <span class="knowledge-citation-preview">{{ citation.excerpt }}</span>
+                        </span>
+                        <AppIcon class="knowledge-citations-chevron" name="chevron-right" :size="12" />
+                      </summary>
+                      <div class="knowledge-citation-content">
+                        <blockquote>{{ citation.excerpt }}</blockquote>
+                        <small class="knowledge-citation-status">{{ citationStatusLabel(citation) }}</small>
+                        <div class="knowledge-citation-actions">
+                          <button class="text-button" type="button" :disabled="['removed', 'position-missing'].includes(citationState(citation, store.documents))" @click="openKnowledgeCitation(citation)"><AppIcon name="external" :size="12" />定位原文</button>
+                          <button class="text-button" type="button" @click="copyKnowledgeCitation(citation)"><AppIcon name="copy" :size="12" />复制摘录</button>
+                        </div>
+                      </div>
+                    </details>
                   </div>
                 </details>
               </article>

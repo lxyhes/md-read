@@ -1542,7 +1542,7 @@ a:active > .app-icon-vector { transform: scale(.92); }
   min-width: 180px;
   text-align: left;
 }
-.app-shell :is(.knowledge-citation, .knowledge-source-overflow).ant-collapse {
+.app-shell .knowledge-source-overflow.ant-collapse {
   border-color: var(--border);
   background: var(--surface);
   color: var(--ink);
@@ -2072,15 +2072,9 @@ a:active > .app-icon-vector { transform: scale(.92); }
 .app-shell .knowledge-source-overflow > summary {
   font-size: 12px;
 }
-.app-shell .knowledge-citations-summary > span:first-child,
-.app-shell .knowledge-citation-top strong,
-.app-shell .knowledge-citation-preview,
 .app-shell .knowledge-source-preview-row {
   font-size: 12px;
 }
-.app-shell .knowledge-citations-summary small,
-.app-shell .knowledge-citations-toggle,
-.app-shell .knowledge-citation-top small,
 .app-shell .knowledge-source-preview-list > small,
 .app-shell .knowledge-source-preview-empty {
   font-size: 11px;
@@ -2492,8 +2486,9 @@ a:active > .app-icon-vector { transform: scale(.92); }
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  padding: 14px 5px 10px;
+  padding: 14px 3px 10px;
   overflow-y: auto;
+  scrollbar-width: thin;
   background: transparent;
 }
 .rail-item {
@@ -2529,6 +2524,11 @@ a:active > .app-icon-vector { transform: scale(.92); }
 .rail-item > span:not(.app-icon) {
   font: 500 11px/1 var(--ui-font);
   white-space: nowrap;
+}
+.rail-item > span > small {
+  display: block;
+  margin-top: 2px;
+  font-size: 9px;
 }
 .rail-item:focus-visible {
   outline: 2px solid var(--accent);
@@ -4604,7 +4604,6 @@ body .app-shell.is-editor-studio .reader-layout {
   outline-offset: -2px;
 }
 
-.rail-tools-menu { min-width: 168px; }
 .tab-context-menu .app-action-menu.ant-menu {
   border: 0;
   background: transparent;
