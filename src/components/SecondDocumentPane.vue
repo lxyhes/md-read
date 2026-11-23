@@ -135,11 +135,8 @@ function onKeydown(event: KeyboardEvent) {
 .second-document-select:hover, .second-document-select:focus-within { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 5%, var(--surface)); }
 .second-document-select > .app-icon { position: absolute; z-index: 1; pointer-events: none; color: var(--muted); }
 .second-document-select > .app-icon:first-child { left: 10px; }
-.second-document-select > .app-icon:last-child { right: 10px; }
 .second-document-doc-select { width: 100%; min-width: 0; }
-:deep(.second-document-doc-select.ant-select-single) { min-height: 34px; padding-inline: 30px; border: 0; border-radius: inherit; background: transparent; color: var(--ink); font: 500 12px/1.5 var(--ui-font); }
-:deep(.second-document-doc-select .ant-select-selector) { padding-inline: 0; }
-:deep(.second-document-doc-select.ant-select-single .ant-select-selection-item) { font: inherit; }
+:deep(.second-document-doc-select.ant-select-single) { --select-inset-start: 30px; min-height: 34px; border: 0; border-radius: inherit; background: transparent; color: var(--ink); font: 500 12px/1.5 var(--ui-font); }
 :deep(.second-document-doc-select.ant-select-single:focus-within) { box-shadow: none; }
 .second-document-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; margin-left: auto; }
 .second-document-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 34px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--muted); font: 12px/1.5 var(--ui-font); white-space: nowrap; }

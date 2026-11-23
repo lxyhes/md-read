@@ -1535,7 +1535,7 @@ a:active > .app-icon-vector { transform: scale(.92); }
   min-width: 180px;
   text-align: left;
 }
-.app-shell :is(.knowledge-citations, .knowledge-citation, .knowledge-source-overflow).ant-collapse {
+.app-shell :is(.knowledge-citation, .knowledge-source-overflow).ant-collapse {
   border-color: var(--border);
   background: var(--surface);
   color: var(--ink);
@@ -1575,7 +1575,7 @@ a:active > .app-icon-vector { transform: scale(.92); }
 .app-shell .ant-select-single.ant-select-focused {
   z-index: 1;
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
+  box-shadow: 0 0 0 var(--control-focus-ring, 2px) color-mix(in srgb, var(--accent) 16%, transparent);
 }
 .app-shell :is(.moyue-input-field, .moyue-textarea-field) :is(.ant-input, .moyue-textarea) {
   color: inherit;
@@ -1617,58 +1617,59 @@ a:active > .app-icon-vector { transform: scale(.92); }
 }
 .ant-input-clear-icon-hidden { visibility: hidden !important; }
 .moyue-textarea-field > .moyue-textarea { display: block; }
-.moyue-select.ant-select-single { display: flex; align-items: stretch; }
-.moyue-select.ant-select-single.ant-select:not(.ant-select-customize-input) > .ant-select-selector {
-  height: auto;
-  min-width: 0;
-  align-items: center;
-}
-.moyue-select.ant-select-single .ant-select-selection-search-input { height: 100%; }
 .moyue-select.ant-select-single.ant-select-open:not(.ant-select-show-search) .ant-select-selection-item { color: inherit; }
 /* Packaged WKWebView can lose Ant Design's runtime-injected CSS. Keep single-select
    layout self-contained so the selected value never spills over adjacent controls. */
 .app-shell .moyue-select.ant-select-single {
+  --control-focus-ring: 1px;
+  --select-inset-end: 8px;
   position: relative;
   display: inline-flex;
   align-items: center;
   box-sizing: border-box;
+  padding: 0;
   overflow: hidden;
   vertical-align: middle;
 }
-.app-shell .moyue-select.ant-select-single > .ant-select-selector {
+.app-shell .moyue-select.ant-select-single.ant-select-show-arrow {
+  --select-inset-end: 26px;
+}
+.app-shell .moyue-select.ant-select-single:not(.ant-select-customize-input) > .ant-select-selector {
+  position: relative;
   display: flex;
   flex: 1 1 auto;
   align-self: stretch;
   align-items: center;
   box-sizing: border-box;
+  width: auto;
   min-width: 0;
   height: auto;
+  padding: 0;
   overflow: hidden;
 }
-.app-shell .moyue-select.ant-select-single .ant-select-selection-search,
-.app-shell .moyue-select.ant-select-single .ant-select-selection-search-input {
+.app-shell .moyue-select.ant-select-single:not(.ant-select-customize-input) > .ant-select-selector > .ant-select-selection-search {
   position: absolute;
   inset: 0;
-  width: 100%;
-  height: auto;
+  inset-inline: var(--select-inset-start, 8px) var(--select-inset-end);
 }
 .app-shell .moyue-select.ant-select-single .ant-select-selection-search-input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
   margin: 0;
-  padding: 0 22px 0 8px;
+  padding: 0;
   border: 0;
   outline: 0;
   background: transparent;
   color: var(--ink);
-  font: 12px/32px var(--ui-font);
+  font: inherit;
 }
-.app-shell .moyue-select.ant-select-single .ant-select-selection-item,
-.app-shell .moyue-select.ant-select-single .ant-select-selection-placeholder {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
+.app-shell .moyue-select.ant-select-single > .ant-select-selector > :is(.ant-select-selection-item, .ant-select-selection-placeholder) {
+  display: block;
+  flex: 1 1 auto;
   min-width: 0;
-  padding: 0 22px 0 8px;
+  padding: 0;
+  padding-inline: var(--select-inset-start, 8px) var(--select-inset-end);
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -1677,9 +1678,10 @@ a:active > .app-icon-vector { transform: scale(.92); }
 .app-shell .moyue-select.ant-select-single .ant-select-arrow {
   position: absolute;
   top: 50%;
-  right: 7px;
+  inset-inline-end: 10px;
   display: inline-flex;
   align-items: center;
+  margin-top: 0;
   transform: translateY(-50%);
   pointer-events: none;
 }
@@ -1727,7 +1729,6 @@ a:active > .app-icon-vector { transform: scale(.92); }
   box-sizing: border-box;
   min-height: 34px;
   height: 34px;
-  padding: 0 9px;
   border: 0;
   border-bottom: 1px solid var(--border);
   border-radius: 0;
@@ -1740,9 +1741,9 @@ a:active > .app-icon-vector { transform: scale(.92); }
   border-bottom-color: color-mix(in srgb, var(--accent) 52%, var(--border));
   background: color-mix(in srgb, var(--accent) 5%, transparent);
 }
-.app-shell .theme-filter.ant-select-single.ant-select-focused {
+.app-shell .theme-filter.ant-select-single:is(:focus-within, .ant-select-focused) {
   border-bottom-color: var(--accent);
-  box-shadow: 0 2px 0 color-mix(in srgb, var(--accent) 28%, transparent);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--accent) 28%, transparent);
 }
 .app-shell .theme-search .moyue-input-field {
   min-height: 34px;
@@ -1806,16 +1807,8 @@ a:active > .app-icon-vector { transform: scale(.92); }
   font: inherit;
 }
 .app-shell .settings-page .setting-input .ant-select-single {
+  --select-inset-start: var(--settings-control-inset);
   margin-top: 0;
-  padding-inline: 0;
-}
-.app-shell .settings-page .setting-input .ant-select-single.ant-select > .ant-select-selector {
-  padding-inline: var(--settings-control-inset);
-  border: 0;
-  font: inherit;
-}
-.app-shell .settings-page .setting-input .ant-select-single .ant-select-selection-search {
-  inset-inline-start: var(--settings-control-inset);
 }
 .app-shell .settings-page .setting-input > .ant-input-number {
   width: 100%;

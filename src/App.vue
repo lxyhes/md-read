@@ -6465,8 +6465,13 @@ async function requestFullscreen() {
                 </Bubble>
                 <small v-if="message.keywordFallback" class="knowledge-ask-hint">本轮使用关键词检索</small>
                 <button v-if="message.role === 'assistant'" class="text-button knowledge-copy-answer" type="button" @click="copyKnowledgeAnswer(message)"><AppIcon name="copy" :size="12" />复制回答与引用</button>
-                <Collapse v-if="message.citations.length" class="knowledge-citations"><CollapseItem key="content">
-                  <template #header><span>引用原文</span><small>{{ message.citations.length }} 条 · {{ new Set(message.citations.map(citation => citation.documentId)).size }} 篇资料</small><span class="knowledge-citations-toggle" /></template>
+                <details v-if="message.citations.length" class="knowledge-citations">
+                  <summary class="knowledge-citations-summary">
+                    <span>引用原文</span>
+                    <small>{{ message.citations.length }} 条 · {{ new Set(message.citations.map(citation => citation.documentId)).size }} 篇资料</small>
+                    <span class="knowledge-citations-toggle" aria-hidden="true" />
+                    <AppIcon class="knowledge-citations-chevron" name="chevron-right" :size="12" aria-hidden="true" />
+                  </summary>
                   <div class="knowledge-citations-list">
                     <Collapse v-for="citation in message.citations" :key="`${message.id}-${citation.index}`" class="knowledge-citation"><CollapseItem key="content">
                       <template #header><div class="knowledge-citation-top"><strong>[{{ citation.index }}] {{ displayTitle(citation.documentTitle) }}</strong><small>{{ citationStatusLabel(citation) }}</small></div><p class="knowledge-citation-preview">{{ citation.excerpt }}</p></template>
@@ -6474,7 +6479,7 @@ async function requestFullscreen() {
                       <div class="knowledge-citation-actions"><button class="text-button" type="button" :disabled="['removed', 'position-missing'].includes(citationState(citation, store.documents))" @click="openKnowledgeCitation(citation)"><AppIcon name="external" :size="12" />定位原文</button><button class="text-button" type="button" @click="copyKnowledgeCitation(citation)"><AppIcon name="copy" :size="12" />复制摘录</button></div>
                     </CollapseItem></Collapse>
                   </div>
-                </CollapseItem></Collapse>
+                </details>
               </article>
               <ContentSkeleton v-if="aiBusy" class="knowledge-message is-assistant knowledge-answer-skeleton" label="正在检索本次资料并整理答案" layout="text" :rows="3" />
             </div>

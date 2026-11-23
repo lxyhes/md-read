@@ -3130,7 +3130,14 @@ body.is-resizing-outline * {
   }
 }
 .reader-edit-actions { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
-.file-filter-toolbar { display: flex; flex-wrap: wrap; gap: 10px 8px; padding: 12px 0 10px; border-bottom: 1px solid var(--border); }
+.file-filter-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  padding-block: 12px 10px;
+  padding-inline-end: clamp(0px, 100% - 140px, 8px);
+  border-bottom: 1px solid var(--border);
+}
 .file-filter-toolbar .ant-select { flex: 1 1 120px; min-width: 0; }
 .file-filter-toolbar .file-sort-select { flex-basis: 90px; }
 .file-filter-toolbar :is(.file-glob-input, .file-tree-mix) { flex: 0 0 100%; min-width: 0; }

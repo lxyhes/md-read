@@ -56,7 +56,6 @@ const custom = computed(() => props.modelValue && !fontPresets.some((font) => fo
 .font-select-label > span { flex-shrink: 0; }
 .font-select-label :deep(.ant-select) { min-width: 154px; max-width: 100%; }
 .font-select-label :deep(.ant-select-single) { min-height: 34px; border-color: var(--border); border-radius: 6px; background: var(--surface-raised); color: var(--ink); font: inherit; }
-.font-select-label :deep(.ant-select-single:focus-within) { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 15%, transparent); }
 .font-sample:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .font-picker-note { margin: 12px 0 18px; color: var(--muted); font-size: 11px; }
 .font-samples { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
