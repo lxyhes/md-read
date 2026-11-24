@@ -2,6 +2,11 @@ type ClipboardDocument = Document
 
 export type ClipboardFormat = 'default' | 'baidu-netdisk-ai' | 'wechat-article'
 
+export function isWordClipboardHtml(html: string) {
+  return /<meta\b[^>]*\bMicrosoft Word\b|\bxmlns:w\s*=\s*["']urn:schemas-microsoft-com:office:word["']/i.test(html)
+    || /\bclass\s*=\s*["']?\s*Mso(?:Normal|ListParagraph\w*|Title|Heading[1-6])\b|\bmso-list\s*:\s*l\d+\s+level\d+/i.test(html)
+}
+
 function inlineText(value: string, node?: Node) {
   let element = node?.parentElement ?? null
   while (element) {
@@ -297,7 +302,7 @@ function renderTable(table: HTMLTableElement) {
   ].join('\n')
 }
 
-function renderList(list: HTMLElement, depth = 0): string {
+function renderList(list: HTMLElement, indentation = ''): string {
   const ordered = list.tagName.toLowerCase() === 'ol'
   const start = ordered ? Number(list.getAttribute('start') ?? 1) || 1 : 1
   const items = Array.from(list.children).filter((child): child is HTMLElement => child.tagName.toLowerCase() === 'li')
@@ -305,11 +310,77 @@ function renderList(list: HTMLElement, depth = 0): string {
     const nested = Array.from(item.children).filter((child) => ['ul', 'ol'].includes(child.tagName.toLowerCase())) as HTMLElement[]
     const content = Array.from(item.childNodes).filter((child) => !(child.nodeType === Node.ELEMENT_NODE && ['ul', 'ol'].includes((child as HTMLElement).tagName.toLowerCase()))).map((child) => child.nodeType === Node.ELEMENT_NODE ? render(child as HTMLElement) : inline(child)).join('').trim()
     const prefix = ordered ? `${start + index}. ` : '- '
-    const indentation = '  '.repeat(depth)
-    const nestedMarkdown: string = nested.map((child) => renderList(child, depth + 1)).filter(Boolean).join('\n')
-    const indentedContent = content.replace(/\n/g, `\n${indentation}${' '.repeat(prefix.length)}`)
+    const continuation = indentation + ' '.repeat(prefix.length)
+    const nestedMarkdown: string = nested.map((child) => renderList(child, continuation)).filter(Boolean).join('\n')
+    const indentedContent = content.replace(/\n/g, `\n${continuation}`)
     return `${indentation}${prefix}${indentedContent}${nestedMarkdown ? `\n${nestedMarkdown}` : ''}`
   }).join('\n')
+}
+
+function prepareWordClipboard(body: HTMLElement) {
+  const document = body.ownerDocument
+  for (const paragraph of body.querySelectorAll<HTMLElement>('p')) {
+    const style = paragraph.getAttribute('style') ?? ''
+    const outline = style.match(/\bmso-outline-level\s*:\s*([1-6])\b/i)?.[1]
+    const heading = outline ?? paragraph.className.match(/\bMsoHeading([1-6])\b/i)?.[1]
+      ?? (paragraph.classList.contains('MsoTitle') ? '1' : '')
+    if (!heading) continue
+    const element = document.createElement(`h${heading}`)
+    element.append(...paragraph.childNodes)
+    paragraph.replaceWith(element)
+  }
+
+  for (const parent of [body, ...body.querySelectorAll<HTMLElement>('div, section, td, th')]) {
+    const levels: { id: string; level: number; list: HTMLElement; item: HTMLElement; next: number }[] = []
+    for (const paragraph of Array.from(parent.children)) {
+      const match = paragraph.matches('p') && paragraph.getAttribute('style')?.match(/\bmso-list\s*:\s*(l\d+)\s+level(\d+)(?:\s+(lfo\d+))?/i)
+      const marker = match && paragraph.querySelector('[style*="mso-list" i][style*="Ignore" i]')
+      const label = marker ? marker.textContent?.trim() ?? '' : ''
+      const number = label.match(/^(\d{1,9})[.)、]$/)?.[1]
+      const tag = number ? 'ol' : 'ul'
+      if (!match || !marker || (!number && !/^[•◦▪▫●○■□·§o\uf000-\uf0ff]$/.test(label))) {
+        levels.length = 0
+        continue
+      }
+
+      const id = `${match[1]}:${match[3] ?? ''}`
+      const level = Number(match[2])
+      while (levels.length && levels[levels.length - 1].level > level) levels.pop()
+      let current = levels[levels.length - 1]
+      const nested = current && current.level < level
+      if (current && !nested && (current.id !== id || current.list.localName !== tag || (number && current.next !== Number(number)))) {
+        levels.pop()
+        current = levels[levels.length - 1]
+      }
+      const item = document.createElement('li')
+      if (!current || current.level !== level) {
+        const list = document.createElement(tag)
+        if (number) list.setAttribute('start', number)
+        if (current) current.item.append(list)
+        else paragraph.before(list)
+        current = { id, level, list, item, next: 0 }
+        levels.push(current)
+      }
+      marker.remove()
+      item.append(...paragraph.childNodes)
+      current.list.append(item)
+      current.item = item
+      current.next = Number(number) + 1
+      paragraph.remove()
+    }
+  }
+
+  for (const paragraph of body.querySelectorAll('td > p + p, th > p + p')) {
+    paragraph.before(document.createElement('br'))
+  }
+  for (const parent of body.querySelectorAll('div, section, td, th')) {
+    for (const child of Array.from(parent.childNodes)) {
+      if (child.nodeType !== Node.TEXT_NODE || child.textContent?.trim()) continue
+      const blockTags = 'p, h1, h2, h3, h4, h5, h6, ul, ol, table, div, section, br'
+      if ((child.previousSibling as Element | null)?.matches?.(blockTags)
+        || (child.nextSibling as Element | null)?.matches?.(blockTags)) child.remove()
+    }
+  }
 }
 
 function classAndId(element: HTMLElement) {
@@ -1030,8 +1101,11 @@ export function htmlToMarkdown(html: string) {
   return convertClipboardHtml(html)
 }
 
-function convertClipboardHtml(html: string, wechatArticle = false, plainText = '') {
+function convertClipboardHtml(html: string, wechatArticle = false, plainText = '', word = !wechatArticle && isWordClipboardHtml(html)) {
   if (!html.trim() || typeof DOMParser === 'undefined') return ''
+  if (word) {
+    html = html.replace(/<!--\[if\s+!supportLists\]\s*>([\s\S]*?)<!\[endif\]\s*-->/gi, '$1')
+  }
   const document = new DOMParser().parseFromString(html, 'text/html') as ClipboardDocument
   if (wechatArticle) {
     const comparable = (value: string) => value.normalize('NFKC').replace(/[\s\u200b-\u200d\uFEFF]/g, '')
@@ -1039,10 +1113,19 @@ function convertClipboardHtml(html: string, wechatArticle = false, plainText = '
     if (plainPrefix && !comparable(document.body.textContent ?? '').includes(plainPrefix)) return ''
   }
   const body = removeClipboardNoise(document, wechatArticle)
+  if (word) {
+    const comparable = (value: string) => value.replace(/[\s\u200b\ufeff]/g, '')
+    const firstLine = plainText.split(/\r\n?|\n/).find((line) => line.trim())?.trim() ?? ''
+    const visible = comparable(body.textContent ?? '')
+    const label = firstLine.replace(/^(?:\d+[.)、]|[•◦▪▫●○■□·\uf000-\uf0ff])\s+/, '')
+    if (firstLine && ![firstLine, label].some((line) => visible.includes(comparable(line).slice(0, 24)))) return ''
+    prepareWordClipboard(body)
+  }
   prepareClipboardImageCaptions(body)
   if (wechatArticle) prepareWechatArticle(body)
   prepareClipboardCallouts(body)
   const source = Array.from(body.childNodes).filter((node) => node.nodeType !== Node.TEXT_NODE || Boolean(node.textContent?.trim())).map((node) => node.nodeType === Node.ELEMENT_NODE ? render(node as HTMLElement) : inline(node)).join('')
+  if (word) return normalizeMarkdown(source)
   const normalized = restoreClipboardStepCards(normalizeMarkdown(stripAccidentalClipboardIndent(source)))
   return wechatArticle ? restoreWechatCodeCards(normalized) : normalizeArticleSections(stripDecorativeHeadingStars(normalized))
 }
@@ -1062,6 +1145,7 @@ export function formatClipboardToMarkdown(html: string, text: string, format: Cl
     const baiduMarkdown = formatBaiduNetdiskAiToMarkdown(promotedText)
     if (baiduMarkdown) return insertClipboardImages(baiduMarkdown, html)
   }
+  if (isWordClipboardHtml(html)) return convertClipboardHtml(html, false, text, true) || formatPastedText(promotedText)
   const clipboardMarkdown = clipboardHtmlMatchesPlainText(html, promotedText) ? htmlToMarkdown(html) : ''
   if (/^!\[.*\]\(.*\)\\\n\*.+\*$/m.test(clipboardMarkdown)) return insertClipboardImages(clipboardMarkdown, html)
   if (/^> \[!(?:STEPS|NOTE|TIP|IMPORTANT|WARNING|CAUTION|INFO|SUCCESS|FAILURE|DANGER|BUG|EXAMPLE|QUOTE)\](?:[ \t].*)?$/m.test(clipboardMarkdown)) return insertClipboardImages(clipboardMarkdown, html)

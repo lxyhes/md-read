@@ -97,7 +97,7 @@ it('moves an open file from the tree into a collapsed folder and keeps the tree 
   }
 })
 
-it('keeps parent and sibling folders visible when opening a nested document', async () => {
+it('keeps parent and sibling folders visible when opening a nested document and reloading', async () => {
   const root = 'E:/notes'
   const nested = `${root}/project`
   const sibling = `${root}/archive`
@@ -118,7 +118,7 @@ it('keeps parent and sibling folders visible when opening a nested document', as
   vi.spyOn(store, 'bootstrap').mockResolvedValue()
   await store.addOpenedFiles([outside, nestedFile, rootFile].map(path => ({ path, source: '# Draft' })), { persist: false })
   const host = document.body.appendChild(document.createElement('div'))
-  const app = createApp(App).use(pinia)
+  let app = createApp(App).use(pinia)
   app.mount(host)
   const row = (path: string) => host.querySelector<HTMLButtonElement>(`[data-filesystem-path="${path}"]`)
   try {
@@ -131,6 +131,15 @@ it('keeps parent and sibling folders visible when opening a nested document', as
     expect(row(nestedFile)?.getAttribute('aria-current')).toBe('page')
     expect(row(rootFile)).not.toBeNull()
     expect(row(siblingFile)).not.toBeNull()
+
+    app.unmount()
+    app = createApp(App).use(pinia)
+    app.mount(host)
+    await vi.waitFor(() => {
+      expect(row(nestedFile)?.getAttribute('aria-current')).toBe('page')
+      expect(row(rootFile)).not.toBeNull()
+      expect(row(siblingFile)).not.toBeNull()
+    })
 
     await store.openDocument(store.documents.find(document => document.path === outside)!.id)
     await vi.waitFor(() => expect(row(outside)?.getAttribute('aria-current')).toBe('page'))

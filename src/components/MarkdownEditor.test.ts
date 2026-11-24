@@ -12,6 +12,39 @@ import MarkdownEditor from './MarkdownEditor.vue'
 
 afterEach(() => { vi.restoreAllMocks(); document.body.replaceChildren() })
 
+it('ends a short pointer selection when the user scrolls and preserves the wheel event', () => {
+  const host = document.createElement('div')
+  document.body.append(host)
+  const app = createApp({ render: () => h(MarkdownEditor, {
+    modelValue: '短距离拖选', live: false, spellcheck: false, typewriter: false, focusMode: false,
+    resolveUrl: (url: string) => url,
+  }) })
+  app.mount(host)
+  try {
+    const content = host.querySelector('.cm-content')!
+    content.addEventListener('mousedown', event => event.stopImmediatePropagation(), { capture: true, once: true })
+    const release = vi.fn()
+    document.addEventListener('mouseup', release, { once: true })
+    content.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, buttons: 1, clientX: 50 }))
+    content.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, buttons: 1, clientX: 53 }))
+
+    const wheel = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 60 })
+    content.dispatchEvent(wheel)
+    expect(release).toHaveBeenCalledOnce()
+    expect(wheel.defaultPrevented).toBe(false)
+
+    const move = new MouseEvent('mousemove', { bubbles: true, cancelable: true, buttons: 1 })
+    content.dispatchEvent(move)
+    expect(move.defaultPrevented).toBe(true)
+    content.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, buttons: 0 }))
+    const nextMove = new MouseEvent('mousemove', { bubbles: true, cancelable: true, buttons: 1 })
+    content.dispatchEvent(nextMove)
+    expect(nextMove.defaultPrevented).toBe(false)
+  } finally {
+    app.unmount()
+  }
+})
+
 describe('editor initialization', () => {
   it('falls back to editable source without changing the draft when live rendering fails', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})

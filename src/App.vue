@@ -51,7 +51,7 @@ import { escapeHtml, isQuarkImageUrl, renderMathMl } from './markdown/shared'
 import { makeImplicitMarkdownHeadingsExplicit, parseMarkdown } from './parser'
 import { getDocumentStatistics } from './documentStats'
 import { asciiDiagramToMermaid, asciiTreeToTree, markdownToTree } from './asciiDiagram'
-import { formatClipboardImage, formatClipboardToMarkdown, htmlToMarkdown, normalizeMixedOrderedListSource, promoteClipboardImageLinks, suggestPastedMarkdownName, type ClipboardFormat } from './pasteMarkdown'
+import { formatClipboardImage, formatClipboardToMarkdown, htmlToMarkdown, isWordClipboardHtml, normalizeMixedOrderedListSource, promoteClipboardImageLinks, suggestPastedMarkdownName, type ClipboardFormat } from './pasteMarkdown'
 import { matchQuickOpen } from './quickOpen'
 import { indentSelection, codeIndentInsertion, isFenceBacktickInput, preserveLineEndings, selectedLineRange, removeSelectedLines, setHeadingLines, setOrderedListLines, toggleHeadingLines, toggleInlineMarkup } from './editorInput'
 import { createEditorHistory, recordEditorHistory, stepEditorHistory } from './editorHistory'
@@ -385,6 +385,8 @@ const fileTreeMixFolders = ref(localStorage.getItem('moyue:file-tree-mix-folders
 const filesystemTree = ref<FileSystemTreeNode | null>(null)
 const filesystemTreeTarget = ref('')
 const filesystemTreeScope = ref<'system' | 'workspace'>('workspace')
+const filesystemTreeSessionKey = 'moyue:filesystem-tree'
+const restoringFilesystemRoot = shallowRef<FileSystemTreeNode>()
 const filesystemDropPath = ref('')
 const filesystemDragging = ref(false)
 let filesystemDrag: { file: FileTreeEntry; pointerId: number; x: number; y: number } | null = null
@@ -765,13 +767,22 @@ const outlineTreeRows = computed(() => {
     }
   })
 })
+const outlineCharacterColors = ['#74bfad', '#e6a7b0', '#edb77b', '#a4bd80', '#b2a0de', '#ce9c85', '#8eb8e8', '#e3cb78', '#86c6ce']
+const outlineCharacterShapeCount = 12
+const outlineCharacterFaceCount = 5
 const outlineChapterCharacters = computed(() => {
   const rows = outlineTreeRows.value
   const roots = rows.filter(row => row.level === 0)
   const sections = roots.length === 1 && roots[0].heading.depth === 1 && roots[0].hasChildren
     ? rows.filter(row => row.level === 1)
     : roots
-  return new Map(sections.map((row, index) => [row.heading.id, index % 4]))
+  return new Map(sections.map((row, index) => {
+    const shape = index % outlineCharacterShapeCount
+    const group = Math.floor(index / outlineCharacterShapeCount)
+    const colorIndex = (shape * 2 + group) % outlineCharacterColors.length
+    const face = (shape * 2 + colorIndex * 2 + Math.floor(group / outlineCharacterColors.length)) % outlineCharacterFaceCount
+    return [row.heading.id, { shape, color: outlineCharacterColors[colorIndex], face }]
+  }))
 })
 const outlineChapterByHeading = computed(() => {
   const chapters = new Map<string, string>()
@@ -2118,9 +2129,8 @@ async function onEditorPaste(event: ClipboardEvent) {
   const clipboard = event.clipboardData
   const imageItem = Array.from(clipboard?.items ?? []).find((item) => item.kind === 'file' && /^image\//i.test(item.type))
   const plainText = clipboard?.getData('text/plain') ?? ''
-  const hasText = Boolean(clipboard?.getData('text/html') || plainText)
-  if (!imageItem && hasText) {
-    let html = clipboard?.getData('text/html') ?? ''
+  let html = clipboard?.getData('text/html') ?? ''
+  if ((html || plainText) && (!imageItem || (plainText.trim() && isWordClipboardHtml(html)))) {
     if (!html && isTauriRuntime()) {
       event.preventDefault(); event.stopPropagation()
       const sourceAtPaste = editorSource.value
@@ -2133,7 +2143,8 @@ async function onEditorPaste(event: ClipboardEvent) {
         notify('文档已变化，未插入内容，请重新粘贴')
         return
       }
-      const normalized = normalizeMixedOrderedListSource(promoteClipboardImageLinks(formatClipboardToMarkdown(html, plainText)))
+      const formatted = promoteClipboardImageLinks(formatClipboardToMarkdown(html, plainText))
+      const normalized = isWordClipboardHtml(html) ? { source: formatted } : normalizeMixedOrderedListSource(formatted)
       insertEditorTextAt(normalized.source, start, end)
       return
     }
@@ -4694,17 +4705,51 @@ async function showParentFilesystemDirectory() {
 
 async function showSystemFilesystemTarget(path: string, rootPath: string) {
   const root = filesystemTree.value
-  const currentRootKey = root && filesystemPathKey(root.path)
-  const requestedRootKey = filesystemPathKey(rootPath)
-  if (!root || filesystemTreeScope.value !== 'system' ||
-    (requestedRootKey !== currentRootKey && !requestedRootKey.startsWith(`${currentRootKey}/`))) {
-    filesystemTree.value = createFilesystemNode(rootPath, fileNameOf(rootPath), true)
+  const saved = !root ? readFilesystemTreeSession() : null
+  const restore = saved && filesystemPathWithin(rootPath, saved.root)
+  if (!root || filesystemTreeScope.value !== 'system' || !filesystemPathWithin(rootPath, root.path)) {
+    const directory = restore ? saved.root : rootPath
+    filesystemTree.value = createFilesystemNode(directory, fileNameOf(directory), true)
   }
   filesystemTreeScope.value = 'system'
   filesystemTreeTarget.value = path
   const visibleRoot = filesystemTree.value!
-  await revealFilesystemTarget(visibleRoot, path)
+  if (restore) {
+    restoringFilesystemRoot.value = visibleRoot
+    try {
+      const expanded = new Set(saved.expanded.map(filesystemPathKey))
+      await Promise.all([restoreFilesystemBranches(visibleRoot, expanded), revealFilesystemTarget(visibleRoot, path)])
+    } finally {
+      if (restoringFilesystemRoot.value === visibleRoot) restoringFilesystemRoot.value = undefined
+    }
+  } else await revealFilesystemTarget(visibleRoot, path)
   return visibleRoot
+}
+
+function filesystemPathWithin(path: string, directory: string) {
+  const key = filesystemPathKey(path)
+  const parent = filesystemPathKey(directory)
+  return key === parent || key.startsWith(`${parent}/`)
+}
+
+function readFilesystemTreeSession() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(filesystemTreeSessionKey) ?? 'null') as { root?: unknown; expanded?: unknown } | null
+    if (typeof saved?.root !== 'string' || !hasRealFilesystemPath(saved.root) || !Array.isArray(saved.expanded)) return null
+    const expanded = saved.expanded.filter((path: unknown): path is string => typeof path === 'string')
+    return { root: saved.root, expanded }
+  } catch { return null }
+}
+
+async function restoreFilesystemBranches(node: FileSystemTreeNode, expanded: Set<string>) {
+  if (!node.isDirectory || !expanded.has(filesystemPathKey(node.path))) return
+  await expandFilesystemTree(node)
+  await Promise.all((node.children ?? []).map(child => restoreFilesystemBranches(child, expanded)))
+}
+
+function expandedFilesystemPaths(node: FileSystemTreeNode): string[] {
+  if (!node.expanded) return []
+  return [node.path, ...(node.children ?? []).flatMap(expandedFilesystemPaths)]
 }
 
 async function openFilesystemTreeForFile(file: FileTreeEntry) {
@@ -5199,6 +5244,13 @@ watch([fileSort, fileTreeMixFolders], ([sort, mixFolders]) => {
   localStorage.setItem('moyue:file-sort', sort)
   localStorage.setItem('moyue:file-tree-mix-folders', String(mixFolders))
   if (filesystemTree.value) sortFilesystemTree(filesystemTree.value)
+})
+watch(() => {
+  const root = filesystemTree.value
+  if (!root || filesystemTreeScope.value !== 'system' || root === restoringFilesystemRoot.value) return
+  return { root: root.path, expanded: expandedFilesystemPaths(root) }
+}, (session) => {
+  if (session) localStorage.setItem(filesystemTreeSessionKey, JSON.stringify(session))
 })
 watch([sidebarFilter, sidebarGlob], async () => {
   const root = filesystemTree.value
@@ -7204,7 +7256,8 @@ async function requestFullscreen() {
                   <button class="outline-heading-button" :data-outline-id="row.heading.id" type="button"
                     :class="{ active: store.activeHeadingId === row.heading.id, 'has-character': row.character !== undefined, 'active-chapter': activeOutlineChapterId === row.heading.id }"
                     :aria-current="store.activeHeadingId === row.heading.id ? 'location' : undefined" @click="scrollToHeading(row.heading.regionId)">
-                    <span v-if="row.character !== undefined" class="outline-character" :data-variant="row.character" aria-hidden="true" />
+                    <span v-if="row.character" class="outline-character" :data-shape="row.character.shape" :data-face="row.character.face"
+                      :style="{ '--character-hue': row.character.color }" aria-hidden="true" />
                     <span class="outline-heading-label">{{ row.heading.text }}</span>
                   </button>
                 </div>

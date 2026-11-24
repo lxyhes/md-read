@@ -434,7 +434,12 @@ export function liveMarkdown(options: LiveOptions) {
   }
   return StateField.define<DecorationSet>({
     create: build,
-    update(value, transaction) { return transaction.docChanged || transaction.selection || syntaxTree(transaction.startState) !== syntaxTree(transaction.state) ? build(transaction.state) : value },
+    update(value, transaction) {
+      if (transaction.docChanged) return build(transaction.state)
+      // Expanding source under a moving pointer changes which text is at the same screen coordinates.
+      if (transaction.isUserEvent('select.pointer') && !transaction.state.selection.main.empty) return value
+      return transaction.selection || syntaxTree(transaction.startState) !== syntaxTree(transaction.state) ? build(transaction.state) : value
+    },
     provide: field => EditorView.decorations.from(field),
   })
 }

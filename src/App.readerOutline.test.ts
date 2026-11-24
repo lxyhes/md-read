@@ -82,12 +82,16 @@ it('indents skipped heading depths by their actual nesting and collapses the mat
     expect(chapterButtons()[0].classList.contains('active-chapter')).toBe(true)
     expect(chapterButtons()[0].hasAttribute('aria-current')).toBe(false)
 
+    const additionalSections = Array.from({ length: 22 }, (_, index) => `## Chapter ${index + 3}`)
     await store.addOpenedFiles([{
       path: 'titled-outline.md',
-      source: '# Document title\n\n## Setup\n\n### Install\n\n## Usage',
+      source: ['# Document title', '## Setup', '### Install', '## Usage', ...additionalSections].join('\n\n'),
     }], { persist: false })
     await nextTick()
-    expect(chapterButtons().map(button => button.textContent?.trim())).toEqual(['Setup', 'Usage'])
+    expect(chapterButtons().slice(0, 2).map(button => button.textContent?.trim())).toEqual(['Setup', 'Usage'])
+    const characters = [...host.querySelectorAll<HTMLElement>('.outline-character')]
+    expect(new Set(characters.map(character => character.dataset.shape)).size).toBe(12)
+    expect(new Set(characters.map(character => [character.dataset.shape, character.dataset.face, character.style.getPropertyValue('--character-hue')].join('/'))).size).toBe(24)
   } finally {
     app.unmount()
     host.remove()

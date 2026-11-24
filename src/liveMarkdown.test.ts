@@ -6,6 +6,31 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { liveMarkdown } from './liveMarkdown'
 import { renderMarkdownFragment } from './parser'
 
+it('keeps the live table layout stable during pointer selection and still exposes the table source on demand', () => {
+  const host = document.createElement('div')
+  const source = '正文\n\n## 标题\n\n| 步骤 | 说明 |\n| --- | --- |\n| 读取 | 内容 |\n\n结尾'
+  const view = new EditorView({
+    doc: source,
+    extensions: [markdown({ base: markdownLanguage }), liveMarkdown({ resolveUrl: value => value, openLink: () => {}, message: () => {} })],
+    parent: host,
+  })
+
+  const table = host.querySelector('.live-table-widget')!
+  expect(table).not.toBeNull()
+  expect(host.querySelector('.live-heading')?.textContent).toBe('标题')
+  view.dispatch({ selection: { anchor: 1 }, userEvent: 'select.pointer' })
+  const head = source.indexOf('读取')
+  view.dispatch({ selection: { anchor: 1, head }, userEvent: 'select.pointer' })
+  expect(view.state.selection.main.head).toBe(head)
+  expect(host.querySelector('.live-table-widget')).toBe(table)
+  expect(host.querySelector('.live-heading')?.textContent).toBe('标题')
+
+  Array.from(table.querySelectorAll('button')).find(button => button.textContent === '源码')!.click()
+  expect(host.querySelector('.live-table-widget')).toBeNull()
+  expect(host.querySelector('.cm-content')?.textContent).toContain('| 读取 | 内容 |')
+  view.destroy()
+})
+
 it('renders quote bars and hard breaks without exposing inactive Markdown markers', () => {
   const host = document.createElement('div')
   const source = '> 引用\\\n> 第二行\n\n正文'

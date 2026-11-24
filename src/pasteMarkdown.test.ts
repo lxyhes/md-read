@@ -4,6 +4,44 @@ import courseSource from '../docs/fixtures/直播电商选品-原文.md?raw'
 import { formatClipboardToMarkdown } from './pasteMarkdown'
 import { parseMarkdown, renderMarkdownFragment } from './parser'
 
+describe('Word clipboard paste', () => {
+  it('keeps Word headings, inline formatting, nested numbering and table paragraphs', () => {
+    const html = `<div class="WordSection1">
+      <p class="MsoHeading2">研发 &amp; 交付计划</p>
+      <p class="MsoNormal">保留 <b>加粗</b>、<i>斜体</i>和<a href="https://example.com/guide">文档链接</a></p>
+      <p class="MsoListParagraph" style="mso-list:l0 level1 lfo1"><!--[if !supportLists]><span style="mso-list:Ignore">5.<span>&nbsp;</span></span><![endif]-->准备资料</p>
+      <p class="MsoListParagraph" style="mso-list:l0 level2 lfo1"><span style="mso-list:Ignore">&nbsp;</span>确认范围</p>
+      <p class="MsoListParagraph" style="mso-list:l0 level1 lfo1"><span style="mso-list:Ignore">6.&nbsp;</span>正式发布</p>
+      <table><tr><td>状态</td><td>说明</td></tr><tr><td>待办</td><td><p>第一行</p><p>第二行</p></td></tr></table>
+    </div>`
+    const text = '研发 & 交付计划\n保留 加粗、斜体和文档链接\n5. 准备资料\n• 确认范围\n6. 正式发布'
+    const source = formatClipboardToMarkdown(html, text)
+    expect(source).toBe([
+      '## 研发 & 交付计划',
+      '',
+      '保留 **加粗**、*斜体*和[文档链接](https://example.com/guide)',
+      '',
+      '5. 准备资料',
+      '   - 确认范围',
+      '6. 正式发布',
+      '',
+      '| 状态 | 说明 |',
+      '| --- | --- |',
+      '| 待办 | 第一行<br>第二行 |',
+    ].join('\n'))
+    const rendered = parseMarkdown('word-paste.md', source).regions.map(region => region.html).join('')
+    const document = new DOMParser().parseFromString(rendered, 'text/html')
+    const list = document.querySelector('ol[start="5"]')
+    expect(list?.querySelector('li > ul > li')?.textContent).toBe('确认范围')
+    expect(list?.lastElementChild?.textContent).toBe('正式发布')
+    expect(document.querySelector('tbody td:nth-child(2)')?.innerHTML).toMatch(/第一行<br\s*\/?>第二行/)
+  })
+
+  it('uses plain text when the Word HTML and text describe different selections', () => {
+    expect(formatClipboardToMarkdown('<p class="MsoNormal"><b>Unrelated text</b></p>', 'New clipboard text')).toBe('New clipboard text')
+  })
+})
+
 describe('WeChat article paste', () => {
   it('keeps centered or semantic image captions attached through paste and rendering', () => {
     const html = `<p><img src="https://example.com/diagram.png" alt="流程图"></p>

@@ -14,6 +14,7 @@ import {
 } from './shared'
 
 function sanitizeRawHtml(value: string, resolveUrl: MarkdownUrlResolver) {
+  if (/^<br\s*\/?>$/i.test(value)) return '<br />'
   if (typeof window === 'undefined') return escapeHtml(value)
   if (/^<img\s[^<>]*>\s*$/i.test(value)) {
     const image = new DOMParser().parseFromString(value, 'text/html').querySelector('img')
