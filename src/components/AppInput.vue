@@ -9,6 +9,7 @@ const field = ref<HTMLElement>()
 defineExpose({
   focus: () => field.value?.querySelector('input')?.focus(),
   select: () => field.value?.querySelector('input')?.select(),
+  setSelectionRange: (start: number, end: number) => field.value?.querySelector('input')?.setSelectionRange(start, end),
 })
 </script>
 

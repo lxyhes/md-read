@@ -388,7 +388,6 @@ const filesystemTreeScope = ref<'system' | 'workspace'>('workspace')
 const filesystemDropPath = ref('')
 const filesystemDragging = ref(false)
 let filesystemDrag: { file: FileTreeEntry; pointerId: number; x: number; y: number } | null = null
-let filesystemMoveTarget = ''
 const filesystemMovingSource = ref('')
 const filesystemFiles = ref<WorkspaceFile[]>([])
 const filesystemFilesDirectory = ref<string | null>(null)
@@ -4445,21 +4444,27 @@ function createWorkspaceTree(targetPath = store.currentDocument?.path ?? ''): Fi
   return root
 }
 
-async function loadFilesystemNode(node: FileSystemTreeNode) {
-  if (!node.isDirectory || node.children !== null || node.loading) return
+const filesystemNodeLoads = new WeakMap<FileSystemTreeNode, Promise<void>>()
+function loadFilesystemNode(node: FileSystemTreeNode) {
+  if (!node.isDirectory || node.children !== null) return
+  const pending = filesystemNodeLoads.get(node)
+  if (pending) return pending
   node.loading = true
   node.error = ''
-  try {
-    const children = (await listFileSystemEntries(node.path))
+  const load = listFileSystemEntries(node.path).then((entries) => {
+    const children = entries
       .filter((entry) => entry.isDirectory || matchesSidebarFilter(entry.name))
       .map((entry) => createFilesystemNode(entry.path, entry.name, entry.isDirectory, entry))
     node.children = sortFileTreeEntries(children, fileSort.value, fileTreeMixFolders.value)
-  } catch (error) {
+  }).catch((error) => {
     node.children = []
     node.error = error instanceof Error ? error.message : '无法读取此目录'
-  } finally {
+  }).finally(() => {
     node.loading = false
-  }
+    filesystemNodeLoads.delete(node)
+  })
+  filesystemNodeLoads.set(node, load)
+  return load
 }
 
 async function toggleFilesystemNode(node: FileSystemTreeNode) {
@@ -4472,8 +4477,11 @@ async function revealFilesystemTarget(node: FileSystemTreeNode, targetPath: stri
   await loadFilesystemNode(node)
   node.expanded = true
   const target = filesystemPathKey(targetPath)
-  const child = node.children?.find((item) => target === filesystemPathKey(item.path) || target.startsWith(`${filesystemPathKey(item.path)}/`))
-  if (child && filesystemPathKey(child.path) !== target && child.isDirectory) await revealFilesystemTarget(child, targetPath)
+  const child = node.children?.find((item) => {
+    const key = filesystemPathKey(item.path)
+    return item.isDirectory && (target === key || target.startsWith(`${key}/`))
+  })
+  if (child) await revealFilesystemTarget(child, targetPath)
 }
 
 async function expandFilesystemTree(node: FileSystemTreeNode) {
@@ -4680,13 +4688,23 @@ async function showParentFilesystemDirectory() {
   }
   fileBrowserMode.value = 'tree'
   leftPanelTab.value = 'files'
+  const root = await showSystemFilesystemTarget(file.path, parentPath)
+  notify(root.error ? '已显示上级目录，但目录读取受限' : '已显示上级目录')
+}
+
+async function showSystemFilesystemTarget(path: string, rootPath: string) {
+  const root = filesystemTree.value
+  const currentRootKey = root && filesystemPathKey(root.path)
+  const requestedRootKey = filesystemPathKey(rootPath)
+  if (!root || filesystemTreeScope.value !== 'system' ||
+    (requestedRootKey !== currentRootKey && !requestedRootKey.startsWith(`${currentRootKey}/`))) {
+    filesystemTree.value = createFilesystemNode(rootPath, fileNameOf(rootPath), true)
+  }
   filesystemTreeScope.value = 'system'
-  filesystemTreeTarget.value = file.path
-  filesystemTree.value = createFilesystemNode(parentPath, folderNameOf(parentPath) || parentPath, true)
-  await revealFilesystemTarget(filesystemTree.value, file.path)
-  const target = filesystemNodeAt(file.path)
-  if (target) await expandFilesystemTree(target)
-  notify(filesystemTree.value.error ? '已显示上级目录，但目录读取受限' : '已显示上级目录')
+  filesystemTreeTarget.value = path
+  const visibleRoot = filesystemTree.value!
+  await revealFilesystemTarget(visibleRoot, path)
+  return visibleRoot
 }
 
 async function openFilesystemTreeForFile(file: FileTreeEntry) {
@@ -4695,11 +4713,7 @@ async function openFilesystemTreeForFile(file: FileTreeEntry) {
     notify('当前文档没有真实系统路径，请重新选择这个文件')
     return
   }
-  filesystemTreeScope.value = 'system'
-  filesystemTreeTarget.value = file.path
-  filesystemTree.value = createFilesystemNode(rootPath, fileNameOf(rootPath) || rootPath, true)
-  const root = filesystemTree.value
-  await expandFilesystemTree(root)
+  const root = await showSystemFilesystemTarget(file.path, rootPath)
   notify(root.error ? '当前目录文档树已打开，但目录读取受限' : '已打开当前目录的文档树')
 }
 
@@ -4715,10 +4729,7 @@ async function toggleFileContextDirectory(file: FileTreeEntry) {
       notify('已显示当前目录中已载入的文档')
       return
     }
-    filesystemTreeScope.value = 'system'
-    filesystemTreeTarget.value = file.path
-    filesystemTree.value = createFilesystemNode(file.path, file.name, true)
-    await expandFilesystemTree(filesystemTree.value)
+    await showSystemFilesystemTarget(file.path, file.path)
     return
   }
   const node = filesystemNodeAt(file.path)
@@ -4742,10 +4753,7 @@ async function showDocumentTreeForEntry(file: FileTreeEntry) {
     return
   }
   if (file.isDirectory && isTauriRuntime() && hasRealFilesystemPath(file.path)) {
-    filesystemTreeScope.value = 'system'
-    filesystemTreeTarget.value = file.path
-    filesystemTree.value = createFilesystemNode(file.path, file.name, true)
-    await expandFilesystemTree(filesystemTree.value)
+    await showSystemFilesystemTarget(file.path, file.path)
     notify('已打开当前目录的文档树')
     return
   }
@@ -4772,21 +4780,14 @@ async function showDocumentTree() {
 
 async function syncFilesystemTreeTarget(path: string) {
   if (fileBrowserMode.value !== 'tree' || !path) return
-  filesystemTreeTarget.value = path
   const rootPath = filesystemDocumentRoot(path)
   if (!isTauriRuntime() || !rootPath) {
     filesystemTreeScope.value = 'workspace'
+    filesystemTreeTarget.value = path
     filesystemTree.value = createWorkspaceTree(path)
     return
   }
-  const root = filesystemTree.value
-  const rootKey = root ? filesystemPathKey(root.path) : ''
-  const movingWithinTree = path === filesystemMoveTarget && filesystemNodeAt(rootPath, root)
-  if (filesystemTreeScope.value !== 'system' || !root || (rootKey !== filesystemPathKey(rootPath) && !movingWithinTree)) {
-    filesystemTree.value = createFilesystemNode(rootPath, fileNameOf(rootPath) || rootPath, true)
-  }
-  filesystemTreeScope.value = 'system'
-  await revealFilesystemTarget(filesystemTree.value!, path)
+  await showSystemFilesystemTarget(path, rootPath)
 }
 
 async function openFilesystemTreeNode(node: FileSystemTreeNode) {
@@ -4805,7 +4806,13 @@ async function renameFileContextEntry() {
   const file = fileContextMenu.value?.file
   fileContextMenu.value = null
   if (!file || !canManageMarkdownEntry(file) || busyAction.value) return
-  const value = await promptAppText({ title: '重命名 Markdown 文件', inputLabel: '文件名', defaultValue: file.name, confirmLabel: '重命名' })
+  const value = await promptAppText({
+    title: '重命名 Markdown 文件',
+    inputLabel: '文件名',
+    defaultValue: file.name,
+    selectionEnd: file.name.replace(/\.(md|markdown|qmd)$/i, '').length,
+    confirmLabel: '重命名',
+  })
   if (value === null || busyAction.value) return
   const name = markdownName(value)
   if (!validEntryName(name)) { notify('文件名不能为空，且不能包含路径分隔符'); return }
@@ -4844,7 +4851,6 @@ async function moveFileToDirectory(file: FileTreeEntry, directory: string) {
   const nextPath = joinFilePath(directory, file.name)
   busyAction.value = 'file'
   filesystemMovingSource.value = sourceKey
-  filesystemMoveTarget = nextPath
   try {
     const movedSource = await moveFilePath(file.path, nextPath)
     const document = store.documents.find(item => filePathKey(item.path) === filePathKey(file.path))
@@ -4873,7 +4879,6 @@ async function moveFileToDirectory(file: FileTreeEntry, directory: string) {
   } catch (error) {
     notify(`${file.name} 移动失败：${error instanceof Error ? error.message : String(error)}`)
   } finally {
-    filesystemMoveTarget = ''
     filesystemMovingSource.value = ''
     busyAction.value = null
   }

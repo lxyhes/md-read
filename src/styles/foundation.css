@@ -137,7 +137,13 @@ button:disabled { cursor: wait; opacity: .58; transform: none !important; }
 .app-shell.is-focus .reader-page { background: var(--focus-page-bg); transition: background .55s ease; }
 .app-shell.is-focus .focus-sidebar { border-left-color: var(--focus-border); background: var(--focus-sidebar-bg); transition: background .55s ease, border-color .55s ease; }
 .app-shell.is-focus .focus-sidebar-head strong, .app-shell.is-focus .focus-card-heading { color: var(--focus-copy); }
-.app-shell.is-focus .focus-sidebar-head .ghost-button { border-color: var(--focus-border); color: var(--focus-accent); }
+.app-shell.is-focus .focus-sidebar-head > div { min-width: 0; }
+.app-shell.is-focus .focus-sidebar-head .ghost-button {
+  flex-shrink: 0;
+  white-space: nowrap;
+  border-color: var(--focus-border);
+  color: var(--focus-accent);
+}
 .app-shell.is-focus .focus-timer-card { border-color: var(--focus-border); background: var(--focus-card-bg); box-shadow: 0 14px 44px color-mix(in srgb, var(--focus-accent) 18%, transparent); }
 .app-shell.is-focus .focus-timer-ring { border-color: color-mix(in srgb, var(--focus-accent) 20%, transparent); border-top-color: var(--focus-accent); border-right-color: var(--focus-accent); box-shadow: 0 0 35px color-mix(in srgb, var(--focus-accent) 28%, transparent); }
 .app-shell.is-focus .focus-timer-ring span, .app-shell.is-focus .focus-timer-actions button:first-child, .app-shell.is-focus .focus-card-heading small { color: var(--focus-muted); }

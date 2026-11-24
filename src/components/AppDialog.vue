@@ -13,6 +13,7 @@ watch(activeAppDialog, async (dialog) => {
   if (activeAppDialog.value !== dialog) return
   if (dialog?.kind === 'prompt') {
     promptInput.value?.focus()
+    if (dialog.selectionEnd !== undefined) promptInput.value?.setSelectionRange(0, dialog.selectionEnd)
   }
 }, { flush: 'post' })
 

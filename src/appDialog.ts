@@ -6,6 +6,7 @@ type PromptDialog = {
   description?: string
   inputLabel?: string
   defaultValue: string
+  selectionEnd?: number
   confirmLabel?: string
   resolve: (value: string | null) => void
 }

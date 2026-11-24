@@ -17,6 +17,10 @@
   font-weight: 600;
   text-wrap: balance;
 }
+.reader-content .region-content :is(h1, h2) {
+  padding-block-end: 0.25em;
+  border-block-end: 1px solid var(--border);
+}
 .reader-content .region-content h1 {
   margin: 0 0 14px;
   font-size: clamp(30px, 3.2vw, 42px);
@@ -89,8 +93,6 @@
 .reader-content .region-content h2.numbered-heading {
   align-items: center;
   gap: 12px;
-  padding-block-end: 10px;
-  border-block-end: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
 }
 .reader-content .region-content h2.numbered-heading .heading-number {
   color: color-mix(in srgb, var(--accent) 34%, var(--surface));

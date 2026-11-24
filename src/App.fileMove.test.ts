@@ -96,3 +96,49 @@ it('moves an open file from the tree into a collapsed folder and keeps the tree 
     localStorage.clear()
   }
 })
+
+it('keeps parent and sibling folders visible when opening a nested document', async () => {
+  const root = 'E:/notes'
+  const nested = `${root}/project`
+  const sibling = `${root}/archive`
+  const nestedFile = `${nested}/chapter.md`
+  const rootFile = `${root}/index.md`
+  const siblingFile = `${sibling}/draft.md`
+  const outside = 'E:/notes-copy/index.md'
+  const entry = (path: string, isDirectory: boolean) => ({ path, name: path.split('/').pop()!, isDirectory })
+  vi.mocked(listFileSystemEntries).mockImplementation(async path => {
+    if (path === root) return [entry(nested, true), entry(sibling, true), entry(rootFile, false)]
+    if (path === nested) return [entry(nestedFile, false)]
+    if (path === sibling) return [entry(siblingFile, false)]
+    return [entry(outside, false)]
+  })
+
+  const pinia = createPinia()
+  const store = useReaderStore(pinia)
+  vi.spyOn(store, 'bootstrap').mockResolvedValue()
+  await store.addOpenedFiles([outside, nestedFile, rootFile].map(path => ({ path, source: '# Draft' })), { persist: false })
+  const host = document.body.appendChild(document.createElement('div'))
+  const app = createApp(App).use(pinia)
+  app.mount(host)
+  const row = (path: string) => host.querySelector<HTMLButtonElement>(`[data-filesystem-path="${path}"]`)
+  try {
+    await vi.waitFor(() => expect(row(rootFile)).not.toBeNull())
+    row(sibling)!.click()
+    row(nested)!.click()
+    await vi.waitFor(() => expect(row(nestedFile)).not.toBeNull())
+    row(nestedFile)!.click()
+    await vi.waitFor(() => expect(store.currentDocument?.path).toBe(nestedFile))
+    expect(row(nestedFile)?.getAttribute('aria-current')).toBe('page')
+    expect(row(rootFile)).not.toBeNull()
+    expect(row(siblingFile)).not.toBeNull()
+
+    await store.openDocument(store.documents.find(document => document.path === outside)!.id)
+    await vi.waitFor(() => expect(row(outside)?.getAttribute('aria-current')).toBe('page'))
+    expect(row(root)).toBeNull()
+  } finally {
+    app.unmount()
+    host.remove()
+    vi.restoreAllMocks()
+    localStorage.clear()
+  }
+})
