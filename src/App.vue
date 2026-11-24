@@ -73,6 +73,7 @@ import { activeAppDialog, confirmAppAction, promptAppText } from './appDialog'
 import { useKnowledgeIndex } from './useKnowledgeIndex'
 import { useKnowledgeVoice } from './useKnowledgeVoice'
 import { KNOWLEDGE_EMBEDDING_MODEL } from './knowledgeHybridSearch'
+import type { KnowledgeSearchMatch } from './knowledgeSearch'
 import { aiEndpoint, aiPayload, aiResponseText, aiTemperature, defaultAiSettings, ollamaModelNames, ollamaReasoningLevels, ollamaShowEndpoint, ollamaTagsEndpoint, openAiReasoningLevels, type AiMessage, type AiReasoning, type AiSettings } from './aiProvider'
 import { domesticAiWebModels } from './aiWebModels'
 import { parseWebPreviewAddress } from './webPreviewAddress'
@@ -164,6 +165,8 @@ const quickOpenQuery = ref('')
 const quickOpenIndex = ref(0)
 let modalRestoreFocus: HTMLElement | null = null
 const searchRegex = ref(false)
+const searchSemanticMatches = ref<KnowledgeSearchMatch[]>([])
+let searchSemanticRequest = 0
 const replaceOpen = ref(false)
 const replaceValue = ref('')
 const toast = ref('')
@@ -3637,6 +3640,17 @@ async function copyKnowledgeCitation(citation: KnowledgeCitation) {
     notify('引用已复制')
   } catch { notify('当前环境不允许访问剪贴板') }
 }
+async function saveKnowledgeAnswerAsNote(message: KnowledgeMessage) {
+  const sources = message.citations.map((citation) => `> ${citation.excerpt}\n> —— ${displayTitle(citation.documentTitle)}`).join('\n\n')
+  const body = `${message.content}${sources ? `\n\n## 引用原文\n\n${sources}` : ''}`
+  const note: PersonalNote = { id: `note-${Date.now()}`, title: activeKnowledgeConversation.value?.title ?? '知识库问答', body, updatedAt: Date.now() }
+  const next = [note, ...personalNotes.value]
+  try { await saveDurableData(PERSONAL_NOTES_KEY, next) }
+  catch { notify('笔记保存失败，请检查应用存储空间'); return }
+  personalNotes.value = next
+  selectedNoteId.value = note.id
+  notify('已存为笔记，可在「笔记」中查看')
+}
 function citationStatusLabel(citation: KnowledgeCitation) {
   const state = citationState(citation, store.documents)
   if (state === 'updated') return '原文已更新，显示回答时的摘录'
@@ -4929,6 +4943,22 @@ watch(query, () => {
   searchIndex.value = 0
   if (searchTimer !== null) window.clearTimeout(searchTimer)
   searchTimer = window.setTimeout(() => { searchNeedle.value = query.value.trim(); searchTimer = null }, 90)
+})
+watch(searchNeedle, () => {
+  const request = ++searchSemanticRequest
+  searchSemanticMatches.value = []
+  const needle = searchNeedle.value
+  // 仅在语义检索开启、输入是自然语言（非精确关键词/正则）且索引可用时补充语义命中。
+  if (!localSemanticSearch.value || searchRegex.value || !needle || needle.length < 4) return
+  void (async () => {
+    const documents = searchScope.value === 'current' && store.currentDocument ? [store.currentDocument] : store.documents
+    try {
+      const { matches } = await findKnowledge(documents, needle)
+      if (request !== searchSemanticRequest) return
+      const keywordIds = new Set(searchResults.value.map((result) => result.region.id))
+      searchSemanticMatches.value = matches.filter((match) => !keywordIds.has(match.region.id)).slice(0, 6)
+    } catch { /* 语义检索失败时静默降级为纯关键词搜索。 */ }
+  })()
 })
 watch(advancedSettings, (settings) => {
   localStorage.setItem('moyue:advanced-settings', JSON.stringify(settings))
@@ -6558,6 +6588,7 @@ async function requestFullscreen() {
                 </Bubble>
                 <small v-if="message.keywordFallback" class="knowledge-ask-hint">本轮使用关键词检索</small>
                 <button v-if="message.role === 'assistant'" class="text-button knowledge-copy-answer" type="button" @click="copyKnowledgeAnswer(message)"><AppIcon name="copy" :size="12" />复制回答与引用</button>
+                <button v-if="message.role === 'assistant' && message.content" class="text-button knowledge-copy-answer" type="button" @click="saveKnowledgeAnswerAsNote(message)"><AppIcon name="note" :size="12" />存为笔记</button>
                 <details v-if="message.citations.length" class="knowledge-citations">
                   <summary class="knowledge-citations-summary">
                     <span class="knowledge-citations-title"><AppIcon name="quote" :size="14" />引用原文</span>
@@ -7321,12 +7352,20 @@ async function requestFullscreen() {
           <Button type="primary" :disabled="!searchPattern || !!searchPatternError" @click="replaceSearchMatches">全部替换</Button>
         </div>
         <p v-if="searchPatternError" class="search-error">正则表达式无效</p>
-        <div v-if="searchResults.length" class="search-results">
+        <div v-if="searchResults.length || searchSemanticMatches.length" class="search-results">
           <button v-for="(result, index) in searchResults" :key="`${result.document.id}-${result.region.id}`" type="button" :class="{ selected: searchIndex === index }" @click="chooseSearchResult(result.document.id, result.region.id)">
             <span class="result-kind">{{ result.region.type }}</span>
             <span><b>{{ displayTitle(result.document.title) }}</b><small>{{ result.region.textContent.slice(0, 100) }} · {{ result.matchCount }} 处匹配</small></span>
             <AppIcon name="external" :size="14" />
           </button>
+          <template v-if="searchSemanticMatches.length">
+            <span class="search-semantic-divider" role="separator">语义匹配</span>
+            <button v-for="match in searchSemanticMatches" :key="`semantic-${match.document.id}-${match.region.id}`" type="button" @click="chooseSearchResult(match.document.id, match.region.id)">
+              <span class="result-kind result-kind-semantic">语义</span>
+              <span><b>{{ displayTitle(match.document.title) }}</b><small>{{ match.snippet.slice(0, 100) }}</small></span>
+              <AppIcon name="external" :size="14" />
+            </button>
+          </template>
         </div>
         <div v-else class="empty-search">{{ query ? '没有找到相关内容' : searchScope === 'current' ? '输入关键词，搜索当前文档' : '输入关键词，搜索你的阅读空间' }}</div>
       </div>

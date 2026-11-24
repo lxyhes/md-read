@@ -45,8 +45,15 @@ export function ollamaReasoningLevels(payload: unknown): AiReasoning[] {
   return supported.some(value => value !== false) ? [...new Set(supported)] : []
 }
 
+// 推理类模型的判断：优先看是否显式传入了推理强度（reasoning），其次按已知的
+// 推理模型命名前缀兜底。OpenAI 系列新模型可能使用不同命名，维护时优先补充前缀，
+// 或改为依据服务端返回的能力标志（如 /models 返回的 reasoning 能力）判断。
+export function isReasoningModel(model: string) {
+  return /^(?:gpt-[56](?:[.-]|$)|o[134](?:-|$))/i.test(model.trim())
+}
+
 export function aiTemperature(settings: Pick<AiSettings, 'provider' | 'model'>, reasoning?: AiReasoning) {
-  if (settings.provider === 'openai-compatible' && (reasoning !== undefined || /^(?:gpt-[56](?:[.-]|$)|o[134](?:-|$))/i.test(settings.model.trim()))) return undefined
+  if (settings.provider === 'openai-compatible' && (reasoning !== undefined || isReasoningModel(settings.model))) return undefined
   return 0.2
 }
 

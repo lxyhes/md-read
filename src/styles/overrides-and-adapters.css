@@ -4272,6 +4272,30 @@ body .app-shell.is-editor-studio .reader-layout {
   transform: translateX(2px);
 }
 
+.app-shell .search-semantic-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 6px 4px;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: .04em;
+}
+
+.app-shell .search-semantic-divider::before,
+.app-shell .search-semantic-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: color-mix(in srgb, var(--accent) 18%, var(--border));
+}
+
+.app-shell .search-results .result-kind-semantic {
+  color: color-mix(in srgb, var(--accent) 80%, var(--ink));
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  background: color-mix(in srgb, var(--accent-soft) 65%, transparent);
+}
+
 .app-shell .empty-search {
   display: grid;
   min-height: 190px;
