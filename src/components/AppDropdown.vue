@@ -2,7 +2,7 @@
 import { onBeforeUnmount, ref, watch } from 'vue'
 import { Dropdown } from 'ant-design-vue'
 
-const props = withDefaults(defineProps<{ panelClass?: string; popupContainer?: string | HTMLElement; position?: 'bl' | 'br' | 'tl' | 'tr'; focusOnOpen?: boolean }>(), {
+const props = withDefaults(defineProps<{ panelClass?: string; popupContainer?: string | HTMLElement; position?: 'bl' | 'br' | 'tl' | 'tr'; focusOnOpen?: boolean; initialFocus?: string }>(), {
   panelClass: 'reader-more-popover',
   position: 'bl',
 })
@@ -17,7 +17,11 @@ watch(panel, (element, _, onCleanup) => {
   const observer = new ResizeObserver(([entry]) => {
     if (!entry.contentRect.width) return
     observer.disconnect()
-    if (visible.value && element.isConnected) element.focus({ preventScroll: true })
+    if (visible.value && element.isConnected) {
+      const initial = props.initialFocus ? element.querySelector<HTMLElement>(props.initialFocus) : null
+      const target = initial ?? element
+      target.focus({ preventScroll: true })
+    }
   })
   observer.observe(element)
   onCleanup(() => observer.disconnect())
@@ -52,7 +56,7 @@ function popupContainer(trigger: HTMLElement) {
 }
 
 onBeforeUnmount(() => document.removeEventListener('keydown', closeOnEscape))
-defineExpose({ close: () => setVisible(false) })
+defineExpose({ open: () => setVisible(true), close: () => setVisible(false) })
 </script>
 
 <template>

@@ -505,6 +505,77 @@
   outline-offset: 3px;
 }
 
+.app-shell:not(.is-focus) .knowledge-tools-card {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+.app-shell:not(.is-focus) .knowledge-tools-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.app-shell:not(.is-focus) .knowledge-tools-head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -.01em;
+}
+.app-shell:not(.is-focus) .knowledge-tools-list {
+  margin-top: 14px;
+}
+.app-shell:not(.is-focus) .knowledge-tool-item {
+  display: flex;
+  min-height: 62px;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--border);
+}
+.app-shell:not(.is-focus) .knowledge-tool-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex-basis: 34px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+.app-shell:not(.is-focus) .knowledge-tool-info {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.app-shell:not(.is-focus) .knowledge-tool-info b {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: -.01em;
+}
+.app-shell:not(.is-focus) .knowledge-tool-info small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.app-shell:not(.is-focus) .knowledge-tool-config {
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-raised, var(--surface)) 60%, transparent);
+}
+.app-shell:not(.is-focus) .knowledge-tool-config .setting-input {
+  margin-bottom: 12px;
+}
+.app-shell:not(.is-focus) .knowledge-tool-config .setting-input:last-of-type {
+  margin-bottom: 0;
+}
+
 @media (max-width: 900px) {
   .app-shell:not(.is-focus) .settings-tabs {
     display: grid;

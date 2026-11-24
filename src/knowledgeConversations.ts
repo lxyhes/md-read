@@ -19,6 +19,7 @@ export type KnowledgeMessage = {
   createdAt: number
   citations: KnowledgeCitation[]
   keywordFallback?: boolean
+  toolsUsed?: string[]
 }
 
 export type KnowledgeConversation = {
@@ -83,6 +84,17 @@ export function validatedKnowledgeAnswer(content: string, citations: KnowledgeCi
   if (!claims.length) return unverified
   if (payload.insufficient || claims.length < payload.claims.length) claims.push('现有资料无法确认其余部分。')
   return { content: claims.join('\n'), citations: citations.filter(citation => used.has(citation.index)) }
+}
+
+export function knowledgeAnswerLines(message: KnowledgeMessage) {
+  return message.content.split('\n').map(line => {
+    const suffix = / (\[\d+\](?:\[\d+\])*)$/.exec(line)
+    if (!line.startsWith('• ') || !suffix) return { text: line, citations: [] }
+    const citations = Array.from(suffix[1].matchAll(/\[(\d+)\]/g), match =>
+      message.citations.find(citation => citation.index === Number(match[1])))
+    if (!citations.every(citation => citation !== undefined)) return { text: line, citations: [] }
+    return { text: line.slice(0, suffix.index), citations }
+  })
 }
 
 export function titleForKnowledgeQuestion(question: string) {

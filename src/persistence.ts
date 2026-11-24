@@ -237,6 +237,7 @@ function validKnowledgeMessage(value: unknown): value is KnowledgeConversation['
   return typeof message.id === 'string' && (message.role === 'user' || message.role === 'assistant')
     && typeof message.content === 'string' && Number.isFinite(message.createdAt)
     && Array.isArray(message.citations) && message.citations.every(validKnowledgeCitation)
+    && (message.toolsUsed === undefined || (Array.isArray(message.toolsUsed) && message.toolsUsed.every(tool => typeof tool === 'string')))
 }
 
 function validKnowledgeConversations(value: unknown): KnowledgeConversation[] {

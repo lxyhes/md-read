@@ -15,6 +15,7 @@ function onKeydown(event: KeyboardEvent) {
 
 <template>
   <form class="knowledge-ask-form" @submit.prevent="!disabled && !busy && hasSources && modelValue.trim() && emit('submit')">
+    <slot name="tools" />
     <Textarea
       :model-value="modelValue"
       :textarea-attrs="{ autoSize: { minRows: 2, maxRows: 6 }, 'aria-label': '询问知识库', 'aria-keyshortcuts': 'Enter Shift+Enter' }"

@@ -126,14 +126,14 @@ export const useReaderStore = defineStore('reader', () => {
     return parseMarkdown(file.path, file.source, (url) => resolveMarkdownAssetUrl(file.path, url, assets))
   }
 
-  async function addOpenedFiles(files: OpenedFile[], options: { persist?: boolean } = {}) {
+  async function addOpenedFiles(files: OpenedFile[], options: { persist?: boolean; localizeImages?: boolean } = {}) {
     if (!files.length) return 0
     const openedIds: string[] = []
     for (const originalFile of files) {
       let file = originalFile
       const normalizedPath = file.path.replace(/\\/g, '/')
       const hasSavedDirectory = normalizedPath.startsWith('/') || /^[A-Za-z]:\//.test(normalizedPath)
-      if (hasSavedDirectory) {
+      if (hasSavedDirectory && options.localizeImages !== false) {
         try {
           const relativePathPrefix = (() => {
             try { return JSON.parse(localStorage.getItem('moyue:advanced-settings') ?? '{}').relativeImagePathPrefix === true }
