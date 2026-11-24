@@ -130,6 +130,13 @@
   opacity: .18;
   background: linear-gradient(135deg, transparent 0 72%, color-mix(in srgb, var(--accent) 8%, transparent) 72.3% 72.7%, transparent 73%), radial-gradient(circle at 82% 12%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 17%);
 }
+.app-shell.theme-paper-white .reader-content .region-content :is(h1, h2) {
+  color: #262626;
+}
+.app-shell.theme-paper-white .reader-content .region-content p {
+  color: #3b4148;
+  font-weight: 400;
+}
 .app-shell.theme-paper-white:not(.is-focus) .reader-content .code-frame,
 .app-shell.theme-paper-white:not(.is-focus) .reader-content .table-scroll {
   box-shadow: 0 10px 24px color-mix(in srgb, var(--accent) 7%, transparent);
