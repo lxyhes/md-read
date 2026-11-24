@@ -750,21 +750,47 @@ const headingIdByRegion = computed(() => {
   return result
 })
 const collapsedOutlineHeadingIds = ref<Set<string>>(new Set())
-const outlineRows = computed(() => {
-  const needle = outlineQuery.value.trim().toLowerCase()
+const outlineTreeRows = computed(() => {
   const headings = store.currentDocument?.headings ?? []
-  const parentDepths: number[] = []
-  const rows = headings.map((heading, index) => {
-    while (parentDepths.length && parentDepths[parentDepths.length - 1] >= heading.depth) parentDepths.pop()
-    const level = parentDepths.length
-    parentDepths.push(heading.depth)
+  const parents: HeadingItem[] = []
+  return headings.map((heading, index) => {
+    while (parents.length && parents[parents.length - 1].depth >= heading.depth) parents.pop()
+    const level = parents.length
+    const parentId = parents[level - 1]?.id ?? null
+    parents.push(heading)
     return {
       heading,
       level,
+      parentId,
       hasChildren: headings[index + 1]?.depth > heading.depth,
-      collapsed: collapsedOutlineHeadingIds.value.has(heading.id),
     }
   })
+})
+const outlineChapterCharacters = computed(() => {
+  const rows = outlineTreeRows.value
+  const roots = rows.filter(row => row.level === 0)
+  const sections = roots.length === 1 && roots[0].heading.depth === 1 && roots[0].hasChildren
+    ? rows.filter(row => row.level === 1)
+    : roots
+  return new Map(sections.map((row, index) => [row.heading.id, index % 4]))
+})
+const outlineChapterByHeading = computed(() => {
+  const chapters = new Map<string, string>()
+  for (const { heading, parentId } of outlineTreeRows.value) {
+    const chapterId = outlineChapterCharacters.value.has(heading.id) ? heading.id : chapters.get(parentId ?? '')
+    if (chapterId) chapters.set(heading.id, chapterId)
+  }
+  return chapters
+})
+const activeOutlineChapterId = computed(() => outlineChapterByHeading.value.get(store.activeHeadingId ?? ''))
+const outlineRows = computed(() => {
+  const needle = outlineQuery.value.trim().toLowerCase()
+  const rows = outlineTreeRows.value.map(row => ({
+    ...row,
+    character: outlineChapterCharacters.value.get(row.heading.id),
+    insideChapter: outlineChapterByHeading.value.has(row.heading.id) && !outlineChapterCharacters.value.has(row.heading.id),
+    collapsed: collapsedOutlineHeadingIds.value.has(row.heading.id),
+  }))
   if (needle) return rows.filter(({ heading }) => heading.text.toLowerCase().includes(needle)).map((row) => ({ ...row, collapsed: false }))
 
   const visibleRows: typeof rows = []
@@ -1070,10 +1096,7 @@ function toggleOutlineHeading(headingId: string) {
 }
 
 function setOutlineExpansion(expanded: boolean) {
-  const headings = store.currentDocument?.headings ?? []
-  const parentIds = expanded ? [] : headings
-    .filter((heading, index) => headings[index + 1]?.depth > heading.depth)
-    .map((heading) => heading.id)
+  const parentIds = expanded ? [] : outlineTreeRows.value.filter(row => row.hasChildren).map(row => row.heading.id)
   collapsedOutlineHeadingIds.value = new Set(parentIds)
 }
 
@@ -7012,7 +7035,7 @@ async function requestFullscreen() {
 
       <section v-else-if="view === 'reader'" class="reader-page">
         <Teleport to=".app-shell">
-          <div v-if="tabListOpen" class="tab-list-popover" :style="tabListPopoverStyle" role="menu" @click.stop>
+          <div v-if="tabListOpen" id="reader-tab-list" class="tab-list-popover" :style="tabListPopoverStyle" role="menu" @click.stop>
             <div class="tab-list-heading"><span>已打开文档</span><small>{{ store.openDocuments.length }}</small></div>
             <Input v-if="store.openDocuments.length > 3" v-model="tabSearchQuery" class="tab-list-search" allow-clear placeholder="搜索已打开标签…" :input-attrs="{ 'aria-label': '搜索已打开标签' }"><template #prefix><AppIcon name="search" :size="13" /></template></Input>
             <div v-for="group in groupedOpenDocuments" :key="group.directory" class="tab-list-group" role="group" :aria-label="group.directory">
@@ -7158,15 +7181,27 @@ async function requestFullscreen() {
               <div class="outline-toolbar">
                 <Input v-model="outlineQuery" class="outline-search" allow-clear placeholder="筛选…" :input-attrs="{ 'aria-label': '筛选章节' }"><template #prefix><AppIcon name="search" :size="13" /></template></Input>
                 <div v-if="store.currentDocument?.headings.length" class="outline-actions" role="group" aria-label="大纲展开控制">
-                  <IconButton icon="plus" size="sm" label="展开全部章节" @click="setOutlineExpansion(true)" />
-                  <IconButton icon="minus" size="sm" label="折叠全部章节" @click="setOutlineExpansion(false)" />
+                  <button type="button" aria-label="展开全部章节" title="展开全部章节" @click="setOutlineExpansion(true)">
+                    <span class="outline-batch-mark" aria-hidden="true"><AppIcon name="chevron-down" :size="9" /><AppIcon name="chevron-down" :size="9" /></span>
+                  </button>
+                  <button type="button" aria-label="折叠全部章节" title="折叠全部章节" @click="setOutlineExpansion(false)">
+                    <span class="outline-batch-mark" aria-hidden="true"><AppIcon name="chevron-up" :size="9" /><AppIcon name="chevron-up" :size="9" /></span>
+                  </button>
                 </div>
               </div>
               <nav class="outline-list" aria-label="当前文档大纲">
-                <div v-for="row in outlineRows" :key="row.heading.id" class="outline-row" :class="{ 'outline-root': row.level === 0, active: store.activeHeadingId === row.heading.id }" :style="{ '--outline-level': row.level }">
-                  <button v-if="row.hasChildren" class="outline-toggle" type="button" :aria-expanded="!row.collapsed" :aria-label="`${row.collapsed ? '展开' : '折叠'} ${row.heading.text}`" @click="toggleOutlineHeading(row.heading.id)"><AppIcon :name="row.collapsed ? 'chevron-right' : 'chevron-down'" :size="12" /></button>
+                <div v-for="row in outlineRows" :key="row.heading.id" class="outline-row"
+                  :class="{ 'outline-root': row.level === 0, 'outline-subchapter': row.insideChapter, active: store.activeHeadingId === row.heading.id }" :style="{ '--outline-level': row.level }">
+                  <button v-if="row.hasChildren" class="outline-toggle" type="button" :aria-expanded="!row.collapsed" :aria-label="`${row.collapsed ? '展开' : '折叠'} ${row.heading.text}`" @click="toggleOutlineHeading(row.heading.id)">
+                    <span class="outline-toggle-mark" aria-hidden="true" />
+                  </button>
                   <span v-else class="outline-toggle-spacer" aria-hidden="true" />
-                  <button class="outline-heading-button" :data-outline-id="row.heading.id" type="button" :class="{ active: store.activeHeadingId === row.heading.id }" :aria-current="store.activeHeadingId === row.heading.id ? 'location' : undefined" @click="scrollToHeading(row.heading.regionId)">{{ row.heading.text }}</button>
+                  <button class="outline-heading-button" :data-outline-id="row.heading.id" type="button"
+                    :class="{ active: store.activeHeadingId === row.heading.id, 'has-character': row.character !== undefined, 'active-chapter': activeOutlineChapterId === row.heading.id }"
+                    :aria-current="store.activeHeadingId === row.heading.id ? 'location' : undefined" @click="scrollToHeading(row.heading.regionId)">
+                    <span v-if="row.character !== undefined" class="outline-character" :data-variant="row.character" aria-hidden="true" />
+                    <span class="outline-heading-label">{{ row.heading.text }}</span>
+                  </button>
                 </div>
                 <p v-if="!outlineRows.length" class="outline-empty">没有匹配的章节</p>
               </nav>
@@ -7197,11 +7232,16 @@ async function requestFullscreen() {
                   </div>
                 </div>
                 <div class="reader-tab-actions">
-                  <IconButton class="reader-new-tab" icon="plus" size="sm" label="打开新文档" :disabled="busyAction !== null" @click="openFile" />
-                  <div ref="tabListTrigger" class="reader-tab-list-wrap">
-                    <IconButton class="reader-tab-list-trigger" icon="chevron-down" size="sm" :active="tabListOpen" :label="`查看全部标签（${store.openDocuments.length}）`" :aria-expanded="tabListOpen" @click.stop="toggleTabList" />
+                  <div class="reader-tab-tools" role="group" aria-label="文档标签操作">
+                    <IconButton class="reader-new-tab" icon="plus" size="sm" label="打开新文档" :disabled="busyAction !== null" @click="openFile" />
+                    <div ref="tabListTrigger" class="reader-tab-list-wrap">
+                      <IconButton class="reader-tab-list-trigger" icon="unordered-list" size="sm" :label="`查看全部标签（${store.openDocuments.length}）`"
+                        :aria-expanded="tabListOpen" :aria-controls="tabListOpen ? 'reader-tab-list' : undefined" @click.stop="toggleTabList" />
+                    </div>
                   </div>
-                  <button class="text-button dual-document-toggle" type="button" :aria-pressed="dualDocumentMode" :disabled="store.openDocuments.length < 2" :title="store.openDocuments.length < 2 ? '先打开两篇 Markdown 文档' : dualDocumentMode ? '返回单文档阅读' : '并排阅读两篇 Markdown 文档'" @click="dualDocumentMode = !dualDocumentMode">双文档</button>
+                  <button class="dual-document-toggle" type="button" :aria-pressed="dualDocumentMode" :disabled="store.openDocuments.length < 2" :title="store.openDocuments.length < 2 ? '先打开两篇 Markdown 文档' : dualDocumentMode ? '返回单文档阅读' : '并排阅读两篇 Markdown 文档'" @click="dualDocumentMode = !dualDocumentMode">
+                    <span class="dual-document-mark" aria-hidden="true" />双文档
+                  </button>
                 </div>
                 <div class="reader-tab-status" :data-tone="readerTabStatus.tone">
                   <small v-if="store.currentDocument" class="reader-tab-word-count">{{ store.currentDocument.wordCount.toLocaleString('zh-CN') }} 字</small>
