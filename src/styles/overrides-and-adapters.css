@@ -1992,13 +1992,13 @@ a:active > .app-icon-vector { transform: scale(.92); }
   color: var(--accent);
 }
 :is(.app-shell, .ant-modal, .ant-dropdown) .moyue-btn-primary.moyue-btn-status-danger {
-  border-color: rgb(var(--danger-6));
-  background: rgb(var(--danger-6));
+  border-color: rgb(var(--danger-6, 177, 54, 54));
+  background: rgb(var(--danger-6, 177, 54, 54));
   color: #fff;
 }
 :is(.app-shell, .ant-modal, .ant-dropdown) .moyue-btn-primary.moyue-btn-status-danger:not(:disabled):hover {
-  border-color: rgb(var(--danger-5));
-  background: rgb(var(--danger-5));
+  border-color: rgb(var(--danger-5, 153, 43, 43));
+  background: rgb(var(--danger-5, 153, 43, 43));
 }
 :is(.app-shell, .ant-modal, .ant-dropdown) .moyue-btn-text.moyue-btn-status-danger {
   color: rgb(var(--danger-6));
@@ -4121,10 +4121,8 @@ body .app-shell.is-editor-studio .reader-layout {
 }
 
 .app-shell .search-scope-row > small {
-  color: var(--muted);
-  font-size: 10px;
-  opacity: .86;
-  white-space: nowrap;
+  color: var(--ink);
+  font-size: 12px;
 }
 
 .app-shell .replace-row {

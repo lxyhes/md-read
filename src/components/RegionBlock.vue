@@ -11,7 +11,7 @@ import { parseComparisonLayout } from '../comparisonLayout'
 import { renderMathMl } from '../markdown/shared'
 
 const props = defineProps<{ region: ReaderRegion; annotations?: Annotation[]; focused: boolean; active: boolean; focusDistance?: number; themeMode?: ThemeManifest['mode']; themeKey?: string }>()
-const emit = defineEmits<{ focus: []; openViewer: []; 'open-link': [url: string]; 'code-copied': []; 'math-copied': []; 'math-copy-failed': []; 'toggle-task': []; 'copy-image': [] }>()
+const emit = defineEmits<{ focus: []; openViewer: [region?: ReaderRegion]; 'open-link': [url: string]; 'code-copied': []; 'math-copied': []; 'math-copy-failed': []; 'toggle-task': []; 'copy-image': [] }>()
 const codeLanguage = computed(() => String(props.region.metadata?.language ?? 'text'))
 const proseCodeLanguage = computed(() => /^(?:text|plaintext|markdown|md)$/i.test(codeLanguage.value))
 const asciiDiagramCandidate = computed(() => props.region.type === 'code' && proseCodeLanguage.value)
@@ -176,6 +176,16 @@ function handleContentClick(event: MouseEvent) {
   }
   if (props.region.type === 'table' || target.closest('img, button, summary, details')) event.stopPropagation()
 }
+
+function openInlineImage(image: HTMLImageElement) {
+  emit('openViewer', {
+    ...props.region,
+    type: 'image',
+    textContent: image.alt,
+    asciiTree: undefined,
+    metadata: { url: image.currentSrc || image.getAttribute('src') },
+  })
+}
 </script>
 
 <template>
@@ -220,9 +230,9 @@ function handleContentClick(event: MouseEvent) {
           <span><AppIcon name="table" :size="15" /> 数据表</span>
           <button class="code-view" type="button" @click.stop="emit('openViewer')"><AppIcon name="external" :size="14" />独立查看</button>
         </div>
-        <div v-html="renderedHtml" />
+        <MarkdownContent :html="renderedHtml" preview-images @open-image="openInlineImage" />
       </div>
-      <MarkdownContent v-else :html="renderedHtml" />
+      <MarkdownContent v-else :html="renderedHtml" preview-images @open-image="openInlineImage" />
       <div v-if="region.type === 'math'" class="math-copy-actions">
         <button class="inline-view-action" type="button" title="复制标准 MathML" @click.stop="copyMathMl">{{ copied ? '已复制 MathML' : '复制 MathML' }}</button>
         <button class="inline-view-action" type="button" @click.stop="emit('copy-image')">复制为图片</button>

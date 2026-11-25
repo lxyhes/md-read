@@ -114,7 +114,7 @@ function onKeydown(event: KeyboardEvent) {
       <div :key="document.id" ref="viewport" class="reader-viewport second-document-viewport" tabindex="0" :aria-label="`阅读 ${document.title}`" @scroll="rememberScroll">
         <div class="reader-content">
           <div class="regions-stack">
-            <RegionBlock v-for="region in document.regions" :key="region.id" :region="region" :focused="false" :active="activeRegionId === region.id" :theme-mode="themeMode" :theme-key="themeKey" @focus="activeRegionId = region.id" @open-link="openLink" @open-viewer="emit('open-viewer', region)" @copy-image="emit('copy-image', region)" @code-copied="emit('notify', '代码已复制')" @math-copied="emit('notify', 'MathML 已复制')" @math-copy-failed="emit('notify', '复制 MathML 失败，请检查剪贴板权限')" @toggle-task="emit('notify', '请先在左侧打开文档，再修改任务')" />
+            <RegionBlock v-for="region in document.regions" :key="region.id" :region="region" :focused="false" :active="activeRegionId === region.id" :theme-mode="themeMode" :theme-key="themeKey" @focus="activeRegionId = region.id" @open-link="openLink" @open-viewer="emit('open-viewer', $event ?? region)" @copy-image="emit('copy-image', region)" @code-copied="emit('notify', '代码已复制')" @math-copied="emit('notify', 'MathML 已复制')" @math-copy-failed="emit('notify', '复制 MathML 失败，请检查剪贴板权限')" @toggle-task="emit('notify', '请先在左侧打开文档，再修改任务')" />
           </div>
         </div>
       </div>

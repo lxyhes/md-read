@@ -31,6 +31,7 @@ function openImage(event: MouseEvent) {
     : event.target.closest('.markdown-image-preview')?.querySelector('img')
   if (!image?.getAttribute('src')?.trim()) return
   event.preventDefault()
+  event.stopPropagation()
   emit('open-image', image)
 }
 </script>

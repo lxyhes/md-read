@@ -149,6 +149,75 @@ fn exit_app(app: tauri::AppHandle) {
     app.exit(0);
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SystemDeleteResult {
+    removed_images: usize,
+    failed_images: usize,
+}
+
+#[tauri::command]
+async fn delete_system_entry(
+    path: String,
+    is_directory: bool,
+    expected_source: Option<String>,
+    images: Vec<String>,
+) -> Result<SystemDeleteResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        delete_system_path(Path::new(&path), is_directory, expected_source.as_deref(), &images)
+    }).await.map_err(|error| format!("删除任务失败：{error}"))?
+}
+
+fn delete_system_path(
+    target: &Path,
+    is_directory: bool,
+    expected_source: Option<&str>,
+    images: &[String],
+) -> Result<SystemDeleteResult, String> {
+    use std::fs;
+
+    if !target.is_absolute() || target.parent().is_none() || target.components().any(|part| matches!(part, std::path::Component::ParentDir)) {
+        return Err("只能删除具有绝对路径的非根目录文件或文件夹".into());
+    }
+    let target = target.components().collect::<PathBuf>();
+    let metadata = fs::symlink_metadata(&target).map_err(|error| format!("无法读取删除目标：{error}"))?;
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
+        if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+            return Err("无法删除重解析点或目录链接".into());
+        }
+    }
+    if (is_directory && !metadata.is_dir()) || (!is_directory && !metadata.is_file()) {
+        return Err("删除目标的类型已变化，请刷新后重试".into());
+    }
+    let resolved = target.canonicalize().map_err(|error| format!("无法解析删除路径：{error}"))?;
+    let parent = resolved.parent().ok_or("不能删除系统根目录")?;
+    let cleanup = !images.is_empty() && !is_directory && expected_source.is_some()
+        && matches!(resolved.extension().and_then(|ext| ext.to_str()).map(str::to_ascii_lowercase).as_deref(), Some("md" | "markdown" | "qmd"));
+    if cleanup && fs::read_to_string(&resolved).ok().as_deref() != expected_source {
+        return Err("文档在确认后发生了修改，请重新检查并确认删除".into());
+    }
+
+    if is_directory { fs::remove_dir_all(&target) } else { fs::remove_file(&target) }
+        .map_err(|error| format!("系统删除失败：{error}"))?;
+    let mut result = SystemDeleteResult { removed_images: 0, failed_images: 0 };
+    if cleanup {
+        let directory = parent.join(".moyue-assets");
+        for name in images {
+            let asset = directory.join(name);
+            let direct_child = Path::new(name).file_name().is_some_and(|file_name| file_name == std::ffi::OsStr::new(name));
+            let allowed = direct_child && name.starts_with("download-") && (is_image(&asset)
+                || matches!(asset.extension().and_then(|ext| ext.to_str()), Some("jif" | "jiff" | "jfif")))
+                && asset.canonicalize().ok().as_ref() == Some(&asset);
+            if allowed && fs::remove_file(asset).is_ok() { result.removed_images += 1; }
+            else { result.failed_images += 1; }
+        }
+    }
+    Ok(result)
+}
+
 fn is_image(path: &Path) -> bool {
     matches!(
         path.extension().and_then(|value| value.to_str()).map(str::to_ascii_lowercase).as_deref(),
@@ -1051,7 +1120,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
-        .invoke_handler(tauri::generate_handler![file_open::take_open_files, file_open::pick_markdown_files, file_move::move_path_without_overwrite, file_move::move_markdown_with_assets, knowledge_embedding::knowledge_embedding_digest, knowledge_embedding::knowledge_embed, tracked_directory, write_markdown_checked, remove_managed_asset, exit_app, allow_asset_directory, read_local_image, read_clipboard_image, read_clipboard_snapshot, read_clipboard_rich_text, read_clipboard_signature, write_clipboard_snapshot, read_remote_image, download_remote_image, upload_piclist_image, ollama_models, ollama_model_thinking, prepare_knowledge_voice, start_knowledge_voice, ai_chat, tool_fetch, open_directory, reveal_file, open_external_url, web_preview::web_preview, pandoc_import_document, pandoc_export_document, export_html_to_pdf])
+        .invoke_handler(tauri::generate_handler![file_open::take_open_files, file_open::pick_markdown_files, file_move::move_path_without_overwrite, file_move::move_markdown_with_assets, knowledge_embedding::knowledge_embedding_digest, knowledge_embedding::knowledge_embed, tracked_directory, write_markdown_checked, remove_managed_asset, delete_system_entry, exit_app, allow_asset_directory, read_local_image, read_clipboard_image, read_clipboard_snapshot, read_clipboard_rich_text, read_clipboard_signature, write_clipboard_snapshot, read_remote_image, download_remote_image, upload_piclist_image, ollama_models, ollama_model_thinking, prepare_knowledge_voice, start_knowledge_voice, ai_chat, tool_fetch, open_directory, reveal_file, open_external_url, web_preview::web_preview, pandoc_import_document, pandoc_export_document, export_html_to_pdf])
         .build(tauri::generate_context!())
         .expect("error while building Moyue application")
         .run(|_app, _event| {
@@ -1070,6 +1139,33 @@ mod media_permission;
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn system_delete_removes_the_selected_entry_and_only_managed_downloads() {
+        let root = tempfile::tempdir().unwrap();
+        let target = root.path().join("note.md");
+        let directory = root.path().join(".moyue-assets");
+        let download = "download-01234567-89ab-cdef-0123-456789abcdef-1.png";
+        std::fs::create_dir(&directory).unwrap();
+        std::fs::write(&target, "# Note").unwrap();
+        std::fs::write(directory.join(download), "image").unwrap();
+        std::fs::write(directory.join("keep.png"), "image").unwrap();
+
+        let images = [download.into(), "keep.png".into()];
+        assert!(super::delete_system_path(&target, false, Some("old note"), &images).is_err());
+        assert!(target.is_file());
+        let result = super::delete_system_path(&target, false, Some("# Note"), &images).unwrap();
+        assert_eq!((result.removed_images, result.failed_images), (1, 1));
+        assert!(!target.exists());
+        assert!(directory.join("keep.png").is_file());
+
+        let folder = root.path().join("folder");
+        std::fs::create_dir(&folder).unwrap();
+        std::fs::write(folder.join("child.md"), "child").unwrap();
+        assert!(super::delete_system_path(&folder, false, None, &[]).is_err());
+        super::delete_system_path(&folder, true, None, &[]).unwrap();
+        assert!(!folder.exists());
+        assert!(directory.is_dir());
+    }
     use super::{is_allowed_external_url, is_image, is_safe_remote_image_url, is_supported_remote_image, pandoc_export_format, pandoc_import_extension, parse_ollama_models, remote_image_referer, remove_managed_asset};
 
     #[test]

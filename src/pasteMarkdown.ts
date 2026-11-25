@@ -35,7 +35,7 @@ function attributeUrl(element: HTMLElement | null, names: string[]) {
 }
 
 function imageUrl(element: HTMLElement | null) {
-  return attributeUrl(element, ['data-markdown-src', 'data-src', 'data-actualsrc', 'data-original', 'data-original-src', 'data-image-src', 'data-lazy-src', 'data-url', 'src'])
+  return attributeUrl(element, ['data-markdown-src', 'data-original-src', 'data-original', 'data-actualsrc', 'data-src', 'data-image-src', 'data-lazy-src', 'data-url', 'src'])
 }
 
 function imageAlt(element: HTMLElement | null) {
@@ -240,15 +240,20 @@ function isSimpleCodeCandidate(element: HTMLElement) {
   return children.every((child) => ['br', 'span'].includes(child.tagName.toLowerCase()))
 }
 
-function inline(node: Node): string {
+function inline(node: Node, inheritedBold = false): string {
   if (node.nodeType === Node.TEXT_NODE) return inlineText(node.textContent ?? '', node)
   if (node.nodeType !== Node.ELEMENT_NODE) return ''
   const element = node as HTMLElement
-  const content = () => Array.from(element.childNodes).map(inline).join('')
+  const bold = isBold(element)
+  const content = () => Array.from(element.childNodes).map((child) => inline(child, inheritedBold || bold)).join('')
+  const boldContent = () => {
+    const text = content().trim()
+    return text && !inheritedBold ? `**${text}**` : text
+  }
   switch (element.tagName.toLowerCase()) {
     case 'br': return '\n\n'
     case 'strong':
-    case 'b': return `**${content().trim()}**`
+    case 'b': return boldContent()
     case 'em':
     case 'i': return `*${content().trim()}*`
     case 's':
@@ -277,7 +282,7 @@ function inline(node: Node): string {
     case 'style':
     case 'noscript': return ''
     default: {
-      if (hasStyle(element, /font-weight\s*:\s*(?:bold|[6-9]00)/i)) return `**${content().trim()}**`
+      if (bold) return boldContent()
       if (hasStyle(element, /font-style\s*:\s*italic/i)) return `*${content().trim()}*`
       if (hasStyle(element, /text-decoration(?:-line)?\s*:\s*[^;]*line-through/i)) return `~~${content().trim()}~~`
       return content()
@@ -650,15 +655,6 @@ function clipboardHtmlMatchesPlainText(html: string, text: string) {
   return visible.includes(plain)
 }
 
-function clipboardImagesMarkdown(html: string) {
-  if (!html.trim() || typeof DOMParser === 'undefined') return ''
-  const document = new DOMParser().parseFromString(html, 'text/html') as ClipboardDocument
-  const images = Array.from(document.body.querySelectorAll('img'))
-    .map((image) => imageMarkdown(image as HTMLElement))
-    .filter(Boolean)
-  return [...new Set(images)].join('\n\n')
-}
-
 function richClipboardListLabel(value: string) {
   const text = value.trim()
   if (!text || text.length > 24 || !/[\u3400-\u9fff]/.test(text) || /[。！？!?；;，,：:、]$/.test(text)) return null
@@ -844,13 +840,40 @@ function normalizeBaiduNetdiskAiText(value: string) {
 }
 
 function insertClipboardImages(source: string, html: string) {
-  const images = clipboardImagesMarkdown(html)
-  if (!images) return source
-  const imageUrls = new Set([...source.matchAll(/!\[[^\]\n]*\]\((<[^>\n]+>|[^)\n]+)\)/g)].map((match) => match[1].replace(/^<|>$/g, '').trim()))
-  const missingImages = images.split(/\n\s*\n/).filter((image) => {
-    const target = image.match(/!\[[^\]\n]*\]\((<[^>\n]+>|[^)\n]+)\)/)?.[1]?.replace(/^<|>$/g, '').trim()
-    return target && !imageUrls.has(target)
-  })
+  if (!html.trim() || typeof DOMParser === 'undefined') return source
+  const document = new DOMParser().parseFromString(html, 'text/html')
+  const images = new Map<string, string>()
+  const preferredUrls = new Map<string, string>()
+  for (const image of document.body.querySelectorAll('img')) {
+    const markdown = imageMarkdown(image)
+    if (!markdown) continue
+    const preferred = imageUrl(image)
+    images.set(preferred, images.get(preferred) ?? markdown)
+    for (const attribute of ['src', 'data-src', 'data-lazy-src']) {
+      const url = image.getAttribute(attribute)?.trim()
+      if (!url) continue
+      const previous = preferredUrls.get(url)
+      preferredUrls.set(url, previous === undefined || previous === preferred ? preferred : '')
+    }
+  }
+  if (!images.size) return source
+  const imageUrls = new Set<string>()
+  let fence = ''
+  source = source.split('\n').map((line) => {
+    const marker = /^\s*(`{3,}|~{3,})(.*)$/.exec(line)
+    if (marker && !fence) { fence = marker[1]; return line }
+    if (fence) {
+      if (marker?.[1].startsWith(fence) && !marker[2].trim()) fence = ''
+      return line
+    }
+    return line.replace(/(!\[(?:\\.|[^\\\]\n])*\]\()(<[^>\n]+>|[^)\n]+)(\))/g, (match, before: string, wrapped: string, after: string) => {
+      const url = wrapped.replace(/^<|>$/g, '').trim().replace(/\\([!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])/g, '$1')
+      const preferred = (line.trim() === match && preferredUrls.get(url)) || url
+      imageUrls.add(preferred)
+      return preferred === url ? match : `${before}<${preferred}>${after}`
+    })
+  }).join('\n')
+  const missingImages = [...images].filter(([url]) => !imageUrls.has(url)).map(([, markdown]) => markdown)
   if (!missingImages.length) return source
   const blocks = source.split(/\n\s*\n/)
   const insertionIndex = blocks[0]?.trim() ? 1 : 0

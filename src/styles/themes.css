@@ -2820,7 +2820,7 @@ body.is-resizing-outline * {
 .tree-summary-markdown td { padding: 4px 7px; border-bottom: 1px solid var(--border); text-align: left; }
 .tree-summary-markdown th { color: var(--accent); font: 600 11px var(--ui-font); }
 .tree-summary-markdown img { max-width: 100%; height: auto; border-radius: 5px; cursor: zoom-in; }
-.tree-summary-markdown .markdown-image-preview {
+.markdown-image-preview {
   max-width: 100%;
   padding: 0;
   border: 0;
@@ -2828,7 +2828,7 @@ body.is-resizing-outline * {
   background: transparent;
   cursor: zoom-in;
 }
-.tree-summary-markdown .markdown-image-preview:focus-visible {
+.markdown-image-preview:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -3172,8 +3172,8 @@ body.is-resizing-outline * {
 .editor-textarea { width: min(980px, 100%); min-height: calc(100vh - 260px); margin: 0 auto; padding: 20px; border: 1px solid var(--border); border-radius: 10px; outline: none; resize: vertical; background: var(--surface-raised); color: var(--ink); font: 14px/1.75 ui-monospace, SFMono-Regular, Consolas, monospace; tab-size: 2; }
 .editor-textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
 .editor-context-menu { position: fixed; z-index: 40; display: grid; min-width: 160px; max-height: calc(100vh - 16px); overflow-y: auto; padding: 5px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); box-shadow: 0 14px 36px rgba(0,0,0,.25); }
-.editor-context-menu button { padding: 8px 10px; border: 0; border-radius: 5px; background: transparent; color: var(--ink); text-align: left; font: 11px var(--ui-font); }
-.editor-context-menu button:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+.editor-context-menu button { padding: 8px 10px; border: 0; border-radius: 5px; background: transparent; color: var(--ink); text-align: left; font: 500 12px/18px var(--ui-font); }
+.editor-context-menu button:hover { background: var(--accent-soft); }
 .editor-context-menu.editor-context-compact { z-index: 60; min-width: 0; padding: 3px; box-shadow: 0 6px 22px #0002; }
 .task-checkbox { cursor: var(--moyue-cursor-pointer); }
 .replace-row { display: flex; gap: 8px; align-items: center; padding: 8px 0; }

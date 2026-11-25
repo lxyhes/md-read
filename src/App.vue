@@ -20,6 +20,7 @@ import { readNativeClipboardRichText } from './nativeClipboard'
 import { canScrollFocusedRegion } from './focusWheel'
 import { useReaderStore } from './stores/reader'
 import RegionBlock from './components/RegionBlock.vue'
+import MarkdownContent from './components/MarkdownContent.vue'
 import SecondDocumentPane from './components/SecondDocumentPane.vue'
 import EditorOutline from './components/EditorOutline.vue'
 import { decodeLinkPart, findDocumentHeading } from './documentLinks'
@@ -43,6 +44,7 @@ import AppDropdown from './components/AppDropdown.vue'
 import { interfaceFont } from './fonts'
 import { defaultTokens } from './themes'
 import type { FileSystemTreeNode } from './components/FileSystemTree.vue'
+import { deleteSystemEntry } from './fileService'
 import ClipboardManager from './components/ClipboardManager.vue'
 import ContentSkeleton from './components/ContentSkeleton.vue'
 import { cachePastedRemoteImages, copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, downloadMarkdownImages, exportDocumentWithPandoc, importDocumentWithPandoc, importMarkdownAsset, importMarkdownAssetFromPath, listDirectoryFiles, listFileSystemEntries, markdownPathExists, moveFilePath, openFileSystemDirectory, openMarkdownDirectory, openMarkdownFile, openMarkdownFolderAt, organizeMarkdownAssets, readMarkdownExportAssets, readMarkdownPath, removeMarkdownAsset, renameMarkdownAsset, renameMarkdownPath, resolveMarkdownAssetUrl, resolveMarkdownPath, saveBinaryExportFile, saveClipboardImage, saveExportFile, saveMarkdownFile, savePdfExportFile, selectDocxReference, selectFileSystemDirectory, selectMarkdownFolder, splitMarkdownLinkTarget, uploadMarkdownImage, watchDirectoryPath, watchMarkdownPath, writeMarkdownFile, type PandocExportFormat, type WorkspaceFile } from './fileService'
@@ -351,6 +353,7 @@ const annotationColor = ref('#e1a85b')
 const viewerZoom = ref(1)
 const viewerPan = ref({ x: 0, y: 0 })
 const viewerImageNaturalSize = ref({ width: 0, height: 0 })
+const viewerImageFailed = ref(false)
 const viewerDragging = ref(false)
 const viewerStage = ref<HTMLElement | null>(null)
 let viewerPointer = { x: 0, y: 0 }
@@ -424,7 +427,7 @@ const tabContextMenu = ref<{ documentId: string; x: number; y: number } | null>(
 const fileContextMenu = ref<{ file: FileTreeEntry; x: number; y: number } | null>(null)
 const fileContextMenuElement = ref<HTMLElement | null>(null)
 const fileProperties = ref<FileTreeEntry | null>(null)
-const deleteConfirmation = ref<{ files: FileTreeEntry[] } | null>(null)
+const deleteConfirmation = ref<{ files: FileTreeEntry[]; system?: boolean; cleanupImages?: boolean } | null>(null)
 const readerMoreTrigger = ref<HTMLButtonElement>()
 let tabMenuTrigger: HTMLElement | null = null
 let fileMenuTrigger: HTMLElement | null = null
@@ -1582,22 +1585,12 @@ function startEditorSplitResize(event: PointerEvent) {
   updateRatio(event)
 }
 
-function openEditorPreviewImage(event: MouseEvent) {
-  const image = event.target instanceof HTMLImageElement ? event.target : null
-  const document = editorPreviewDocument.value
-  if (!image || !document) return
-  const source = image.currentSrc || image.getAttribute('src') || ''
-  const region = document.regions.find((item) => item.type === 'image' && (String(item.metadata?.url ?? '') === source || item.html.includes(source)))
-  if (!region) return
-  openViewer({ ...region, metadata: { ...(region.metadata ?? {}), url: source } })
-}
-
-function openMindmapImage(image: HTMLImageElement) {
+function openDocumentImage(image: HTMLImageElement, documentId = store.currentDocument?.id) {
   const url = image.currentSrc || image.getAttribute('src')
-  if (!url || !store.currentDocument) return
+  if (!url || !documentId) return
   openViewer({
-    id: 'mindmap-image',
-    documentId: store.currentDocument.id,
+    id: 'preview-image',
+    documentId,
     type: 'image',
     index: 0,
     textContent: image.alt,
@@ -4611,7 +4604,14 @@ async function createFileContextFile() {
   fileContextMenu.value = null
   if (!file) return
   const directory = contextDirectoryPath(file)
-  const value = await promptAppText({ title: '新建 Markdown 文件', inputLabel: '文件名', defaultValue: '新建文本文档.md', confirmLabel: '新建' })
+  const defaultName = '新建文本文档'
+  const value = await promptAppText({
+    title: '新建 Markdown 文件',
+    inputLabel: '文件名',
+    defaultValue: markdownName(defaultName),
+    selectionEnd: defaultName.length,
+    confirmLabel: '新建',
+  })
   if (value === null) return
   const name = markdownName(value)
   if (!validEntryName(name)) { notify('文件名不能为空，且不能包含路径分隔符'); return }
@@ -4634,7 +4634,14 @@ async function createFileContextFolder() {
   fileContextMenu.value = null
   if (!file) return
   const directory = contextDirectoryPath(file)
-  const name = await promptAppText({ title: '新建文件夹', inputLabel: '文件夹名称', defaultValue: '新建文件夹', confirmLabel: '新建' })
+  const defaultName = '新建文件夹'
+  const name = await promptAppText({
+    title: '新建文件夹',
+    inputLabel: '文件夹名称',
+    defaultValue: defaultName,
+    selectionEnd: defaultName.length,
+    confirmLabel: '新建',
+  })
   if (name === null) return
   if (!validEntryName(name)) { notify('文件夹名称不能为空，且不能包含路径分隔符'); return }
   if (!directory) { notify('当前工作区没有可用的实际目录路径'); return }
@@ -5058,6 +5065,18 @@ async function deleteContextFile() {
   const file = fileContextMenu.value?.file
   fileContextMenu.value = null
   if (file) await deleteFile(file, fileMenuTrigger)
+}
+
+function canDeleteSystemEntry(file: FileTreeEntry) {
+  return isTauriRuntime() && hasRealFilesystemPath(file.path) && Boolean(parentFilesystemPath(file.path))
+}
+
+function requestSystemDelete() {
+  const file = fileContextMenu.value?.file
+  fileContextMenu.value = null
+  if (!file || !canDeleteSystemEntry(file) || busyAction.value) return
+  readerModalTrigger = fileMenuTrigger
+  deleteConfirmation.value = { files: [file], system: true, cleanupImages: false }
 }
 
 function onTabAuxClick(event: MouseEvent, documentId: string) {
@@ -5892,13 +5911,53 @@ async function confirmDeleteFile() {
   deleteConfirmation.value = null
   busyAction.value = 'delete'
   try {
+    if (confirmation.system) {
+      await deleteLocalEntry(files[0], Boolean(confirmation.cleanupImages))
+      return
+    }
     for (const file of files) if (file.documentId) await store.removeDocument(file.documentId)
     selectedFilePaths.value = []
     await refreshFileTree()
     notify(files.length === 1 ? `已从阅读空间移除 ${files[0].name}` : `已从阅读空间移除 ${files.length} 个文件`)
   } catch (error) {
-    notify(error instanceof Error ? error.message : '删除文件失败')
+    notify(typeof error === 'string' ? error : error instanceof Error ? error.message : '删除文件失败')
   } finally { busyAction.value = null }
+}
+
+async function deleteLocalEntry(file: FileTreeEntry, cleanupImages: boolean) {
+  if (!canDeleteSystemEntry(file)) return
+  const folder = Boolean(file.isDirectory)
+  const windowsPath = /^[a-z]:[\\/]/i.test(file.path)
+  const entryKey = (path: string) => windowsPath ? filePathKey(path) : path.replace(/\/+$/, '')
+  const target = entryKey(file.path)
+  const matches = (path: string) => entryKey(path) === target || (folder && entryKey(path).startsWith(`${target}/`))
+  if (editorOpen.value && matches(editorDocumentPath.value)) {
+    if (editorDirty.value || editorSaving.value) throw new Error('此文件或文件夹内有正在编辑的草稿，请先保存再删除')
+    await closeEditor()
+  }
+
+  const parent = parentFilesystemPath(file.path)!
+  try {
+    const result = await deleteSystemEntry(file.path, folder, cleanupImages && isMarkdownEntry(file), store.documents)
+    const removed = store.documents.filter(document => matches(document.path))
+    const removedIds = new Set(removed.map(document => document.id))
+    recentlyClosedTabs.value = recentlyClosedTabs.value.filter(id => !removedIds.has(id))
+    let recordsFailed = false
+    for (const document of removed) {
+      try { await store.removeDocument(document.id) }
+      catch { recordsFailed = true }
+    }
+    const root = filesystemTree.value
+    if (root && filesystemTreeScope.value === 'system' && matches(root.path)) await showSystemFilesystemTarget(parent, parent)
+    const images = result.removedImages ? `，已删除 ${result.removedImages} 张下载图片` : ''
+    const failed = result.imageCheckFailed ? '，下载图片检查失败，图片已保留' : result.failedImages ? `，${result.failedImages} 张图片未能删除` : ''
+    const records = recordsFailed ? '，部分阅读记录未能更新' : ''
+    notify(`已从系统删除 ${file.name}${images}${failed}${records}`)
+  } finally {
+    await refreshFileTree()
+    await refreshFilesystemDirectory(parent)
+    if (folder) await refreshFilesystemDirectory(file.path)
+  }
 }
 async function closeDocument(id: string) {
   if (editorOpen.value && editorDocumentId.value === id) {
@@ -6177,6 +6236,7 @@ function openViewer(region: ReaderRegion) {
     viewer.value = { type: region.type === 'code' ? 'code' : region.type === 'image' ? 'image' : region.type === 'table' ? 'table' : 'mermaid', region }
   }
   viewerImageNaturalSize.value = { width: 0, height: 0 }
+  viewerImageFailed.value = false
   resetViewerView(); viewerTab.value = 'preview'; viewerFullscreen.value = false
   void nextTick(() => requestAnimationFrame(fitViewer))
 }
@@ -6192,7 +6252,10 @@ function viewerTitle(type: ViewerType, region: ReaderRegion) {
   return region.metadata?.autoDiagram ? '自动流程图' : 'Mermaid 图表'
 }
 function viewerSubtitle(type: ViewerType, region: ReaderRegion) {
-  if (type === 'image') return '原始尺寸预览 · 滚轮缩放 · 拖动查看'
+  if (type === 'image') {
+    const { width, height } = viewerImageNaturalSize.value
+    return width && height ? `${width} × ${height} 像素` : ''
+  }
   if (type === 'code') return `${region.textContent.split(/\r?\n/).length} 行 · 可复制代码`
   if (type === 'tree') return '从文本树自动生成 · 支持展开与折叠'
   if (type === 'table') return '完整表格 · 支持横向滚动'
@@ -7156,6 +7219,7 @@ async function requestFullscreen() {
             <button type="button" role="menuitem" :disabled="!hasRealFilesystemPath(contextDirectoryPath(fileContextMenu.file))" title="只对真实系统目录提供目录路径" @click="copyFileContextValue('directory')"><AppIcon name="copy" :size="13" />复制目录路径</button>
             <button type="button" role="menuitem" @click="showFileProperties"><AppIcon name="info" :size="13" />属性</button>
             <button v-if="isDeletableFile(fileContextMenu.file)" type="button" role="menuitem" class="file-context-danger" @click="deleteContextFile"><AppIcon name="trash" :size="13" />从阅读空间移除</button>
+            <button v-if="canDeleteSystemEntry(fileContextMenu.file)" type="button" role="menuitem" class="file-context-danger" @click="requestSystemDelete"><AppIcon name="trash" :size="13" />从系统删除…</button>
           </div>
         </Teleport>
         <Modal :open="!!fileProperties" title="文件属性" wrap-class-name="reader-detail-modal" :width="500" centered :after-close="restoreReaderModalFocus" @cancel="fileProperties = null">
@@ -7173,13 +7237,18 @@ async function requestFullscreen() {
             <Button type="primary" @click="copyFilePropertiesPath"><template #icon><AppIcon name="copy" :size="13" /></template>复制文件路径</Button>
           </template>
         </Modal>
-        <Modal :open="!!deleteConfirmation" title="从阅读空间移除？" wrap-class-name="reader-detail-modal" :width="500" centered :after-close="restoreReaderModalFocus" @cancel="deleteConfirmation = null">
-          <p v-if="deleteConfirmation" class="reader-remove-description">
+        <Modal :open="!!deleteConfirmation" :title="deleteConfirmation?.system ? '从系统永久删除？' : '从阅读空间移除？'" wrap-class-name="reader-detail-modal" :width="500" centered :after-close="restoreReaderModalFocus" @cancel="deleteConfirmation = null">
+          <template v-if="deleteConfirmation?.system">
+            <p class="reader-remove-description">将永久删除“{{ deleteConfirmation.files[0].name }}”{{ deleteConfirmation.files[0].isDirectory ? '及其中的所有文件、子文件夹和图片' : '' }}。</p>
+            <p class="reader-remove-description">{{ deleteConfirmation.files[0].path }}</p>
+            <Checkbox v-if="isMarkdownEntry(deleteConfirmation.files[0])" v-model:checked="deleteConfirmation.cleanupImages">同时删除本文引用的下载图片</Checkbox>
+          </template>
+          <p v-else-if="deleteConfirmation" class="reader-remove-description">
             确定从阅读空间移除{{ deleteConfirmation.files.length === 1 ? `“${deleteConfirmation.files[0].name}”` : ` ${deleteConfirmationSummary}` }}？本地文件会保留。
           </p>
           <template #footer>
             <Button type="secondary" @click="deleteConfirmation = null">取消</Button>
-            <Button type="primary" status="danger" :disabled="busyAction !== null" @click="confirmDeleteFile">确认移除</Button>
+            <Button type="primary" status="danger" :disabled="busyAction !== null" @click="confirmDeleteFile">{{ deleteConfirmation?.system ? '永久删除' : '确认移除' }}</Button>
           </template>
         </Modal>
         <div class="reader-layout" :class="{ 'focus-layout': store.mode === 'focus', 'clean-layout': store.mode === 'clean', 'split-layout': readerDisplayMode === 'split', 'html-layout': readerDisplayMode === 'html', 'context-open': readerContextVisible, 'outline-panel-collapsed': outlinePanelCollapsed, 'is-resizing-outline': outlinePanelResizing }" :style="{ '--outline-panel-width': `${outlinePanelWidth}px`, gridTemplateColumns: readerWebPreviewColumns }">
@@ -7450,7 +7519,7 @@ async function requestFullscreen() {
                       </span>
                     </div>
                     <div ref="editorPreview" class="editor-preview-scroll">
-                      <article class="editor-preview" @click="openEditorPreviewImage">
+                      <article class="editor-preview">
                         <p v-if="editorPreviewResult.failed" class="editor-preview-error">预览暂时无法解析，请检查 Markdown 语法。</p>
                         <p v-else-if="!editorPreviewDocument" class="editor-preview-empty">从左侧开始写作，右侧会实时出现阅读效果。</p>
                         <template v-else>
@@ -7458,7 +7527,7 @@ async function requestFullscreen() {
                             <div v-if="region.asciiTree" :data-editor-region-id="region.id">
                               <TreeDiagram :node="region.asciiTree" root directory />
                             </div>
-                            <div v-else :data-editor-region-id="region.id" v-html="region.html" />
+                            <MarkdownContent v-else :data-editor-region-id="region.id" :html="region.html" preview-images @open-image="openDocumentImage($event, region.documentId)" />
                           </template>
                         </template>
                       </article>
@@ -7487,7 +7556,7 @@ async function requestFullscreen() {
                 <div class="regions-stack" :class="{ virtualized: virtualizedReader }">
                 <div v-if="virtualRange.before" class="virtual-spacer" :style="{ height: `${virtualRange.before}px` }" aria-hidden="true" />
                 <div class="virtual-regions">
-                  <RegionBlock v-for="region in virtualRange.regions" v-memo="[region, store.currentDocument?.sourceHash, store.activeRegionId === region.id, store.focusedRegionId === region.id, focusDistanceByRegion.get(region.id), store.mode, store.activeThemeId, currentAnnotationsByRegion.get(region.id)]" :key="region.id" :region="region" :annotations="currentAnnotationsByRegion.get(region.id)" :focused="store.focusedRegionId === region.id" :active="store.activeRegionId === region.id" :focus-distance="focusDistanceByRegion.get(region.id)" :theme-mode="store.activeTheme?.manifest.mode" :theme-key="`${store.mode}-${store.activeThemeId}`" @focus="focusRegion(region)" @open-viewer="openViewer(region)" @open-link="openExternalLink" @code-copied="notify('代码已复制')" @math-copied="notify('MathML 已复制')" @math-copy-failed="notify('复制 MathML 失败，请检查剪贴板权限')" @copy-image="copyRegionAsImage(region)" @toggle-task="toggleTask(region)" />
+                  <RegionBlock v-for="region in virtualRange.regions" v-memo="[region, store.currentDocument?.sourceHash, store.activeRegionId === region.id, store.focusedRegionId === region.id, focusDistanceByRegion.get(region.id), store.mode, store.activeThemeId, currentAnnotationsByRegion.get(region.id)]" :key="region.id" :region="region" :annotations="currentAnnotationsByRegion.get(region.id)" :focused="store.focusedRegionId === region.id" :active="store.activeRegionId === region.id" :focus-distance="focusDistanceByRegion.get(region.id)" :theme-mode="store.activeTheme?.manifest.mode" :theme-key="`${store.mode}-${store.activeThemeId}`" @focus="focusRegion(region)" @open-viewer="openViewer($event ?? region)" @open-link="openExternalLink" @code-copied="notify('代码已复制')" @math-copied="notify('MathML 已复制')" @math-copy-failed="notify('复制 MathML 失败，请检查剪贴板权限')" @copy-image="copyRegionAsImage(region)" @toggle-task="toggleTask(region)" />
                 </div>
                 <div v-if="virtualRange.after" class="virtual-spacer" :style="{ height: `${virtualRange.after}px` }" aria-hidden="true" />
                 </div></div>
@@ -7497,9 +7566,9 @@ async function requestFullscreen() {
                     <small v-if="currentMindmap">点击节点展开一层，点击双箭头展开或收起整个分支</small>
                   </div>
                   <div v-if="currentMindmap && readerDisplayMode === 'mindmap'" class="reader-mindmap-scroll" role="region" aria-label="思维导图画布" tabindex="0">
-                    <TreeDiagram :node="currentMindmap" root horizontal :resolve-url="resolveMindmapUrl" @open-link="openExternalLink" @open-image="openMindmapImage" />
+                    <TreeDiagram :node="currentMindmap" root horizontal :resolve-url="resolveMindmapUrl" @open-link="openExternalLink" @open-image="openDocumentImage" />
                   </div>
-                  <TreeDiagram v-else-if="currentMindmap" :node="currentMindmap" root compact :resolve-url="resolveMindmapUrl" @open-link="openExternalLink" @open-image="openMindmapImage" />
+                  <TreeDiagram v-else-if="currentMindmap" :node="currentMindmap" root compact :resolve-url="resolveMindmapUrl" @open-link="openExternalLink" @open-image="openDocumentImage" />
                   <p v-else class="reader-mindmap-empty">请使用 Markdown 标题或独立加粗小标题来生成思维导图。</p>
                 </div>
               </div>
@@ -7790,7 +7859,10 @@ async function requestFullscreen() {
             <div class="viewer-source-toolbar"><span>图表结构</span></div>
             <pre class="viewer-source">{{ JSON.stringify(viewer.region.metadata ?? {}, null, 2) }}</pre>
           </div>
-          <div v-else-if="viewer.type === 'image'" class="image-viewer"><img :src="String(viewer.region.metadata?.url ?? '')" :alt="viewer.region.textContent" :style="viewerImageStyle" draggable="false" decoding="async" :referrerpolicy="advancedSettings.remoteImagePrivacy || isQuarkImageUrl(String(viewer.region.metadata?.url ?? '')) ? 'no-referrer' : undefined" @load="fitViewer" /></div>
+          <div v-else-if="viewer.type === 'image'" class="image-viewer">
+            <p v-if="viewerImageFailed || !viewer.region.metadata?.url" role="status">图片加载失败。请检查图片路径或重新复制图片。</p>
+            <img v-else :src="String(viewer.region.metadata?.url)" :alt="viewer.region.textContent" :style="viewerImageStyle" draggable="false" decoding="async" :referrerpolicy="advancedSettings.remoteImagePrivacy || isQuarkImageUrl(String(viewer.region.metadata?.url)) ? 'no-referrer' : undefined" @load="fitViewer" @error="viewerImageFailed = true" />
+          </div>
           <ViewerCode v-else-if="viewer.type === 'code'" :region="viewer.region" :theme-mode="store.activeTheme?.manifest.mode" @copied="notify('代码已复制')" />
           <div v-else class="code-viewer table-viewer" v-html="viewer.region.html" />
         </div>

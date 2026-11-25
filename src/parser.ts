@@ -195,7 +195,7 @@ function expandProseCodeBlock(node: MdastNode, source: string): MdastNode[] {
   const value = formatPastedText(node.value ?? '')
   const innerTree = processor.parse(value) as unknown as MdastNode
   resolveMarkdownReferences(innerTree)
-  normalizeArticleStrong(innerTree)
+  normalizeArticleStrong(innerTree, value)
   const nodeStart = node.position?.start?.offset ?? 0
   const nodeEnd = node.position?.end?.offset ?? nodeStart
   const valueOffset = source.slice(nodeStart, nodeEnd).indexOf(value)
@@ -217,7 +217,7 @@ export function parseMarkdown(path: string, source: string, resolveUrl: Markdown
   restoreTimestampedListHeadings(tree)
   removeEmptyListItems(tree)
   restoreSplitStepsLists(tree, normalizedSource)
-  normalizeArticleStrong(tree)
+  normalizeArticleStrong(tree, normalizedSource)
   restoreClipboardCodeCards(tree, normalizedSource)
   const documentId = `doc_${hashText(path)}`
   const regions: ReaderRegion[] = []

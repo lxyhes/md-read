@@ -60,11 +60,20 @@ function splitArticleStrongText(node: MdastNode): MdastNode[] {
   return result
 }
 
-export function normalizeArticleStrong(node: MdastNode) {
+export function normalizeArticleStrong(node: MdastNode, source: string) {
   if (node.type === 'code' || node.type === 'inlineCode' || node.type === 'html') return
   if (!node.children) return
+  const [title, timestamp] = node.children
+  const link = timestamp?.children?.[0]
+  if (node.type === 'paragraph' && node.children.length === 2
+    && title.type === 'text' && /^\*{4}[^*]/.test(title.value ?? '')
+    && source.slice(title.position?.start?.offset, title.position?.end?.offset).startsWith('****')
+    && timestamp.type === 'strong' && timestamp.children?.length === 1
+    && link?.type === 'link' && /^\d{1,2}:\d{2}(?::\d{2})?$/.test(nodeText(link))) {
+    node.children = [{ type: 'strong', children: [{ ...title, value: title.value?.slice(4) }, link] }]
+  }
   node.children = node.children.flatMap((child) => {
-    normalizeArticleStrong(child)
+    normalizeArticleStrong(child, source)
     return child.type === 'text' ? splitArticleStrongText(child) : [child]
   })
 }
@@ -304,7 +313,7 @@ export function renderMarkdownFragment(source: string, resolveUrl: MarkdownUrlRe
   promoteTimestampedParagraphs(tree)
   removeEmptyListItems(tree)
   restoreSplitStepsLists(tree, normalizedSource)
-  normalizeArticleStrong(tree)
+  normalizeArticleStrong(tree, normalizedSource)
   restoreClipboardCodeCards(tree, normalizedSource)
   const headings = (tree.children ?? []).filter((node) => node.type === 'heading').map((node, index) => ({ id: `moyue-heading-${index + 1}`, text: nodeText(node), depth: node.depth ?? 1 }))
   const context = createRenderContext(new Map((tree.children ?? []).filter(node => node.type === 'footnoteDefinition').map(node => [node.identifier ?? node.label ?? '', node])), headings)

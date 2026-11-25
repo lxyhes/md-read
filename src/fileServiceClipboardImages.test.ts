@@ -19,7 +19,7 @@ describe('clipboard image downloads', () => {
     const result = await downloadMarkdownImages('C:/notes/test.md', '[image](https://img-view-c-sz.drive.quark.cn/a/preview?x=1\\&y=2)')
     expect(invoke).toHaveBeenCalledWith('download_remote_image', { url: 'https://img-view-c-sz.drive.quark.cn/a/preview?x=1&y=2' })
     expect(result.source).toMatch(/^!\[image\]\(\.moyue-assets\/download-.*\.webp\)$/)
-    expect(writeFile).toHaveBeenCalled()
+    expect(writeFile).toHaveBeenCalledWith(expect.stringMatching(/\.webp$/), Uint8Array.of(1, 2))
   })
 
   it('keeps an unsaved paste backed by an encoded application data path', async () => {

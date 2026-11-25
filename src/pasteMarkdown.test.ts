@@ -241,6 +241,34 @@ describe('WeChat article paste', () => {
 })
 
 describe('rich clipboard list hierarchy', () => {
+  it('uses the original image URL from HTML even when the copied Markdown has a preview', () => {
+    const preview = 'https://img-view-c-sz.drive.quark.cn/assets/preview?x=1&y=2'
+    const original = 'https://img-view-c-sz.drive.quark.cn/assets/original.png'
+    const html = `<p>内容摘要</p><img alt="封面" src="${preview}" data-src="${preview}" data-original-src="${original}">`
+    const plain = `# 内容摘要\n\n[image](${preview.replace('&', '\\&')})\n\n- 章节\n  - 内容`
+    const source = formatClipboardToMarkdown(html, plain)
+    expect(source).not.toContain('/preview?')
+    expect(source.split(original)).toHaveLength(2)
+    const document = parseMarkdown('course.md', source)
+    expect(document.regions.find((region) => region.type === 'image')?.metadata?.url).toBe(original)
+    expect(formatClipboardToMarkdown(html, '')).toContain(`![封面](${original})`)
+    expect(formatClipboardToMarkdown('', plain)).toContain('/preview?')
+  })
+
+  it('renders a nested bold chapter title and keeps its timestamp clickable', () => {
+    const title = '实时数字人与NUI（自然用户界面）'
+    const url = 'https://b.quark.cn/video#?seek_t=1218'
+    const html = `<ul><li>AI Agent 与数字人<ul><li><strong><span style="font-weight: 700">${title}</span><a href="${url}">20:18</a></strong></li></ul></li></ul>`
+    const pasted = formatClipboardToMarkdown(html, '')
+    expect(pasted).toContain(`**${title}[20:18](${url})**`)
+    const saved = `- AI Agent 与数字人\n  - ****${title}**[20:18](${url})**`
+    for (const source of [pasted, saved]) {
+      const expected = `<strong>${title}<a href="${url}"`
+      expect(parseMarkdown('course.md', source).regions[0].html).toContain(expected)
+      expect(renderMarkdownFragment(source)).toContain(expected)
+    }
+  })
+
   it('renders standalone pasted image links in saved documents and previews', () => {
     const source = '[image](https://img-view-c-sz.drive.quark.cn/assets/preview?token=abc\\&sp=100)'
     const document = parseMarkdown('course.md', source)

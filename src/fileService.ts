@@ -569,6 +569,45 @@ export async function selectFileSystemDirectory(): Promise<string | null> {
   return typeof selected === 'string' ? selected : null
 }
 
+export async function deleteSystemEntry(
+  path: string,
+  isDirectory: boolean,
+  cleanupImages: boolean,
+  openDocuments: ReadonlyArray<Pick<OpenedFile, 'path' | 'source'>>,
+) {
+  if (!isTauri()) throw new Error('从系统删除需要桌面端')
+  let expectedSource: string | null = null
+  let images: string[] = []
+  let imageCheckFailed = false
+  if (cleanupImages && !isDirectory && /\.(md|markdown|qmd)$/i.test(path)) {
+    try {
+      const directory = dirnameOf(path)
+      const source = await readTextFile(path)
+      const candidates = new Set<string>()
+      const assetDirectory = `${normalizeLocalPath(directory).replace(/\/$/, '')}/.moyue-assets/`
+      for (const { url } of markdownMediaDestinations(source)) {
+        const asset = localEditorImagePath(path, url)
+        if (!asset) continue
+        const name = asset.slice(asset.lastIndexOf('/') + 1)
+        if (asset === `${assetDirectory}${name}` && isImagePath(name) && /^download-[0-9a-f-]{36}-\d+\./i.test(name)) candidates.add(name)
+      }
+      if (candidates.size) {
+        const siblings = (await readDir(directory)).filter(entry => !entry.isDirectory && /\.(md|markdown|qmd)$/i.test(entry.name))
+          .map(entry => `${directory.replace(/\/$/, '')}/${entry.name}`).filter(entry => assetKey(entry) !== assetKey(path))
+        const otherSources = await Promise.all(siblings.map(entry => readTextFile(entry)))
+        for (const document of openDocuments) if (assetKey(document.path) !== assetKey(path)) otherSources.push(document.source)
+        const references = otherSources.map(source => source.replace(/%[0-9a-f]{2}/gi, code => decodeUrlPath(code)).toLowerCase())
+        images = [...candidates].filter(name => !references.some(source => source.includes(name.toLowerCase())))
+        if (images.length) expectedSource = source
+      }
+    } catch {
+      imageCheckFailed = true
+    }
+  }
+  const result = await invoke<{ removedImages: number; failedImages: number }>('delete_system_entry', { path, isDirectory, expectedSource, images })
+  return { ...result, imageCheckFailed }
+}
+
 export async function renameMarkdownPath(path: string, nextPath: string): Promise<string | null> {
   if (!isTauri()) throw new Error('浏览器预览无法重命名文件，请使用桌面端打开')
   if (!/\.(md|markdown|qmd)$/i.test(path) || !/\.(md|markdown|qmd)$/i.test(nextPath)) throw new Error('只能重命名 Markdown / Quarto 文件')
