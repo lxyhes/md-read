@@ -740,7 +740,7 @@
   border-bottom: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
   background: color-mix(in srgb, var(--surface-raised) 30%, var(--code-bg));
   color: var(--muted);
-  font: 10px var(--ui-font);
+  font: 12px var(--ui-font);
 }
 .code-language,
 .code-viewer-toolbar > span {
@@ -756,7 +756,7 @@
 .code-language b {
   overflow: hidden;
   color: var(--ink);
-  font: 10px var(--mono);
+  font: 12px var(--mono);
   letter-spacing: .04em;
   text-overflow: ellipsis;
   text-transform: uppercase;
@@ -766,7 +766,7 @@
   padding-left: 8px;
   border-left: 1px solid var(--border);
   color: var(--muted);
-  font-size: 9px;
+  font-size: 12px;
 }
 .code-copy,
 .code-viewer-toolbar button {
@@ -780,7 +780,7 @@
   border-radius: 6px;
   background: transparent;
   color: var(--muted);
-  font: 10px var(--ui-font);
+  font: 12px var(--ui-font);
   transition: background .2s ease, border-color .2s ease, color .2s ease, transform .2s ease;
 }
 .code-copy:hover,
@@ -875,10 +875,10 @@
   font-size: 12px;
 }
 .reader-tab small {
-  font-size: 10px;
+  font-size: 11px;
 }
 .reader-tab-status {
-  font-size: 10px;
+  font-size: 12px;
 }
 .reader-meta {
   font-size: 11px;
@@ -897,7 +897,7 @@
 }
 .file-item-copy small,
 .file-browser-note {
-  font-size: 10px;
+  font-size: 12px;
 }
 .context-panel,
 .outline-panel {
@@ -969,13 +969,13 @@
   font-family: var(--mono);
 }
 
-.search-scope-row { display: flex; align-items: center; gap: 10px; padding: 8px 18px; border-bottom: 1px solid var(--border); color: var(--muted); font: 10px var(--ui-font); }
+.search-scope-row { display: flex; align-items: center; gap: 10px; padding: 8px 18px; border-bottom: 1px solid var(--border); color: var(--muted); font: 12px var(--ui-font); }
 .search-scope-tabs { display: flex; gap: 3px; padding: 3px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-raised); }
-.search-scope-tabs button { padding: 5px 8px; border-radius: 5px; background: transparent; color: var(--muted); font: 10px var(--ui-font); }
+.search-scope-tabs button { padding: 5px 8px; border-radius: 5px; background: transparent; color: var(--muted); font: 12px var(--ui-font); }
 .search-scope-tabs button.active, .search-scope-tabs button:hover:not(:disabled) { background: var(--accent-soft); color: var(--ink); }
 .search-scope-tabs button:disabled { cursor: not-allowed; opacity: .45; }
 .search-scope-row > span { margin-left: auto; color: var(--accent); font-family: var(--mono); }
-.quick-open-meta strong { color: var(--ink); font: 600 10px var(--ui-font); }
+.quick-open-meta strong { color: var(--ink); font: 600 12px var(--ui-font); }
 .quick-open-results .quick-open-path { font-family: var(--mono); letter-spacing: -.01em; }
 @media (max-width: 720px) { .search-scope-row { flex-wrap: wrap; } .search-scope-row > span { margin-left: 0; } .search-scope-row > small { width: 100%; } }
 
@@ -1110,7 +1110,7 @@
   min-height: 30px;
   padding: 0 2px 6px;
   color: var(--muted);
-  font: 10px var(--ui-font);
+  font: 12px var(--ui-font);
   letter-spacing: .04em;
 }
 .table-region-toolbar > span {
@@ -1230,7 +1230,7 @@
   border-radius: 6px;
   background: transparent;
   color: var(--muted);
-  font: 10px var(--ui-font);
+  font: 12px var(--ui-font);
   transition: background .2s ease, border-color .2s ease, color .2s ease;
 }
 .code-view:hover,
@@ -1325,7 +1325,7 @@ button:focus-visible,
   border-radius: 7px;
   background: var(--surface-raised);
   color: var(--muted);
-  font: 10px var(--ui-font);
+  font: 12px var(--ui-font);
 }
 .viewer-fit-button:hover,
 .viewer-source-toolbar button:hover {
@@ -1384,7 +1384,7 @@ button:focus-visible,
   padding: 11px 14px;
   border-bottom: 1px solid var(--border);
   color: var(--muted);
-  font: 10px var(--ui-font);
+  font: 12px var(--ui-font);
 }
 .viewer-source-toolbar button {
   min-height: 25px;
@@ -1424,7 +1424,7 @@ button:focus-visible,
 }
 .mermaid-error small {
   color: var(--muted);
-  font: 10px/1.5 var(--mono);
+  font: 12px/1.5 var(--mono);
 }
 .mermaid-error code {
   display: block;
@@ -1472,7 +1472,7 @@ button:focus-visible,
     gap: 8px;
   }
   .viewer-footer-actions button {
-    font-size: 10px;
+    font-size: 12px;
   }
 }
 
@@ -1497,7 +1497,7 @@ button:focus-visible,
 .reading-progress-rail-caption {
   margin-bottom: 10px;
   color: var(--accent);
-  font: 9px var(--mono);
+  font: 12px var(--mono);
   letter-spacing: .04em;
 }
 .reading-progress-rail-track {
@@ -1574,7 +1574,7 @@ button:focus-visible,
   border-radius: 6px;
   background: var(--surface-raised);
   color: var(--ink);
-  font: 10px var(--ui-font);
+  font: 12px var(--ui-font);
   opacity: 0;
   pointer-events: none;
   text-overflow: ellipsis;
@@ -2065,12 +2065,12 @@ button:focus-visible,
   justify-content: space-between;
   padding: 7px 9px 8px;
   color: var(--muted);
-  font: 10px var(--ui-font);
+  font: 12px var(--ui-font);
   letter-spacing: .08em;
 }
 .tab-list-heading small {
   color: var(--accent);
-  font: 10px var(--mono);
+  font: 11px var(--mono);
 }
 .tab-list-group + .tab-list-group {
   margin-top: 5px;
@@ -2116,7 +2116,7 @@ button:focus-visible,
   border-radius: 4px;
   background: var(--accent-soft);
   color: var(--accent);
-  font: 10px var(--mono);
+  font: 11px var(--mono);
 }
 .tab-list-item {
   display: flex;
@@ -2161,7 +2161,7 @@ button:focus-visible,
 .tab-list-copy small {
   margin-top: 3px;
   color: var(--muted);
-  font: 9px var(--ui-font);
+  font: 12px var(--ui-font);
 }
 .tab-context-menu {
   position: fixed;
@@ -2309,8 +2309,8 @@ button:focus-visible,
 .filesystem-tree-empty {
   padding-top: 5px;
   padding-bottom: 6px;
-  color: var(--muted);
-  font: 9px/1.4 var(--ui-font);
+  color: color-mix(in srgb, var(--ink) 72%, var(--muted));
+  font: 12px/1.4 var(--ui-font);
 }
 .filesystem-tree-error {
   color: #c96c6c;
@@ -2330,14 +2330,14 @@ button:focus-visible,
   border-bottom: 0;
 }
 .file-properties-list dt {
-  color: var(--muted);
-  font: 10px var(--ui-font);
+  color: color-mix(in srgb, var(--ink) 75%, var(--muted));
+  font: 500 13px/20px var(--ui-font);
 }
 .file-properties-list dd {
   margin: 0;
   overflow-wrap: anywhere;
   color: var(--ink);
-  font: 10px/1.5 var(--mono);
+  font: 13px/20px var(--ui-font);
 }
 .reader-tab-status {
   flex: 0 0 auto;
@@ -2362,14 +2362,14 @@ button:focus-visible,
   outline: 0;
   background: transparent;
   color: var(--ink);
-  font: 10px var(--ui-font);
+  font: 12px var(--ui-font);
 }
 .tab-list-search input::placeholder { color: var(--muted); }
 .tab-list-empty {
   padding: 14px 9px;
   color: var(--muted);
   text-align: center;
-  font: 10px var(--ui-font);
+  font: 12px var(--ui-font);
 }
 .tab-reopen-button {
   display: flex;
@@ -2382,7 +2382,7 @@ button:focus-visible,
   background: transparent;
   color: var(--accent);
   text-align: left;
-  font: 10px var(--ui-font);
+  font: 12px var(--ui-font);
 }
 .tab-reopen-button:hover:not(:disabled) { background: var(--accent-soft); }
 .tab-reopen-button:disabled { cursor: not-allowed; opacity: .42; }
@@ -2485,7 +2485,7 @@ button:focus-visible,
   align-items: center;
   gap: 7px;
   color: var(--muted);
-  font: 9px var(--mono);
+  font: 12px var(--mono);
   letter-spacing: .14em;
 }
 .viewer-kicker i {
@@ -2517,8 +2517,8 @@ button:focus-visible,
 .viewer-heading > small {
   display: block;
   margin-top: 4px;
-  color: var(--muted);
-  font: 10px var(--ui-font);
+  color: color-mix(in srgb, var(--ink) 72%, var(--muted));
+  font: 12px var(--ui-font);
 }
 .viewer-title-badge {
   flex: 0 0 auto;
@@ -2527,7 +2527,7 @@ button:focus-visible,
   border-radius: 999px;
   background: color-mix(in srgb, var(--accent-soft) 40%, transparent);
   color: var(--accent);
-  font: 9px var(--ui-font);
+  font: 11px var(--ui-font);
 }
 .viewer-actions {
   flex: 0 0 auto;
@@ -2623,7 +2623,7 @@ button:focus-visible,
   border-radius: 4px;
   background: var(--surface-raised);
   color: var(--muted);
-  font: 9px var(--mono);
+  font: 11px var(--mono);
 }
 .viewer-footer-hint span {
   color: var(--muted);
@@ -2728,7 +2728,7 @@ button:focus-visible,
 }
 .viewer-stage .code-viewer-toolbar > span b {
   color: var(--ink);
-  font: 10px var(--mono);
+  font: 12px var(--mono);
   letter-spacing: .04em;
   text-transform: uppercase;
 }
@@ -2736,7 +2736,7 @@ button:focus-visible,
   padding-left: 8px;
   border-left: 1px solid var(--border);
   color: var(--muted);
-  font-size: 9px;
+  font-size: 12px;
 }
 .viewer-stage .code-viewer-content {
   min-height: 0;
@@ -3012,7 +3012,7 @@ button:focus-visible,
   outline: 0;
   background: transparent;
   color: var(--ink);
-  font: 10px var(--ui-font);
+  font: 12px var(--ui-font);
 }
 .outline-search input::placeholder { color: var(--muted); }
 .outline-search button {
@@ -3300,7 +3300,7 @@ button:focus-visible,
 .outline-empty {
   margin: 16px 8px;
   color: var(--muted);
-  font: 10px/1.5 var(--ui-font);
+  font: 12px/1.5 var(--ui-font);
 }
 
 .reader-navigation {
@@ -3317,7 +3317,7 @@ button:focus-visible,
 .reader-progress-label {
   padding: 4px 7px;
   color: var(--accent);
-  font: 10px var(--mono);
+  font: 12px var(--mono);
   white-space: nowrap;
 }
 .reader-navigation button {
@@ -3325,7 +3325,7 @@ button:focus-visible,
   border-radius: 6px;
   background: transparent;
   color: var(--muted);
-  font: 10px var(--ui-font);
+  font: 12px var(--ui-font);
   white-space: nowrap;
 }
 .reader-navigation button:hover {

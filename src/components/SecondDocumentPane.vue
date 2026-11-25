@@ -134,7 +134,7 @@ function onKeydown(event: KeyboardEvent) {
 .second-document-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; min-height: 76px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
 .second-document-identity { display: flex; flex: 1 1 220px; min-width: 0; max-width: 440px; flex-direction: column; gap: 6px; }
 .second-document-caption { display: flex; align-items: center; gap: 8px; color: var(--muted); font: 11px/1.4 var(--ui-font); }
-.second-document-readonly { padding: 1px 5px; border: 1px solid var(--border); border-radius: 4px; font-size: 10px; }
+.second-document-readonly { padding: 1px 5px; border: 1px solid var(--border); border-radius: 4px; font-size: 12px; }
 .second-document-select { position: relative; display: flex; align-items: center; min-width: 0; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); transition: border-color .15s, background .15s; }
 .second-document-select:hover, .second-document-select:focus-within { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 5%, var(--surface)); }
 .second-document-select > .app-icon { position: absolute; z-index: 1; pointer-events: none; color: var(--muted); }
