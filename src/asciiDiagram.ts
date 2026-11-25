@@ -1,4 +1,5 @@
 import { formatPastedText } from './pasteMarkdown'
+import type { ReaderRegion } from './types'
 
 type DiagramBox = {
   top: number
@@ -19,6 +20,7 @@ export type AsciiTreeNode = {
   href?: string
   linkText?: string
   detail?: string
+  regionId?: string
   children: AsciiTreeNode[]
 }
 
@@ -87,7 +89,7 @@ function mindmapSummary(lines: string[]) {
 }
 
 /** Build a compact outline tree from Markdown headings and standalone bold section labels. */
-export function markdownToTree(source: string, title: string): AsciiTreeNode | null {
+export function markdownToTree(source: string, title: string, regions: readonly ReaderRegion[] = []): AsciiTreeNode | null {
   const lines = formatPastedText(source).split(/\r?\n/)
   const headings: MarkdownHeading[] = []
   for (const [lineIndex, line] of lines.entries()) {
@@ -116,6 +118,18 @@ export function markdownToTree(source: string, title: string): AsciiTreeNode | n
   if (!headings.length) return null
 
   const root: AsciiTreeNode = { label: title || '未命名文档', children: [] }
+  const titleRegion = regions.find(region => region.type === 'heading')
+  if (titleRegion?.textContent === title) root.regionId = titleRegion.id
+  const sourceLabels = regions.flatMap(region => {
+    if (region.id === root.regionId) return []
+    if (region.type === 'heading') return [{ id: region.id, label: mindmapHeading(region.textContent) }]
+    if (region.type !== 'paragraph' && region.type !== 'list') return []
+    const rawLines = source.slice(region.sourceStart, region.sourceEnd).split(/\r?\n/)
+    return rawLines.map(line => line.trim().replace(/^[-+*]\s+/, ''))
+      .filter(line => /^(?:\*\*|__)/.test(line) || mindmapLink(line))
+      .map(line => ({ id: region.id, label: mindmapHeading(line) }))
+  })
+  let sourceIndex = 0
   const stack: Array<{ depth: number; node: AsciiTreeNode }> = [{ depth: 0, node: root }]
   const titleLine = lines.findIndex((line) => {
     const match = line.match(/^\s*#{1,6}\s+(.+?)\s*$/)
@@ -130,6 +144,12 @@ export function markdownToTree(source: string, title: string): AsciiTreeNode | n
       ...(heading.href ? { href: heading.href } : {}),
       ...(heading.linkText ? { linkText: heading.linkText } : {}),
       children: [],
+    }
+    for (let candidate = sourceIndex; candidate < sourceLabels.length; candidate += 1) {
+      if (sourceLabels[candidate].label !== heading.label) continue
+      node.regionId = sourceLabels[candidate].id
+      sourceIndex = candidate + 1
+      break
     }
     const bodyEnd = headings[index + 1]?.line ?? lines.length
     const summary = mindmapSummary(lines.slice(heading.line + 1, bodyEnd))

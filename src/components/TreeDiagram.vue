@@ -6,12 +6,23 @@ import AppIcon from './AppIcon.vue'
 import MarkdownContent from './MarkdownContent.vue'
 
 type BranchExpansion = { open: boolean }
-const props = defineProps<{ node: AsciiTreeNode; root?: boolean; depth?: number; compact?: boolean; directory?: boolean; horizontal?: boolean; resolveUrl?: MarkdownUrlResolver; expandRequest?: BranchExpansion }>()
-const emit = defineEmits<{ 'open-link': [url: string]; 'open-image': [image: HTMLImageElement] }>()
+type MindmapNavigation = { selected: string; focused: string; reveal?: { path: string; openTarget?: boolean } }
+const props = defineProps<{ node: AsciiTreeNode; root?: boolean; depth?: number; compact?: boolean; directory?: boolean; horizontal?: boolean; resolveUrl?: MarkdownUrlResolver; expandRequest?: BranchExpansion; nodePath?: string; navigation?: MindmapNavigation }>()
+const emit = defineEmits<{ 'open-link': [url: string]; 'open-image': [image: HTMLImageElement]; 'select-node': [path: string] }>()
 const branchDepth = props.depth ?? 0
 const expanded = ref(props.expandRequest?.open ?? Boolean(props.root || (!props.horizontal && !props.compact && branchDepth <= 1)))
 const expandRequest = ref(props.expandRequest)
 const branchDetails = ref<HTMLDetailsElement | null>(null)
+const selected = computed(() => Boolean(props.nodePath && props.navigation?.selected === props.nodePath))
+const outsideFocus = computed(() => {
+  const path = props.nodePath
+  const focused = props.navigation?.focused
+  if (!path || !focused || path === focused || focused.startsWith(path + '.') || path.startsWith(focused + '.')) return false
+  const parentPath = path.slice(0, path.lastIndexOf('.'))
+  return focused.startsWith(parentPath + '.')
+})
+const childPath = (index: number) => props.nodePath ? `${props.nodePath}.${index}` : undefined
+const selectNode = () => { if (props.nodePath) emit('select-node', props.nodePath) }
 const canExpandAll = computed(() => !props.directory && (props.horizontal || props.compact)
   && props.node.children.some(child => child.children.length > 0))
 const bulkOpen = computed(() => expandRequest.value?.open === true)
@@ -24,6 +35,12 @@ function applyExpandRequest(request: BranchExpansion) {
 watch(() => props.expandRequest, request => {
   if (request) applyExpandRequest(request)
 })
+watch(() => props.navigation?.reveal, request => {
+  if (!props.nodePath || !request) return
+  if (!request.path.startsWith(props.nodePath + '.') && !(request.openTarget && request.path === props.nodePath)) return
+  expanded.value = true
+  if (branchDetails.value) branchDetails.value.open = true
+}, { immediate: true })
 const horizontalChildren = ref<HTMLElement | null>(null)
 const summaryOpen = ref(false)
 const summaryHover = ref(false)
@@ -60,6 +77,7 @@ const rootLabel = computed(() => {
   return name || props.node.label
 })
 const toggleBranch = (event: MouseEvent) => {
+  selectNode()
   const restorePosition = captureNodePosition(event)
   expanded.value = !expanded.value
   if (!expanded.value) expandRequest.value = undefined
@@ -207,7 +225,7 @@ onBeforeUnmount(() => {
 <template>
   <div v-if="root" class="tree-diagram" :class="{ 'is-compact': compact, 'is-directory': directory, 'is-horizontal': horizontal }">
     <div class="tree-root-row" :class="{ 'has-expand-all': canExpandAll }">
-      <button class="tree-root" :class="{ collapsed: !expanded }" type="button" :title="node.label" :aria-label="node.label" :aria-expanded="expanded" @click="toggleBranch">
+      <button class="tree-root" :class="{ collapsed: !expanded, 'is-mindmap-selected': selected }" type="button" :data-mindmap-node="nodePath" :title="node.label" :aria-label="node.label" :aria-expanded="expanded" @click="toggleBranch">
         <AppIcon v-if="directory" name="chevron-right" :size="14" />
         <AppIcon v-if="directory" name="folder" :size="16" />
         <span class="tree-node-label">{{ rootLabel }}</span>
@@ -215,30 +233,30 @@ onBeforeUnmount(() => {
       <button v-if="canExpandAll" class="tree-expand-all" :class="{ 'is-expanded': bulkOpen }" type="button" :title="bulkAction" :aria-label="`${bulkAction}：${rootLabel}`" @click="toggleAll"><AppIcon name="chevrons-right" :size="16" /></button>
     </div>
     <ul v-if="node.children.length && (directory || expanded)" v-show="expanded" class="tree-children tree-root-children" role="list">
-      <TreeDiagram v-for="(child, index) in node.children" :key="`${child.label}-${index}`" :node="child" :depth="branchDepth + 1" :compact="compact" :directory="directory" :horizontal="horizontal" :resolve-url="resolveUrl" :expand-request="expandRequest" @open-link="emit('open-link', $event)" @open-image="emit('open-image', $event)" />
+      <TreeDiagram v-for="(child, index) in node.children" :key="`${child.label}-${index}`" :node="child" :depth="branchDepth + 1" :compact="compact" :directory="directory" :horizontal="horizontal" :resolve-url="resolveUrl" :expand-request="expandRequest" :node-path="childPath(index)" :navigation="navigation" @select-node="emit('select-node', $event)" @open-link="emit('open-link', $event)" @open-image="emit('open-image', $event)" />
     </ul>
   </div>
-  <li v-else class="tree-item">
+  <li v-else class="tree-item" :class="{ 'is-mindmap-dimmed': outsideFocus }">
     <div v-if="node.children.length" class="tree-node-row">
-      <button v-if="horizontal" class="tree-branch-toggle" type="button" :title="expanded ? '收起当前层' : '展开一层'" :aria-expanded="expanded" @click="toggleBranch">
+      <button v-if="horizontal" class="tree-branch-toggle" :class="{ 'is-mindmap-selected': selected }" type="button" :data-mindmap-node="nodePath" :title="expanded ? '收起当前层' : '展开一层'" :aria-expanded="expanded" @click="toggleBranch">
         <span class="tree-node-label">{{ nodeLabel }}</span>
         <span class="tree-branch-indicator" aria-hidden="true">{{ expanded ? '−' : '+' }}</span>
       </button>
       <details v-else ref="branchDetails" :open="expanded" @toggle="resetBulkOnNativeClose">
-        <summary>
+        <summary :class="{ 'is-mindmap-selected': selected }" :data-mindmap-node="nodePath" @click="selectNode">
           <AppIcon v-if="directory" name="chevron-right" :size="14" />
           <AppIcon v-if="directory" name="folder" :size="16" />
           <span class="tree-node-label">{{ nodeLabel }}</span>
         </summary>
         <ul class="tree-children" role="list">
-          <TreeDiagram v-for="(child, index) in node.children" :key="`${child.label}-${index}`" :node="child" :depth="branchDepth + 1" :compact="compact" :directory="directory" :resolve-url="resolveUrl" :expand-request="expandRequest" @open-link="emit('open-link', $event)" @open-image="emit('open-image', $event)" />
+          <TreeDiagram v-for="(child, index) in node.children" :key="`${child.label}-${index}`" :node="child" :depth="branchDepth + 1" :compact="compact" :directory="directory" :resolve-url="resolveUrl" :expand-request="expandRequest" :node-path="childPath(index)" :navigation="navigation" @select-node="emit('select-node', $event)" @open-link="emit('open-link', $event)" @open-image="emit('open-image', $event)" />
         </ul>
       </details>
       <button v-if="canExpandAll" class="tree-expand-all" :class="{ 'is-expanded': bulkOpen }" type="button" :title="bulkAction" :aria-label="`${bulkAction}：${nodeLabel}`" @click="toggleAll"><AppIcon name="chevrons-right" :size="16" /></button>
       <a v-if="node.href" class="tree-timestamp-link" :href="node.href" target="_blank" rel="noreferrer" :aria-label="nodeLinkLabel(node.label)" :title="node.href" @click="openNodeLink">{{ linkText }}</a>
     </div>
     <div v-else class="tree-leaf-row">
-      <span class="tree-leaf" :class="{ 'tree-summary-leaf': isSummaryLeaf(node.label), 'is-summary-open': summaryOpen }" :title="isSummaryLeaf(node.label) ? '悬浮查看完整内容，点击固定' : node.label" :tabindex="isSummaryLeaf(node.label) ? 0 : undefined" :role="isSummaryLeaf(node.label) ? 'button' : undefined" :aria-expanded="isSummaryLeaf(node.label) ? summaryVisible : undefined" @mouseenter="showSummary" @mouseleave="scheduleHideSummary" @focus="showSummary" @blur="scheduleHideSummary" @click="toggleSummary" @keydown.enter.prevent="toggleSummary" @keydown.space.prevent="toggleSummary" @keydown.esc="summaryOpen = false; hideSummary()">
+      <span class="tree-leaf" :class="{ 'tree-summary-leaf': isSummaryLeaf(node.label), 'is-summary-open': summaryOpen, 'is-mindmap-selected': selected }" :data-mindmap-node="nodePath" :title="isSummaryLeaf(node.label) ? '悬浮查看完整内容，点击固定' : node.label" :tabindex="isSummaryLeaf(node.label) || nodePath ? 0 : undefined" :role="isSummaryLeaf(node.label) || nodePath ? 'button' : undefined" :aria-expanded="isSummaryLeaf(node.label) ? summaryVisible : undefined" @mouseenter="showSummary" @mouseleave="scheduleHideSummary" @focus="showSummary" @blur="scheduleHideSummary" @click="selectNode(); toggleSummary($event)" @keydown.enter.prevent="selectNode(); toggleSummary($event)" @keydown.space.prevent="selectNode(); toggleSummary($event)" @keydown.esc="summaryOpen = false; hideSummary()">
         <template v-if="isSummaryLeaf(node.label)">
           <span ref="summaryPreview" class="tree-leaf-text">{{ summaryText(nodeLabel) }}</span>
           <span v-if="showFullContentLink" class="tree-leaf-more">查看全文</span>
@@ -252,7 +270,7 @@ onBeforeUnmount(() => {
       <a v-if="node.href" class="tree-timestamp-link" :href="node.href" target="_blank" rel="noreferrer" :aria-label="nodeLinkLabel(node.label)" :title="node.href" @click="openNodeLink">{{ linkText }}</a>
     </div>
     <ul v-if="horizontal && expanded && node.children.length" ref="horizontalChildren" class="tree-children tree-horizontal-children" role="list">
-      <TreeDiagram v-for="(child, index) in node.children" :key="`${child.label}-${index}`" :node="child" horizontal :resolve-url="resolveUrl" :expand-request="expandRequest" @open-link="emit('open-link', $event)" @open-image="emit('open-image', $event)" />
+      <TreeDiagram v-for="(child, index) in node.children" :key="`${child.label}-${index}`" :node="child" horizontal :resolve-url="resolveUrl" :expand-request="expandRequest" :node-path="childPath(index)" :navigation="navigation" @select-node="emit('select-node', $event)" @open-link="emit('open-link', $event)" @open-image="emit('open-image', $event)" />
     </ul>
     <Teleport to="body">
       <div v-if="isSummaryLeaf(node.label) && summaryVisible" ref="summaryPopover" class="tree-summary-popover" role="group" aria-label="完整内容" :style="summaryPopoverStyle" @mouseenter="cancelHideSummary" @mouseleave="scheduleHideSummary" @focusin="cancelHideSummary">

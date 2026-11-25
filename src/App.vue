@@ -28,6 +28,7 @@ import WebPreviewPanel, { hideNativeWebPreviews } from './components/WebPreviewP
 import WebPreviewDock from './components/WebPreviewDock.vue'
 import MermaidBlock from './components/MermaidBlock.vue'
 import TreeDiagram from './components/TreeDiagram.vue'
+import { isMermaidFlowchart } from './flowchart'
 import AppIcon from './components/AppIcon.vue'
 import AppDialog from './components/AppDialog.vue'
 import AppActionMenu from './components/AppActionMenu.vue'
@@ -53,6 +54,7 @@ import { escapeHtml, isQuarkImageUrl, renderMathMl } from './markdown/shared'
 import { makeImplicitMarkdownHeadingsExplicit, parseMarkdown } from './parser'
 import { getDocumentStatistics } from './documentStats'
 import { asciiDiagramToMermaid, asciiTreeToTree, markdownToTree } from './asciiDiagram'
+import type { AsciiTreeNode } from './asciiDiagram'
 import { formatClipboardImage, formatClipboardToMarkdown, htmlToMarkdown, isWordClipboardHtml, normalizeMixedOrderedListSource, promoteClipboardImageLinks, suggestPastedMarkdownName, type ClipboardFormat } from './pasteMarkdown'
 import { matchQuickOpen } from './quickOpen'
 import { indentSelection, codeIndentInsertion, isFenceBacktickInput, preserveLineEndings, selectedLineRange, removeSelectedLines, setHeadingLines, setOrderedListLines, toggleHeadingLines, toggleInlineMarkup } from './editorInput'
@@ -344,6 +346,9 @@ let ollamaModelsRequest = 0
 const orderedRecentFolders = computed(() => orderRecentFolders(recentFolders.value))
 const viewer = ref<{ type: ViewerType; region: ReaderRegion } | null>(null)
 const viewerTab = ref<'preview' | 'source' | 'data'>('preview')
+const viewerFlowPlaying = ref(false)
+const viewerHasFlowchart = computed(() => viewer.value?.type === 'mermaid'
+  && isMermaidFlowchart(String(viewer.value.region.metadata?.code ?? viewer.value.region.textContent)))
 const viewerFullscreen = ref(false)
 const wordCountOpen = ref(false)
 const selectionToolbar = ref<{ text: string; html: string; regionId: string; rect: { top: number; left: number; width: number; height: number } } | null>(null)
@@ -819,6 +824,14 @@ const readerScrollPercent = ref(0)
 const readerAtTop = computed(() => readerScrollPercent.value <= 0.01)
 const readerAtBottom = computed(() => readerScrollPercent.value >= 0.99)
 const readerDisplayMode = ref<'markdown' | 'mindmap' | 'split' | 'html'>('markdown')
+const mindmapMotion = ref(true)
+const mindmapQuery = ref('')
+const mindmapSelectedPath = ref('')
+const mindmapFocusedPath = ref('')
+const mindmapReturnPath = ref('')
+const mindmapReveal = ref<{ path: string; openTarget?: boolean }>()
+const mindmapPanel = ref<HTMLElement | null>(null)
+const splitMindmapViewport = ref<HTMLElement | null>(null)
 const readerSidebarAvailable = computed(() => store.mode !== 'focus' && store.mode !== 'clean')
 const readerContextVisible = computed(() => contextPanelOpen.value && readerSidebarAvailable.value && readerDisplayMode.value !== 'html' && !hasWebPreviews.value)
 const readerWebPreviewColumns = computed(() => {
@@ -840,7 +853,109 @@ function hasCourseOutline(document: ReaderDocument | null | undefined) {
 const compactCourseOutline = computed(() => hasCourseOutline(store.currentDocument))
 const currentMindmap = computed(() => {
   const document = store.currentDocument
-  return document ? markdownToTree(document.source, document.title) : null
+  return document ? markdownToTree(document.source, document.title, document.regions) : null
+})
+const mindmapNodes = computed(() => {
+  const nodes = new Map<string, AsciiTreeNode>()
+  function collect(node: AsciiTreeNode, path: string) {
+    nodes.set(path, node)
+    node.children.forEach((child, index) => collect(child, `${path}.${index}`))
+  }
+  if (currentMindmap.value) collect(currentMindmap.value, '0')
+  return nodes
+})
+const mindmapMatches = computed(() => {
+  const query = mindmapQuery.value.trim().toLocaleLowerCase()
+  return query ? [...mindmapNodes.value].filter(([, node]) => node.label.toLocaleLowerCase().includes(query)).map(([path]) => path) : []
+})
+const mindmapMatchIndex = computed(() => mindmapMatches.value.indexOf(mindmapSelectedPath.value))
+const mindmapSelectedNode = computed(() => mindmapNodes.value.get(mindmapSelectedPath.value))
+const mindmapNavigation = computed(() => ({
+  selected: mindmapSelectedPath.value,
+  focused: mindmapFocusedPath.value,
+  reveal: mindmapReveal.value,
+}))
+function centerSplitMindmapNode(element: HTMLElement) {
+  const viewport = splitMindmapViewport.value
+  if (!viewport || getComputedStyle(viewport).overflowY !== 'auto') return false
+  const node = element.getBoundingClientRect()
+  const bounds = viewport.getBoundingClientRect()
+  viewport.scrollTop += node.top - bounds.top + (node.height - viewport.clientHeight) / 2
+  return true
+}
+function revealMindmapNode(path: string, focus = false, openTarget = false) {
+  mindmapSelectedPath.value = path
+  mindmapReveal.value = { path, openTarget }
+  void nextTick(() => {
+    const element = mindmapPanel.value?.querySelector<HTMLElement>(`[data-mindmap-node="${path}"]`)
+    if (!element) return
+    if (!centerSplitMindmapNode(element)) {
+      element.scrollIntoView({ block: 'center', inline: 'center' })
+    }
+    if (focus) element.focus({ preventScroll: true })
+  })
+}
+function selectMindmapNode(path: string) {
+  mindmapSelectedPath.value = path
+  mindmapReveal.value = undefined
+}
+function navigateMindmapMatches(direction: number) {
+  const count = mindmapMatches.value.length
+  if (!count) return
+  const index = mindmapMatchIndex.value
+  const next = index < 0 ? (direction > 0 ? 0 : count - 1) : (index + direction + count) % count
+  if (mindmapFocusedPath.value) mindmapFocusedPath.value = ''
+  revealMindmapNode(mindmapMatches.value[next])
+}
+function onMindmapSearchEnter(event: KeyboardEvent) {
+  if (event.isComposing || event.keyCode === 229) return
+  event.preventDefault()
+  navigateMindmapMatches(event.shiftKey ? -1 : 1)
+}
+function focusMindmapBranch() {
+  const path = mindmapSelectedPath.value
+  mindmapFocusedPath.value = mindmapFocusedPath.value === path ? '' : path
+  if (mindmapFocusedPath.value) revealMindmapNode(path, false, true)
+}
+function centerMindmap() {
+  mindmapFocusedPath.value = ''
+  revealMindmapNode('0', true)
+}
+function jumpFromMindmapToSource() {
+  const regionId = mindmapSelectedNode.value?.regionId
+  if (!regionId) return
+  const enteringSplit = readerDisplayMode.value === 'mindmap'
+  mindmapReturnPath.value = mindmapSelectedPath.value
+  if (enteringSplit) mindmapReveal.value = { path: mindmapSelectedPath.value }
+  scrollToHeading(regionId)
+  if (enteringSplit) void nextTick(() => {
+    const selected = splitMindmapViewport.value?.querySelector<HTMLElement>('.is-mindmap-selected')
+    if (selected) centerSplitMindmapNode(selected)
+  })
+}
+function returnToMindmapNode() {
+  const path = mindmapReturnPath.value
+  mindmapReturnPath.value = ''
+  setReaderDisplayMode('mindmap')
+  revealMindmapNode(path, true)
+}
+watch(() => [store.currentDocumentId, store.currentDocument?.sourceHash], () => {
+  mindmapQuery.value = ''
+  mindmapSelectedPath.value = ''
+  mindmapFocusedPath.value = ''
+  mindmapReturnPath.value = ''
+  mindmapReveal.value = undefined
+})
+const mindmapFlowcharts = computed(() => {
+  let heading = ''
+  const charts: { region: ReaderRegion; heading: string }[] = []
+  for (const region of store.currentDocument?.regions ?? []) {
+    if (region.type === 'heading') heading = region.textContent
+    if (region.type === 'mermaid' && isMermaidFlowchart(String(region.metadata?.code ?? region.textContent))) {
+      charts.push({ region, heading })
+    }
+  }
+  return charts
 })
 function resolveMindmapUrl(url: string) {
   const document = store.currentDocument
@@ -5440,6 +5555,12 @@ function onKeydown(event: KeyboardEvent) {
     if (restoreFocus) outlinePanelExpandButton.value?.focus()
     return
   }
+  if (event.key === 'Escape' && view.value === 'reader' && mindmapFocusedPath.value
+    && (readerDisplayMode.value === 'mindmap' || readerDisplayMode.value === 'split')) {
+    event.preventDefault()
+    mindmapFocusedPath.value = ''
+    return
+  }
   if (view.value === 'reader' && !isTypingTarget(event.target) && (event.ctrlKey || event.metaKey)) {
     const isZoomIn = event.key === '+' || event.key === '=' || event.key === 'Add' || event.code === 'Equal' || event.code === 'NumpadAdd'
     const isZoomOut = event.key === '-' || event.key === '_' || event.key === 'Subtract' || event.code === 'Minus' || event.code === 'NumpadSubtract'
@@ -5983,6 +6104,7 @@ function syncVirtualViewport() {
   const viewport = readerViewport.value
   if (!viewport) return
   const height = viewport.clientHeight
+  viewport.style.setProperty('--reader-viewport-height', `${height}px`)
   // Leave enough room to scroll the last block past the reading line.
   viewport.style.setProperty('--reader-end-padding', `${Math.max(96, height - readerTrackingOffset(height))}px`)
   virtualScrollTop.value = viewport.scrollTop
@@ -6094,6 +6216,9 @@ function onReaderWheel(event: WheelEvent) {
     return
   }
   if (event.ctrlKey || event.metaKey || event.shiftKey || Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return
+  const mindmapViewport = splitMindmapViewport.value
+  if (event.target instanceof Node && mindmapViewport?.contains(event.target)
+    && mindmapViewport.scrollHeight > mindmapViewport.clientHeight) return
   const document = store.currentDocument
   if (!document || editorOpen.value || store.mode === 'clean' || (readerDisplayMode.value !== 'markdown' && readerDisplayMode.value !== 'split')) {
     readerScrollTargetId = null
@@ -6217,7 +6342,7 @@ function toggleCleanMode() {
 }
 function setViewerZoom(value: number) { viewerZoom.value = Math.min(3, Math.max(.1, Number(value.toFixed(2)))) }
 function resetViewerView() { viewerZoom.value = 1; viewerPan.value = { x: 0, y: 0 } }
-function openViewer(region: ReaderRegion) {
+function openViewer(region: ReaderRegion, playFlow = false) {
   const language = String(region.metadata?.language ?? 'text')
   const asciiDiagramCandidate = region.type === 'code' && /^(?:text|plaintext|markdown|md)$/i.test(language)
   const generatedTree = region.asciiTree ?? (asciiDiagramCandidate ? asciiTreeToTree(region.textContent) : null)
@@ -6237,6 +6362,7 @@ function openViewer(region: ReaderRegion) {
   }
   viewerImageNaturalSize.value = { width: 0, height: 0 }
   viewerImageFailed.value = false
+  viewerFlowPlaying.value = playFlow
   resetViewerView(); viewerTab.value = 'preview'; viewerFullscreen.value = false
   void nextTick(() => requestAnimationFrame(fitViewer))
 }
@@ -6307,6 +6433,7 @@ async function copyViewerSource() {
 }
 function cleanSvgForClipboard(svg: SVGSVGElement) {
   const copy = svg.cloneNode(true) as SVGSVGElement
+  copy.querySelector('.mermaid-flow-dot')?.remove()
   copy.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
   const cleanElement = (element: Element) => {
     if (['script', 'foreignobject'].includes(element.localName.toLowerCase())) {
@@ -6381,7 +6508,9 @@ function onViewerDoubleClick() { if (viewerCanPan.value) resetViewerView() }
 function exportViewer(format: 'svg' | 'png' = 'svg') {
   if (!viewer.value) return
   const svg = viewer.value.type === 'mermaid' ? document.querySelector<SVGSVGElement>('.viewer-stage svg') : null
-  const source = svg?.outerHTML ?? viewer.value.region.textContent
+  const exportSvg = svg?.cloneNode(true) as SVGSVGElement | undefined
+  exportSvg?.querySelector('.mermaid-flow-dot')?.remove()
+  const source = exportSvg?.outerHTML ?? viewer.value.region.textContent
   if (!source) { notify('当前内容暂时没有可导出的数据'); return }
   if (format === 'png' && svg) {
     const svgText = source.includes('xmlns=') ? source : source.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"')
@@ -7432,6 +7561,7 @@ async function requestFullscreen() {
                       @keydown.enter.stop @click="toggleReaderOutline">大纲</button>
                   </div>
                   <div class="reader-reading-actions">
+                    <Button v-if="mindmapReturnPath && readerDisplayMode === 'split'" size="small" type="secondary" @click="returnToMindmapNode">回到导图节点</Button>
                     <div class="reader-display-switch" role="tablist" aria-label="阅读视图">
                       <button type="button" role="tab" :aria-selected="readerDisplayMode === 'markdown'" :class="{ active: readerDisplayMode === 'markdown' }" @click="setReaderDisplayMode('markdown')">Markdown</button>
                       <button type="button" role="tab" :aria-selected="readerDisplayMode === 'mindmap'" :class="{ active: readerDisplayMode === 'mindmap' }" @click="setReaderDisplayMode('mindmap')">思维导图</button>
@@ -7560,15 +7690,38 @@ async function requestFullscreen() {
                 </div>
                 <div v-if="virtualRange.after" class="virtual-spacer" :style="{ height: `${virtualRange.after}px` }" aria-hidden="true" />
                 </div></div>
-                <div v-if="readerDisplayMode === 'mindmap' || readerDisplayMode === 'split'" class="reader-mindmap">
+                <div v-if="readerDisplayMode === 'mindmap' || readerDisplayMode === 'split'" ref="mindmapPanel" class="reader-mindmap">
                   <div class="reader-mindmap-heading">
-                    <h2>章节脉络</h2>
+                    <div class="reader-mindmap-title-row">
+                      <h2>章节脉络</h2>
+                      <Button v-if="currentMindmap?.children.length && readerDisplayMode === 'mindmap'" type="secondary" size="small" :aria-pressed="mindmapMotion" @click="mindmapMotion = !mindmapMotion">连线动效</Button>
+                    </div>
                     <small v-if="currentMindmap">点击节点展开一层，点击双箭头展开或收起整个分支</small>
+                    <div v-if="mindmapFlowcharts.length" class="reader-mindmap-flows">
+                      <Button v-for="(chart, index) in mindmapFlowcharts" :key="chart.region.id" size="small" type="secondary" @click="openViewer(chart.region, true)">
+                        {{ mindmapFlowcharts.length === 1 ? '播放数据流' : `播放数据流 ${index + 1}${chart.heading ? ` · ${chart.heading}` : ''}` }}
+                      </Button>
+                    </div>
                   </div>
-                  <div v-if="currentMindmap && readerDisplayMode === 'mindmap'" class="reader-mindmap-scroll" role="region" aria-label="思维导图画布" tabindex="0">
-                    <TreeDiagram :node="currentMindmap" root horizontal :resolve-url="resolveMindmapUrl" @open-link="openExternalLink" @open-image="openDocumentImage" />
+                  <div v-if="currentMindmap?.children.length" class="reader-mindmap-tools" role="group" aria-label="导图导航">
+                    <div class="reader-mindmap-search">
+                      <Input v-model:value="mindmapQuery" size="small" placeholder="搜索节点" aria-label="搜索节点" @keydown.enter="onMindmapSearchEnter" />
+                      <Button size="small" type="text" aria-label="上一个匹配节点" :disabled="!mindmapMatches.length" @click="navigateMindmapMatches(-1)"><AppIcon name="chevron-up" :size="14" /></Button>
+                      <Button size="small" type="text" aria-label="下一个匹配节点" :disabled="!mindmapMatches.length" @click="navigateMindmapMatches(1)"><AppIcon name="chevron-down" :size="14" /></Button>
+                      <small v-if="mindmapQuery.trim()" role="status">{{ mindmapMatchIndex >= 0 ? `${mindmapMatchIndex + 1} / ${mindmapMatches.length}` : mindmapMatches.length ? `${mindmapMatches.length} 个匹配` : '无匹配节点' }}</small>
+                    </div>
+                    <div class="reader-mindmap-actions">
+                      <Button size="small" type="text" :disabled="!mindmapSelectedNode?.regionId" @click="jumpFromMindmapToSource">定位原文</Button>
+                      <Button size="small" type="text" :disabled="!mindmapFocusedPath && (!mindmapSelectedNode || mindmapSelectedPath === '0')" @click="focusMindmapBranch">{{ mindmapFocusedPath ? '退出聚焦' : '聚焦分支' }}</Button>
+                      <Button size="small" type="text" @click="centerMindmap">回到中心</Button>
+                    </div>
                   </div>
-                  <TreeDiagram v-else-if="currentMindmap" :node="currentMindmap" root compact :resolve-url="resolveMindmapUrl" @open-link="openExternalLink" @open-image="openDocumentImage" />
+                  <div v-if="currentMindmap && readerDisplayMode === 'mindmap'" class="reader-mindmap-scroll" :class="{ 'has-animated-branches': mindmapMotion }" role="region" aria-label="思维导图画布" tabindex="0">
+                    <TreeDiagram :node="currentMindmap" root horizontal node-path="0" :navigation="mindmapNavigation" :resolve-url="resolveMindmapUrl" @select-node="selectMindmapNode" @open-link="openExternalLink" @open-image="openDocumentImage" />
+                  </div>
+                  <div v-else-if="currentMindmap" ref="splitMindmapViewport" class="reader-split-mindmap-scroll" role="region" aria-label="并排思维导图" tabindex="0">
+                    <TreeDiagram :node="currentMindmap" root compact node-path="0" :navigation="mindmapNavigation" :resolve-url="resolveMindmapUrl" @select-node="selectMindmapNode" @open-link="openExternalLink" @open-image="openDocumentImage" />
+                  </div>
                   <p v-else class="reader-mindmap-empty">请使用 Markdown 标题或独立加粗小标题来生成思维导图。</p>
                 </div>
               </div>
@@ -7847,10 +8000,11 @@ async function requestFullscreen() {
           <Button type="text" size="small" :class="{ active: viewerTab === 'preview' }" @click="viewerTab = 'preview'">图表预览</Button>
           <Button type="text" size="small" :class="{ active: viewerTab === 'source' }" @click="viewerTab = 'source'">源代码</Button>
           <Button type="text" size="small" :class="{ active: viewerTab === 'data' }" @click="viewerTab = 'data'">结构</Button>
+          <Button v-if="viewerTab === 'preview' && viewerHasFlowchart" type="text" size="small" @click="viewerFlowPlaying = !viewerFlowPlaying">{{ viewerFlowPlaying ? '停止数据流' : '播放数据流' }}</Button>
         </nav>
         <div ref="viewerStage" class="viewer-stage" :class="{ 'is-pan-enabled': viewerCanPan, 'is-dragging': viewerDragging }" :style="viewerStageStyle" @wheel="onViewerWheel" @pointerdown="onViewerPointerDown" @pointermove="onViewerPointerMove" @pointerup="onViewerPointerUp" @pointercancel="onViewerPointerUp" @dblclick="onViewerDoubleClick">
           <TreeDiagram v-if="viewer.type === 'tree' && activeViewerTree" :node="activeViewerTree" root directory @open-link="openExternalLink" />
-          <MermaidBlock v-else-if="viewer.type === 'mermaid' && viewerTab === 'preview'" :code="String(viewer.region.metadata?.code ?? viewer.region.textContent)" :native-labels="Boolean(viewer.region.metadata?.autoDiagram)" large @rendered="fitViewer" />
+          <MermaidBlock v-else-if="viewer.type === 'mermaid' && viewerTab === 'preview'" :code="String(viewer.region.metadata?.code ?? viewer.region.textContent)" :native-labels="Boolean(viewer.region.metadata?.autoDiagram)" :play-flow="viewerHasFlowchart && viewerFlowPlaying" large @rendered="fitViewer" />
           <div v-else-if="viewer.type === 'mermaid' && viewerTab === 'source'" class="viewer-source-panel">
             <div class="viewer-source-toolbar"><span>Mermaid 源码</span><Button type="text" size="small" @click="copyViewerSource"><template #icon><AppIcon name="copy" :size="13" /></template>复制源码</Button></div>
             <pre class="viewer-source">{{ mermaidSource() }}</pre>

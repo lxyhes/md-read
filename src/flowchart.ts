@@ -1,6 +1,12 @@
 type FlowNode = { id: string; label: string }
 type FlowEdge = { from: string; to: string; label: string }
 
+export function isMermaidFlowchart(source: string) {
+  const header = source.replace(/^\s*---\s*\r?\n[\s\S]*?\r?\n---\s*(?:\r?\n|$)/, '')
+    .split(/\r?\n/).find(line => line.trim() && !line.trimStart().startsWith('%%'))
+  return /^(?:flowchart|graph)\b/i.test(header?.trim() ?? '')
+}
+
 function escapeXml(value: string) {
   return value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[character] ?? character)
 }

@@ -13,7 +13,7 @@ function loadMermaid() {
   return mermaidModule ??= import('mermaid').then((module) => module.default)
 }
 
-const props = defineProps<{ code: string; large?: boolean; themeKey?: string; nativeLabels?: boolean }>()
+const props = defineProps<{ code: string; large?: boolean; themeKey?: string; nativeLabels?: boolean; playFlow?: boolean }>()
 const emit = defineEmits<{ click: []; rendered: [] }>()
 const store = useReaderStore()
 const svg = ref('')
@@ -44,6 +44,50 @@ function measureDiagram() {
 function normalizeMermaidCode(code: string) {
   return code.split(/\r?\n/).map((line) => line.replace(/([A-Za-z_]\w*)\{([^{}\r\n]*\([^{}\r\n]*\)[^{}\r\n]*)\}/g, (_, id: string, label: string) => id + '{"' + label + '"}')).join('\n')
 }
+
+watch(() => [svg.value, props.playFlow] as const, ([markup, playing], _, onCleanup) => {
+  if (!markup || !playing) return
+  const diagram = root.value?.querySelector('.mermaid-svg svg')
+  if (!diagram) return
+  const edges = Array.from(diagram.querySelectorAll<SVGPathElement>('path[marker-end], path[marker-start]'))
+    .filter(path => !path.closest('defs, marker') && typeof path.getTotalLength === 'function')
+    .map(path => ({ path, length: path.getTotalLength(), reverse: !path.hasAttribute('marker-end') }))
+    .filter(edge => edge.length > 0)
+  if (!edges.length) return
+
+  const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle')
+  dot.setAttribute('class', 'mermaid-flow-dot')
+  dot.setAttribute('r', '4')
+  dot.setAttribute('aria-hidden', 'true')
+  let frame = 0
+  let startedAt: number | undefined
+  const millisecondsPerEdge = 900
+  const tick = (time: number) => {
+    startedAt ??= time
+    const elapsed = time - startedAt
+    const edge = edges[Math.floor(elapsed / millisecondsPerEdge) % edges.length]
+    const progress = (elapsed % millisecondsPerEdge) / millisecondsPerEdge
+    const point = edge.path.getPointAtLength((edge.reverse ? 1 - progress : progress) * edge.length)
+    if (dot.parentNode !== edge.path.parentNode) edge.path.parentNode?.appendChild(dot)
+    dot.setAttribute('cx', String(point.x))
+    dot.setAttribute('cy', String(point.y))
+    frame = requestAnimationFrame(tick)
+  }
+  const motion = window.matchMedia('(prefers-reduced-motion: reduce)')
+  const syncMotion = () => {
+    cancelAnimationFrame(frame)
+    dot.remove()
+    startedAt = undefined
+    if (!motion.matches) frame = requestAnimationFrame(tick)
+  }
+  motion.addEventListener('change', syncMotion)
+  syncMotion()
+  onCleanup(() => {
+    motion.removeEventListener('change', syncMotion)
+    cancelAnimationFrame(frame)
+    dot.remove()
+  })
+}, { flush: 'post' })
 
 async function render() {
   const request = ++renderRequest
