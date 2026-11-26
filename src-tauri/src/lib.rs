@@ -308,24 +308,28 @@ fn read_clipboard_snapshot_inner() -> Result<ClipboardSnapshot, String> {
     }
 
     let image = clipboard.get_image().map_err(|error| format!("读取系统剪贴板失败：{error}"))?;
-    let raw = image.bytes.into_owned();
-    if raw.is_empty() || image.width == 0 || image.height == 0 {
+    let signature = image_clipboard_signature(image.width, image.height, &image.bytes);
+    Ok(ClipboardSnapshot {
+        signature: format!("image:{signature}"),
+        kind: "image".into(),
+        text: None,
+        html: None,
+        bytes: Some(encode_clipboard_image(image)?),
+        mime: Some("image/png".into()),
+    })
+}
+
+fn encode_clipboard_image(image: ImageData<'_>) -> Result<Vec<u8>, String> {
+    if image.bytes.is_empty() || image.width == 0 || image.height == 0 {
         return Err("剪贴板里没有可读取的内容".into());
     }
-    let rgba = image::RgbaImage::from_raw(image.width as u32, image.height as u32, raw.clone())
+    let rgba = image::RgbaImage::from_raw(image.width as u32, image.height as u32, image.bytes.into_owned())
         .ok_or_else(|| "剪贴板图片格式无效".to_string())?;
     let mut encoded = Vec::new();
     image::DynamicImage::ImageRgba8(rgba)
         .write_to(&mut std::io::Cursor::new(&mut encoded), image::ImageFormat::Png)
         .map_err(|error| format!("编码剪贴板图片失败：{error}"))?;
-    Ok(ClipboardSnapshot {
-        signature: format!("image:{}", image_clipboard_signature(image.width, image.height, &raw)),
-        kind: "image".into(),
-        text: None,
-        html: None,
-        bytes: Some(encoded),
-        mime: Some("image/png".into()),
-    })
+    Ok(encoded)
 }
 
 fn read_clipboard_signature_inner() -> Result<Option<ClipboardSignature>, String> {
@@ -390,13 +394,21 @@ fn read_clipboard_signature() -> Result<Option<ClipboardSignature>, String> {
 
 #[tauri::command]
 fn read_clipboard_image() -> Result<ClipboardImage, String> {
-    let snapshot = read_clipboard_snapshot_inner()?;
-    if snapshot.kind != "image" {
-        return Err("剪贴板里没有图片".into());
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_app_kit::NSPasteboardTypePNG;
+
+        // arboard's macOS image reader requests TIFF, but some apps publish PNG only.
+        let data = unsafe { NSPasteboard::generalPasteboard().dataForType(NSPasteboardTypePNG) };
+        if let Some(bytes) = data.map(|data| data.to_vec()).filter(|bytes| bytes.starts_with(b"\x89PNG\r\n\x1a\n")) {
+            return Ok(ClipboardImage { bytes, mime: "image/png".into() });
+        }
     }
+    let mut clipboard = Clipboard::new().map_err(|error| format!("连接系统剪贴板失败：{error}"))?;
+    let image = clipboard.get_image().map_err(|error| format!("读取系统剪贴板失败：{error}"))?;
     Ok(ClipboardImage {
-        bytes: snapshot.bytes.unwrap_or_default(),
-        mime: snapshot.mime.unwrap_or_else(|| "image/png".into()),
+        bytes: encode_clipboard_image(image)?,
+        mime: "image/png".into(),
     })
 }
 

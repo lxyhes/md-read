@@ -2235,10 +2235,12 @@ async function onEditorPaste(event: ClipboardEvent) {
   const element = editorTextarea.value
   if (!element) return
   const clipboard = event.clipboardData
-  const imageItem = Array.from(clipboard?.items ?? []).find((item) => item.kind === 'file' && /^image\//i.test(item.type))
+  const clipboardImage = Array.from(clipboard?.items ?? [])
+    .find((item) => item.kind === 'file' && /^image\//i.test(item.type))?.getAsFile()
+    ?? Array.from(clipboard?.files ?? []).find((file) => /^image\//i.test(file.type))
   const plainText = clipboard?.getData('text/plain') ?? ''
   let html = clipboard?.getData('text/html') ?? ''
-  if ((html || plainText) && (!imageItem || (plainText.trim() && isWordClipboardHtml(html)))) {
+  if ((html || plainText) && (!clipboardImage || (plainText.trim() && isWordClipboardHtml(html)))) {
     if (!html && isTauriRuntime()) {
       event.preventDefault(); event.stopPropagation()
       const sourceAtPaste = editorSource.value
@@ -2257,23 +2259,27 @@ async function onEditorPaste(event: ClipboardEvent) {
       return
     }
     if (html) {
-      event.preventDefault(); event.stopPropagation()
-      insertEditorTextAt(promoteClipboardImageLinks(formatClipboardToMarkdown(html, plainText)), element.selectionStart, element.selectionEnd)
+      const formatted = promoteClipboardImageLinks(formatClipboardToMarkdown(html, plainText))
+      if (formatted) {
+        event.preventDefault(); event.stopPropagation()
+        insertEditorTextAt(formatted, element.selectionStart, element.selectionEnd)
+        return
+      }
+    } else {
+      const formatted = promoteClipboardImageLinks(formatClipboardToMarkdown('', plainText))
+      const normalized = normalizeMixedOrderedListSource(formatted)
+      if (normalized.converted) {
+        event.preventDefault()
+        event.stopPropagation()
+        insertEditorTextAt(normalized.source, element.selectionStart, element.selectionEnd)
+        notify(`已修正 ${normalized.converted} 行列表编号`)
+      } else if (formatted !== plainText) {
+        event.preventDefault()
+        event.stopPropagation()
+        insertEditorTextAt(formatted, element.selectionStart, element.selectionEnd)
+      }
       return
     }
-    const formatted = promoteClipboardImageLinks(formatClipboardToMarkdown('', plainText))
-    const normalized = normalizeMixedOrderedListSource(formatted)
-    if (normalized.converted) {
-      event.preventDefault()
-      event.stopPropagation()
-      insertEditorTextAt(normalized.source, element.selectionStart, element.selectionEnd)
-      notify(`已修正 ${normalized.converted} 行列表编号`)
-    } else if (formatted !== plainText) {
-      event.preventDefault()
-      event.stopPropagation()
-      insertEditorTextAt(formatted, element.selectionStart, element.selectionEnd)
-    }
-    return
   }
 
   // The page-level handler intentionally ignores typing targets. Stop this
@@ -2287,7 +2293,7 @@ async function onEditorPaste(event: ClipboardEvent) {
   const documentPath = editorDocumentPath.value
   busyAction.value = 'paste-image'
   try {
-    const image = imageItem?.getAsFile() ?? await readNativeClipboardImage()
+    const image = clipboardImage ?? await readNativeClipboardImage()
     if (!image) {
       notify('剪贴板里没有可读取的图片')
       return
