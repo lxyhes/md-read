@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, ref, useId, watch } from 'vue'
 import type { AsciiTreeNode } from '../asciiDiagram'
 import type { MarkdownUrlResolver } from '../markdown/shared'
 import AppIcon from './AppIcon.vue'
@@ -43,28 +43,12 @@ watch(() => props.navigation?.reveal, request => {
 }, { immediate: true })
 const horizontalChildren = ref<HTMLElement | null>(null)
 const summaryOpen = ref(false)
-const summaryHover = ref(false)
-const summaryTarget = ref<HTMLElement | null>(null)
+const summaryId = useId()
+const summaryTarget = ref<HTMLButtonElement | null>(null)
 const summaryPopover = ref<HTMLElement | null>(null)
 const summaryPopoverStyle = ref<Record<string, string>>({})
-const summaryPreview = ref<HTMLElement | null>(null)
-const previewClipped = ref(false)
-let hideTimer: number | undefined
-const isSummaryLeaf = (label: string) => !props.directory && (label.startsWith('内容：') || label.startsWith('导读：'))
+const isSummaryLeaf = computed(() => !props.directory && /^(?:内容|导读)：/.test(props.node.label))
 const summaryText = (label: string) => label.replace(/^(?:内容|导读)：/, '')
-const showFullContentLink = computed(() => previewClipped.value
-  || props.node.label.endsWith('…')
-  || /!\[[^\]]*\]|<img\b/i.test(props.node.detail ?? ''))
-watch(summaryPreview, (preview, _, onCleanup) => {
-  if (!preview) return
-  const measure = () => { previewClipped.value = preview.scrollHeight > preview.clientHeight }
-  measure()
-  if (typeof ResizeObserver === 'undefined') return
-  const observer = new ResizeObserver(measure)
-  observer.observe(preview)
-  onCleanup(() => observer.disconnect())
-}, { flush: 'post' })
-const summaryVisible = computed(() => summaryOpen.value || summaryHover.value)
 const nodeLinkLabel = (label: string) => `打开章节链接：${label}`
 const linkText = computed(() => props.node.href ? props.node.linkText || '↗' : '')
 const linkStart = computed(() => linkText.value && linkText.value !== '↗' ? props.node.label.indexOf(linkText.value) : -1)
@@ -116,110 +100,79 @@ const openNodeLink = (event: MouseEvent) => {
   event.stopPropagation()
   if (props.node.href) emit('open-link', props.node.href)
 }
-const toggleSummary = (event: MouseEvent | KeyboardEvent) => {
-  if (!isSummaryLeaf(props.node.label)) return
-  if (summaryOpen.value) {
-    closeSummary()
-    return
-  }
-  showSummary(event)
-  summaryOpen.value = true
+const toggleSummary = () => {
+  selectNode()
+  summaryOpen.value = !summaryOpen.value
 }
-const positionSummary = () => {
+const positionSummary = (event?: Event) => {
   const target = summaryTarget.value
-  if (!target) return
+  const panel = summaryPopover.value
+  if (!target || !panel || (event?.type === 'scroll' && event.target instanceof Node && panel.contains(event.target))) return
 
   const targetRect = target.getBoundingClientRect()
   const gap = 10
   const viewportPadding = 16
-  const width = Math.min(460, window.innerWidth - viewportPadding * 2)
-  const preferredHeight = Math.min(360, window.innerHeight * 0.56)
+  const preferredHeight = Math.max(0, Math.min(640, window.innerHeight * 0.72, window.innerHeight - viewportPadding * 2))
   const topSpace = targetRect.top - gap - viewportPadding
   const bottomSpace = window.innerHeight - targetRect.bottom - gap - viewportPadding
   const rightSpace = window.innerWidth - targetRect.right - gap - viewportPadding
   const leftSpace = targetRect.left - gap - viewportPadding
-  const showOnSide = Math.max(leftSpace, rightSpace) >= width
+  const sideSpace = Math.max(leftSpace, rightSpace)
+  const showOnSide = sideSpace >= 400
+  const width = Math.min(560, showOnSide ? sideSpace : window.innerWidth - viewportPadding * 2)
   const showBelow = bottomSpace >= topSpace
-  const availableHeight = showOnSide
-    ? Math.min(preferredHeight, window.innerHeight - viewportPadding * 2)
-    : Math.max(120, Math.min(preferredHeight, showBelow ? bottomSpace : topSpace))
-  const popoverHeight = Math.min(availableHeight, summaryPopover.value?.offsetHeight ?? availableHeight)
+  const verticalSpace = Math.max(topSpace, bottomSpace)
+  const availableHeight = showOnSide || verticalSpace < 180 ? preferredHeight : Math.min(preferredHeight, verticalSpace)
+  const popoverHeight = Math.min(availableHeight, panel.offsetHeight)
   const left = showOnSide
     ? rightSpace >= width ? targetRect.right + gap : targetRect.left - width - gap
     : Math.min(Math.max(viewportPadding, targetRect.left), window.innerWidth - width - viewportPadding)
-  const top = showOnSide
-    ? Math.min(Math.max(viewportPadding, targetRect.top), window.innerHeight - popoverHeight - viewportPadding)
-    : showBelow ? targetRect.bottom + gap : Math.max(viewportPadding, targetRect.top - gap - popoverHeight)
+  const top = showOnSide ? targetRect.top : showBelow ? targetRect.bottom + gap : targetRect.top - gap - popoverHeight
 
   summaryPopoverStyle.value = {
-    left: `${left}px`,
-    top: `${top}px`,
-    width: `${width}px`,
-    maxHeight: `${availableHeight}px`,
+    '--summary-left': `${left}px`,
+    '--summary-top': `${Math.max(viewportPadding, Math.min(top, window.innerHeight - popoverHeight - viewportPadding))}px`,
+    '--summary-width': `${width}px`,
+    '--summary-max-height': `${availableHeight}px`,
   }
-}
-const showSummary = (event: Event) => {
-  const target = event.currentTarget
-  if (!(target instanceof HTMLElement) || !isSummaryLeaf(props.node.label)) return
-
-  window.clearTimeout(hideTimer)
-  summaryTarget.value = target
-  summaryHover.value = true
-  positionSummary()
-  window.addEventListener('resize', positionSummary)
-  window.addEventListener('scroll', positionSummary, true)
-}
-const cancelHideSummary = () => {
-  window.clearTimeout(hideTimer)
-}
-const hideSummary = () => {
-  summaryHover.value = false
-  if (!summaryOpen.value) {
-    summaryTarget.value = null
-    window.removeEventListener('resize', positionSummary)
-    window.removeEventListener('scroll', positionSummary, true)
-  }
-}
-const scheduleHideSummary = () => {
-  window.clearTimeout(hideTimer)
-  hideTimer = window.setTimeout(hideSummary, 120)
 }
 const closeSummary = () => {
   summaryOpen.value = false
-  summaryHover.value = false
-  hideSummary()
+  summaryTarget.value?.focus({ preventScroll: true })
 }
 const openSummaryImage = (image: HTMLImageElement) => {
   closeSummary()
   emit('open-image', image)
 }
-const onOutsidePointerDown = (event: PointerEvent) => {
-  const target = event.target
+const dismissSummaryFromOutside = (target: EventTarget | null) => {
   if (!(target instanceof Node) || summaryTarget.value?.contains(target) || summaryPopover.value?.contains(target)) return
+  summaryOpen.value = false
+}
+const onOutsidePointerDown = (event: PointerEvent) => dismissSummaryFromOutside(event.target)
+const onSummaryFocusout = (event: FocusEvent) => dismissSummaryFromOutside(event.relatedTarget)
+const onSummaryKeydown = (event: KeyboardEvent) => {
+  if (!summaryOpen.value) return
+  event.preventDefault()
+  event.stopPropagation()
   closeSummary()
 }
-const onSummaryKeydown = (event: KeyboardEvent) => {
-  if (event.key === 'Escape') closeSummary()
-}
-watch(summaryOpen, (open) => {
-  if (open) {
-    document.addEventListener('pointerdown', onOutsidePointerDown)
-    document.addEventListener('keydown', onSummaryKeydown)
-  } else {
-    document.removeEventListener('pointerdown', onOutsidePointerDown)
-    document.removeEventListener('keydown', onSummaryKeydown)
-  }
-})
-watch(summaryVisible, (visible) => {
-  if (visible) positionSummary()
+watch(summaryOpen, (open, _, onCleanup) => {
+  const panel = summaryPopover.value
+  if (!open || !panel) return
+  positionSummary()
+  panel.focus({ preventScroll: true })
+  const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(() => positionSummary())
+  observer?.observe(panel)
+  document.addEventListener('pointerdown', onOutsidePointerDown, true)
+  window.addEventListener('resize', positionSummary)
+  window.addEventListener('scroll', positionSummary, true)
+  onCleanup(() => {
+    observer?.disconnect()
+    document.removeEventListener('pointerdown', onOutsidePointerDown, true)
+    window.removeEventListener('resize', positionSummary)
+    window.removeEventListener('scroll', positionSummary, true)
+  })
 }, { flush: 'post' })
-onBeforeUnmount(() => {
-  window.clearTimeout(hideTimer)
-  window.removeEventListener('resize', positionSummary)
-  window.removeEventListener('scroll', positionSummary, true)
-  document.removeEventListener('pointerdown', onOutsidePointerDown)
-  document.removeEventListener('keydown', onSummaryKeydown)
-})
 </script>
 
 <template>
@@ -256,12 +209,12 @@ onBeforeUnmount(() => {
       <a v-if="node.href" class="tree-timestamp-link" :href="node.href" target="_blank" rel="noreferrer" :aria-label="nodeLinkLabel(node.label)" :title="node.href" @click="openNodeLink">{{ linkText }}</a>
     </div>
     <div v-else class="tree-leaf-row">
-      <span class="tree-leaf" :class="{ 'tree-summary-leaf': isSummaryLeaf(node.label), 'is-summary-open': summaryOpen, 'is-mindmap-selected': selected }" :data-mindmap-node="nodePath" :title="isSummaryLeaf(node.label) ? '悬浮查看完整内容，点击固定' : node.label" :tabindex="isSummaryLeaf(node.label) || nodePath ? 0 : undefined" :role="isSummaryLeaf(node.label) || nodePath ? 'button' : undefined" :aria-expanded="isSummaryLeaf(node.label) ? summaryVisible : undefined" @mouseenter="showSummary" @mouseleave="scheduleHideSummary" @focus="showSummary" @blur="scheduleHideSummary" @click="selectNode(); toggleSummary($event)" @keydown.enter.prevent="selectNode(); toggleSummary($event)" @keydown.space.prevent="selectNode(); toggleSummary($event)" @keydown.esc="summaryOpen = false; hideSummary()">
-        <template v-if="isSummaryLeaf(node.label)">
-          <span ref="summaryPreview" class="tree-leaf-text">{{ summaryText(nodeLabel) }}</span>
-          <span v-if="showFullContentLink" class="tree-leaf-more">查看全文</span>
-        </template>
-        <template v-else-if="directory">
+      <button v-if="isSummaryLeaf" ref="summaryTarget" type="button" class="tree-leaf tree-summary-leaf" :class="{ 'is-summary-open': summaryOpen, 'is-mindmap-selected': selected }" :data-mindmap-node="nodePath" :aria-expanded="summaryOpen" :aria-controls="summaryOpen ? summaryId : undefined" @click="toggleSummary" @keydown.esc="onSummaryKeydown">
+        <span class="tree-leaf-text">{{ summaryText(nodeLabel) }}</span>
+        <span class="tree-leaf-more">{{ summaryOpen ? '收起全文' : '查看全文' }}<AppIcon name="chevron-right" :size="11" /></span>
+      </button>
+      <span v-else class="tree-leaf" :class="{ 'is-mindmap-selected': selected }" :data-mindmap-node="nodePath" :title="node.label" :tabindex="nodePath ? 0 : undefined" :role="nodePath ? 'button' : undefined" @click="selectNode" @keydown.enter.prevent="selectNode" @keydown.space.prevent="selectNode">
+        <template v-if="directory">
           <AppIcon name="file" :size="16" />
           <span class="tree-node-label">{{ nodeLabel }}</span>
         </template>
@@ -273,9 +226,14 @@ onBeforeUnmount(() => {
       <TreeDiagram v-for="(child, index) in node.children" :key="`${child.label}-${index}`" :node="child" horizontal :resolve-url="resolveUrl" :expand-request="expandRequest" :node-path="childPath(index)" :navigation="navigation" @select-node="emit('select-node', $event)" @open-link="emit('open-link', $event)" @open-image="emit('open-image', $event)" />
     </ul>
     <Teleport to="body">
-      <div v-if="isSummaryLeaf(node.label) && summaryVisible" ref="summaryPopover" class="tree-summary-popover" role="group" aria-label="完整内容" :style="summaryPopoverStyle" @mouseenter="cancelHideSummary" @mouseleave="scheduleHideSummary" @focusin="cancelHideSummary">
-        <div class="tree-summary-popover-heading">完整内容</div>
-        <MarkdownContent class="tree-summary-markdown" :source="node.detail || summaryText(node.label)" :resolve-url="resolveUrl" preview-images @open-image="openSummaryImage" @load.capture="positionSummary" />
+      <div v-if="isSummaryLeaf && summaryOpen" :id="summaryId" ref="summaryPopover" class="tree-summary-popover" role="dialog" aria-label="完整内容" tabindex="-1" :style="summaryPopoverStyle" @keydown.esc="onSummaryKeydown" @focusout="onSummaryFocusout">
+        <header class="tree-summary-popover-heading">
+          <span>完整内容</span>
+          <button type="button" class="tree-summary-close" aria-label="关闭全文" @click="closeSummary"><AppIcon name="close" :size="15" /></button>
+        </header>
+        <div class="tree-summary-scroll" tabindex="0" role="region" aria-label="正文">
+          <MarkdownContent class="tree-summary-markdown" :source="node.detail || summaryText(node.label)" :resolve-url="resolveUrl" preview-images @open-image="openSummaryImage" />
+        </div>
       </div>
     </Teleport>
   </li>

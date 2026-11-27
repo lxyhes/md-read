@@ -8,6 +8,29 @@ import TreeDiagram from '../components/TreeDiagram.vue'
 import { markdownToTree } from '../asciiDiagram'
 import { resolveMarkdownAssetUrl } from '../fileService'
 
+it.each([true, false])('keeps mind map table rows and links with outer pipes set to %s', (outerPipes) => {
+  const rows = [
+    '项目 | 核实结果',
+    '--- | ---',
+    '用户访问地址 | https://example.com/',
+    '**服务器资源：** | 4 个逻辑 CPU',
+    '部署录像 | [00:12](https://example.com/video)',
+    '部署时间 | 08:30',
+  ]
+  const table = rows.map(row => outerPipes ? `| ${row} |` : row).join('\n')
+  const source = `# 部署说明\n\n## 当前部署\n\n系统当前部署在云服务器。\n\n${table}\n\n## 软件组成\n\n服务清单。`
+  const tree = markdownToTree(source, '部署说明')!
+  expect(tree.children.map(node => node.label)).toEqual(['当前部署', '软件组成'])
+  const detail = tree.children[0].children[0].detail!
+  const container = document.createElement('div')
+  container.innerHTML = renderMarkdownFragment(detail)
+
+  const body = container.querySelector('table tbody')
+  expect(body?.querySelectorAll('tr')).toHaveLength(4)
+  expect(body?.querySelector('a')?.getAttribute('href')).toBe('https://example.com/')
+  expect(body?.lastElementChild?.textContent).toBe('部署时间08:30')
+})
+
 it.each(['horizontal', 'compact'] as const)('toggles all descendants of only the selected %s branch', async (mode) => {
   const node = markdownToTree('# Root\n\n## A\n\n### Child\n\n#### Deep\n\nDetails\n\n## B\n\n### Other\n\nOther details', 'Root')!
   const host = document.createElement('div')
@@ -82,13 +105,40 @@ it.each(['horizontal', 'compact'] as const)('renders a relative image in the %s 
     expect(host.querySelector('.image-region img')?.getAttribute('src')).toBe(imageUrl)
     host.querySelector<HTMLElement>(mode === 'horizontal' ? '.tree-branch-toggle' : 'summary')!.click()
     await nextTick()
-    const summary = host.querySelector<HTMLElement>('.tree-summary-leaf')!
+    const summary = host.querySelector<HTMLButtonElement>('.tree-summary-leaf')!
     expect(summary.textContent).toContain('图片')
+    summary.dispatchEvent(new MouseEvent('mouseenter'))
+    summary.focus()
+    await nextTick()
+    expect(summary.getAttribute('aria-expanded')).toBe('false')
+    expect(document.querySelector('.tree-summary-popover')).toBeNull()
+
     summary.click()
     await nextTick()
+    const panel = document.querySelector<HTMLElement>('.tree-summary-popover')!
+    expect(summary.getAttribute('aria-controls')).toBe(panel.id)
+    expect(document.activeElement).toBe(panel)
     const image = document.querySelector('.tree-summary-markdown img')
     expect(image?.getAttribute('src')).toBe(imageUrl)
     expect(image?.getAttribute('alt')).toBe('Preview')
+
+    panel.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+    await nextTick()
+    expect(document.querySelector('.tree-summary-popover')).toBeNull()
+    expect(document.activeElement).toBe(summary)
+
+    summary.click()
+    await nextTick()
+    document.querySelector<HTMLButtonElement>('[aria-label="关闭全文"]')!.click()
+    await nextTick()
+    expect(summary.getAttribute('aria-expanded')).toBe('false')
+    expect(document.activeElement).toBe(summary)
+
+    summary.click()
+    await nextTick()
+    host.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+    await nextTick()
+    expect(document.querySelector('.tree-summary-popover')).toBeNull()
   } finally {
     app.unmount()
     host.remove()

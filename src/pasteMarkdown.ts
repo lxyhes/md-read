@@ -1,3 +1,5 @@
+import { markdownTableLineIndexes } from './markdown/processor'
+
 type ClipboardDocument = Document
 
 export type ClipboardFormat = 'default' | 'baidu-netdisk-ai' | 'wechat-article'
@@ -612,16 +614,17 @@ function mergeAdjacentArticleHeadingSpans(value: string) {
 function normalizeArticleSections(value: string) {
   let inFence = false
   const lines = value.split('\n')
+  const tableLines = markdownTableLineIndexes(value)
   const result: string[] = []
   const imageCaptionStart = /^!\[.*\]\(.*\)\\$/
-  for (const line of lines) {
+  for (const [index, line] of lines.entries()) {
     const trimmed = line.trim()
     if (/^(?:```|~~~)/.test(trimmed)) {
       inFence = !inFence
       result.push(line)
       continue
     }
-    if (inFence || !trimmed) {
+    if (inFence || !trimmed || tableLines.has(index)) {
       result.push(line)
       continue
     }
@@ -659,13 +662,14 @@ function normalizeArticleSections(value: string) {
 
 function normalizeTimestampedHeadings(value: string) {
   let inFence = false
-  return value.split('\n').map((line) => {
+  const tableLines = markdownTableLineIndexes(value)
+  return value.split('\n').map((line, index) => {
     const trimmed = line.trim()
     if (/^(?:```|~~~)/.test(trimmed)) {
       inFence = !inFence
       return line
     }
-    if (inFence || /^(?:>|#{1,6}\s+)/.test(trimmed)) return line
+    if (inFence || tableLines.has(index) || /^(?:>|#{1,6}\s+)/.test(trimmed)) return line
     const match = trimmed.match(/^(.+?)\s+(\d{1,2}:\d{2}(?::\d{2})?)$/)
     const title = match?.[1]?.trim() ?? ''
     if (!match || !title || title.length > 48 || !/[\u3400-\u9fff]/.test(title) || /[。！？!?]$/.test(title)) return line

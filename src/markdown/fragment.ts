@@ -1,18 +1,10 @@
-import { unified } from 'unified'
-import remarkFrontmatter from 'remark-frontmatter'
-import remarkGfm from 'remark-gfm'
-import remarkMath from 'remark-math'
-import remarkParse from 'remark-parse'
 import { parseComparisonLayout, renderComparisonLayout } from '../comparisonLayout'
+import { markdownProcessor } from './processor'
 import { blockHtmlWithSourceIndent, renderFootnotes } from './render'
 import { createRenderContext, nodeText, resolveMarkdownReferences, type MarkdownUrlResolver, type MdastNode } from './shared'
 import { clipboardCodeCardLanguage, clipboardStepsMarkdown, isClipboardImageLink, normalizeMixedOrderedListSource, readClipboardStep } from '../pasteMarkdown'
 
-export const markdownProcessor = unified()
-  .use(remarkParse)
-  .use(remarkGfm, { singleTilde: false })
-  .use(remarkFrontmatter, ['yaml', 'toml'])
-  .use(remarkMath)
+export { markdownProcessor } from './processor'
 
 export function normalizeLatexDelimiters(source: string): string {
   let inFence = false

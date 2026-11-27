@@ -1,4 +1,5 @@
 import { formatPastedText } from './pasteMarkdown'
+import { markdownTableLineIndexes } from './markdown/processor'
 import type { ReaderRegion } from './types'
 
 type DiagramBox = {
@@ -90,9 +91,12 @@ function mindmapSummary(lines: string[]) {
 
 /** Build a compact outline tree from Markdown headings and standalone bold section labels. */
 export function markdownToTree(source: string, title: string, regions: readonly ReaderRegion[] = []): AsciiTreeNode | null {
-  const lines = formatPastedText(source).split(/\r?\n/)
+  const formatted = formatPastedText(source)
+  const lines = formatted.split(/\r?\n/)
+  const tableLines = markdownTableLineIndexes(formatted)
   const headings: MarkdownHeading[] = []
   for (const [lineIndex, line] of lines.entries()) {
+    if (tableLines.has(lineIndex)) continue
     const heading = line.match(/^\s*(#{1,6})\s+(.+?)\s*$/)
     const isNestedListItem = /^\s+[-+*]\s+/.test(line)
     if (isNestedListItem) continue
