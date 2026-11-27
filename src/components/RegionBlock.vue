@@ -10,7 +10,7 @@ import { asciiDiagramToMermaid, asciiTreeToTree } from '../asciiDiagram'
 import { parseComparisonLayout } from '../comparisonLayout'
 import { renderMathMl } from '../markdown/shared'
 
-const props = defineProps<{ region: ReaderRegion; annotations?: Annotation[]; focused: boolean; active: boolean; focusDistance?: number; themeMode?: ThemeManifest['mode']; themeKey?: string }>()
+const props = defineProps<{ region: ReaderRegion; annotations?: Annotation[]; focused: boolean; active: boolean; focusDistance?: number; themeMode?: ThemeManifest['mode']; themeKey?: string; treeExpansionRequest?: { open: boolean } }>()
 const emit = defineEmits<{ focus: []; openViewer: [region?: ReaderRegion]; 'open-link': [url: string]; 'code-copied': []; 'math-copied': []; 'math-copy-failed': []; 'toggle-task': []; 'copy-image': [] }>()
 const codeLanguage = computed(() => String(props.region.metadata?.language ?? 'text'))
 const proseCodeLanguage = computed(() => /^(?:text|plaintext|markdown|md)$/i.test(codeLanguage.value))
@@ -206,7 +206,7 @@ function openInlineImage(image: HTMLImageElement) {
       </component>
     </div>
       <div v-else-if="region.type === 'code' && asciiTree" class="region-content auto-tree-region" @click.stop>
-      <TreeDiagram :node="asciiTree" root directory @open-link="emit('open-link', $event)" />
+      <TreeDiagram :node="asciiTree" root directory :expand-request="treeExpansionRequest" @open-link="emit('open-link', $event)" />
     </div>
     <div v-else-if="region.type === 'code' && asciiDiagramCode" class="region-content auto-diagram-region" @click.stop="emit('openViewer')">
       <MermaidBlock :code="asciiDiagramCode" :theme-key="themeKey" native-labels />

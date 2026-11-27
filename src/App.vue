@@ -978,6 +978,8 @@ const editorPreviewDocument = computed(() => editorPreviewResult.value.document)
 const editorCourseOutline = computed(() => hasCourseOutline(editorPreviewDocument.value))
 const editorHeadings = computed(() => editorPreviewDocument.value?.headings ?? [])
 const readerRegions = computed(() => store.currentDocument?.regions ?? [])
+const hasReaderDirectoryTrees = computed(() => readerRegions.value.some(region => region.asciiTree))
+const readerTreeExpansionRequest = ref<{ open: boolean }>()
 const virtualizedReader = computed(() => readerRegions.value.length > virtualRegionThreshold)
 const virtualLayout = computed(() => {
   const regions = readerRegions.value
@@ -5449,6 +5451,7 @@ watch(currentDirectoryFiles, (files) => {
 })
 watch(() => store.currentDocumentId, () => {
   collapsedOutlineHeadingIds.value = new Set()
+  readerTreeExpansionRequest.value = undefined
   virtualMeasuredHeights.value = new Map()
   // Do not render the new document at the previous document's virtual offset.
   virtualScrollTop.value = 0
@@ -7568,6 +7571,7 @@ async function requestFullscreen() {
                       <AppIcon name="sidebar-layout" :size="16" />
                     </button>
                     <button type="button" :class="{ active: editorOpen }" @click="editorOpen ? closeEditor() : openEditor()">{{ editorOpen ? '阅读' : '编辑' }}</button>
+                    <button v-if="hasReaderDirectoryTrees && (readerDisplayMode === 'markdown' || readerDisplayMode === 'split')" type="button" @click="readerTreeExpansionRequest = { open: false }">折叠全部目录树</button>
                     <button v-if="!isRealDocumentPath(store.currentDocument?.path ?? '')" class="save-pasted-button" type="button" :disabled="savingDocument" @click="saveCurrentDocument">{{ savingDocument ? '保存中…' : '保存 Markdown' }}</button>
                     <AppDropdown class="reader-more-menu">
                       <button ref="readerMoreTrigger" aria-label="更多文档操作" type="button">更多</button>
@@ -7732,7 +7736,7 @@ async function requestFullscreen() {
                 <div class="regions-stack" :class="{ virtualized: virtualizedReader }">
                 <div v-if="virtualRange.before" class="virtual-spacer" :style="{ height: `${virtualRange.before}px` }" aria-hidden="true" />
                 <div class="virtual-regions">
-                  <RegionBlock v-for="region in virtualRange.regions" v-memo="[region, store.currentDocument?.sourceHash, store.activeRegionId === region.id, store.focusedRegionId === region.id, focusDistanceByRegion.get(region.id), store.mode, store.activeThemeId, currentAnnotationsByRegion.get(region.id)]" :key="region.id" :region="region" :annotations="currentAnnotationsByRegion.get(region.id)" :focused="store.focusedRegionId === region.id" :active="store.activeRegionId === region.id" :focus-distance="focusDistanceByRegion.get(region.id)" :theme-mode="store.activeTheme?.manifest.mode" :theme-key="`${store.mode}-${store.activeThemeId}`" @focus="focusRegion(region)" @open-viewer="openViewer($event ?? region)" @open-link="openExternalLink" @code-copied="notify('代码已复制')" @math-copied="notify('MathML 已复制')" @math-copy-failed="notify('复制 MathML 失败，请检查剪贴板权限')" @copy-image="copyRegionAsImage(region)" @toggle-task="toggleTask(region)" />
+                  <RegionBlock v-for="region in virtualRange.regions" v-memo="[region, store.currentDocument?.sourceHash, store.activeRegionId === region.id, store.focusedRegionId === region.id, focusDistanceByRegion.get(region.id), store.mode, store.activeThemeId, currentAnnotationsByRegion.get(region.id), readerTreeExpansionRequest]" :key="region.id" :region="region" :annotations="currentAnnotationsByRegion.get(region.id)" :focused="store.focusedRegionId === region.id" :active="store.activeRegionId === region.id" :focus-distance="focusDistanceByRegion.get(region.id)" :theme-mode="store.activeTheme?.manifest.mode" :theme-key="`${store.mode}-${store.activeThemeId}`" :tree-expansion-request="readerTreeExpansionRequest" @focus="focusRegion(region)" @open-viewer="openViewer($event ?? region)" @open-link="openExternalLink" @code-copied="notify('代码已复制')" @math-copied="notify('MathML 已复制')" @math-copy-failed="notify('复制 MathML 失败，请检查剪贴板权限')" @copy-image="copyRegionAsImage(region)" @toggle-task="toggleTask(region)" />
                 </div>
                 <div v-if="virtualRange.after" class="virtual-spacer" :style="{ height: `${virtualRange.after}px` }" aria-hidden="true" />
                 </div></div>
