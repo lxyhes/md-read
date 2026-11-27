@@ -40,6 +40,54 @@ describe('Word clipboard paste', () => {
   it('uses plain text when the Word HTML and text describe different selections', () => {
     expect(formatClipboardToMarkdown('<p class="MsoNormal"><b>Unrelated text</b></p>', 'New clipboard text')).toBe('New clipboard text')
   })
+
+  it('rejoins step descriptions split by stray bold delimiters in the clipboard', () => {
+    const text = '建议的现场演示顺序\n\n• 第一步 展示入口： **\n\n**从统一首页进入环保问答。\n\n• 第二步 展示知识问答： **\n\n**选用已有入库依据的问题。'
+    const html = text.split('\n\n').map((line) => `<p class="MsoNormal">${line}</p>`).join('')
+    for (const input of [html, '']) {
+      const source = formatClipboardToMarkdown(input, text)
+      const rendered = renderMarkdownFragment(source)
+      const document = new DOMParser().parseFromString(rendered, 'text/html')
+      expect(Array.from(document.querySelectorAll('li'), (item) => item.textContent)).toEqual([
+        '第一步 展示入口： 从统一首页进入环保问答。',
+        '第二步 展示知识问答： 选用已有入库依据的问题。',
+      ])
+      expect(document.querySelector('li strong')?.textContent).toBe('第一步 展示入口：')
+    }
+  })
+
+  it('keeps bold Word text on both sides of a line break inside its list item', () => {
+    const html = '<ul><li><p class="MsoNormal"><b>第一步 展示入口：<br>从统一首页进入环保问答。</b></p></li></ul>'
+    const document = new DOMParser().parseFromString(renderMarkdownFragment(formatClipboardToMarkdown(html, '')), 'text/html')
+    expect(Array.from(document.querySelectorAll('li strong'), (element) => element.textContent)).toEqual([
+      '第一步 展示入口：', '从统一首页进入环保问答。',
+    ])
+  })
+
+  it('leaves the same characters inside a fenced code block intact', () => {
+    const text = '```text\n- 第一步 展示入口： **\n\n**示例代码\n```'
+    expect(formatClipboardToMarkdown('', text)).toBe(text)
+  })
+
+  it('removes four stray stars after bold lines and Word headings', () => {
+    const title = '系统基本情况及专家问答'
+    for (const [html, text, selector] of [
+      [`<p class="MsoNormal"><b>${title}</b><span>****</span></p>`, `${title}****`, 'strong'],
+      [`<p class="MsoHeading2">${title}****</p>`, `${title}****`, 'h2'],
+      ['', `**${title}** ****`, 'strong'],
+      ['', `## ${title}****`, 'h2'],
+    ]) {
+      const source = formatClipboardToMarkdown(html, text)
+      const rendered = renderMarkdownFragment(source)
+      expect(rendered).not.toContain('****')
+      expect(new DOMParser().parseFromString(rendered, 'text/html').querySelector(selector)?.textContent).toBe(title)
+    }
+  })
+
+  it('preserves literal stars in prose, escaped headings and fenced code', () => {
+    const text = '保留脱敏字符****\n\n## 示例 \\*\\*\\*\\*\n\n~~~text\n**系统基本情况******\n~~~'
+    expect(formatClipboardToMarkdown('', text)).toBe(text)
+  })
 })
 
 describe('WeChat article paste', () => {

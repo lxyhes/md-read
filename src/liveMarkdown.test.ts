@@ -195,9 +195,38 @@ describe('rich Markdown image previews', () => {
   })
 })
 
-it('refocuses a resized table without scrolling away from it', async () => {
+it('renders table cell formatting and refreshes it after a source edit', () => {
   const host = document.createElement('div')
   document.body.append(host)
+  const view = new EditorView({
+    doc: '| **配置项** | 当前值 |\n| --- | ---: |\n| 分块方式 | 第一行<br>第二行 |\n\n正文',
+    extensions: [markdown({ base: markdownLanguage }), liveMarkdown({ resolveUrl: url => url, openLink() {}, message() {} })],
+    parent: host,
+  })
+  try {
+    const input = host.querySelector<HTMLTextAreaElement>('textarea[data-row="0"][data-col="0"]')!
+    const cell = input.closest('th')!
+    expect(cell.querySelector('.live-table-cell-preview strong')?.textContent).toBe('配置项')
+    expect(host.querySelector('td:nth-child(2) .live-table-cell-preview br')).not.toBeNull()
+    input.focus()
+    expect(input.value).toBe('**配置项**')
+    input.value = '*新名称*'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    expect(document.activeElement).toBe(input)
+    expect(view.state.doc.toString()).toContain('| *新名称* | 当前值 |')
+    input.blur()
+    expect(cell.querySelector('.live-table-cell-preview em')?.textContent).toBe('新名称')
+  } finally {
+    view.destroy()
+    host.remove()
+  }
+})
+
+it.each([false, true])('refocuses a resized table only while focus has stayed there (left: %s)', async left => {
+  const host = document.createElement('div')
+  document.body.append(host)
+  const outside = document.createElement('button')
+  document.body.append(outside)
   const source = '| 场景 | 安全 |\n| --- | --- |\n| GET | 是 |\n\n正文'
   const focus = vi.spyOn(HTMLTextAreaElement.prototype, 'focus')
   const view = new EditorView({
@@ -211,13 +240,36 @@ it('refocuses a resized table without scrolling away from it', async () => {
 
   host.querySelector<HTMLTextAreaElement>('textarea[data-row="1"][data-col="0"]')?.focus()
   Array.from(host.querySelectorAll<HTMLButtonElement>('.live-table-tools button')).find(button => button.textContent === '加行')?.click()
+  if (left) outside.focus()
   await new Promise(requestAnimationFrame)
 
   expect(view.state.doc.toString()).toContain('|  |  |')
-  expect(focus).toHaveBeenLastCalledWith({ preventScroll: true })
+  if (left) expect(document.activeElement).toBe(outside)
+  else expect(focus).toHaveBeenLastCalledWith({ preventScroll: true })
   focus.mockRestore()
   view.destroy()
   host.remove()
+  outside.remove()
+})
+
+it('focuses the new row when Tab extends a table', async () => {
+  const host = document.createElement('div')
+  document.body.append(host)
+  const view = new EditorView({
+    doc: '| 第 1 列 | 第 2 列 |\n| --- | --- |\n| 左 | 右 |\n\n正文',
+    extensions: [markdown({ base: markdownLanguage }), liveMarkdown({ resolveUrl: url => url, openLink() {}, message() {} })],
+    parent: host,
+  })
+  try {
+    const cell = host.querySelector<HTMLTextAreaElement>('textarea[data-row="1"][data-col="1"]')!
+    cell.focus()
+    cell.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }))
+    await new Promise(requestAnimationFrame)
+    expect(document.activeElement).toBe(host.querySelector('textarea[data-row="2"][data-col="0"]'))
+  } finally {
+    view.destroy()
+    host.remove()
+  }
 })
 
 it('tracks the focused table row after an outline jump and returns to the clicked paragraph', () => {

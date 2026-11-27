@@ -31,16 +31,21 @@ let publishing = false
 let lastCell: HTMLTextAreaElement | null = null
 let selectionPointerDown = false
 let selectionDragFrozen = false
+let typewriterFrame: number | null = null
 
 function onSelectionMouseDown(event: MouseEvent) {
   const target = event.target
-  if (event.button !== 0 || !(target instanceof Element) || !target.closest('.cm-content') || target.closest('input, textarea, button, a, .live-preview-widget, .live-table-widget, .live-diagram-widget')) return
+  if (event.button !== 0 || !(target instanceof Element) || !target.closest('.cm-content')) return
+  cancelTypewriterCenter()
+  if (target.closest('input, textarea, button, a, .live-preview-widget, .live-table-widget, .live-diagram-widget')) return
   selectionPointerDown = true
   selectionDragFrozen = false
 }
 function onSelectionMouseMove(event: MouseEvent) {
-  if (event.buttons === 0) resetSelectionDrag()
-  else if (selectionDragFrozen) {
+  if (!(event.buttons & 1)) {
+    if (selectionPointerDown) finishSelectionDrag(event)
+    resetSelectionDrag()
+  } else if (selectionDragFrozen) {
     event.preventDefault()
     event.stopImmediatePropagation()
   }
@@ -52,17 +57,24 @@ function resetSelectionDrag() {
 function onSelectionMouseUp(event: MouseEvent) {
   if (event.isTrusted && event.button === 0) resetSelectionDrag()
 }
-function freezeSelectionOnWheel(event: WheelEvent) {
+function finishSelectionDrag(event: MouseEvent | FocusEvent) {
+  cancelTypewriterCenter()
   if (!selectionPointerDown || selectionDragFrozen) return
   selectionDragFrozen = true
+  const currentView = view
+  const state = currentView?.state
   document.dispatchEvent(new MouseEvent('mouseup', {
     bubbles: true,
     cancelable: true,
     button: 0,
     buttons: 0,
-    clientX: event.clientX,
-    clientY: event.clientY,
+    clientX: event instanceof MouseEvent ? event.clientX : 0,
+    clientY: event instanceof MouseEvent ? event.clientY : 0,
   }))
+  // Releasing a pending click inside an existing selection can collapse it.
+  if (currentView && state && currentView.state.doc === state.doc && !state.selection.eq(currentView.state.selection)) {
+    currentView.dispatch({ selection: state.selection, userEvent: 'select.pointer' })
+  }
 }
 
 function onFocus(event: FocusEvent) {
@@ -106,13 +118,19 @@ function centerCaret() {
   if (view && props.typewriter) view.dispatch({ effects: EditorView.scrollIntoView(view.state.selection.main.head, { y: 'center' }) })
 }
 
+function cancelTypewriterCenter() {
+  if (typewriterFrame === null) return
+  cancelAnimationFrame(typewriterFrame)
+  typewriterFrame = null
+}
+
 onMounted(() => {
   host.value!.addEventListener('focusin', onFocus)
   host.value!.addEventListener('mousedown', onSelectionMouseDown, true)
-  host.value!.addEventListener('wheel', freezeSelectionOnWheel, true)
+  document.addEventListener('wheel', finishSelectionDrag, { capture: true, passive: true })
   document.addEventListener('mousemove', onSelectionMouseMove, true)
   document.addEventListener('mouseup', onSelectionMouseUp, true)
-  window.addEventListener('blur', resetSelectionDrag)
+  window.addEventListener('blur', finishSelectionDrag)
   const createEditor = () => new EditorView({ parent: host.value!, state: EditorState.create({ doc: props.modelValue, extensions: [
     // Tauri's packaged CSP requires dynamic editor styles to reuse its style nonce.
     EditorView.cspNonce.of(document.querySelector<HTMLStyleElement>('style[nonce]')?.nonce ?? ''),
@@ -127,12 +145,16 @@ onMounted(() => {
     EditorView.updateListener.of(update => {
       if (update.docChanged) { publishing = true; try { emit('update:modelValue', update.state.doc.toString()) } finally { publishing = false } }
       if (update.docChanged || update.selectionSet) {
+        cancelTypewriterCenter()
         const offset = update.state.selection.main.from
         const line = update.state.doc.lineAt(offset)
         emit('caret', { offset, line: line.number, column: offset - line.from + 1 })
         emit('history', { undo: undoDepth(update.state) > 0, redo: redoDepth(update.state) > 0 })
         if (props.typewriter && !update.transactions.some(transaction => transaction.isUserEvent('select.pointer') || transaction.isUserEvent('select.outline') || transaction.isUserEvent('select.table') || transaction.isUserEvent('input.table'))) {
-          requestAnimationFrame(centerCaret)
+          typewriterFrame = requestAnimationFrame(() => {
+            typewriterFrame = null
+            centerCaret()
+          })
         }
       }
     }),
@@ -157,14 +179,18 @@ onMounted(() => {
 })
 watch(() => props.modelValue, value => { if (!publishing && view?.state.doc.toString() !== value) replaceSource(value) })
 watch(() => [props.live, props.spellcheck], () => view?.dispatch({ effects: appearance.reconfigure(extensions()) }))
-watch(() => props.typewriter, centerCaret)
+watch(() => props.typewriter, () => {
+  cancelTypewriterCenter()
+  centerCaret()
+})
 onBeforeUnmount(() => {
+  cancelTypewriterCenter()
   host.value?.removeEventListener('focusin', onFocus)
   host.value?.removeEventListener('mousedown', onSelectionMouseDown, true)
-  host.value?.removeEventListener('wheel', freezeSelectionOnWheel, true)
+  document.removeEventListener('wheel', finishSelectionDrag, true)
   document.removeEventListener('mousemove', onSelectionMouseMove, true)
   document.removeEventListener('mouseup', onSelectionMouseUp, true)
-  window.removeEventListener('blur', resetSelectionDrag)
+  window.removeEventListener('blur', finishSelectionDrag)
   view?.destroy()
   view = null
 })

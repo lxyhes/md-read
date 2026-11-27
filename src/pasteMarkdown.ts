@@ -221,14 +221,19 @@ function isPlainTextLanguage(language: string) {
 }
 
 function stripDecorativeHeadingStars(value: string) {
-  let inFence = false
+  let fence = ''
   return value.split('\n').map((line) => {
-    const trimmed = line.trimStart()
-    if (/^(?:```|~~~)/.test(trimmed)) {
-      inFence = !inFence
+    const marker = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/)
+    if (marker) {
+      if (!fence) fence = marker[1]
+      else if (marker[1].startsWith(fence) && !marker[2].trim()) fence = ''
       return line
     }
-    return inFence ? line : line.replace(/^((?:#{1,6}[ \t]*)?)\*{4}(?=\s*\d)/, '$1')
+    if (fence) return line
+    return line
+      .replace(/^((?:#{1,6}[ \t]*)?)\*{4}(?=\s*\d)/, '$1')
+      .replace(/^( {0,3}(?:#{1,6}[ \t]+)?\*\*[^*\n]+\*\*)[ \t]*\*{4}$/, '$1')
+      .replace(/^( {0,3}#{1,6}[ \t]+[^*\n]+?)[ \t]*\*{4}$/, '$1')
   }).join('\n')
 }
 
@@ -248,7 +253,8 @@ function inline(node: Node, inheritedBold = false): string {
   const content = () => Array.from(element.childNodes).map((child) => inline(child, inheritedBold || bold)).join('')
   const boldContent = () => {
     const text = content().trim()
-    return text && !inheritedBold ? `**${text}**` : text
+    if (!text || inheritedBold) return text
+    return text.split(/(\n{2,})/).map((part) => part.trim() ? `**${part.trim()}**` : part).join('')
   }
   switch (element.tagName.toLowerCase()) {
     case 'br': return '\n\n'
@@ -534,6 +540,29 @@ function normalizeMarkdown(value: string) {
     result.push(line.replace(/[ \t]+$/g, ''))
   }
   return result.join('\n').trim()
+}
+
+function repairSplitClipboardSteps(source: string) {
+  const lines = source.split('\n')
+  let fence = ''
+  for (let index = 0; index < lines.length; index += 1) {
+    const marker = lines[index].match(/^ {0,3}(`{3,}|~{3,})(.*)$/)
+    if (marker) {
+      if (!fence) fence = marker[1]
+      else if (marker[1].startsWith(fence) && !marker[2].trim()) fence = ''
+      continue
+    }
+    if (fence) continue
+    const step = lines[index].match(/^([ \t]*)(?:[•◦▪·][ \t]*|(?:[-+*]|(\d+)[.)])[ \t]+)(第[一二三四五六七八九十百零\d]+步[^*：:\n]{0,48}[：:])[ \t]*\*\*$/)
+    if (!step) continue
+    const next = lines[index + 1] === '' ? index + 2 : index + 1
+    const description = lines[next]?.match(/^[ \t]*\*\*(?!\*)(\S.*)$/)?.[1]
+    if (!description || description.includes('**')) continue
+    const [, indent, number, label] = step
+    const prefix = number ? `${number}.` : '-'
+    lines.splice(index, next - index + 1, `${indent}${prefix} **${label}** ${description}`)
+  }
+  return lines.join('\n')
 }
 
 function hasMarkdownSyntax(value: string) {
@@ -882,7 +911,8 @@ function insertClipboardImages(source: string, html: string) {
 }
 
 export function formatPastedText(value: string) {
-  return normalizeTimestampedHeadings(normalizeArticleSections(stripDecorativeHeadingStars(normalizeMarkdown(stripAccidentalClipboardIndent(value)))))
+  const source = repairSplitClipboardSteps(normalizeMarkdown(stripAccidentalClipboardIndent(value)))
+  return normalizeTimestampedHeadings(normalizeArticleSections(stripDecorativeHeadingStars(source)))
     .replace(/^([ \t]*)[•◦▪][ \t]+/gm, '$1- ')
     .replace(/^([ \t]*)(\d+)[.)][ \t]+/gm, '$1$2. ')
 }
@@ -1148,8 +1178,8 @@ function convertClipboardHtml(html: string, wechatArticle = false, plainText = '
   if (wechatArticle) prepareWechatArticle(body)
   prepareClipboardCallouts(body)
   const source = Array.from(body.childNodes).filter((node) => node.nodeType !== Node.TEXT_NODE || Boolean(node.textContent?.trim())).map((node) => node.nodeType === Node.ELEMENT_NODE ? render(node as HTMLElement) : inline(node)).join('')
-  if (word) return normalizeMarkdown(source)
-  const normalized = restoreClipboardStepCards(normalizeMarkdown(stripAccidentalClipboardIndent(source)))
+  if (word) return stripDecorativeHeadingStars(repairSplitClipboardSteps(normalizeMarkdown(source)))
+  const normalized = restoreClipboardStepCards(repairSplitClipboardSteps(normalizeMarkdown(stripAccidentalClipboardIndent(source))))
   return wechatArticle ? restoreWechatCodeCards(normalized) : normalizeArticleSections(stripDecorativeHeadingStars(normalized))
 }
 

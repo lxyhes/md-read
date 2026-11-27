@@ -111,7 +111,7 @@ class FootnoteWidget extends WidgetType {
   ignoreEvent() { return true }
 }
 
-type TableContext = { from: number; to: number; raw: string; table: EditableTable; row: number; col: number }
+type TableContext = { from: number; to: number; raw: string; table: EditableTable; row: number; col: number; focusFrame?: number }
 type TableDOM = HTMLDivElement & { tableContext: TableContext }
 
 function tableRowStart(doc: Text, tableStart: number, row: number) {
@@ -129,17 +129,36 @@ class TableWidget extends WidgetType {
     if (!table) return false
     const previous = root.tableContext
     const resize = previous.table.rows.length !== table.rows.length || previous.table.alignments.length !== table.alignments.length
+    const contentChanged = previous.raw !== this.raw
     Object.assign(previous, { from: this.from, to: this.to, raw: this.raw, table })
     if (resize) {
       const wasFocused = root.contains(document.activeElement)
       this.fill(root, view)
-      if (wasFocused) requestAnimationFrame(() => this.focus(root, previous.row, previous.col))
-    } else root.querySelectorAll<HTMLTextAreaElement>('textarea').forEach(input => {
-      const value = (table.rows[Number(input.dataset.row)]?.[Number(input.dataset.col)] ?? '').replace(/<br\s*\/?\s*>/gi, '\n')
-      if (input.value !== value) input.value = value
-      input.style.textAlign = table.alignments[Number(input.dataset.col)]
-    })
+      if (wasFocused) this.scheduleFocus(root, previous.row, previous.col)
+    } else if (contentChanged) {
+      root.querySelectorAll<HTMLTextAreaElement>('textarea').forEach(input => {
+        const column = Number(input.dataset.col)
+        const value = (table.rows[Number(input.dataset.row)]?.[column] ?? '').replace(/<br\s*\/?\s*>/gi, '\n')
+        if (input.value !== value) input.value = value
+        input.parentElement!.style.textAlign = table.alignments[column]
+      })
+      this.updatePreviews(root)
+    }
     return true
+  }
+  updatePreviews(root: TableDOM) {
+    const { table } = root.tableContext
+    const template = root.ownerDocument.createElement('template')
+    template.innerHTML = renderMarkdownFragment(serializeEditableTable(table), this.options.resolveUrl)
+    const rendered = template.content.querySelector('table')
+    const width = table.alignments.length
+    root.querySelectorAll<HTMLElement>('.live-table-cell-preview').forEach((preview, index) => {
+      const row = Math.floor(index / width)
+      const column = index % width
+      const cell = rendered?.rows[row]?.cells[column]
+      if (cell) preview.replaceChildren(...cell.childNodes)
+      else preview.textContent = table.rows[row][column]
+    })
   }
   toDOM(view: EditorView) {
     const root = document.createElement('div') as TableDOM
@@ -148,11 +167,21 @@ class TableWidget extends WidgetType {
     this.fill(root, view)
     return root
   }
-  focus(root: TableDOM, row: number, col: number) {
+  destroy(root: TableDOM) {
+    if (root.tableContext.focusFrame !== undefined) cancelAnimationFrame(root.tableContext.focusFrame)
+  }
+
+  scheduleFocus(root: TableDOM, row: number, col: number) {
     const ctx = root.tableContext
-    ctx.row = Math.min(Math.max(0, row), ctx.table.rows.length - 1)
-    ctx.col = Math.min(Math.max(0, col), ctx.table.alignments.length - 1)
-    root.querySelector<HTMLTextAreaElement>(`textarea[data-row="${ctx.row}"][data-col="${ctx.col}"]`)?.focus({ preventScroll: true })
+    if (ctx.focusFrame !== undefined) cancelAnimationFrame(ctx.focusFrame)
+    const active = root.ownerDocument.activeElement
+    ctx.focusFrame = requestAnimationFrame(() => {
+      ctx.focusFrame = undefined
+      if (!root.isConnected || root.ownerDocument.activeElement !== active) return
+      const nextRow = Math.min(Math.max(0, row), ctx.table.rows.length - 1)
+      const nextCol = Math.min(Math.max(0, col), ctx.table.alignments.length - 1)
+      root.querySelector<HTMLTextAreaElement>(`textarea[data-row="${nextRow}"][data-col="${nextCol}"]`)?.focus({ preventScroll: true })
+    })
   }
   commit(root: TableDOM, view: EditorView, change: (table: EditableTable, ctx: TableContext) => void) {
     const ctx = root.tableContext
@@ -198,9 +227,11 @@ class TableWidget extends WidgetType {
       const tr = table.insertRow()
       row.forEach((value, c) => {
         const cell = document.createElement(r === 0 ? 'th' : 'td')
+        const editor = document.createElement('div')
+        editor.className = 'live-table-cell-editor'
         const input = document.createElement('textarea')
         input.rows = 1; input.value = value.replace(/<br\s*\/?\s*>/gi, '\n'); input.dataset.row = String(r); input.dataset.col = String(c)
-        input.style.textAlign = ctx.table.alignments[c]
+        editor.style.textAlign = ctx.table.alignments[c]
         input.setAttribute('aria-label', `表格第 ${r + 1} 行第 ${c + 1} 列`)
         input.addEventListener('focus', () => {
           ctx.row = r
@@ -234,9 +265,13 @@ class TableWidget extends WidgetType {
           let next = r * width + c + (event.shiftKey ? -1 : 1)
           if (next >= ctx.table.rows.length * width) modify(table => { table.rows.push(table.alignments.map(() => '')) })
           next = Math.max(0, next)
-          requestAnimationFrame(() => this.focus(root, Math.floor(next / width), next % width))
+          this.scheduleFocus(root, Math.floor(next / width), next % width)
         })
-        cell.append(input)
+        const preview = document.createElement('div')
+        preview.className = 'live-table-cell-preview'
+        preview.setAttribute('inert', '')
+        editor.append(input, preview)
+        cell.append(editor)
         if (r === 0 || c === 0) {
           cell.draggable = true
           cell.addEventListener('dragstart', event => event.dataTransfer?.setData('application/x-moyue-table', JSON.stringify({ from: ctx.from, type: r === 0 ? 'column' : 'row', index: r === 0 ? c : r })))
@@ -266,6 +301,7 @@ class TableWidget extends WidgetType {
       })
     })
     root.append(table)
+    this.updatePreviews(root)
   }
   ignoreEvent() { return true }
 }

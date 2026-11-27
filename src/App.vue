@@ -4757,10 +4757,18 @@ async function createFileContextFile() {
   if (busyAction.value) return
   busyAction.value = 'file'
   try {
-    await createMarkdownFile(path, `# ${name.replace(/\.(md|markdown|qmd)$/i, '')}\n\n`)
-    await refreshFileTree()
-    await refreshFilesystemDirectory(directory)
+    const source = `# ${name.replace(/\.(md|markdown|qmd)$/i, '')}\n\n`
+    await createMarkdownFile(path, source)
+    void refreshFilesystemDirectory(directory)
     notify(`已新建 ${name}`)
+    await openImportedFiles([{ path, source }])
+    if (filePathKey(store.currentDocument?.path ?? '') !== filePathKey(path)) return
+    if (editorMode.value === 'preview') setEditorMode('rich')
+    await openEditor()
+    if (fileBrowserMode.value === 'list') {
+      await nextTick()
+      document.querySelector('.file-list .file-item.active')?.scrollIntoView({ block: 'nearest' })
+    }
   } catch (error) {
     notify(error instanceof Error ? error.message : '新建文件失败')
   } finally { busyAction.value = null }
