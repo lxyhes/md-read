@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { hashText, makeImplicitMarkdownHeadingsExplicit, parseMarkdown, renderMarkdownFragment } from './parser'
+import { editorDirectoryTrees, hashText, makeImplicitMarkdownHeadingsExplicit, parseMarkdown, renderMarkdownFragment } from './parser'
 import { asciiDiagramToMermaid, asciiTreeToTree, markdownToTree } from './asciiDiagram'
 import { formatClipboardImage, formatClipboardToMarkdown, formatPastedText, isLikelyProseBlock, normalizeMixedOrderedListSource, suggestPastedMarkdownName } from './pasteMarkdown'
 import { resolveMarkdownAssetUrl, splitMarkdownLinkTarget, withRelativePathPrefix } from './fileService'
@@ -379,6 +379,15 @@ $$`)
 
     const fenced = parseMarkdown('resources.md', `\`\`\`text\n课程目录\n${listing}\n\`\`\``)
     expect(fenced.regions[0].asciiTree?.label).toBe('课程目录')
+  })
+
+  it('locates directory nodes on their original lines in fenced and bare trees', () => {
+    const source = ['- 1. preceding list', '', '# Heading', '', '  ~~~~text', '  root', '  │', '  └── file', '  ~~~~', '',
+      '├── first', '│   └── file', '', '└── last', '', '```js', 'root', '└── ignored', '```'].join('\r\n')
+    const trees = editorDirectoryTrees(source)
+    expect(trees.map(tree => [tree.startLine, tree.endLine])).toEqual([[5, 9], [11, 14]])
+    expect(trees.map(tree => [...tree.sourceLines].map(([node, offset]) => [node.label, tree.bodyLine + offset])))
+      .toEqual([[['root', 6], ['file', 8]], [['first', 11], ['file', 12], ['last', 14]]])
   })
 
   it('normalizes plain clipboard text into Markdown lists', () => {

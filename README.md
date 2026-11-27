@@ -1,107 +1,75 @@
-# 墨阅 Moyue Reader
+<p align="center">
+  <img src="./src/assets/moyue-logo-256.png" width="112" height="112" alt="墨阅的水墨书卷标志">
+</p>
 
-> 把 Markdown 读成一段真正能停留的时间。
+<h1 align="center">墨阅 · Moyue Reader</h1>
 
-墨阅是一款 **本地优先、离线可用的 Markdown 沉浸式阅读器**。它不追求把编辑器做得更复杂，而是把长文档变成更容易浏览、理解和回看的阅读空间：章节导航、代码高亮、Mermaid 图表、专注模式、主题切换和阅读进度，都在一个安静的桌面窗口里完成。
+<p align="center"><strong>长文慢慢读，灵感随手写，答案回到原文。</strong></p>
+<p align="center">为技术文档、读书笔记和本地资料打造的 Markdown 桌面工作台。<br>打开一个文件夹，就能在同一处阅读、写作和查找资料。</p>
 
-## 产品预览
+<p align="center">
+  <a href="#快速上手"><strong>快速上手</strong></a> ·
+  <a href="#功能亮点">功能亮点</a> ·
+  <a href="#本地知识库">本地知识库</a> ·
+  <a href="#桌面打包">桌面打包</a>
+</p>
 
-以下截图来自内置浏览器中的实际运行界面，示例内容为虚构文本，不包含个人文件或隐私信息。
-
-![墨阅阅读空间](./docs/screenshots/reader-overview.png)
-
-![Mermaid 图表独立查看](./docs/screenshots/mermaid-viewer.png)
-
-![专注阅读模式](./docs/screenshots/focus-mode.png)
-
-## 为什么是墨阅？
-
-- **为阅读而生**：Markdown 被拆成清晰的阅读区域，按章节浏览，随时聚焦当前内容。
-- **长文也能读下去**：自动恢复文档、标签和滚动位置，阅读进度保存在本地。
-- **代码和图表是一等内容**：Shiki 代码高亮、行号、复制；Mermaid 支持缩放、拖动、源码查看和 SVG / PNG 导出。
-- **完全掌控自己的文件**：打开本地文件或文件夹即可使用，支持拖拽导入、相对图片资源和外部文件变化监听。
-- **让环境适合你**：内置多种阅读主题，支持自定义主题、导入和导出主题包。
-
-## 你可以用它做什么？
-
-| 场景 | 墨阅提供的体验 |
-| --- | --- |
-| 阅读技术文档 | 目录导航、全文搜索、代码高亮、快捷键和阅读进度 |
-| 学习长文章 | 专注模式、区域聚焦、划词高亮、批注和纯净阅读 |
-| 查看架构与流程 | Mermaid 图表独立查看、缩放拖动、复制源码、导出图片 |
-| 整理本地资料 | 打开文件夹扫描 Markdown，多文档标签、文件树和本地持久化 |
-| 调整阅读氛围 | 静默苔原、纯净白纸、烟雨竹影，以及可编辑主题 |
-
-## 30 秒开始阅读
-
-### 直接运行桌面版（推荐）
-
-环境要求：Node.js 20+、Rust stable、Windows 或 macOS。
-
-```bash
-# 进入项目目录后执行
-npm install
-npm run tauri dev
-```
-
-启动后，点击「导入 Markdown」、打开文件夹，或直接把 `.md` / `.markdown` 文件拖进窗口即可。
-
-### 从系统“打开方式”打开
-
-安装打包后的桌面版，即可把 `.md`、`.markdown`、`.qmd` 文件交给墨阅打开；应用已运行时，文件会进入现有窗口的新标签。
-
-- **Windows**：安装 NSIS 安装包后，右键文件 →「打开方式」→「墨阅 Moyue」。若没有直接列出，进入「选择其他应用」查找墨阅。
-- **macOS**：将 `墨阅 Moyue.app` 放入「应用程序」，右键文件 →「打开方式」→「墨阅 Moyue」。要长期使用，可在「显示简介」中修改「打开方式」并点击「全部更改」。
-
-文件关联在安装包中注册；开发模式不会向系统注册。是否设为默认打开应用由用户在系统中选择。
-
-### 只查看前端预览
-
-```bash
-npm install
-npm run dev
-```
-
-浏览器预览适合体验界面和基础 Markdown 渲染；本地文件读取、文件夹扫描、SQLite 持久化、外部文件监听和相对图片资源，请使用 Tauri 桌面版。
+<p align="center">
+  <img src="./docs/screenshots/reader-overview.png" width="840" alt="墨阅阅读工作区。左侧是文档树和标签，中间展示正文、代码高亮与流程图，右侧提供阅读进度和专注入口。">
+  <br><sub>墨阅运行界面 · 示例文档</sub>
+</p>
 
 ## 功能亮点
 
-### 把 Markdown 变成阅读空间
+| 你想做什么 | 在墨阅里怎么做 |
+| --- | --- |
+| **读完一篇很长的文档** | 从大纲跳到章节，按 `F` 进入专注模式。划词高亮、写批注，下次打开从上次的位置继续。 |
+| **边读边改一份笔记** | 在所见即所得、源码和分栏预览间切换，共用同一份 Markdown 和撤销历史。表格可以直接编辑，公式和脚注在正文里即可查看。 |
+| **看懂技术文档里的代码和图** | Shiki 为代码高亮并显示行号。Mermaid 图表可以单独打开、缩放、拖动和导出为 SVG 或 PNG。章节还能切换成思维导图。 |
+| **从一整个文件夹里找原话** | 用全局搜索查关键词，或在知识库里选定几篇资料再提问。点击引用即可跳回对应段落。 |
 
-- 支持标题、大纲、段落、软换行、引用、列表、任务列表、表格、图片、链接和分隔线。
-- 支持搜索全部文档或当前文档，按结果直接跳转到对应阅读区域。
-- 支持多文档标签、文件树、全屏、纯净阅读和专注计时。
-- 支持 Markdown 编辑、分栏预览、粘贴内容格式化和编辑器内图片处理。
-- 支持划词高亮、批注、复制为 Markdown 引用。
+<p align="center">
+  <img src="./docs/screenshots/focus-mode.png" width="44%" alt="墨阅的专注阅读模式">
+  <img src="./docs/screenshots/mermaid-viewer.png" width="44%" alt="墨阅的独立 Mermaid 图表查看器">
+  <br><sub>专注阅读 · Mermaid 图表查看器</sub>
+</p>
 
-### 源码不变，写作更自然
+- **本地优先。** 阅读、写作和关键词检索可以离线使用，无需账号。桌面端会保留阅读进度与批注，支持加载相对路径图片，并监听已打开文件的外部修改。
+- **按你的习惯读写。** 「静默苔原」「纯净白纸」「烟雨竹影」等内置主题可直接切换，也能自定义主题、导入或导出主题包。写作时可开启打字机模式，草稿恢复和磁盘冲突保护会帮你保住修改。
+- **写完就能分享。** 支持 HTML、DOCX、EPUB、LaTeX、PNG 长图和 PDF 等格式。桌面端导出 DOCX 或 LaTeX 需要 Pandoc，DOCX 支持自定义 Word 模板。详见 [写作与导出验收记录](./docs/typora-gap-verification.md)。
 
-- 静写模式默认保留简洁工具条，所见即所得、源码与分栏共用文档和撤销历史；公式、图表、图片及脚注可在正文中查看和编辑。
-- 表格单元格原地编辑，支持行列操作、TSV 粘贴及格式工具；查找替换无需切回源码模式。
-- 本地草稿恢复、磁盘外部冲突保护及临时文件安全保存；自动保存可选，默认不会自动覆盖原文件。
-- 专注与打字机模式独立，字体和正文排版跟随当前主题及阅读设置。
-- 支持 HTML、DOCX、EPUB、LaTeX、PNG、PDF 导出；桌面 DOCX/LaTeX 需要 Pandoc，支持 Word 模板与可携带图片。具体证据及限制见 [写作补齐验收记录](docs/typora-gap-verification.md)。
+## 快速上手
 
-### 让代码与图表更容易理解
+### 浏览器预览
 
-- fenced code 使用 Shiki 进行语法高亮，显示语言、行号和行数，支持完整复制与横向滚动。
-- `mermaid` 代码块会直接渲染为图表，可适应窗口、缩放、拖动、查看源码和导出 SVG / PNG。
-- 常见的文本框图、ASCII 流程图和目录树可自动转换为可视化结构。
+用 Node.js 22.12+（推荐 22 或 24 LTS）运行以下命令。启动后打开 Vite 输出的本地地址，体验基础 Markdown 渲染和写作界面。
 
-切换到「思维导图」即可看到章节连线上移动的光点。「连线动效」可随时开关。如果文档里还有 Mermaid 流程图，也可以点击「播放数据流」，单独查看流程箭头上的逐段播放。
-
-```mermaid
-flowchart LR
-  file["读取文件"] -->|Markdown 原文| parser["解析文档"]
-  parser -->|章节与内容块| reader["阅读视图"]
+```bash
+git clone https://github.com/lxyhes/md-read.git
+cd md-read
+npm ci
+npm run dev
 ```
 
-### 保持本地、安静和可控
+### 桌面版
 
-- 桌面端使用 SQLite 保存文档快照、阅读进度和批注；浏览器预览使用 `localStorage` 回退。
-- Markdown 外部修改后自动重新解析，并尽量保留当前阅读位置。
-- 危险 HTML、脚本、事件属性和危险 URL 会被隐藏或清理。
-- 不依赖账号或云同步；AI 可选接入本地 Ollama 或 OpenAI-compatible 服务，文件默认仍留在本地工作区。
+按上面的步骤克隆仓库并执行 `npm ci`，再准备 Rust stable 和对应平台的系统依赖。桌面版提供文件夹扫描、外部文件监听、相对图片加载和 SQLite 持久化。 [Tauri 环境准备](https://v2.tauri.app/start/prerequisites/)
+
+```bash
+npm run tauri dev
+```
+
+启动后，在应用里点击「导入 Markdown」、打开文件夹，或把 Markdown 文件拖进窗口。安装 Windows 或 macOS 桌面包后，也可通过系统的「打开方式」将 `.md`、`.markdown` 和 `.qmd` 文件交给墨阅，已运行的应用会在新标签中打开文件。
+
+## 本地知识库
+
+把要用的文档加入「本次资料」，试着问「这几份笔记怎么解释这个概念？」墨阅会检索选定范围内的原文，点一下引用就能回到对应段落。
+
+- **离线检索。** 关键词检索开箱即用。桌面端可在「设置 → 阅读偏好 → AI 能力」开启本地语义检索。先运行 `ollama pull qwen3-embedding:0.6b` 安装模型，再选定资料，墨阅会在本机后台建索引。模型暂时不可用时会回退到关键词检索。
+- **可选 AI 问答。** 同一设置页可连接本地 Ollama 或 OpenAI-compatible 服务。开启 AI 问答后，墨阅会将本轮检索到的片段及相关上下文发送给所选模型，并在回答中提供可核对的原文引用。API Key 仅保留在当前会话。
+- **实时语音。** 桌面端配置 OpenAI 官方接口及 API Key 后，可使用实时字幕、静音和开口打断。通话会将麦克风音频和本轮检索到的原文发送给 OpenAI Realtime。
+
+[查看知识库检索设计](./docs/knowledge-base-design.md)
 
 ## 常用快捷键
 
@@ -110,116 +78,66 @@ flowchart LR
 | `Ctrl / Cmd + K` | 搜索全部文档 |
 | `Ctrl / Cmd + F` | 搜索当前文档 |
 | `Ctrl / Cmd + O` | 打开 Markdown 文件 |
-| `Ctrl / Cmd + Tab` | 切换下一个文档 |
-| `F` | 进入 / 退出专注模式 |
-| `Enter` / `Space` | 在专注模式中聚焦当前阅读区域 |
-| `↑` / `↓` | 切换阅读区域 |
+| `Ctrl / Cmd + Tab` | 切换到下一个文档标签 |
+| `F` | 进入或退出专注模式 |
+| `↑` / `↓` | 在专注模式中切换阅读区域 |
+| `Enter` / `Space` | 在专注模式中聚焦当前区域 |
 | `Esc` | 退出聚焦或关闭查看器 |
 
-## 开发者信息
+## 桌面打包
 
-```text
-Vue 3 + TypeScript + Vite
-Tauri 2 + Rust
-Pinia
-remark-parse + remark-gfm + unified
-CodeMirror 6（源码与行内所见即所得）
-remark-math + MathJax
-Shiki
-Mermaid
-SQLite（Tauri SQL 插件）
-```
+墨阅处于桌面端 V1 开发阶段，可在本机生成安装包。Windows 和 macOS 需在对应系统上打包。
 
-项目结构：
+| 平台 | 命令 | 产物 |
+| --- | --- | --- |
+| Windows | `npm run package:windows` | NSIS `.exe` |
+| macOS | `npm run package:macos` | `.app`、`.dmg` |
+| Linux / WSL | `npm run package:linux` | `.deb`、AppImage |
 
-```text
-.
-├─ src/
-│  ├─ components/       Vue 阅读、主题和图标组件
-│  ├─ stores/            Pinia 阅读状态
-│  ├─ parser.ts          Markdown AST → ReaderRegion
-│  ├─ highlight.ts       Shiki 代码高亮
-│  ├─ persistence.ts     SQLite / localStorage 持久化
-│  ├─ fileService.ts     文件导入、文件树和外部文件监听
-│  ├─ themes.ts          内置主题与主题包处理
-│  └─ styles.css         全局布局、主题和阅读排版
-├─ src-tauri/            Tauri 2 Rust 容器与插件配置
-├─ docs/screenshots/      README 产品截图
-└─ package.json
-```
+默认输出目录为 `src-tauri/target/release/bundle/`。也可使用项目根目录的一键打包脚本。推送 `v*` 标签或手动运行工作流，可生成 Windows 和 macOS 的 GitHub Actions 构建产物。 [Build desktop packages 工作流](https://github.com/lxyhes/md-read/actions/workflows/build-desktop.yml)
 
-常用命令：
+<details>
+<summary>Linux 打包与安装</summary>
 
-```bash
-npm run dev          # 浏览器开发预览
-npm run tauri dev   # Tauri 桌面开发模式
-npm run test         # 运行单元测试
-npm run build        # 类型检查并构建前端
-npm run preview      # 预览生产构建
-npm run package:windows # Windows：生成 NSIS .exe 安装包
-npm run package:macos   # macOS：生成 .app 和 .dmg
-npm run package:linux   # Linux：生成 .deb 和 AppImage
-```
-
-Windows 打包需要在 Windows 上执行，产物位于 `src-tauri/target/release/bundle/`；macOS 打包需要在 macOS 上执行。推送 `v*` 标签或在 GitHub Actions 手动运行 `Build desktop packages`，也会分别生成 Windows 和 macOS 构建物供下载。
-
-也可以直接双击项目根目录的 `一键打包桌面端.bat`（Windows）或 `一键打包桌面端.command`（macOS）。每次打包前，脚本都会按锁文件安装依赖，打包完成后打开产物目录。
-
-### Linux 打包
-
-在 Windows 上，启动 Docker Desktop 的 Linux 容器引擎后，双击项目根目录的 `一键打包Linux桌面端.bat`。首次会下载并构建 Debian 镜像，后续复用镜像。产物为 Linux x86-64 的 `.deb` 和 AppImage，输出到下方同一目录。
-
-在 Linux 或 WSL 中使用 Node.js 22.12+（推荐 22 或 24 LTS）和 Rust stable。Ubuntu／Debian 首次打包需安装系统依赖：
+在 Ubuntu / Debian 上准备 Node.js 22.12+、Rust stable 和系统依赖。
 
 ```bash
 sudo apt update
 sudo apt install build-essential pkg-config curl wget file libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+bash ./一键打包桌面端.sh
 ```
 
-在项目根目录执行 `bash ./一键打包桌面端.sh`。默认产物位于 `src-tauri/target/release/bundle/` 下的 `deb/` 和 `appimage/`，架构与构建环境一致。Ubuntu／Debian 可用 `sudo apt install ./文件名.deb` 安装。AppImage 可用 `chmod +x ./文件名.AppImage` 添加执行权限后直接运行。
+在 Windows 上也可以启用 Docker Desktop 的 Linux 容器引擎，双击 `一键打包Linux桌面端.bat` 构建 Linux x86-64 安装包。
 
-需要兼容多个发行版版本时，在目标范围内最老且提供 WebKitGTK 4.1 的系统上构建，以免产物依赖更新的 glibc。参见 [Tauri Linux 构建依赖](https://v2.tauri.app/start/prerequisites/#linux)和 [AppImage 兼容性说明](https://v2.tauri.app/distribute/appimage/#limitations)。
+进入产物目录后，可用 `sudo apt install ./文件名.deb` 安装 Debian 包，或对 AppImage 运行 `chmod +x ./文件名.AppImage` 后直接执行。需要兼容多个发行版时，在目标范围内最老且提供 WebKitGTK 4.1 的系统上构建。 [AppImage 兼容性说明](https://v2.tauri.app/distribute/appimage/#limitations)
 
-## 当前状态
+</details>
 
-墨阅目前处于桌面端 V1 开发阶段，已完成本地 Markdown 阅读、文件夹工作区、代码 / Mermaid 查看、主题系统、阅读进度和本地持久化。
+## 开发与反馈
 
-当前暂不包含：
-
-- PDF 阅读
-- 账号、云同步和社区主题市场
-- 插件脚本运行时
-- 自动更新和在线安装包分发
-
-### AI 能力
-
-在“设置 → 阅读偏好 → AI 能力”中选择服务类型并测试连接：
-
-- Ollama：默认地址 `http://127.0.0.1:11434`，填写本地模型名，例如 `qwen2.5:7b`。
-- OpenAI-compatible：填写服务地址（例如 `https://api.openai.com/v1`）、模型名和 API Key。
-- 打开“在知识库问答中启用 AI”后，AI 只会参考知识库检索到的本地原文；API Key 只保留在当前会话，不写入 `localStorage`。
-- AI 回答用带编号的原文摘录呈现。墨阅逐条核对摘录与引用，资料不足时提示并保留可查看的检索结果。
-- 知识库支持离线关键词检索；阅读器划词“翻译”也会调用已配置的 AI 服务。
-
-桌面端可以在同一设置页开启「本地语义检索」并保存配置。先用 `ollama pull qwen3-embedding:0.6b` 安装模型，再在知识库选择「本次资料」。墨阅后台建立本机索引，关闭 AI 生成时也能按语义查找原文。模型不可用或等待超时时，本轮自动使用关键词检索。外部修改了未打开的文件后，可用「刷新资料」同步。
-
-知识库问答支持 Enter 发送、Shift + Enter 换行，中文输入法选词时不会发送。每轮最多检索 8 条原文；引用摘录最多保留 1200 字，启用 AI 时会连同命中段落的相邻上下文发送给所选模型，单条最多 1600 字。“继续解释”“举个例子”等追问会结合最近的问题检索。回答下方可复制正文与引用，右侧可按标题或消息内容搜索全部历史对话。浏览器端 AI 请求超过 120 秒会结束等待，并保留问题以便重试。
-
-输入框下方可以临时切换回答模型和推理强度。Ollama 根据当前模型提供的选项显示档位，OpenAI-compatible 接口的自动档使用服务默认设置。桌面端启用 `https://api.openai.com/v1` 并填写 API Key 后，可以开始双向实时语音。通话会把麦克风音频和本轮检索到的原文发送给 OpenAI Realtime，支持静音和开口打断。实时字幕随通话显示。
-
-欢迎使用、试读自己的 Markdown 文档，并通过 Issue 或 PR 告诉我们：你希望下一次阅读变得更顺手的地方是什么？
-
-## 验证项目
+墨阅使用 Vue 3、TypeScript、Vite 和 Pinia 构建界面，Tauri 2 与 Rust 提供桌面能力，SQLite 保存本地状态。Markdown 由 remark / unified 解析，编辑器基于 CodeMirror 6，公式由 MathJax 渲染。
 
 ```bash
-npm run test
-npm run build
+npm run test      # 运行测试
+npm run build     # 类型检查与前端构建
+npm run preview   # 预览前端生产构建
 ```
 
-安装语义模型并启动 Ollama 后，可在 PowerShell 中运行 `$env:MOYUE_EVAL_OLLAMA = '1'`，再运行 `npm run test -- src/knowledgeSearch.evaluation.test.ts`，比较关键词与混合检索在 30 道段落级题目上的表现。
+<details>
+<summary>运行知识库检索评测</summary>
 
-当前测试覆盖 Markdown Region 解析、危险 HTML、相对资源、粘贴、源码保真的实时编辑、草稿恢复、表格操作、导出 XML 及公式/脚注/媒体。原生外部工具验收的复现命令见 [验收记录](docs/typora-gap-verification.md)。
+安装语义模型并启动 Ollama 后，运行以下命令，比较关键词检索与混合检索在段落级题目上的表现。
+
+```bash
+MOYUE_EVAL_OLLAMA=1 npm run test -- src/knowledgeSearch.evaluation.test.ts
+```
+
+PowerShell 中先运行 `$env:MOYUE_EVAL_OLLAMA = '1'`，再执行 `npm run test -- src/knowledgeSearch.evaluation.test.ts`。
+
+</details>
+
+欢迎用自己的 Markdown 文档试一遍。遇到问题时，欢迎附上复现步骤、系统信息和一小段脱敏示例。 [提交 Issue](https://github.com/lxyhes/md-read/issues)
 
 ## 许可证
 
-项目当前处于开发阶段，许可证与发布方式待后续确定。
+许可证与发布方式待确定。

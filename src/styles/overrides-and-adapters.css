@@ -4649,6 +4649,24 @@ body .app-shell.is-editor-studio .reader-layout {
   border-bottom: 1px solid var(--border);
 }
 
+.is-directory .tree-root-row.has-copy {
+  display: flex;
+  align-items: center;
+  padding-inline-end: 8px;
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface-raised));
+}
+
+.is-directory .tree-root-row.has-copy:has(> .tree-root:not(.collapsed)) {
+  border-bottom: 1px solid var(--border);
+}
+
+.is-directory .tree-root-row.has-copy > .tree-root {
+  flex: 1;
+  min-width: 0;
+  border-bottom: 0;
+  background: transparent;
+}
+
 .is-directory .tree-root .tree-node-label {
   white-space: normal;
 }

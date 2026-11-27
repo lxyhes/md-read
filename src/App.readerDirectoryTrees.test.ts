@@ -7,7 +7,7 @@ import { useReaderStore } from './stores/reader'
 
 vi.mock('./startup', () => ({ startupStylesReady: Promise.resolve() }))
 
-it('collapses every directory tree in the current document and allows individual reopening', async () => {
+it('collapses all directory trees, copies their full text, and allows individual reopening', async () => {
   const pinia = createPinia()
   const store = useReaderStore(pinia)
   vi.spyOn(store, 'bootstrap').mockResolvedValue()
@@ -16,6 +16,7 @@ it('collapses every directory tree in the current document and allows individual
 
   const host = document.body.appendChild(document.createElement('div'))
   const app = createApp(App).use(pinia)
+  const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue()
   app.mount(host)
   try {
     const collapseButton = () => [...host.querySelectorAll<HTMLButtonElement>('.reader-edit-actions button')]
@@ -26,6 +27,16 @@ it('collapses every directory tree in the current document and allows individual
     await vi.waitFor(() => expect(expansion()).toEqual(['true', 'true']))
     collapseButton()!.click()
     await nextTick()
+    expect(expansion()).toEqual(['false', 'false'])
+
+    const copyButtons = [...host.querySelectorAll<HTMLButtonElement>('.tree-copy')]
+    expect(copyButtons).toHaveLength(2)
+    writeText.mockRejectedValueOnce(new Error('Clipboard unavailable'))
+    copyButtons[1].click()
+    await vi.waitFor(() => expect(copyButtons[1].textContent).toContain('复制失败'))
+    copyButtons[1].click()
+    await vi.waitFor(() => expect(copyButtons[1].textContent).toContain('已复制'))
+    expect(writeText).toHaveBeenLastCalledWith('second\n└── folder\n    └── file.md')
     expect(expansion()).toEqual(['false', 'false'])
 
     treeRoots()[0].click()
@@ -42,6 +53,7 @@ it('collapses every directory tree in the current document and allows individual
     await store.addOpenedFiles([{ path: 'plain.md', source: '# Plain text' }], { persist: false })
     await vi.waitFor(() => expect(collapseButton()).toBeUndefined())
   } finally {
+    writeText.mockRestore()
     app.unmount()
     host.remove()
     localStorage.clear()

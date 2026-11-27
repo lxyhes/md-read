@@ -16,7 +16,7 @@ import { Checkbox } from 'ant-design-vue'
 import { invoke, isTauri as tauriIsTauri } from '@tauri-apps/api/core'
 import { bindNativeFileOpen } from './nativeFileOpen'
 import { bindNativeClose } from './nativeClose'
-import { readNativeClipboardRichText } from './nativeClipboard'
+import { readNativeClipboardRichText, writeTextToClipboard } from './nativeClipboard'
 import { canScrollFocusedRegion } from './focusWheel'
 import { useReaderStore } from './stores/reader'
 import RegionBlock from './components/RegionBlock.vue'
@@ -4699,15 +4699,6 @@ function filesystemNodeExpanded(path: string) {
   return filesystemNodeAt(path)?.expanded ?? false
 }
 
-async function writeTextToClipboard(value: string) {
-  if (isTauriRuntime()) {
-    await invoke('write_clipboard_snapshot', { kind: 'text', text: value, bytes: null })
-    return
-  }
-  if (!navigator.clipboard?.writeText) throw new Error('clipboard-unavailable')
-  await navigator.clipboard.writeText(value)
-}
-
 async function copyFileContextValue(kind: 'name' | 'file' | 'directory') {
   const file = fileContextMenu.value?.file
   if (!file) return
@@ -7685,7 +7676,7 @@ async function requestFullscreen() {
                 <EditorOutline id="editor-draft-outline" v-if="editorPreviewDocument?.headings.length" :document="editorPreviewDocument" :cursor="editorCursorOffset" :open="editorOutlineOpen" @jump="jumpToEditorHeading" @toggle="editorOutlineOpen = $event" />
                 <div class="editor-workspace" :class="[`editor-mode-${editorMode}`, { 'is-resizing-split': editorSplitResizing }]" :style="editorMode === 'split' ? { '--editor-split-ratio': `${editorSplitRatio}%` } : undefined">
                   <section v-show="editorMode !== 'preview'" class="editor-main-pane" :inert="filesystemMovingSource === filePathKey(editorDocumentPath)" :class="editorMode === 'rich' ? 'editor-rich-pane' : 'editor-source-pane'">
-                    <MarkdownEditor ref="editorTextarea" v-model="editorSource" :live="editorMode === 'rich'" :spellcheck="advancedSettings.spellcheck" :typewriter="advancedSettings.typewriterMode" :focus-mode="editorFocusMode" :theme-mode="store.activeTheme?.manifest.mode" :resolve-url="url => resolveEditorAssetUrl(editorDocumentPath, url)" @keydown="onEditorKeydown" @paste="onEditorPaste" @copy="onEditorLineClipboard($event, false)" @cut="onEditorLineClipboard($event, true)" @caret="updateEditorCursor" @history="editorUndoAvailable = $event.undo; editorRedoAvailable = $event.redo" @message="notify" @link="openExternalLink" @code-language="rememberEditorCodeLanguage" />
+                    <MarkdownEditor ref="editorTextarea" v-model="editorSource" :directory-tree-source="editorPreviewSource" :live="editorMode === 'rich'" :spellcheck="advancedSettings.spellcheck" :typewriter="advancedSettings.typewriterMode" :focus-mode="editorFocusMode" :theme-mode="store.activeTheme?.manifest.mode" :resolve-url="url => resolveEditorAssetUrl(editorDocumentPath, url)" @keydown="onEditorKeydown" @paste="onEditorPaste" @copy="onEditorLineClipboard($event, false)" @cut="onEditorLineClipboard($event, true)" @caret="updateEditorCursor" @history="editorUndoAvailable = $event.undo; editorRedoAvailable = $event.redo" @message="notify" @link="openExternalLink" @code-language="rememberEditorCodeLanguage" @refresh-directory-tree="editorPreviewSource = editorSource" />
                     <div v-if="editorEmojiSuggestions.length" class="editor-emoji-menu" role="listbox" aria-label="Emoji 建议"><button v-for="emoji in editorEmojiSuggestions" :key="emoji.code" type="button" @click="insertEditorEmoji(emoji.value)"><span>{{ emoji.value }}</span>:{{ emoji.code }}:</button></div>
                     <div v-if="editorEmojiPickerOpen" class="editor-emoji-menu editor-symbol-menu" role="dialog" aria-label="表情与符号"><div class="editor-symbol-heading"><strong>表情与符号</strong><button type="button" aria-label="关闭表情与符号" @click="editorEmojiPickerOpen = false"><AppIcon name="close" :size="13" /></button></div><div class="editor-symbol-grid"><button v-for="symbol in editorSymbolChoices" :key="symbol" type="button" :aria-label="`插入 ${symbol}`" @click="insertEditorSymbol(symbol)">{{ symbol }}</button></div></div>
                   </section>
@@ -7705,7 +7696,7 @@ async function requestFullscreen() {
                         <template v-else>
                           <template v-for="region in editorPreviewDocument.regions" :key="region.id">
                             <div v-if="region.asciiTree" :data-editor-region-id="region.id">
-                              <TreeDiagram :node="region.asciiTree" root directory />
+                              <TreeDiagram :node="region.asciiTree" root directory :copy-text="region.textContent" />
                             </div>
                             <MarkdownContent v-else :data-editor-region-id="region.id" :html="region.html" :code-region="region.type === 'code' ? region : undefined" :theme-mode="store.activeTheme?.manifest.mode" preview-images @open-image="openDocumentImage($event, region.documentId)" />
                           </template>
@@ -8053,7 +8044,7 @@ async function requestFullscreen() {
           <Button v-if="viewerTab === 'preview' && viewerHasFlowchart" type="text" size="small" @click="viewerFlowPlaying = !viewerFlowPlaying">{{ viewerFlowPlaying ? '停止数据流' : '播放数据流' }}</Button>
         </nav>
         <div ref="viewerStage" class="viewer-stage" :class="{ 'is-pan-enabled': viewerCanPan, 'is-dragging': viewerDragging }" :style="viewerStageStyle" @wheel="onViewerWheel" @pointerdown="onViewerPointerDown" @pointermove="onViewerPointerMove" @pointerup="onViewerPointerUp" @pointercancel="onViewerPointerUp" @dblclick="onViewerDoubleClick">
-          <TreeDiagram v-if="viewer.type === 'tree' && activeViewerTree" :node="activeViewerTree" root directory @open-link="openExternalLink" />
+          <TreeDiagram v-if="viewer.type === 'tree' && activeViewerTree" :node="activeViewerTree" root directory :copy-text="viewer.region.textContent" @open-link="openExternalLink" />
           <MermaidBlock v-else-if="viewer.type === 'mermaid' && viewerTab === 'preview'" :code="String(viewer.region.metadata?.code ?? viewer.region.textContent)" :native-labels="Boolean(viewer.region.metadata?.autoDiagram)" :play-flow="viewerHasFlowchart && viewerFlowPlaying" large @rendered="fitViewer" />
           <div v-else-if="viewer.type === 'mermaid' && viewerTab === 'source'" class="viewer-source-panel">
             <div class="viewer-source-toolbar"><span>Mermaid 源码</span><Button type="text" size="small" @click="copyViewerSource"><template #icon><AppIcon name="copy" :size="13" /></template>复制源码</Button></div>

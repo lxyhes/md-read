@@ -260,16 +260,18 @@ export function isAsciiTreeBody(source: string) {
 }
 
 /** Parse Unicode directory trees into nested data instead of forcing them through Mermaid. */
-export function asciiTreeToTree(source: string): AsciiTreeNode | null {
+export function asciiTreeToTree(source: string, sourceLines?: Map<AsciiTreeNode, number>): AsciiTreeNode | null {
   const lines = treeLines(source)
   const first = lines.findIndex((line) => !treeGuidePattern.test(line))
   if (first < 0) return null
   const rootless = treeBranchPattern.test(lines[first])
 
   const root: AsciiTreeNode = { label: rootless ? '目录树' : lines[first].trim(), children: [] }
+  if (!rootless) sourceLines?.set(root, first)
   const stack: AsciiTreeNode[] = [root]
   let branchCount = 0
-  for (const line of lines.slice(first + (rootless ? 0 : 1))) {
+  for (let index = first + (rootless ? 0 : 1); index < lines.length; index++) {
+    const line = lines[index]
     if (treeGuidePattern.test(line)) continue
     const match = line.match(treeBranchPattern)
     if (!match) return null
@@ -277,6 +279,7 @@ export function asciiTreeToTree(source: string): AsciiTreeNode | null {
     const parent = stack[depth - 1]
     if (!parent) return null
     const node: AsciiTreeNode = { label: match[2].trim(), children: [] }
+    sourceLines?.set(node, index)
     parent.children.push(node)
     stack.length = depth
     stack.push(node)

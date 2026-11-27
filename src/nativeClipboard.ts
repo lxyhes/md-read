@@ -1,5 +1,14 @@
 import { invoke, isTauri } from '@tauri-apps/api/core'
 
+export async function writeTextToClipboard(value: string) {
+  if (isTauri()) {
+    await invoke('write_clipboard_snapshot', { kind: 'text', text: value, bytes: null })
+    return
+  }
+  if (!navigator.clipboard?.writeText) throw new Error('clipboard-unavailable')
+  await navigator.clipboard.writeText(value)
+}
+
 export async function readNativeClipboardRichText(expectedText?: string): Promise<{ text: string; html: string } | null> {
   if (!isTauri()) return null
   try {

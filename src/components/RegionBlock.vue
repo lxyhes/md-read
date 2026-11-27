@@ -206,7 +206,7 @@ function openInlineImage(image: HTMLImageElement) {
       </component>
     </div>
       <div v-else-if="region.type === 'code' && asciiTree" class="region-content auto-tree-region" @click.stop>
-      <TreeDiagram :node="asciiTree" root directory :expand-request="treeExpansionRequest" @open-link="emit('open-link', $event)" />
+      <TreeDiagram :node="asciiTree" root directory :copy-text="region.textContent" :expand-request="treeExpansionRequest" @open-link="emit('open-link', $event)" />
     </div>
     <div v-else-if="region.type === 'code' && asciiDiagramCode" class="region-content auto-diagram-region" @click.stop="emit('openViewer')">
       <MermaidBlock :code="asciiDiagramCode" :theme-key="themeKey" native-labels />

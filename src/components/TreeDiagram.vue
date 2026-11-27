@@ -2,12 +2,13 @@
 import { computed, nextTick, ref, useId, watch } from 'vue'
 import type { AsciiTreeNode } from '../asciiDiagram'
 import type { MarkdownUrlResolver } from '../markdown/shared'
+import { writeTextToClipboard } from '../nativeClipboard'
 import AppIcon from './AppIcon.vue'
 import MarkdownContent from './MarkdownContent.vue'
 
 type BranchExpansion = { open: boolean }
 type MindmapNavigation = { selected: string; focused: string; reveal?: { path: string; openTarget?: boolean } }
-const props = defineProps<{ node: AsciiTreeNode; root?: boolean; depth?: number; compact?: boolean; directory?: boolean; horizontal?: boolean; resolveUrl?: MarkdownUrlResolver; expandRequest?: BranchExpansion; nodePath?: string; navigation?: MindmapNavigation }>()
+const props = defineProps<{ node: AsciiTreeNode; root?: boolean; depth?: number; compact?: boolean; directory?: boolean; horizontal?: boolean; resolveUrl?: MarkdownUrlResolver; expandRequest?: BranchExpansion; nodePath?: string; navigation?: MindmapNavigation; copyText?: string }>()
 const emit = defineEmits<{ 'open-link': [url: string]; 'open-image': [image: HTMLImageElement]; 'select-node': [path: string] }>()
 const branchDepth = props.depth ?? 0
 const expanded = ref(props.expandRequest?.open ?? Boolean(props.root || (!props.horizontal && !props.compact && branchDepth <= 1)))
@@ -60,6 +61,19 @@ const rootLabel = computed(() => {
   const name = props.node.label.replace(/\.(?:md|markdown)$/i, '').trim()
   return name || props.node.label
 })
+const copyStatus = ref('')
+watch(() => props.copyText, () => { copyStatus.value = '' })
+async function copyDirectoryTree() {
+  const text = props.copyText
+  if (!text) return
+  copyStatus.value = ''
+  try {
+    await writeTextToClipboard(text)
+    if (text === props.copyText) copyStatus.value = '已复制'
+  } catch {
+    if (text === props.copyText) copyStatus.value = '复制失败'
+  }
+}
 const toggleBranch = (event: MouseEvent) => {
   selectNode()
   const restorePosition = captureNodePosition(event)
@@ -177,13 +191,17 @@ watch(summaryOpen, (open, _, onCleanup) => {
 
 <template>
   <div v-if="root" class="tree-diagram" :class="{ 'is-compact': compact, 'is-directory': directory, 'is-horizontal': horizontal }">
-    <div class="tree-root-row" :class="{ 'has-expand-all': canExpandAll }">
+    <div class="tree-root-row" :class="{ 'has-expand-all': canExpandAll, 'has-copy': copyText }">
       <button class="tree-root" :class="{ collapsed: !expanded, 'is-mindmap-selected': selected }" type="button" :data-mindmap-node="nodePath" :title="node.label" :aria-label="node.label" :aria-expanded="expanded" @click="toggleBranch">
         <AppIcon v-if="directory" name="chevron-right" :size="14" />
         <AppIcon v-if="directory" name="folder" :size="16" />
         <span class="tree-node-label">{{ rootLabel }}</span>
       </button>
       <button v-if="canExpandAll" class="tree-expand-all" :class="{ 'is-expanded': bulkOpen }" type="button" :title="bulkAction" :aria-label="`${bulkAction}：${rootLabel}`" @click="toggleAll"><AppIcon name="chevrons-right" :size="16" /></button>
+      <button v-if="copyText" class="code-copy tree-copy" type="button" :title="`复制目录树：${rootLabel}`" @click.stop="copyDirectoryTree">
+        <AppIcon :name="copyStatus === '已复制' ? 'check' : 'copy'" :size="14" />
+        <span aria-live="polite">{{ copyStatus || '复制目录树' }}</span>
+      </button>
     </div>
     <ul v-if="node.children.length && (directory || expanded)" v-show="expanded" class="tree-children tree-root-children" role="list">
       <TreeDiagram v-for="(child, index) in node.children" :key="`${child.label}-${index}`" :node="child" :depth="branchDepth + 1" :compact="compact" :directory="directory" :horizontal="horizontal" :resolve-url="resolveUrl" :expand-request="expandRequest" :node-path="childPath(index)" :navigation="navigation" @select-node="emit('select-node', $event)" @open-link="emit('open-link', $event)" @open-image="emit('open-image', $event)" />

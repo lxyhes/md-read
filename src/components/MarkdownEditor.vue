@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { getCurrentInstance, h, render, onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, getCurrentInstance, h, render, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { Compartment, EditorState } from '@codemirror/state'
 import { EditorView, keymap, drawSelection, dropCursor, lineNumbers, highlightActiveLine } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap, undo, redo, undoDepth, redoDepth } from '@codemirror/commands'
@@ -10,9 +10,11 @@ import { isTopLevelParagraph } from '../editorInput'
 import { liveMarkdown } from '../liveMarkdown'
 import { editorCodeHighlight } from '../editorCodeHighlight'
 import type { ThemeManifest } from '../types'
+import { editorDirectoryTrees } from '../parser'
+import EditorDirectoryNavigator from './EditorDirectoryNavigator.vue'
 import MermaidBlock from './MermaidBlock.vue'
 
-const props = defineProps<{ modelValue: string; live: boolean; spellcheck: boolean; typewriter: boolean; focusMode: boolean; themeMode?: ThemeManifest['mode']; resolveUrl: (url: string) => string }>()
+const props = defineProps<{ modelValue: string; directoryTreeSource?: string; live: boolean; spellcheck: boolean; typewriter: boolean; focusMode: boolean; themeMode?: ThemeManifest['mode']; resolveUrl: (url: string) => string }>()
 const emit = defineEmits<{
   'update:modelValue': [value: string]
   caret: [position: { offset: number; line: number; column: number }]
@@ -24,6 +26,7 @@ const emit = defineEmits<{
   message: [text: string]
   link: [url: string]
   'code-language': [language: string]
+  'refresh-directory-tree': []
 }>()
 const host = ref<HTMLElement | null>(null)
 const fallback = ref(false)
@@ -35,6 +38,31 @@ let lastCell: HTMLTextAreaElement | null = null
 let selectionPointerDown = false
 let selectionDragFrozen = false
 let typewriterFrame: number | null = null
+const cursorLine = ref(1)
+const treeAnchorTop = ref<number | null>(null)
+const directoryTreeSource = computed(() => props.directoryTreeSource ?? props.modelValue)
+const directoryTrees = computed(() => editorDirectoryTrees(directoryTreeSource.value))
+const activeDirectoryTree = computed(() => directoryTrees.value.find(tree => cursorLine.value >= tree.startLine && cursorLine.value <= tree.endLine))
+const treeAnchorMeasure = {
+  read(editor: EditorView) {
+    if (!activeDirectoryTree.value || !host.value) return null
+    const bounds = editor.scrollDOM.getBoundingClientRect()
+    const line = editor.lineBlockAt(editor.state.selection.main.from)
+    const top = editor.documentTop + line.top
+    if (top + line.height <= bounds.top || top >= bounds.bottom) return null
+    return Math.max(bounds.top, top) - host.value.getBoundingClientRect().top
+  },
+  write(top: number | null) { treeAnchorTop.value = top },
+}
+watch([cursorLine, activeDirectoryTree], () => view?.requestMeasure(treeAnchorMeasure))
+
+function jumpToDirectoryLine(number: number) {
+  if (!view || directoryTreeSource.value !== props.modelValue || number > view.state.doc.lines) return
+  const line = view.state.doc.line(number)
+  const offset = line.from + line.text.trimEnd().length
+  view.focus()
+  view.dispatch({ selection: { anchor: offset }, scrollIntoView: true })
+}
 
 function onSelectionMouseDown(event: MouseEvent) {
   const target = event.target
@@ -151,6 +179,7 @@ onMounted(() => {
         cancelTypewriterCenter()
         const offset = update.state.selection.main.from
         const line = update.state.doc.lineAt(offset)
+        cursorLine.value = line.number
         emit('caret', { offset, line: line.number, column: offset - line.from + 1 })
         emit('history', { undo: undoDepth(update.state) > 0, redo: redoDepth(update.state) > 0 })
         if (props.typewriter && !update.transactions.some(transaction => transaction.isUserEvent('select.pointer') || transaction.isUserEvent('select.outline') || transaction.isUserEvent('select.table') || transaction.isUserEvent('input.table'))) {
@@ -160,6 +189,7 @@ onMounted(() => {
           })
         }
       }
+      if (activeDirectoryTree.value && (update.geometryChanged || update.viewportChanged)) update.view.requestMeasure(treeAnchorMeasure)
     }),
   ] }) })
   try {
@@ -179,7 +209,12 @@ onMounted(() => {
     }
   }
   view?.focus()
+  view?.requestMeasure(treeAnchorMeasure)
+  view?.scrollDOM.addEventListener('scroll', measureTreeAnchor, { passive: true })
 })
+function measureTreeAnchor() {
+  if (activeDirectoryTree.value) view?.requestMeasure(treeAnchorMeasure)
+}
 watch(() => props.modelValue, value => { if (!publishing && view?.state.doc.toString() !== value) replaceSource(value) })
 watch(() => [props.live, props.spellcheck], () => view?.dispatch({ effects: appearance.reconfigure(extensions()) }))
 watch(() => props.typewriter, () => {
@@ -194,6 +229,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('mousemove', onSelectionMouseMove, true)
   document.removeEventListener('mouseup', onSelectionMouseUp, true)
   window.removeEventListener('blur', finishSelectionDrag)
+  view?.scrollDOM.removeEventListener('scroll', measureTreeAnchor)
   view?.destroy()
   view = null
 })
@@ -259,13 +295,21 @@ defineExpose({
   <div class="markdown-editor" :data-code-theme="themeMode ?? 'system'" :class="{ 'is-live': live && !fallback, 'is-line-focus': focusMode && !fallback }">
     <p v-if="fallback" role="alert" class="editor-fallback-notice">{{ failed ? '编辑器加载失败，原文未改变。请复制原文或退出编辑后重试。' : '实时渲染加载失败，已切换到源码编辑；草稿内容未改变。' }}</p>
     <textarea v-if="failed" :value="modelValue" class="editor-fallback-source" readonly aria-label="编辑器加载失败时的原文" />
-    <div ref="host" class="editor-code-host" :hidden="failed" />
+    <div class="editor-code-frame">
+      <div ref="host" class="editor-code-host" :hidden="failed" />
+      <EditorDirectoryNavigator v-if="activeDirectoryTree && treeAnchorTop !== null"
+        :key="activeDirectoryTree.startLine" :tree="activeDirectoryTree" :line="cursorLine"
+        class="editor-directory-anchor" :style="{ '--tree-anchor-top': `${treeAnchorTop}px` }"
+        @open="emit('refresh-directory-tree')" @jump="jumpToDirectoryLine" />
+    </div>
   </div>
 </template>
 
 <style scoped>
 .markdown-editor { display: flex; flex-direction: column; }
-.editor-code-host { flex: 1; min-height: 0; }
+.editor-code-frame { position: relative; flex: 1; min-height: 0; display: flex; }
+.editor-code-host { flex: 1; min-width: 0; min-height: 0; }
+.editor-directory-anchor { position: absolute; z-index: 3; inset-inline-end: 16px; inset-block-start: clamp(0px, var(--tree-anchor-top), calc(100% - 30px)); }
 .editor-fallback-notice { flex: none; margin: 0; padding: 10px 16px; color: var(--ink); background: var(--accent-soft); font: 13px/1.5 var(--ui-font); }
 .editor-fallback-source { flex: 1; min-height: 0; width: 100%; padding: 16px; resize: none; color: var(--ink); background: var(--surface); font: 14px/1.6 var(--mono); }
 </style>

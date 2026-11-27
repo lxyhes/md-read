@@ -2,7 +2,7 @@ import type { HeadingItem, ReaderDocument, ReaderRegion, ReaderRegionType } from
 import { blockHtmlWithSourceIndent, renderFootnotes, renderVideoNode } from './markdown/render'
 import { createRenderContext, nodeText, renderMath, resolveMarkdownReferences, type MarkdownUrlResolver, type MdastNode } from './markdown/shared'
 import { formatPastedText, isLikelyProseBlock, normalizeMixedOrderedListSource } from './pasteMarkdown'
-import { asciiTreeToTree, isAsciiTreeBody } from './asciiDiagram'
+import { asciiTreeToTree, isAsciiTreeBody, type AsciiTreeNode } from './asciiDiagram'
 import { attachImageCaptions, isTimestampedParagraph, markdownProcessor as processor, normalizeArticleStrong, normalizeLatexDelimiters, normalizeMixedOrderedLists, promoteStandaloneImageLinks, promoteTimestampedParagraphs, removeEmptyListItems, restoreClipboardCodeCards, restoreSplitStepsLists } from './markdown/fragment'
 
 export type { MarkdownUrlResolver } from './markdown/shared'
@@ -60,10 +60,34 @@ function regionType(node: MdastNode): ReaderRegionType {
   return node.type as ReaderRegionType
 }
 
-function codeTree(node: MdastNode) {
+function codeTree(node: MdastNode, sourceLines?: Map<AsciiTreeNode, number>) {
   return node.type === 'code' && /^(?:plain|plaintext|text|txt|markdown|md)?$/i.test(node.lang?.trim() ?? '')
-    ? asciiTreeToTree(node.value ?? '')
+    ? asciiTreeToTree(node.value ?? '', sourceLines)
     : null
+}
+
+export type DirectoryTreeLocation = {
+  startLine: number
+  endLine: number
+  bodyLine: number
+  root: AsciiTreeNode
+  sourceLines: ReadonlyMap<AsciiTreeNode, number>
+}
+
+export function editorDirectoryTrees(source: string): DirectoryTreeLocation[] {
+  if (!/(?:[├└]─{2}|[+\\]--)/.test(source)) return []
+  // Reader normalization can shift lines. Locate nodes in the original draft.
+  const markdown = processor.parse(source) as unknown as MdastNode
+  restorePlainTrees(markdown, source)
+  return (markdown.children ?? []).flatMap(node => {
+    const { start, end } = node.position ?? {}
+    if (!start?.line || !end?.line) return []
+    const sourceLines = new Map<AsciiTreeNode, number>()
+    const root = codeTree(node, sourceLines)
+    if (!root) return []
+    const fenced = /^(?:`{3,}|~{3,})/.test(source.slice(start.offset, end.offset))
+    return [{ startLine: start.line, endLine: end.line, bodyLine: start.line + Number(fenced), root, sourceLines }]
+  })
 }
 
 function restorePlainTrees(tree: MdastNode, source: string) {
