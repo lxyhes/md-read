@@ -7391,7 +7391,7 @@ async function requestFullscreen() {
             <button v-if="canDeleteSystemEntry(fileContextMenu.file)" type="button" role="menuitem" class="file-context-danger" @click="requestSystemDelete"><AppIcon name="trash" :size="13" />从系统删除…</button>
           </div>
         </Teleport>
-        <Modal :open="!!fileProperties" title="文件属性" wrap-class-name="reader-detail-modal" :width="500" centered :after-close="restoreReaderModalFocus" @cancel="fileProperties = null">
+        <Modal :open="!!fileProperties" title="文件属性" wrap-class-name="reader-detail-modal app-dialog-wrap" :width="500" :after-close="restoreReaderModalFocus" @cancel="fileProperties = null">
           <template v-if="fileProperties">
             <p class="reader-detail-name">{{ fileProperties.name }}</p>
             <dl class="file-properties-list">
@@ -7406,7 +7406,7 @@ async function requestFullscreen() {
             <Button type="primary" @click="copyFilePropertiesPath"><template #icon><AppIcon name="copy" :size="13" /></template>复制文件路径</Button>
           </template>
         </Modal>
-        <Modal :open="!!deleteConfirmation" :title="deleteConfirmation?.system ? '从系统永久删除？' : '从阅读空间移除？'" wrap-class-name="reader-detail-modal" :width="500" centered :after-close="restoreReaderModalFocus" @cancel="deleteConfirmation = null">
+        <Modal :open="!!deleteConfirmation" :title="deleteConfirmation?.system ? '从系统永久删除？' : '从阅读空间移除？'" wrap-class-name="reader-detail-modal app-dialog-wrap" :width="500" :after-close="restoreReaderModalFocus" @cancel="deleteConfirmation = null">
           <template v-if="deleteConfirmation?.system">
             <p class="reader-remove-description">将永久删除“{{ deleteConfirmation.files[0].name }}”{{ deleteConfirmation.files[0].isDirectory ? '及其中的所有文件、子文件夹和图片' : '' }}。</p>
             <p class="reader-remove-description">{{ deleteConfirmation.files[0].path }}</p>
@@ -7820,7 +7820,7 @@ async function requestFullscreen() {
           <button type="button" @click="copySelection">复制纯文本</button>
           <IconButton icon="close" size="sm" label="关闭选区工具栏" @keydown.enter.stop @click="dismissSelectionToolbar" />
         </div>
-        <Modal :open="wordCountOpen && !!store.currentDocument" title="字数统计" wrap-class-name="reader-detail-modal" :width="500" centered :after-close="restoreReaderModalFocus" @cancel="wordCountOpen = false">
+        <Modal :open="wordCountOpen && !!store.currentDocument" title="字数统计" wrap-class-name="reader-detail-modal app-dialog-wrap" :width="500" :after-close="restoreReaderModalFocus" @cancel="wordCountOpen = false">
           <template v-if="store.currentDocument">
             <p class="reader-detail-name">{{ displayTitle(store.currentDocument.title) }}</p>
             <dl class="file-properties-list">
