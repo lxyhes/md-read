@@ -2860,6 +2860,12 @@ async function chooseEditorCodeLanguage() {
   if (advancedSettings.value.rememberCodeLanguage) advancedSettings.value.defaultCodeLanguage = editorCodeLanguage.value
 }
 
+function rememberEditorCodeLanguage(language: string) {
+  if (!advancedSettings.value.rememberCodeLanguage) return
+  editorCodeLanguage.value = language
+  advancedSettings.value.defaultCodeLanguage = language
+}
+
 function insertEditorEmoji(value: string) {
   const element = editorTextarea.value
   if (!element) return
@@ -7675,7 +7681,7 @@ async function requestFullscreen() {
                 <EditorOutline id="editor-draft-outline" v-if="editorPreviewDocument?.headings.length" :document="editorPreviewDocument" :cursor="editorCursorOffset" :open="editorOutlineOpen" @jump="jumpToEditorHeading" @toggle="editorOutlineOpen = $event" />
                 <div class="editor-workspace" :class="[`editor-mode-${editorMode}`, { 'is-resizing-split': editorSplitResizing }]" :style="editorMode === 'split' ? { '--editor-split-ratio': `${editorSplitRatio}%` } : undefined">
                   <section v-show="editorMode !== 'preview'" class="editor-main-pane" :inert="filesystemMovingSource === filePathKey(editorDocumentPath)" :class="editorMode === 'rich' ? 'editor-rich-pane' : 'editor-source-pane'">
-                    <MarkdownEditor ref="editorTextarea" v-model="editorSource" :live="editorMode === 'rich'" :spellcheck="advancedSettings.spellcheck" :typewriter="advancedSettings.typewriterMode" :focus-mode="editorFocusMode" :resolve-url="url => resolveEditorAssetUrl(editorDocumentPath, url)" @keydown="onEditorKeydown" @paste="onEditorPaste" @copy="onEditorLineClipboard($event, false)" @cut="onEditorLineClipboard($event, true)" @caret="updateEditorCursor" @history="editorUndoAvailable = $event.undo; editorRedoAvailable = $event.redo" @message="notify" @link="openExternalLink" />
+                    <MarkdownEditor ref="editorTextarea" v-model="editorSource" :live="editorMode === 'rich'" :spellcheck="advancedSettings.spellcheck" :typewriter="advancedSettings.typewriterMode" :focus-mode="editorFocusMode" :theme-mode="store.activeTheme?.manifest.mode" :resolve-url="url => resolveEditorAssetUrl(editorDocumentPath, url)" @keydown="onEditorKeydown" @paste="onEditorPaste" @copy="onEditorLineClipboard($event, false)" @cut="onEditorLineClipboard($event, true)" @caret="updateEditorCursor" @history="editorUndoAvailable = $event.undo; editorRedoAvailable = $event.redo" @message="notify" @link="openExternalLink" @code-language="rememberEditorCodeLanguage" />
                     <div v-if="editorEmojiSuggestions.length" class="editor-emoji-menu" role="listbox" aria-label="Emoji 建议"><button v-for="emoji in editorEmojiSuggestions" :key="emoji.code" type="button" @click="insertEditorEmoji(emoji.value)"><span>{{ emoji.value }}</span>:{{ emoji.code }}:</button></div>
                     <div v-if="editorEmojiPickerOpen" class="editor-emoji-menu editor-symbol-menu" role="dialog" aria-label="表情与符号"><div class="editor-symbol-heading"><strong>表情与符号</strong><button type="button" aria-label="关闭表情与符号" @click="editorEmojiPickerOpen = false"><AppIcon name="close" :size="13" /></button></div><div class="editor-symbol-grid"><button v-for="symbol in editorSymbolChoices" :key="symbol" type="button" :aria-label="`插入 ${symbol}`" @click="insertEditorSymbol(symbol)">{{ symbol }}</button></div></div>
                   </section>
@@ -7697,7 +7703,7 @@ async function requestFullscreen() {
                             <div v-if="region.asciiTree" :data-editor-region-id="region.id">
                               <TreeDiagram :node="region.asciiTree" root directory />
                             </div>
-                            <MarkdownContent v-else :data-editor-region-id="region.id" :html="region.html" preview-images @open-image="openDocumentImage($event, region.documentId)" />
+                            <MarkdownContent v-else :data-editor-region-id="region.id" :html="region.html" :code-region="region.type === 'code' ? region : undefined" :theme-mode="store.activeTheme?.manifest.mode" preview-images @open-image="openDocumentImage($event, region.documentId)" />
                           </template>
                         </template>
                       </article>

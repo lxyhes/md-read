@@ -71,6 +71,17 @@ export function deleteTableColumn(table: EditableTable, index: number) {
   return true
 }
 
+export function countRemovedTableCells(table: EditableTable, rows: number, columns: number) {
+  return table.rows.reduce((total, row, index) => total + row
+    .slice(index >= rows ? 0 : columns).filter(value => value.trim()).length, 0)
+}
+
+export function resizeEditableTable(table: EditableTable, rows: number, columns: number) {
+  table.alignments = Array.from({ length: columns }, (_, col) => table.alignments[col] ?? 'left')
+  table.rows = Array.from({ length: rows }, (_, row) =>
+    table.alignments.map((_, col) => table.rows[row]?.[col] ?? ''))
+}
+
 export function parseTableClipboard(text: string) {
   if (text.length > 1000000) throw new Error('粘贴内容超过 100 万字符，请分批粘贴')
   const rows: string[][] = []

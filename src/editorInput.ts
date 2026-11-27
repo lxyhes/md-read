@@ -113,23 +113,27 @@ export function indentSelection(value: string, start: number, end: number, outde
 }
 
 export function codeIndentInsertion(value: string, cursor: number): { text: string; caret: number } | null {
-  let fence: { marker: string; length: number } | null = null
+  let fence: { marker: string; length: number; language: string; line: number } | null = null
   const lines = value.slice(0, cursor).split('\n')
-  for (const line of lines) {
+  for (const [index, line] of lines.entries()) {
     const match = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/)
     if (!match) continue
     if (!fence) {
       if (match[1][0] === '`' && match[2].includes('`')) continue
-      fence = { marker: match[1][0], length: match[1].length }
+      fence = { marker: match[1][0], length: match[1].length, language: match[2].trim().split(/\s+/, 1)[0].toLowerCase(), line: index }
     } else if (match[1][0] === fence.marker && match[1].length >= fence.length && /^[ \t]*$/.test(match[2])) fence = null
   }
   if (!fence) return null
   const line = lines[lines.length - 1]
   const indent = line.match(/^[ \t]*/)?.[0] ?? ''
-  const extra = /(?:\{|\(|\[|：|:)[ \t]*$/.test(line) ? (indent.includes('\t') ? '\t' : '  ') : ''
   const opening = line.trimEnd().slice(-1)
   const closing = ({ '{': '}', '(': ')', '[': ']' } as Record<string, string>)[opening]
-  const paired = !!closing && closing === value[cursor]
+  const inBody = fence.line < lines.length - 1
+  const python = /^(?:py|python)$/.test(fence.language)
+  const yaml = /^(?:yaml|yml)$/.test(fence.language)
+  const block = (python || yaml) && /:\s*(?:#.*)?$/.test(line)
+  const extra = inBody && (closing || block) ? (indent.includes('\t') ? '\t' : python ? '    ' : '  ') : ''
+  const paired = inBody && !!closing && closing === value[cursor]
   const text = `\n${indent}${extra}`
   return { text: text + (paired ? `\n${indent}` : ''), caret: text.length }
 }

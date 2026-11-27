@@ -8,9 +8,11 @@ import { Subscript, Superscript } from '@lezer/markdown'
 import { syntaxHighlighting, defaultHighlightStyle, syntaxTree } from '@codemirror/language'
 import { isTopLevelParagraph } from '../editorInput'
 import { liveMarkdown } from '../liveMarkdown'
+import { editorCodeHighlight } from '../editorCodeHighlight'
+import type { ThemeManifest } from '../types'
 import MermaidBlock from './MermaidBlock.vue'
 
-const props = defineProps<{ modelValue: string; live: boolean; spellcheck: boolean; typewriter: boolean; focusMode: boolean; resolveUrl: (url: string) => string }>()
+const props = defineProps<{ modelValue: string; live: boolean; spellcheck: boolean; typewriter: boolean; focusMode: boolean; themeMode?: ThemeManifest['mode']; resolveUrl: (url: string) => string }>()
 const emit = defineEmits<{
   'update:modelValue': [value: string]
   caret: [position: { offset: number; line: number; column: number }]
@@ -21,6 +23,7 @@ const emit = defineEmits<{
   history: [state: { undo: boolean; redo: boolean }]
   message: [text: string]
   link: [url: string]
+  'code-language': [language: string]
 }>()
 const host = ref<HTMLElement | null>(null)
 const fallback = ref(false)
@@ -94,7 +97,7 @@ function wrapInlineCell(before: string, after: string, placeholder: string) {
   return true
 }
 const appContext = getCurrentInstance()!.appContext
-const live = liveMarkdown({ resolveUrl: url => props.resolveUrl(url), openLink: url => emit('link', url), message: text => emit('message', text), renderDiagram(root, code) {
+const live = liveMarkdown({ resolveUrl: url => props.resolveUrl(url), openLink: url => emit('link', url), message: text => emit('message', text), selectCodeLanguage: language => emit('code-language', language), renderDiagram(root, code) {
   const node = h(MermaidBlock, { code, large: true })
   node.appContext = appContext
   render(node, root)
@@ -134,7 +137,7 @@ onMounted(() => {
   const createEditor = () => new EditorView({ parent: host.value!, state: EditorState.create({ doc: props.modelValue, extensions: [
     // Tauri's packaged CSP requires dynamic editor styles to reuse its style nonce.
     EditorView.cspNonce.of(document.querySelector<HTMLStyleElement>('style[nonce]')?.nonce ?? ''),
-    EditorState.lineSeparator.of('\n'), ...(fallback.value ? [] : [markdown({ base: markdownLanguage, extensions: [Subscript, Superscript] })]), history(), drawSelection(), dropCursor(), highlightActiveLine(), EditorView.lineWrapping,
+    EditorState.lineSeparator.of('\n'), ...(fallback.value ? [] : [markdown({ base: markdownLanguage, extensions: [Subscript, Superscript] }), editorCodeHighlight]), history(), drawSelection(), dropCursor(), highlightActiveLine(), EditorView.lineWrapping,
     keymap.of([...historyKeymap, ...defaultKeymap]), appearance.of(extensions()),
     EditorView.domEventHandlers({
       keydown(event) { emit('keydown', event); return event.defaultPrevented },
@@ -253,7 +256,7 @@ defineExpose({
 </script>
 
 <template>
-  <div class="markdown-editor" :class="{ 'is-live': live && !fallback, 'is-line-focus': focusMode && !fallback }">
+  <div class="markdown-editor" :data-code-theme="themeMode ?? 'system'" :class="{ 'is-live': live && !fallback, 'is-line-focus': focusMode && !fallback }">
     <p v-if="fallback" role="alert" class="editor-fallback-notice">{{ failed ? '编辑器加载失败，原文未改变。请复制原文或退出编辑后重试。' : '实时渲染加载失败，已切换到源码编辑；草稿内容未改变。' }}</p>
     <textarea v-if="failed" :value="modelValue" class="editor-fallback-source" readonly aria-label="编辑器加载失败时的原文" />
     <div ref="host" class="editor-code-host" :hidden="failed" />

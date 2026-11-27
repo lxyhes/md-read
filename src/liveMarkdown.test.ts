@@ -1,10 +1,190 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from 'vitest'
 import { EditorState } from '@codemirror/state'
-import { EditorView } from '@codemirror/view'
+import { EditorView, keymap, runScopeHandlers } from '@codemirror/view'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
+import { defaultKeymap, history, undo } from '@codemirror/commands'
 import { liveMarkdown } from './liveMarkdown'
+import { editorCodeHighlight } from './editorCodeHighlight'
 import { renderMarkdownFragment } from './parser'
+import { parseEditableTable } from './tableEditing'
+import { activeAppDialog, resolveAppDialog } from './appDialog'
+
+it.each([
+  ['Backspace', '```yaml', '\n```\n\n结尾', '开头\n\n结尾'],
+  ['Delete', '~~~yaml', '', '开头\n\n'],
+])('only removes the fence on the second %s, once its body is empty', (key, opening, tail, expected) => {
+  const host = document.createElement('div')
+  const start = `开头\n\n${opening}\n`
+  const code = 'name: sample\nport: 8080'
+  const source = start + code + tail
+  const view = new EditorView({
+    state: EditorState.create({
+      doc: source,
+      selection: { anchor: start.length + 2 },
+      extensions: [markdown({ base: markdownLanguage }), keymap.of(defaultKeymap), history(), liveMarkdown({ resolveUrl: url => url, openLink() {}, message() {} })],
+    }),
+    parent: host,
+  })
+  const press = (key: string, ctrlKey = false) => runScopeHandlers(view, new KeyboardEvent('keydown', { key, ctrlKey }), 'editor')
+  try {
+    expect(press('a', true)).toBe(true)
+    expect(press(key)).toBe(true)
+    expect(view.state.doc.toString()).toBe(start + tail)
+    expect(host.querySelector('.live-code-footer')).not.toBeNull()
+    expect(press(key)).toBe(true)
+    expect(view.state.doc.toString()).toBe(expected)
+    expect(host.querySelector('.live-code-footer')).toBeNull()
+    expect(undo(view)).toBe(true)
+    expect(view.state.doc.toString()).toBe(start + tail)
+    expect(undo(view)).toBe(true)
+    expect(view.state.doc.toString()).toBe(source)
+  } finally {
+    view.destroy()
+  }
+})
+
+it('keeps normal Backspace behavior when there are still spaces or code in the block', () => {
+  const prefix = '开头\n\n```yaml\n'
+  const view = new EditorView({
+    state: EditorState.create({
+      doc: prefix + ' \n```',
+      selection: { anchor: prefix.length + 1 },
+      extensions: [markdown({ base: markdownLanguage }), keymap.of(defaultKeymap), liveMarkdown({ resolveUrl: url => url, openLink() {}, message() {} })],
+    }),
+    parent: document.createElement('div'),
+  })
+  try {
+    expect(runScopeHandlers(view, new KeyboardEvent('keydown', { key: 'Backspace' }), 'editor')).toBe(true)
+    expect(view.state.doc.toString()).toBe(prefix + '\n```')
+  } finally {
+    view.destroy()
+  }
+})
+
+it.each([
+  ['正文\n\n```yaml\nkey: value\n  next: 1\n```\n\n结尾', 'key', 'key: value\n  next: 1'],
+  ['正文\n\n~~~yaml\nkey: value\n', 'key', 'key: value\n'],
+  ['正文\n\n```yaml\n\n```\n\n结尾', '\n```\n', ''],
+  ['正文\n\n```mermaid\nflowchart TD\nA --> B\n```', 'flowchart', 'flowchart TD\nA --> B'],
+])('scopes Select All to the current fenced code body', (source, start, expected) => {
+  const host = document.createElement('div')
+  const view = new EditorView({
+    state: EditorState.create({
+      doc: source,
+      selection: { anchor: source.indexOf(start) + Math.min(start.length - 1, 2) },
+      extensions: [markdown({ base: markdownLanguage }), keymap.of(defaultKeymap), liveMarkdown({ resolveUrl: url => url, openLink() {}, message() {} })],
+    }),
+    parent: host,
+  })
+  const selectAll = () => runScopeHandlers(view, new KeyboardEvent('keydown', { key: 'a', ctrlKey: true }), 'editor')
+  try {
+    for (let press = 0; press < 2; press++) {
+      expect(selectAll()).toBe(true)
+      const { from, to } = view.state.selection.main
+      expect(view.state.sliceDoc(from, to)).toBe(expected)
+      expect(host.querySelector('.live-diagram-widget')).toBeNull()
+    }
+    view.dispatch({ selection: { anchor: 1 } })
+    for (let press = 0; press < 2; press++) {
+      expect(selectAll()).toBe(true)
+      expect(view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to)).toBe(source)
+    }
+  } finally {
+    view.destroy()
+  }
+})
+
+it.each([
+  ['~~~yaml title', 'name: sample\nport: 8080\n', '~~~', 'yaml', 'json'],
+  ['```', '', '```', '代码语言', 'yaml'],
+  ['```yaml', 'name: sample', '', 'yaml', 'json'],
+])('renders an editable code block with a language button for %s', (opening, body, closing, label, language) => {
+  const source = `正文\n\n${opening}\n${body}${closing}`
+  const host = document.createElement('div')
+  const view = new EditorView({
+    doc: source,
+    extensions: [markdown({ base: markdownLanguage }), history(), liveMarkdown({ resolveUrl: value => value, openLink() {}, message() {} })],
+    parent: host,
+  })
+  try {
+    const button = () => host.querySelector<HTMLButtonElement>('.live-code-footer button')!
+    const lines = () => [...host.querySelectorAll('.live-code-line')].map(line => line.textContent)
+    expect(button().textContent).toBe(label)
+    expect(lines()).toEqual(body ? body.trimEnd().split('\n') : [''])
+    if (body) {
+      view.dispatch({ selection: { anchor: source.indexOf(body) + 2 } })
+      expect(lines()[0]).toBe('name: sample')
+    }
+    button().click()
+    const input = host.querySelector<HTMLInputElement>('.live-code-language-search')!
+    input.value = language
+    input.dispatchEvent(new Event('input'))
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+    const updatedOpening = label === '代码语言' ? opening + language : opening.replace(label, language)
+    expect(view.state.doc.toString()).toBe(source.replace(opening, updatedOpening))
+    expect(button().textContent).toBe(language)
+    expect(lines()).not.toContain(updatedOpening)
+    expect(undo(view)).toBe(true)
+    expect(view.state.doc.toString()).toBe(source)
+  } finally {
+    view.destroy()
+  }
+})
+
+it('filters language names and aliases, supports arrow navigation, and cancels on Escape', () => {
+  const host = document.createElement('div')
+  document.body.append(host)
+  const view = new EditorView({
+    doc: '正文\n\n```yaml\nname: sample\n```',
+    extensions: [markdown({ base: markdownLanguage }), liveMarkdown({ resolveUrl: url => url, openLink() {}, message() {} })],
+    parent: host,
+  })
+  try {
+    const button = host.querySelector<HTMLButtonElement>('.live-code-language-trigger')!
+    button.click()
+    const input = host.querySelector<HTMLInputElement>('.live-code-language-search')!
+    input.value = 'j'
+    input.dispatchEvent(new Event('input'))
+    const list = document.getElementById(input.getAttribute('aria-controls')!)!
+    expect([...list.children].map(option => option.textContent)).toEqual(expect.arrayContaining(['jade', 'java', 'javascript', 'jinja2', 'js']))
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }))
+    expect(list.querySelector('[aria-selected="true"]')?.textContent).toBe('java')
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+    expect(list.isConnected).toBe(false)
+    expect(view.state.doc.toString()).toContain('```yaml')
+  } finally {
+    view.destroy()
+    host.remove()
+  }
+})
+
+it('highlights selected language syntax in editable source positions', async () => {
+  const host = document.createElement('div')
+  const source = '正文\n\n```js\nconst value = "语法";\nreturn value;\n```'
+  const view = new EditorView({
+    doc: source,
+    extensions: [markdown({ base: markdownLanguage }), editorCodeHighlight, liveMarkdown({ resolveUrl: url => url, openLink() {}, message() {} })],
+    parent: host,
+  })
+  try {
+    const tokens = () => [...host.querySelectorAll('.editor-code-token')]
+    await vi.waitFor(() => expect(tokens().map(token => token.textContent)).toContain('return'))
+    const token = tokens().find(token => token.textContent === 'return')!
+    expect(view.posAtDOM(token.firstChild!, 2)).toBe(source.indexOf('return') + 2)
+    expect(token.getAttribute('style')).toContain('--code-token-dark')
+
+    host.querySelector<HTMLButtonElement>('.live-code-language-trigger')!.click()
+    const input = host.querySelector<HTMLInputElement>('.live-code-language-search')!
+    input.value = 'text'
+    input.dispatchEvent(new Event('input'))
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+    await vi.waitFor(() => expect(tokens()).toHaveLength(0))
+    expect(view.state.doc.toString()).toBe(source.replace('```js', '```text'))
+  } finally {
+    view.destroy()
+  }
+})
 
 it('keeps tables and heading markup stable across pointer and keyboard selections', () => {
   const host = document.createElement('div')
@@ -34,6 +214,112 @@ it('keeps tables and heading markup stable across pointer and keyboard selection
   expect(host.querySelector('.live-table-widget')).toBeNull()
   expect(host.querySelector('.cm-content')?.textContent).toContain('| 读取 | 内容 |')
   view.destroy()
+})
+
+it('previews table dimensions, aligns the current column, and confirms populated cells before shrinking', async () => {
+  const host = document.createElement('div')
+  document.body.append(host)
+  const source = '| A | B |\n| :--- | :--- |\n| first | second |'
+  const view = new EditorView({
+    doc: source,
+    extensions: [markdown({ base: markdownLanguage }), history(), liveMarkdown({ resolveUrl: url => url, openLink() {}, message() {} })],
+    parent: host,
+  })
+  const open = () => {
+    host.querySelector<HTMLButtonElement>('[aria-label="调整表格尺寸"]')!.click()
+    return document.querySelector<HTMLFormElement>('.live-table-size-picker')!
+  }
+  const table = () => parseEditableTable(view.state.doc.toString())!
+  try {
+    const picker = open()
+    const expand = picker.querySelector<HTMLButtonElement>('[aria-label="3 列 4 行"]')!
+    expand.dispatchEvent(new Event('pointerenter'))
+    expect(picker.querySelectorAll('.is-preview')).toHaveLength(12)
+    expect(view.state.doc.toString()).toBe(source)
+    expand.click()
+    expect(picker.isConnected).toBe(false)
+    expect(table().rows).toEqual([['A', 'B', ''], ['first', 'second', ''], ['', '', ''], ['', '', '']])
+
+    await vi.waitFor(() => expect(host.querySelectorAll('tr')).toHaveLength(4))
+    host.querySelector<HTMLTextAreaElement>('textarea[data-row="0"][data-col="1"]')!.focus()
+    const center = host.querySelector<HTMLButtonElement>('[data-alignment="center"]')!
+    center.click()
+    expect(table().alignments).toEqual(['left', 'center', 'left'])
+    expect(center.getAttribute('aria-pressed')).toBe('true')
+
+    const shrink = open()
+    shrink.querySelector<HTMLButtonElement>('[aria-label="1 列 1 行"]')!.click()
+    expect(shrink.querySelector('[role="status"]')?.textContent).toContain('3 个')
+    expect(table().rows).toHaveLength(4)
+    shrink.dispatchEvent(new Event('submit', { cancelable: true }))
+    expect(table().rows).toEqual([['A']])
+    expect(undo(view)).toBe(true)
+    expect(table().rows[1]).toEqual(['first', 'second', ''])
+    expect(table().alignments).toEqual(['left', 'center', 'left'])
+  } finally {
+    view.destroy()
+    host.remove()
+  }
+})
+
+it('supports keyboard preview and escaping the table dimension grid', async () => {
+  const host = document.createElement('div')
+  document.body.append(host)
+  const source = '| A | B |\n| :--- | :--- |\n| first | second |'
+  const view = new EditorView({
+    doc: source,
+    extensions: [markdown({ base: markdownLanguage }), liveMarkdown({ resolveUrl: url => url, openLink() {}, message() {} })],
+    parent: host,
+  })
+  try {
+    const trigger = host.querySelector<HTMLButtonElement>('[aria-label="调整表格尺寸"]')!
+    trigger.click()
+    const picker = document.querySelector('.live-table-size-picker')!
+    await vi.waitFor(() => expect(document.activeElement?.getAttribute('aria-label')).toBe('2 列 2 行'))
+    document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }))
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('3 列 2 行')
+    expect(picker.querySelectorAll('.is-preview')).toHaveLength(6)
+    document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+    expect(picker.isConnected).toBe(false)
+    expect(document.activeElement).toBe(trigger)
+    expect(view.state.doc.toString()).toBe(source)
+  } finally {
+    view.destroy()
+    host.remove()
+  }
+})
+
+it('confirms deleting just the chosen table and restores it on undo', async () => {
+  const host = document.createElement('div')
+  document.body.append(host)
+  const table = '| 第一列 |\n| --- |\n| 内容 |'
+  const other = '| 另一张表 |\n| --- |\n| 保留 |'
+  const source = `开头\n\n${table}\n\n中间\n\n${other}`
+  const view = new EditorView({
+    doc: source,
+    extensions: [markdown({ base: markdownLanguage }), history(), liveMarkdown({ resolveUrl: url => url, openLink() {}, message() {} })],
+    parent: host,
+  })
+  try {
+    const remove = host.querySelector<HTMLButtonElement>('.live-table-delete')!
+    remove.click()
+    expect(activeAppDialog.value).toMatchObject({ kind: 'confirm', destructive: true })
+    expect(view.state.doc.toString()).toBe(source)
+    resolveAppDialog(false)
+    await vi.waitFor(() => expect(remove.disabled).toBe(false))
+    expect(view.state.doc.toString()).toBe(source)
+
+    remove.click()
+    resolveAppDialog(true)
+    await vi.waitFor(() => expect(view.state.doc.toString()).toBe(`开头\n\n中间\n\n${other}`))
+    expect(host.querySelectorAll('.live-table-widget')).toHaveLength(1)
+    expect(undo(view)).toBe(true)
+    expect(view.state.doc.toString()).toBe(source)
+  } finally {
+    resolveAppDialog(false)
+    view.destroy()
+    host.remove()
+  }
 })
 
 it('keeps formatted text in place when a mouse click moves the caret', () => {

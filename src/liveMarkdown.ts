@@ -1,17 +1,74 @@
-import { EditorState, StateField, type EditorSelection, type Range, type Text } from '@codemirror/state'
+import { EditorState, Prec, StateField, type EditorSelection, type Range, type Text } from '@codemirror/state'
 import type { SyntaxNode } from '@lezer/common'
-import { Decoration, EditorView, WidgetType } from '@codemirror/view'
+import { Decoration, EditorView, keymap, WidgetType } from '@codemirror/view'
 import { syntaxTree } from '@codemirror/language'
-import { undo, redo } from '@codemirror/commands'
+import { undo, redo, isolateHistory } from '@codemirror/commands'
 import { renderMarkdownFragment } from './parser'
 import { articleStrongSpans, markdownProcessor } from './markdown/fragment'
 import { nodeText, safeUrl, type MdastNode } from './markdown/shared'
-import { parseEditableTable, serializeEditableTable, moveTableRow, moveTableColumn, deleteTableRow, deleteTableColumn, pasteTableCells, type EditableTable } from './tableEditing'
+import { parseEditableTable, serializeEditableTable, moveTableRow, moveTableColumn, deleteTableRow, deleteTableColumn, pasteTableCells, resizeEditableTable, type EditableTable } from './tableEditing'
+import { attachTableSizePicker } from './tableSizePicker'
+import { confirmAppAction } from './appDialog'
 import { isClipboardImageLink } from './pasteMarkdown'
+import { CodeLanguageWidget } from './codeLanguagePicker'
 
-export interface LiveOptions { resolveUrl: (url: string) => string; openLink: (url: string) => void; message: (text: string) => void; renderDiagram?: (root: HTMLElement, code: string) => () => void }
+export interface LiveOptions { resolveUrl: (url: string) => string; openLink: (url: string) => void; message: (text: string) => void; renderDiagram?: (root: HTMLElement, code: string) => () => void; selectCodeLanguage?: (language: string) => void }
 
 const selectPreviewSource = 'select.markdown.source'
+
+function currentCodeFence(state: EditorState) {
+  const selection = state.selection.main
+  const tree = syntaxTree(state)
+  for (const side of [1, -1] as const) {
+    let fence: SyntaxNode | null = tree.resolve(selection.head, side)
+    while (fence && fence.name !== 'FencedCode') fence = fence.parent
+    if (fence && selection.from >= fence.from && selection.to <= fence.to) return fence
+  }
+  return null
+}
+
+function codeBodyBounds(doc: Text, fence: SyntaxNode) {
+  const [, closing] = fence.getChildren('CodeMark')
+  return {
+    from: doc.lineAt(fence.from).to + 1,
+    to: closing ? doc.lineAt(closing.from).from - 1 : fence.to,
+  }
+}
+
+function selectCodeBody(view: EditorView) {
+  const fence = currentCodeFence(view.state)
+  if (!fence) return false
+  const { from, to } = codeBodyBounds(view.state.doc, fence)
+  if (from <= to) view.dispatch({ selection: { anchor: from, head: to }, userEvent: selectPreviewSource })
+  return true
+}
+
+function deleteBlock(view: EditorView, from: number, to: number, userEvent: string) {
+  const { doc } = view.state
+  const followedByBlankLine = doc.sliceString(to, Math.min(to + 2, doc.length)) === '\n\n'
+  const hasLeadingSeparator = from === 0 || doc.sliceString(Math.max(0, from - 2), from) === '\n\n'
+  view.dispatch({
+    changes: { from, to: to + (followedByBlankLine && hasLeadingSeparator ? 2 : 0) },
+    selection: { anchor: from },
+    annotations: isolateHistory.of('full'),
+    userEvent,
+  })
+}
+
+function deleteEmptyCodeBlock(view: EditorView) {
+  const { doc, selection } = view.state
+  if (!selection.main.empty) return false
+  const fence = currentCodeFence(view.state)
+  if (!fence) return false
+  const body = codeBodyBounds(doc, fence)
+  if (selection.main.head < body.from || selection.main.head > body.to) return false
+  if (fence.getChildren('CodeText').some(text => /[^\n]/.test(doc.sliceString(text.from, text.to)))) return false
+
+  const opening = doc.lineAt(fence.from)
+  const start = doc.sliceString(opening.from, fence.from).trim() ? fence.from : opening.from
+  deleteBlock(view, start, fence.to, 'delete.code-block')
+  return true
+}
 
 class PreviewWidget extends WidgetType {
   constructor(readonly source: string, readonly from: number, readonly options: LiveOptions, readonly block = false, readonly previewSource = source, readonly image = false) { super() }
@@ -51,21 +108,27 @@ function keepLongImagePreview(source: string) {
 
 const diagramMounts = new WeakMap<HTMLElement, () => void>()
 class DiagramWidget extends WidgetType {
-  constructor(readonly source: string, readonly from: number, readonly code: string, readonly options: LiveOptions) { super() }
+  constructor(readonly source: string, readonly from: number, readonly code: string, readonly options: LiveOptions, readonly language: CodeLanguageWidget) { super() }
   eq(other: DiagramWidget) { return this.source === other.source && this.from === other.from }
   toDOM(view: EditorView) {
     const root = document.createElement('div')
     root.className = 'live-diagram-widget'
-    const cleanup = this.options.renderDiagram?.(root, this.code)
+    const diagram = document.createElement('div')
+    const language = this.language.toDOM(view)
+    root.append(diagram, language)
+    const cleanup = this.options.renderDiagram?.(diagram, this.code)
     if (cleanup) diagramMounts.set(root, cleanup)
-    else root.textContent = this.code
-    root.addEventListener('dblclick', () => {
+    else diagram.textContent = this.code
+    diagram.addEventListener('dblclick', () => {
       view.dispatch({ selection: { anchor: this.from, head: this.from + this.source.length }, scrollIntoView: true, userEvent: selectPreviewSource })
       view.focus()
     })
     return root
   }
-  destroy(root: HTMLElement) { diagramMounts.get(root)?.() }
+  destroy(root: HTMLElement) {
+    diagramMounts.get(root)?.()
+    this.language.destroy(root.lastElementChild as HTMLElement)
+  }
   ignoreEvent() { return true }
 }
 
@@ -112,7 +175,7 @@ class FootnoteWidget extends WidgetType {
 }
 
 type TableContext = { from: number; to: number; raw: string; table: EditableTable; row: number; col: number; focusFrame?: number }
-type TableDOM = HTMLDivElement & { tableContext: TableContext }
+type TableDOM = HTMLDivElement & { tableContext: TableContext; closeSizePicker?: () => void }
 
 function tableRowStart(doc: Text, tableStart: number, row: number) {
   if (row === 0) return tableStart
@@ -143,6 +206,7 @@ class TableWidget extends WidgetType {
         input.parentElement!.style.textAlign = table.alignments[column]
       })
       this.updatePreviews(root)
+      this.updateAlignmentButtons(root)
     }
     return true
   }
@@ -168,7 +232,14 @@ class TableWidget extends WidgetType {
     return root
   }
   destroy(root: TableDOM) {
+    root.closeSizePicker?.()
     if (root.tableContext.focusFrame !== undefined) cancelAnimationFrame(root.tableContext.focusFrame)
+  }
+  updateAlignmentButtons(root: TableDOM) {
+    const { table, col } = root.tableContext
+    for (const button of root.querySelectorAll<HTMLButtonElement>('button[data-alignment]')) {
+      button.setAttribute('aria-pressed', String(button.dataset.alignment === table.alignments[col]))
+    }
   }
 
   scheduleFocus(root: TableDOM, row: number, col: number) {
@@ -183,7 +254,7 @@ class TableWidget extends WidgetType {
       root.querySelector<HTMLTextAreaElement>(`textarea[data-row="${nextRow}"][data-col="${nextCol}"]`)?.focus({ preventScroll: true })
     })
   }
-  commit(root: TableDOM, view: EditorView, change: (table: EditableTable, ctx: TableContext) => void) {
+  commit(root: TableDOM, view: EditorView, change: (table: EditableTable, ctx: TableContext) => void, resize = false) {
     const ctx = root.tableContext
     if (view.state.doc.sliceString(ctx.from, ctx.to) !== ctx.raw) { this.options.message('表格已变更，请重新选择后编辑'); return }
     const next = structuredClone(ctx.table)
@@ -196,21 +267,66 @@ class TableWidget extends WidgetType {
       changes: { from: ctx.from, to: ctx.to, insert },
       selection: { anchor: ctx.from + tableRowStart(insert, 0, row) },
       userEvent: 'input.table',
+      annotations: resize ? isolateHistory.of('full') : undefined,
     })
   }
+  async deleteTable(root: TableDOM, view: EditorView) {
+    const { from, to, raw } = root.tableContext
+    const { doc } = view.state
+    if (!(await confirmAppAction({
+      title: '删除整个表格？',
+      description: '表头和所有单元格都会从当前文档移除。可以撤销此次操作。',
+      confirmLabel: '删除表格',
+      destructive: true,
+    }))) return
+    if (!root.isConnected || view.state.doc !== doc || doc.sliceString(from, to) !== raw) {
+      this.options.message('文档已变更，请重新选择要删除的表格')
+      return
+    }
+    deleteBlock(view, from, to, 'delete.table')
+    view.focus()
+  }
   fill(root: TableDOM, view: EditorView) {
+    root.closeSizePicker?.()
     root.replaceChildren()
     const ctx = root.tableContext
     const tools = document.createElement('div')
     tools.className = 'live-table-tools'
     tools.setAttribute('aria-label', '原地表格操作')
-    const button = (label: string, action: () => void) => {
+    const button = (label: string, action?: () => void) => {
       const control = document.createElement('button')
       control.type = 'button'; control.textContent = label
-      control.addEventListener('click', action)
+      if (action) control.addEventListener('click', action)
       tools.append(control)
+      return control
     }
     const modify = (change: (table: EditableTable, ctx: TableContext) => void) => this.commit(root, view, change)
+    const icon = (control: HTMLButtonElement, name: 'size' | 'align', label: string) => {
+      const glyph = document.createElement('span')
+      glyph.className = `live-table-${name}-icon`
+      for (let index = 0; index < (name === 'size' ? 4 : 3); index++) glyph.append(document.createElement('i'))
+      glyph.setAttribute('aria-hidden', 'true')
+      control.classList.add('live-table-tool-icon')
+      control.setAttribute('aria-label', label)
+      control.title = label
+      control.replaceChildren(glyph)
+    }
+    const size = button('表格尺寸')
+    icon(size, 'size', '调整表格尺寸')
+    root.closeSizePicker = attachTableSizePicker(size, () => ctx.table, (rows, columns) => {
+      this.commit(root, view, (table, selected) => {
+        resizeEditableTable(table, rows, columns)
+        selected.row = Math.min(selected.row, rows - 1)
+        selected.col = Math.min(selected.col, columns - 1)
+      }, true)
+    })
+    for (const alignment of ['left', 'center', 'right'] as const) {
+      const label = { left: '左对齐', center: '居中', right: '右对齐' }[alignment]
+      const control = button(label, () => modify((table, selected) => { table.alignments[selected.col] = alignment }))
+      control.dataset.alignment = alignment
+      icon(control, 'align', `当前列${label}`)
+    }
+    tools.setAttribute('role', 'group')
     button('加行', () => modify((table, selected) => { table.rows.splice(selected.row + 1, 0, table.alignments.map(() => '')); selected.row++ }))
     button('加列', () => modify((table, selected) => { table.alignments.splice(selected.col + 1, 0, 'left'); table.rows.forEach(row => row.splice(selected.col + 1, 0, '')); selected.col++ }))
     button('删行', () => modify((table, selected) => { deleteTableRow(table, selected.row); selected.row = Math.min(selected.row, table.rows.length - 1) }))
@@ -219,9 +335,15 @@ class TableWidget extends WidgetType {
     button('行↓', () => modify((table, selected) => { selected.row = moveTableRow(table, selected.row, 1) }))
     button('列←', () => modify((table, selected) => { selected.col = moveTableColumn(table, selected.col, -1) }))
     button('列→', () => modify((table, selected) => { selected.col = moveTableColumn(table, selected.col, 1) }))
-    for (const alignment of ['left', 'center', 'right'] as const) button({ left: '左对齐', center: '居中', right: '右对齐' }[alignment], () => modify((table, selected) => { table.alignments[selected.col] = alignment }))
+    const remove = button('删除表格', async () => {
+      remove.disabled = true
+      try { await this.deleteTable(root, view) }
+      finally { remove.disabled = false }
+    })
+    remove.className = 'live-table-delete'
     button('源码', () => { view.dispatch({ selection: { anchor: ctx.from, head: ctx.to }, userEvent: selectPreviewSource }); view.focus() })
     root.append(tools)
+    this.updateAlignmentButtons(root)
     const table = document.createElement('table')
     ctx.table.rows.forEach((row, r) => {
       const tr = table.insertRow()
@@ -236,6 +358,7 @@ class TableWidget extends WidgetType {
         input.addEventListener('focus', () => {
           ctx.row = r
           ctx.col = c
+          this.updateAlignmentButtons(root)
           const anchor = tableRowStart(view.state.doc, ctx.from, r)
           const range = view.state.selection.main
           if (!range.empty || range.head !== anchor) {
@@ -410,20 +533,56 @@ export function liveMarkdown(options: LiveOptions) {
           if (!editing && task) replace(node.from, node.to)
         }
       }
-      if (node.name === 'FencedCode' && !active) {
-        const diagram = raw.match(/^\s*(`{3,}|~{3,})mermaid[^\n]*\r?\n([\s\S]*?)\r?\n\s*\1\s*$/i)
-        if (diagram) {
-          ranges.push(Decoration.replace({ widget: new DiagramWidget(raw, node.from, diagram[2], options), block: true }).range(node.from, node.to))
-          return false
-        }
-      }
       const heading = node.name.match(/^(?:ATX|Setext)Heading([1-6])$/)
       if (heading) ranges.push(Decoration.line({ class: `live-heading live-h${heading[1]}` }).range(state.doc.lineAt(node.from).from))
       const classes: Record<string, string> = { StrongEmphasis: 'live-strong', Emphasis: 'live-emphasis', Strikethrough: 'live-strike', InlineCode: 'live-code', Link: 'live-link', Subscript: 'live-sub', Superscript: 'live-sup' }
       if (classes[node.name]) ranges.push(Decoration.mark({ class: classes[node.name] }).range(node.from, node.to))
       if (node.name === 'FencedCode') {
-        const first = state.doc.lineAt(node.from).number, last = state.doc.lineAt(node.to).number
-        for (let line = first; line <= last; line++) ranges.push(Decoration.line({ class: 'live-code-line' }).range(state.doc.line(line).from))
+        const opening = state.doc.lineAt(node.from)
+        const last = state.doc.lineAt(node.to)
+        if (state.doc.sliceString(opening.from, node.from).trim()) {
+          for (let number = opening.number; number <= last.number; number++) {
+            ranges.push(Decoration.line({ class: 'live-code-line' }).range(state.doc.line(number).from))
+          }
+          return
+        }
+
+        const [, closing] = node.node.getChildren('CodeMark')
+        const info = node.node.getChild('CodeInfo')
+        const language = info && state.doc.sliceString(info.from, info.to).match(/\S+/)
+        const label = language?.[0] ?? ''
+        const widget = new CodeLanguageWidget(label, language && info ? info.from + language.index! : opening.to, options.selectCodeLanguage)
+        if (!active && closing && /^(?:mermaid|mmd)$/i.test(label) && last.number > opening.number + 1) {
+          const code = state.sliceDoc(opening.to + 1, last.from - 1)
+          ranges.push(Decoration.replace({ widget: new DiagramWidget(raw, node.from, code, options, widget), block: true }).range(node.from, node.to))
+          return false
+        }
+
+        const fenceSelected = (from: number, to: number) => state.selection.ranges.some(range =>
+          (range.empty || revealSource) && range.from <= to && range.to >= from)
+        const showOpening = fenceSelected(opening.from, opening.to)
+        const showClosing = closing && fenceSelected(last.from, last.to)
+        const firstBody = opening.number + 1
+        const lastBody = last.number - Number(!!closing)
+        const hasBody = firstBody <= lastBody
+        const firstVisible = showOpening || !hasBody ? opening.number : firstBody
+        const lastVisible = showClosing || !closing ? last.number : Math.max(opening.number, lastBody)
+        for (let number = firstVisible; number <= lastVisible; number++) {
+          const start = number === firstVisible ? ' live-code-start' : ''
+          const end = number === lastVisible ? ' live-code-end' : ''
+          ranges.push(Decoration.line({ class: `live-code-line${start}${end}` }).range(state.doc.line(number).from))
+        }
+        if (!showOpening) {
+          if (hasBody) ranges.push(Decoration.replace({ block: true }).range(opening.from, opening.to))
+          else replace(opening.from, opening.to)
+        }
+
+        if (!showClosing) {
+          ranges.push(closing
+            ? Decoration.replace({ block: true, widget }).range(last.from, last.to)
+            : Decoration.widget({ block: true, side: 1, widget }).range(last.to))
+        }
+        return false
       }
       if (/^(HeaderMark|EmphasisMark|StrikethroughMark|CodeMark|SubscriptMark|SuperscriptMark)$/.test(node.name) && node.node.parent && !touches(node.node.parent.from, node.node.parent.to)) {
         let to = node.to
@@ -523,7 +682,16 @@ export function liveMarkdown(options: LiveOptions) {
     update(value, transaction) {
       if (transaction.docChanged) return build(transaction.state, transaction.state.selection)
       // Keep the text the user clicked in place, including on a collapsed mouse selection.
-      if (transaction.isUserEvent('select.pointer') || transaction.isUserEvent('select.table')) return value
+      if (transaction.isUserEvent('select.pointer')) {
+        const before = transaction.startState.selection.main
+        const after = transaction.state.selection.main
+        const onFence = (position: number) => /^ {0,3}(?:`{3,}|~{3,})/.test(transaction.state.doc.lineAt(position).text)
+        if (after.empty && (onFence(before.head) || onFence(after.head))) {
+          return build(transaction.state, value.selection, value.revealSource)
+        }
+        return value
+      }
+      if (transaction.isUserEvent('select.table')) return value
       if (transaction.selection) return build(transaction.state, transaction.state.selection, transaction.isUserEvent(selectPreviewSource))
       return syntaxTree(transaction.startState) !== syntaxTree(transaction.state)
         ? build(transaction.state, value.selection, value.revealSource)
@@ -531,7 +699,11 @@ export function liveMarkdown(options: LiveOptions) {
     },
     provide: field => EditorView.decorations.from(field, value => value.ranges),
   })
-  return [decorations, EditorView.domEventHandlers({
+  return [decorations, Prec.high(keymap.of([
+    { key: 'Mod-a', run: selectCodeBody },
+    { key: 'Backspace', run: deleteEmptyCodeBlock },
+    { key: 'Delete', run: deleteEmptyCodeBlock },
+  ])), EditorView.domEventHandlers({
     click(event) {
       if (!(event.ctrlKey || event.metaKey) || !(event.target instanceof Element)) return false
       const link = event.target.closest<HTMLElement>('[data-live-link]')

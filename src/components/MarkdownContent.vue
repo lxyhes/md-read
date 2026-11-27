@@ -2,13 +2,25 @@
 import { computed, ref, watch } from 'vue'
 import { renderMarkdownFragment } from '../markdown/fragment'
 import type { MarkdownUrlResolver } from '../markdown/shared'
+import type { ReaderRegion, ThemeManifest } from '../types'
 
-const props = defineProps<{ html?: string; source?: string; resolveUrl?: MarkdownUrlResolver; previewImages?: boolean }>()
+const props = defineProps<{ html?: string; source?: string; resolveUrl?: MarkdownUrlResolver; previewImages?: boolean; codeRegion?: ReaderRegion; themeMode?: ThemeManifest['mode'] }>()
 const emit = defineEmits<{ 'open-image': [image: HTMLImageElement] }>()
 const root = ref<HTMLElement | null>(null)
+const highlighted = ref<string>()
 const content = computed(() => props.source === undefined
-  ? props.html ?? ''
+  ? highlighted.value ?? props.html ?? ''
   : renderMarkdownFragment(props.source, props.resolveUrl))
+
+watch(() => [props.codeRegion, props.themeMode] as const, async ([region, mode], _, onCleanup) => {
+  highlighted.value = undefined
+  if (!region) return
+  let current = true
+  onCleanup(() => { current = false })
+  const { highlightCode } = await import('../highlight')
+  const html = await highlightCode(region.textContent, String(region.metadata?.language ?? 'text'), mode)
+  if (current) highlighted.value = html
+}, { immediate: true })
 
 watch([root, content], ([element]) => {
   if (!props.previewImages || !element) return

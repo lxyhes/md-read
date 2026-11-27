@@ -19,7 +19,7 @@ export function hashText(value: string): string {
 
 function mermaidCode(node: MdastNode): string | null {
   if (node.type !== 'code') return null
-  if (node.lang?.trim().toLowerCase() === 'mermaid') return node.value ?? ''
+  if (/^(?:mermaid|mmd)$/i.test(node.lang?.trim() ?? '')) return node.value ?? ''
   const value = (node.value ?? '').trim()
   const match = value.match(/^(?:`{3}|~~~)\s*mermaid[^\r\n]*\r?\n([\s\S]*?)\r?\n(?:`{3}|~~~)$/i)
   return match?.[1] ?? null

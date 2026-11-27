@@ -141,6 +141,11 @@ it('keeps CRLF documents consistent after editor commands insert LF', () => {
 function atEnd(value: string) { return codeIndentInsertion(value, value.length) }
 
 describe('fenced code enter', () => {
+  it('follows Python and YAML indentation without interpreting a colon in JSON as a block', () => {
+    expect(atEnd('```py\nif ready: # comment')).toEqual({ text: '\n    ', caret: 5 })
+    expect(atEnd('```yml\nconfig:')).toEqual({ text: '\n  ', caret: 3 })
+    expect(atEnd('```json\n  "key":')).toEqual({ text: '\n  ', caret: 3 })
+  })
   it('retains indentation and adds a level after an opening brace', () => {
     expect(atEnd('```js\n  if (ok) {')).toEqual({ text: '\n    ', caret: 5 })
   })
