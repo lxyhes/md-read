@@ -1,18 +1,17 @@
-import { EditorState, StateField, type Range } from '@codemirror/state'
+import { EditorState, StateField, type EditorSelection, type Range, type Text } from '@codemirror/state'
 import type { SyntaxNode } from '@lezer/common'
-import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view'
+import { Decoration, EditorView, WidgetType } from '@codemirror/view'
 import { syntaxTree } from '@codemirror/language'
 import { undo, redo } from '@codemirror/commands'
 import { renderMarkdownFragment } from './parser'
 import { articleStrongSpans, markdownProcessor } from './markdown/fragment'
-import { nodeText, type MdastNode } from './markdown/shared'
+import { nodeText, safeUrl, type MdastNode } from './markdown/shared'
 import { parseEditableTable, serializeEditableTable, moveTableRow, moveTableColumn, deleteTableRow, deleteTableColumn, pasteTableCells, type EditableTable } from './tableEditing'
+import { isClipboardImageLink } from './pasteMarkdown'
 
 export interface LiveOptions { resolveUrl: (url: string) => string; openLink: (url: string) => void; message: (text: string) => void; renderDiagram?: (root: HTMLElement, code: string) => () => void }
 
-export function selectionTouches(state: EditorState, from: number, to: number) {
-  return state.selection.ranges.some(range => range.from <= to && range.to >= from)
-}
+const selectPreviewSource = 'select.markdown.source'
 
 class PreviewWidget extends WidgetType {
   constructor(readonly source: string, readonly from: number, readonly options: LiveOptions, readonly block = false, readonly previewSource = source, readonly image = false) { super() }
@@ -30,7 +29,7 @@ class PreviewWidget extends WidgetType {
     root.setAttribute('aria-label', '预览内容，双击选中源码进行替换')
     root.addEventListener('dblclick', event => {
       event.preventDefault()
-      view.dispatch({ selection: { anchor: this.from, head: this.from + this.source.length }, scrollIntoView: true })
+      view.dispatch({ selection: { anchor: this.from, head: this.from + this.source.length }, scrollIntoView: true, userEvent: selectPreviewSource })
       view.focus()
     })
     root.querySelectorAll<HTMLAnchorElement>('a').forEach(link => {
@@ -38,7 +37,7 @@ class PreviewWidget extends WidgetType {
       link.addEventListener('click', event => {
         event.preventDefault()
         if (event.ctrlKey || event.metaKey) this.options.openLink(link.getAttribute('href') ?? '')
-        else { view.dispatch({ selection: { anchor: this.from, head: this.from + this.source.length } }); view.focus() }
+        else { view.dispatch({ selection: { anchor: this.from, head: this.from + this.source.length }, userEvent: selectPreviewSource }); view.focus() }
       })
     })
     return root
@@ -61,7 +60,7 @@ class DiagramWidget extends WidgetType {
     if (cleanup) diagramMounts.set(root, cleanup)
     else root.textContent = this.code
     root.addEventListener('dblclick', () => {
-      view.dispatch({ selection: { anchor: this.from, head: this.from + this.source.length }, scrollIntoView: true })
+      view.dispatch({ selection: { anchor: this.from, head: this.from + this.source.length }, scrollIntoView: true, userEvent: selectPreviewSource })
       view.focus()
     })
     return root
@@ -115,6 +114,13 @@ class FootnoteWidget extends WidgetType {
 type TableContext = { from: number; to: number; raw: string; table: EditableTable; row: number; col: number }
 type TableDOM = HTMLDivElement & { tableContext: TableContext }
 
+function tableRowStart(doc: Text, tableStart: number, row: number) {
+  if (row === 0) return tableStart
+  const firstLine = doc.lineAt(tableStart).number
+  // Markdown adds a separator line between the header and the first body row.
+  return doc.line(Math.min(firstLine + row + 1, doc.lines)).from
+}
+
 class TableWidget extends WidgetType {
   constructor(readonly raw: string, readonly from: number, readonly to: number, readonly options: LiveOptions) { super() }
   eq(other: TableWidget) { return this.raw === other.raw && this.from === other.from }
@@ -155,7 +161,13 @@ class TableWidget extends WidgetType {
     change(next, ctx)
     const source = serializeEditableTable(next).replace(/\n/g, ctx.raw.includes('\r\n') ? '\r\n' : '\n')
     if (source === ctx.raw) return
-    view.dispatch({ changes: { from: ctx.from, to: ctx.to, insert: source }, userEvent: 'input.table' })
+    const insert = view.state.toText(source)
+    const row = Math.min(ctx.row, next.rows.length - 1)
+    view.dispatch({
+      changes: { from: ctx.from, to: ctx.to, insert },
+      selection: { anchor: ctx.from + tableRowStart(insert, 0, row) },
+      userEvent: 'input.table',
+    })
   }
   fill(root: TableDOM, view: EditorView) {
     root.replaceChildren()
@@ -179,7 +191,7 @@ class TableWidget extends WidgetType {
     button('列←', () => modify((table, selected) => { selected.col = moveTableColumn(table, selected.col, -1) }))
     button('列→', () => modify((table, selected) => { selected.col = moveTableColumn(table, selected.col, 1) }))
     for (const alignment of ['left', 'center', 'right'] as const) button({ left: '左对齐', center: '居中', right: '右对齐' }[alignment], () => modify((table, selected) => { table.alignments[selected.col] = alignment }))
-    button('源码', () => { view.dispatch({ selection: { anchor: ctx.from, head: ctx.to } }); view.focus() })
+    button('源码', () => { view.dispatch({ selection: { anchor: ctx.from, head: ctx.to }, userEvent: selectPreviewSource }); view.focus() })
     root.append(tools)
     const table = document.createElement('table')
     ctx.table.rows.forEach((row, r) => {
@@ -190,7 +202,15 @@ class TableWidget extends WidgetType {
         input.rows = 1; input.value = value.replace(/<br\s*\/?\s*>/gi, '\n'); input.dataset.row = String(r); input.dataset.col = String(c)
         input.style.textAlign = ctx.table.alignments[c]
         input.setAttribute('aria-label', `表格第 ${r + 1} 行第 ${c + 1} 列`)
-        input.addEventListener('focus', () => { ctx.row = r; ctx.col = c })
+        input.addEventListener('focus', () => {
+          ctx.row = r
+          ctx.col = c
+          const anchor = tableRowStart(view.state.doc, ctx.from, r)
+          const range = view.state.selection.main
+          if (!range.empty || range.head !== anchor) {
+            view.dispatch({ selection: { anchor }, userEvent: 'select.table' })
+          }
+        })
         input.addEventListener('input', () => modify(table => { table.rows[r][c] = input.value }))
         input.addEventListener('paste', event => {
           const text = event.clipboardData?.getData('text/plain') ?? ''
@@ -251,7 +271,9 @@ class TableWidget extends WidgetType {
 }
 
 export function liveMarkdown(options: LiveOptions) {
-  const build = (state: EditorState): DecorationSet => {
+  const build = (state: EditorState, selection: EditorSelection, revealSource = false) => {
+    const touches = (from: number, to: number) => selection.ranges.some(range =>
+      (range.empty || revealSource) && range.from <= to && range.to >= from)
     const ranges: Range<Decoration>[] = []
     const replace = (from: number, to: number) => { if (from < to) ranges.push(Decoration.replace({}).range(from, to)) }
     const notes = new Map<string, MdastNode>(), references: MdastNode[] = [], definitions: MdastNode[] = [], replacedNotes: Array<{ from: number; to: number }> = []
@@ -263,6 +285,12 @@ export function liveMarkdown(options: LiveOptions) {
     }
     // Parse footnote syntax only when present; ordinary typing stays on the incremental tree.
     if (state.doc.toString().includes('[^') || /(?:^|\n)\s{0,3}\[[^\]]+\]:/.test(state.doc.toString())) collect(markdownProcessor.parse(state.doc.toString()) as unknown as MdastNode)
+    const linkDefinitions = new Map<string, string>()
+    for (const definition of definitions) {
+      if (definition.identifier && definition.url && !linkDefinitions.has(definition.identifier)) {
+        linkDefinitions.set(definition.identifier, definition.url)
+      }
+    }
     const referenceDefinitions = definitions.flatMap(node => {
       const from = node.position?.start?.offset, to = node.position?.end?.offset
       return from === undefined || to === undefined ? [] : [state.doc.sliceString(from, to)]
@@ -274,11 +302,11 @@ export function liveMarkdown(options: LiveOptions) {
       if (!definition || from === undefined || to === undefined || definitionFrom === undefined) continue
       const index = noteIndexes.get(reference.identifier!) ?? noteIndexes.size + 1
       noteIndexes.set(reference.identifier!, index)
-      if (!selectionTouches(state, from, to)) ranges.push(Decoration.replace({ widget: new FootnoteWidget(index, definitionFrom, nodeText(definition)) }).range(from, to))
+      if (!touches(from, to)) ranges.push(Decoration.replace({ widget: new FootnoteWidget(index, definitionFrom, nodeText(definition)) }).range(from, to))
     }
     for (const [identifier, definition] of notes) {
       const from = definition.position?.start?.offset, to = definition.position?.end?.offset
-      if (from === undefined || to === undefined || selectionTouches(state, from, to)) continue
+      if (from === undefined || to === undefined || touches(from, to)) continue
       const raw = state.doc.sliceString(from, to), content = raw.replace(/^\[\^[^\]]+\]:\s*/, '')
       const index = noteIndexes.get(identifier) ?? identifier
       ranges.push(Decoration.replace({ widget: new PreviewWidget(raw, from, options, true, `> **[${index}]** ${content}`), block: true }).range(from, to))
@@ -287,10 +315,9 @@ export function liveMarkdown(options: LiveOptions) {
     syntaxTree(state).iterate({ enter(node) {
       if (replacedNotes.some(range => node.from >= range.from && node.to <= range.to)) return false
       const raw = state.doc.sliceString(node.from, node.to)
-      const active = selectionTouches(state, node.from, node.to)
+      const active = touches(node.from, node.to)
       if ((node.name === 'Table' || node.name === 'Paragraph') && parseEditableTable(raw)) {
-        // A table remains interactive while the editor caret is elsewhere; select its source to reveal it.
-        if (!state.selection.ranges.some(range => !range.empty && range.from <= node.to && range.to >= node.from)) {
+        if (!revealSource || !touches(node.from, node.to)) {
           ranges.push(Decoration.replace({ widget: new TableWidget(raw, node.from, node.to, options), block: true }).range(node.from, node.to))
           return false
         }
@@ -314,14 +341,14 @@ export function liveMarkdown(options: LiveOptions) {
       }
       if (node.name === 'QuoteMark' || node.name === 'HardBreak') {
         const line = state.doc.lineAt(node.from)
-        if (!selectionTouches(state, line.from, line.to)) {
+        if (!touches(line.from, line.to)) {
           const followingSpace = node.name === 'QuoteMark' && state.doc.sliceString(node.to, node.to + 1) === ' '
           replace(node.from, Math.min(line.to, node.to + Number(followingSpace)))
         }
       }
       if (node.name === 'ListMark' && node.node.parent) {
         const line = state.doc.lineAt(node.from)
-        const editing = selectionTouches(state, node.node.parent.from, node.node.parent.to)
+        const editing = touches(node.node.parent.from, node.node.parent.to)
         const task = node.node.parent.getChild('Task')
         const bullet = !editing && !task && /^[-+*]$/.test(raw)
         const prefix = line.text.match(/^([ \t]*)(?:[-+*]|\d+[.)])[ \t]+/)
@@ -362,17 +389,40 @@ export function liveMarkdown(options: LiveOptions) {
         const first = state.doc.lineAt(node.from).number, last = state.doc.lineAt(node.to).number
         for (let line = first; line <= last; line++) ranges.push(Decoration.line({ class: 'live-code-line' }).range(state.doc.line(line).from))
       }
-      if (/^(HeaderMark|EmphasisMark|StrikethroughMark|CodeMark|SubscriptMark|SuperscriptMark)$/.test(node.name) && node.node.parent && !selectionTouches(state, node.node.parent.from, node.node.parent.to)) {
+      if (/^(HeaderMark|EmphasisMark|StrikethroughMark|CodeMark|SubscriptMark|SuperscriptMark)$/.test(node.name) && node.node.parent && !touches(node.node.parent.from, node.node.parent.to)) {
         let to = node.to
         if (node.name === 'HeaderMark' && state.doc.sliceString(to, to + 1) === ' ') to++
         replace(node.from, to)
       }
-      if (node.name === 'Link' && !active) {
-        if (!ranges.some(range => range.value.spec.widget && range.from < node.to && range.to > node.from)) {
-          ranges.push(Decoration.replace({ widget: new PreviewWidget(raw, node.from, options, false, `${raw}\n\n${referenceDefinitions}`) }).range(node.from, node.to))
+      if (node.name === 'Link') {
+        const [opening, closing] = node.node.getChildren('LinkMark')
+        if (opening && closing && opening.to < closing.from && !node.node.getChild('Image')) {
+          const label = state.doc.sliceString(opening.to, closing.from)
+          const reference = node.node.getChild('LinkLabel')
+          const urlNode = node.node.getChild('URL')
+          const referenceText = reference ? state.doc.sliceString(reference.from + 1, reference.to - 1) : label
+          const rawTarget = urlNode
+            ? state.doc.sliceString(urlNode.from, urlNode.to).replace(/^<|>$/g, '')
+            : linkDefinitions.get((referenceText || label).trim().replace(/\s+/g, ' ').toLowerCase())
+          const target = urlNode && rawTarget && /\\|&[^;\s]+;/.test(rawTarget)
+            ? (markdownProcessor.parse(raw) as unknown as MdastNode).children?.[0]?.children?.[0]?.url ?? rawTarget
+            : rawTarget
+          // Keep link labels in CodeMirror's text layer so each character has a cursor position.
+          if (target && !/\\|&[^;\s]+;/.test(label) && !isClipboardImageLink(label, target)) {
+            const href = options.resolveUrl(target)
+            if (safeUrl(href)) {
+              ranges.push(Decoration.mark({ attributes: { 'data-live-link': href } }).range(opening.to, closing.from))
+            }
+            if (!active) { replace(node.from, opening.to); replace(closing.from, node.to) }
+            return
+          }
+        }
+        if (!active) {
+          if (!ranges.some(range => range.value.spec.widget && range.from < node.to && range.to > node.from)) {
+            ranges.push(Decoration.replace({ widget: new PreviewWidget(raw, node.from, options, false, `${raw}\n\n${referenceDefinitions}`) }).range(node.from, node.to))
+          }
           return false
         }
-        return false
       }
       if (node.name === 'Paragraph') {
         const display = /^(?:\$\$[\s\S]+\$\$|\\\[[\s\S]+\\\])\s*$/.test(raw)
@@ -391,7 +441,7 @@ export function liveMarkdown(options: LiveOptions) {
             if (!ancestor.parent) break
             ancestor = ancestor.parent
           }
-          if (!excluded && !selectionTouches(state, from, to)) ranges.push(Decoration.replace({ widget: new PreviewWidget(match[0], from, options) }).range(from, to))
+          if (!excluded && !touches(from, to)) ranges.push(Decoration.replace({ widget: new PreviewWidget(match[0], from, options) }).range(from, to))
         }
         for (const match of raw.matchAll(/(?<![\\=])==(?=\S)[^=\n]+?(?<=\S)==(?![=])/g)) {
           const from = node.from + match.index!, to = from + match[0].length
@@ -404,7 +454,7 @@ export function liveMarkdown(options: LiveOptions) {
           }
           if (!excluded && !ranges.some(range => range.value.spec.widget && range.from < to && range.to > from)) {
             ranges.push(Decoration.mark({ class: 'live-highlight' }).range(from, to))
-            if (!selectionTouches(state, from, to)) { replace(from, from + 2); replace(to - 2, to) }
+            if (!touches(from, to)) { replace(from, from + 2); replace(to - 2, to) }
           }
         }
       }
@@ -416,7 +466,7 @@ export function liveMarkdown(options: LiveOptions) {
             const contentStart = from + span.contentFrom, contentEnd = from + span.contentTo
             if (ranges.some(range => range.value.spec.widget && (range.from < contentStart && range.to > start || range.from < end && range.to > contentEnd))) continue
             ranges.push(Decoration.mark({ class: 'live-strong' }).range(contentStart, contentEnd))
-            if (!selectionTouches(state, start, end)) {
+            if (!touches(start, end)) {
               replace(start, contentStart)
               replace(contentEnd, end)
             }
@@ -430,16 +480,29 @@ export function liveMarkdown(options: LiveOptions) {
         decorateText(from, node.to)
       }
     } })
-    return Decoration.set(ranges, true)
+    return { ranges: Decoration.set(ranges, true), selection, revealSource }
   }
-  return StateField.define<DecorationSet>({
-    create: build,
+  const decorations = StateField.define({
+    create: state => build(state, state.selection),
     update(value, transaction) {
-      if (transaction.docChanged) return build(transaction.state)
-      // Expanding source under a moving pointer changes which text is at the same screen coordinates.
-      if (transaction.isUserEvent('select.pointer') && !transaction.state.selection.main.empty) return value
-      return transaction.selection || syntaxTree(transaction.startState) !== syntaxTree(transaction.state) ? build(transaction.state) : value
+      if (transaction.docChanged) return build(transaction.state, transaction.state.selection)
+      // Keep the text the user clicked in place, including on a collapsed mouse selection.
+      if (transaction.isUserEvent('select.pointer') || transaction.isUserEvent('select.table')) return value
+      if (transaction.selection) return build(transaction.state, transaction.state.selection, transaction.isUserEvent(selectPreviewSource))
+      return syntaxTree(transaction.startState) !== syntaxTree(transaction.state)
+        ? build(transaction.state, value.selection, value.revealSource)
+        : value
     },
-    provide: field => EditorView.decorations.from(field),
+    provide: field => EditorView.decorations.from(field, value => value.ranges),
   })
+  return [decorations, EditorView.domEventHandlers({
+    click(event) {
+      if (!(event.ctrlKey || event.metaKey) || !(event.target instanceof Element)) return false
+      const link = event.target.closest<HTMLElement>('[data-live-link]')
+      if (!link?.dataset.liveLink) return false
+      event.preventDefault()
+      options.openLink(link.dataset.liveLink)
+      return true
+    },
+  })]
 }

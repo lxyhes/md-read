@@ -49,11 +49,12 @@ describe('editor initialization', () => {
   it('falls back to editable source without changing the draft when live rendering fails', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     const changes: string[] = []
+    const onCaret = vi.fn()
     const host = document.createElement('div')
     document.body.append(host)
     const app = createApp({ render: () => h(MarkdownEditor, {
       modelValue: '# 原文\n\n内容', live: true, spellcheck: false, typewriter: false, focusMode: false,
-      resolveUrl: (url: string) => url, 'onUpdate:modelValue': (value: string) => changes.push(value),
+      resolveUrl: (url: string) => url, 'onUpdate:modelValue': (value: string) => changes.push(value), onCaret,
     }) })
     app.mount(host)
     await nextTick()
@@ -61,8 +62,10 @@ describe('editor initialization', () => {
     const view = EditorView.findFromDOM(host.querySelector('.cm-editor') as HTMLElement)!
     expect(view.state.doc.toString()).toBe('# 原文\n\n内容')
     expect(changes).toEqual([])
-    view.dispatch({ changes: { from: view.state.doc.length, insert: '新增' } })
+    const end = view.state.doc.length
+    view.dispatch({ changes: { from: end, insert: '新增' }, selection: { anchor: end + 2 } })
     expect(changes).toEqual(['# 原文\n\n内容新增'])
+    expect(onCaret).toHaveBeenLastCalledWith({ offset: end + 2, line: 3, column: 5 })
     app.unmount()
   })
 })

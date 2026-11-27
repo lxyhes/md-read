@@ -7,12 +7,14 @@ const props = withDefaults(defineProps<{ document: ReaderDocument | null; cursor
 const emit = defineEmits<{ jump: [heading: HeadingItem]; toggle: [open: boolean] }>()
 const headings = computed(() => props.document?.headings ?? [])
 const minDepth = computed(() => Math.min(6, ...headings.value.map(heading => heading.depth)))
-const activeId = computed(() => {
+const headingPositions = computed(() => {
   const positions = new Map(props.document?.regions.map(region => [region.id, region.sourceStart]))
+  return headings.value.map(heading => ({ id: heading.id, position: positions.get(heading.regionId) }))
+})
+const activeId = computed(() => {
   let active = headings.value[0]?.id
-  for (const heading of headings.value) {
-    const position = positions.get(heading.regionId)
-    if (position !== undefined && position <= props.cursor) active = heading.id
+  for (const { id, position } of headingPositions.value) {
+    if (position !== undefined && position <= props.cursor) active = id
   }
   return active
 })

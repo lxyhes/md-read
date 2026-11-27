@@ -126,7 +126,11 @@ export const useReaderStore = defineStore('reader', () => {
     return parseMarkdown(file.path, file.source, (url) => resolveMarkdownAssetUrl(file.path, url, assets))
   }
 
-  async function addOpenedFiles(files: OpenedFile[], options: { persist?: boolean; localizeImages?: boolean } = {}) {
+  async function addOpenedFiles(files: OpenedFile[], options: {
+    persist?: boolean
+    localizeImages?: boolean
+    activate?: false | ((id: string) => Promise<boolean | void>)
+  } = {}) {
     if (!files.length) return 0
     const openedIds: string[] = []
     for (const originalFile of files) {
@@ -160,7 +164,9 @@ export const useReaderStore = defineStore('reader', () => {
     }
     updateHiddenRecentDocuments([], openedIds)
     openDocumentIds.value = [...new Set([...openDocumentIds.value, ...openedIds])]
-    await openDocument(openedIds[openedIds.length - 1])
+    if (options.activate === false || await (options.activate ?? openDocument)(openedIds[openedIds.length - 1]) === false) {
+      persistSession()
+    }
     return files.length
   }
 

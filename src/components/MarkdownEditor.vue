@@ -13,7 +13,7 @@ import MermaidBlock from './MermaidBlock.vue'
 const props = defineProps<{ modelValue: string; live: boolean; spellcheck: boolean; typewriter: boolean; focusMode: boolean; resolveUrl: (url: string) => string }>()
 const emit = defineEmits<{
   'update:modelValue': [value: string]
-  caret: []
+  caret: [position: { offset: number; line: number; column: number }]
   keydown: [event: KeyboardEvent]
   paste: [event: ClipboardEvent]
   copy: [event: ClipboardEvent]
@@ -127,9 +127,11 @@ onMounted(() => {
     EditorView.updateListener.of(update => {
       if (update.docChanged) { publishing = true; try { emit('update:modelValue', update.state.doc.toString()) } finally { publishing = false } }
       if (update.docChanged || update.selectionSet) {
-        emit('caret')
+        const offset = update.state.selection.main.from
+        const line = update.state.doc.lineAt(offset)
+        emit('caret', { offset, line: line.number, column: offset - line.from + 1 })
         emit('history', { undo: undoDepth(update.state) > 0, redo: redoDepth(update.state) > 0 })
-        if (props.typewriter && !update.transactions.some(transaction => transaction.isUserEvent('select.pointer') || transaction.isUserEvent('select.outline') || transaction.isUserEvent('input.table'))) {
+        if (props.typewriter && !update.transactions.some(transaction => transaction.isUserEvent('select.pointer') || transaction.isUserEvent('select.outline') || transaction.isUserEvent('select.table') || transaction.isUserEvent('input.table'))) {
           requestAnimationFrame(centerCaret)
         }
       }
@@ -179,17 +181,10 @@ defineExpose({
     const anchor = Math.min(start, view.state.doc.length)
     view.dispatch({
       selection: { anchor, head: Math.min(end, view.state.doc.length) },
-      ...(align === 'nearest' ? { scrollIntoView: true } : { userEvent: 'select.outline' }),
-      ...(align === 'center' ? { effects: EditorView.scrollIntoView(anchor, { y: 'center' }) } : {}),
+      ...(align === 'nearest'
+        ? { scrollIntoView: true }
+        : { userEvent: 'select.outline', effects: EditorView.scrollIntoView(anchor, { y: align, yMargin: 16 }) }),
     })
-    if (align === 'start') {
-      view.scrollDOM.scrollTop = Math.max(0, view.lineBlockAt(anchor).top)
-      requestAnimationFrame(() => {
-        if (!view || view.state.selection.main.anchor !== anchor) return
-        const coords = view.coordsAtPos(anchor)
-        if (coords) view.scrollDOM.scrollTop += coords.top - view.scrollDOM.getBoundingClientRect().top - 16
-      })
-    }
   },
   replaceSource,
   placeContextCaret(event: MouseEvent) {

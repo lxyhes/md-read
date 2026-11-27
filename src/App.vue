@@ -45,7 +45,7 @@ import AppDropdown from './components/AppDropdown.vue'
 import { interfaceFont } from './fonts'
 import { defaultTokens } from './themes'
 import type { FileSystemTreeNode } from './components/FileSystemTree.vue'
-import { deleteSystemEntry } from './fileService'
+import { deleteSystemEntry, openMarkdownFolder, type OpenedFile } from './fileService'
 import ClipboardManager from './components/ClipboardManager.vue'
 import ContentSkeleton from './components/ContentSkeleton.vue'
 import { cachePastedRemoteImages, copyMarkdownPath, createBrowserAssetMap, createMarkdownDirectory, createMarkdownFile, downloadMarkdownImages, exportDocumentWithPandoc, importDocumentWithPandoc, importMarkdownAsset, importMarkdownAssetFromPath, listDirectoryFiles, listFileSystemEntries, markdownPathExists, moveFilePath, openFileSystemDirectory, openMarkdownDirectory, openMarkdownFile, openMarkdownFolderAt, organizeMarkdownAssets, readMarkdownExportAssets, readMarkdownPath, removeMarkdownAsset, renameMarkdownAsset, renameMarkdownPath, resolveMarkdownAssetUrl, resolveMarkdownPath, saveBinaryExportFile, saveClipboardImage, saveExportFile, saveMarkdownFile, savePdfExportFile, selectDocxReference, selectFileSystemDirectory, selectMarkdownFolder, splitMarkdownLinkTarget, uploadMarkdownImage, watchDirectoryPath, watchMarkdownPath, writeMarkdownFile, type PandocExportFormat, type WorkspaceFile } from './fileService'
@@ -472,7 +472,9 @@ const editorFindScope = ref<{ start: number; end: number } | undefined>()
 let editorFindReplacing = false
 const editorFindResult = computed(() => findEditorMatches(editorSource.value, editorFindQuery.value, { ...editorFindOptions.value, scope: editorFindScope.value }))
 const editorSource = ref('')
+const editorPreviewSource = ref('')
 const editorTextarea = ref<InstanceType<typeof MarkdownEditorComponent> | null>(null)
+let pendingEditorHeading: HeadingItem | null = null
 const editorSyntaxGuideOpen = ref(false)
 watch(editorOpen, open => { if (!open) editorSyntaxGuideOpen.value = false })
 const editorUndoAvailable = ref(false)
@@ -962,10 +964,11 @@ function resolveMindmapUrl(url: string) {
   return document ? resolveMarkdownAssetUrl(document.path, url, store.getDocumentAssets(document.id)) : url
 }
 const editorPreviewResult = computed(() => {
-  if (!editorSource.value.trim()) return { document: null, failed: false }
+  const source = editorPreviewSource.value
+  if (!source.trim()) return { document: null, failed: false }
   try {
-    const path = store.currentDocument?.path ?? '编辑.md'
-    return { document: parseMarkdown(path, editorSource.value, (url) => resolveEditorAssetUrl(path, url)), failed: false }
+    const path = editorDocumentPath.value
+    return { document: parseMarkdown(path, source, (url) => resolveEditorAssetUrl(path, url)), failed: false }
   } catch (error) {
     console.error('编辑文档解析失败', error)
     return { document: null, failed: true }
@@ -1048,7 +1051,9 @@ async function openExternalLink(url: string, sourceDocument = store.currentDocum
   }
   try {
     const existing = store.documents.find((document) => filePathKey(document.path) === filePathKey(targetPath))
-    if (existing) await chooseDocument(existing.id)
+    if (existing) {
+      if (!(await chooseDocument(existing.id))) return
+    }
     else {
       let source: string
       try { source = await readMarkdownPath(targetPath) }
@@ -1060,7 +1065,8 @@ async function openExternalLink(url: string, sourceDocument = store.currentDocum
         await createMarkdownFile(targetPath, source)
         notify(`已创建 ${name}`)
       }
-      await store.addOpenedFiles([{ path: targetPath, source }])
+      await openImportedFiles([{ path: targetPath, source }])
+      if (filePathKey(store.currentDocument?.path ?? '') !== filePathKey(targetPath)) return
     }
     if (fragment) {
       await nextTick()
@@ -1294,7 +1300,7 @@ function openQuickOpen() {
 }
 
 async function openEditor() {
-  if (!store.currentDocument) return
+  if (editorOpen.value || !store.currentDocument) return
   const document = store.currentDocument
   let originalSource = document.source
   if (isRealDocumentPath(document.path)) {
@@ -1304,28 +1310,18 @@ async function openEditor() {
     if (originalSource !== document.source) await store.replaceDocumentSource(document.id, originalSource)
   }
   const recovered = await readEditorDraft(document.path)
-  const realPath = isRealDocumentPath(store.currentDocument.path)
+  if (editorOpen.value || store.currentDocumentId !== document.id) return
   let migrated = { source: originalSource, count: 0 }
-  let migrationMode: 'file' | 'memory' | 'none' = 'none'
-  clearEditorInlineAssets()
-  try {
-    if (realPath) {
-      migrated = await migrateEmbeddedEditorImages(originalSource, store.currentDocument.path)
-      if (migrated.count) {
-        migrationMode = 'file'
-      } else {
-        migrated = compactEmbeddedEditorImages(originalSource)
-        if (migrated.count) migrationMode = 'memory'
-      }
-    } else {
-      migrated = compactEmbeddedEditorImages(originalSource)
-      if (migrated.count) migrationMode = 'memory'
-    }
-  } catch {
-    migrated = compactEmbeddedEditorImages(originalSource)
-    if (migrated.count) migrationMode = 'memory'
-    else notify('内嵌图片转换失败，可继续编辑并稍后重试')
+  let migrationFailed = false
+  if (isRealDocumentPath(document.path)) {
+    try { migrated = await migrateEmbeddedEditorImages(originalSource, document.path) }
+    catch { migrationFailed = true }
   }
+  if (editorOpen.value || store.currentDocumentId !== document.id) return
+  clearEditorInlineAssets()
+  const migratedToFile = migrated.count > 0
+  if (!migratedToFile) migrated = compactEmbeddedEditorImages(originalSource)
+  if (migrationFailed && !migrated.count) notify('内嵌图片转换失败，可继续编辑并稍后重试')
   editorDocumentPath.value = document.path
   editorDocumentId.value = document.id
   editorSource.value = recovered?.source ?? migrated.source
@@ -1338,7 +1334,7 @@ async function openEditor() {
   view.value = 'reader'
   editorContextMenu.value = null
   if (migrated.count) {
-    notify(migrationMode === 'file'
+    notify(migratedToFile
       ? `已将 ${migrated.count} 张内嵌图片转换为本地图片，请保存文档`
       : `已将 ${migrated.count} 张内嵌图片收纳为短引用`)
   }
@@ -1348,16 +1344,30 @@ async function openEditor() {
 }
 
 async function closeEditor() {
+  if (!editorOpen.value) return true
   const documentId = editorDocumentId.value
-  const saving = editorSaveTask.value
-  if (saving && !(await saving)) return
-  if (!editorOpen.value || editorDocumentId.value !== documentId) return
-  if (editorDirty.value && !(await persistEditorDraft())) { notify('草稿备份失败，请先保存或另存副本再退出'); return }
-  if (!editorOpen.value || editorDocumentId.value !== documentId) return
-  editorOpen.value = false
-  editorFindOpen.value = false
-  editorContextMenu.value = null
-  clearEditorInlineAssets()
+  while (editorOpen.value && editorDocumentId.value === documentId) {
+    const saving = editorSaveTask.value
+    if (saving) {
+      if (!(await saving)) return false
+      continue
+    }
+    const source = editorSourceForSave.value
+    const baseline = editorOriginalSource.value
+    if (!(await persistEditorDraft())) {
+      notify('草稿备份失败，请先保存或另存副本再退出')
+      return false
+    }
+    if (!editorOpen.value || editorDocumentId.value !== documentId) return false
+    if (source !== editorSourceForSave.value || baseline !== editorOriginalSource.value || editorSaveTask.value) continue
+    editorOpen.value = false
+    pendingEditorHeading = null
+    editorFindOpen.value = false
+    editorContextMenu.value = null
+    clearEditorInlineAssets()
+    return true
+  }
+  return false
 }
 
 type EditorMenuItem = { label?: string; shortcut?: string; disabled?: boolean; separator?: boolean; checkable?: boolean; checked?: boolean; action?: () => void; children?: EditorMenuItem[] }
@@ -1577,15 +1587,6 @@ async function saveEditorCopy() {
 
 function mountRichEditor() { editorTextarea.value?.focus() }
 
-function centerEditorCaret() { editorTextarea.value?.centerCaret() }
-
-function onEditorCaretActivity() {
-  updateEditorCursor()
-  centerEditorCaret()
-}
-
-
-
 function openEditorFind() {
   if (editorMode.value === 'preview') setEditorMode('rich')
   const element = editorTextarea.value
@@ -1716,21 +1717,40 @@ function openDocumentImage(image: HTMLImageElement, documentId = store.currentDo
   })
 }
 
-function jumpToEditorHeading(item: HeadingItem) {
-  const region = editorPreviewDocument.value?.regions.find(region => region.id === item.regionId)
+async function jumpToEditorHeading(item: HeadingItem) {
+  if (editorMode.value !== 'preview' && !editorTextarea.value) {
+    pendingEditorHeading = item
+    return
+  }
+  pendingEditorHeading = null
+  const matchesHeading = (heading: HeadingItem) => heading.text === item.text && heading.depth === item.depth
+  const occurrence = editorHeadings.value.filter(matchesHeading).findIndex(heading => heading.id === item.id)
+  editorPreviewSource.value = editorSource.value
+  const matching = editorHeadings.value.filter(matchesHeading)
+  const heading = matching.find(heading => heading.id === item.id) ?? matching[occurrence]
+  const region = editorPreviewDocument.value?.regions.find(region => region.id === heading?.regionId)
+  if (!region) return
   const source = editorSource.value
-  const headingOffset = source.search(new RegExp(`^#{1,6}[ \\t]+${escapeRegExp(item.text)}[ \\t]*\\r?$`, 'm'))
-  const offset = headingOffset >= 0 ? headingOffset : region?.sourceStart
-  if (offset !== undefined) editorCursorOffset.value = offset
-  if (region && editorMode.value !== 'preview') {
+  const headingOffset = matching.length === 1
+    ? source.search(new RegExp(`^#{${item.depth}}[ \\t]+${escapeRegExp(item.text)}[ \\t]*\\r?$`, 'm'))
+    : -1
+  const offset = headingOffset >= 0 ? headingOffset : region.sourceStart
+  editorCursorOffset.value = offset
+  if (editorMode.value !== 'preview') {
     editorTextarea.value?.focus()
     editorTextarea.value?.setSelectionRange(
-      offset ?? region.sourceStart,
-      offset ?? region.sourceStart,
+      offset,
+      offset,
       advancedSettings.value.typewriterMode ? 'center' : 'start',
     )
   }
-  if (region) editorPreview.value?.querySelector(`[data-editor-region-id="${region.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  await nextTick()
+  const viewport = editorPreview.value
+  const target = viewport?.querySelector(`[data-editor-region-id="${region.id}"]`)
+  if (viewport && target) {
+    const top = viewport.scrollTop + target.getBoundingClientRect().top - viewport.getBoundingClientRect().top
+    viewport.scrollTo({ top, behavior: 'instant' })
+  }
 }
 
 function isRealDocumentPath(path: string) {
@@ -1772,17 +1792,9 @@ async function persistEditorChanges(document: ReaderDocument) {
   }
 }
 
-function updateEditorCursor() {
-  const element = editorTextarea.value
-  if (!element) return
-  const position = element.selectionStart
-  editorCursorOffset.value = position
-  const before = editorSource.value.slice(0, position)
-  const lastBreak = before.lastIndexOf('\n')
-  editorCursor.value = {
-    line: (before.match(/\n/g)?.length ?? 0) + 1,
-    column: position - lastBreak,
-  }
+function updateEditorCursor({ offset, line, column }: { offset: number; line: number; column: number }) {
+  editorCursorOffset.value = offset
+  editorCursor.value = { line, column }
 }
 
 function updateEditor(transform: (value: string, start: number, end: number) => { value: string; start: number; end: number }) {
@@ -1796,7 +1808,6 @@ function applyEditorChange(value: string, start: number, end = start) {
   editorTextarea.value?.replaceSource(value, start, end)
   editorSource.value = value
   editorTextarea.value?.focus()
-  updateEditorCursor()
 }
 
 async function insertFromSyntaxGuide(example: SyntaxExample) {
@@ -2693,6 +2704,7 @@ function onTableCellBeforeInput(event: InputEvent, row: number, column: number) 
 function openDraftTableEditor() {
   const cursor = editorTextarea.value?.selectionStart
   if (cursor === undefined) return
+  editorPreviewSource.value = editorSource.value
   const region = editorPreviewDocument.value?.regions.find((region) => region.type === 'table' && cursor >= region.sourceStart && cursor <= region.sourceEnd)
   if (!region) { notify('先把光标放到要编辑的 Markdown 表格中'); return }
   openTableEditor(region, true)
@@ -3382,7 +3394,10 @@ async function attachKnowledgeFiles(format: 'markdown' | 'office' = 'markdown') 
       ? [await importDocumentWithPandoc(advancedSettings.value.defaultExtension)].filter(file => file !== null)
       : await openMarkdownFile()
     if (!files.length) return
-    await store.addOpenedFiles(files, { localizeImages: false })
+    await store.addOpenedFiles(files, {
+      localizeImages: false,
+      activate: async id => editorOpen.value ? false : store.openDocument(id),
+    })
     const paths = new Set(files.map(file => file.path))
     const documents = store.documents.filter(document => paths.has(document.path))
     const sourceIds = documents.map(document => document.id)
@@ -4316,7 +4331,7 @@ async function importClipboardContent(html: string, text: string, saveToFile = f
     // Clipboard images are opened as session documents first. Persisting a
     // large data URL in the local snapshot can exceed WebKit's storage quota
     // and leave the default document selected.
-    const count = await store.addOpenedFiles([{ path, source }], { persist: !image })
+    const count = await openImportedFiles([{ path, source }], { persist: !image })
     if (count) {
       view.value = 'reader'
       await nextTick()
@@ -4417,6 +4432,7 @@ function openWordCount() {
     ? document.querySelector<HTMLElement>('.editor-menu-trigger[aria-expanded="true"]')
     : readerMoreTrigger.value
   readerModalTrigger = menuTrigger ?? activeElement
+  if (editorOpen.value) editorPreviewSource.value = editorSource.value
   wordCountOpen.value = true
 }
 
@@ -4937,7 +4953,7 @@ async function showDocumentTreeForEntry(file: FileTreeEntry) {
       notify('未选择文件，系统文件树未打开')
       return
     }
-    await store.addOpenedFiles([matched])
+    await openImportedFiles([matched])
     await openFilesystemTreeForFile({ path: matched.path, name: fileNameOf(matched.path) })
     return
   }
@@ -5326,6 +5342,18 @@ onUnmounted(() => {
   viewportResizeObserver?.disconnect()
 })
 watch(editorSource, scheduleEditorDraft, { flush: 'sync' })
+watch(editorTextarea, editor => {
+  if (editor && pendingEditorHeading) void jumpToEditorHeading(pendingEditorHeading)
+})
+watch([editorSource, editorOpen, editorMode], ([source, open, mode], [, wasOpen, previousMode], onCleanup) => {
+  if (!open || !wasOpen || mode !== previousMode) {
+    editorPreviewSource.value = open ? source : ''
+    return
+  }
+  // CodeMirror updates the writing surface. Reader HTML and the outline can wait for a pause.
+  const timer = window.setTimeout(() => { editorPreviewSource.value = source }, 160)
+  onCleanup(() => window.clearTimeout(timer))
+})
 watch(editorFocusMode, value => localStorage.setItem('moyue:editor-focus', String(value)))
 watch(editorOutlineOpen, value => localStorage.setItem('moyue:editor-outline-open', String(value)))
 watch(editorMode, value => localStorage.setItem('moyue:editor-mode', value))
@@ -5649,7 +5677,7 @@ async function openFile() {
   if (busyAction.value) return
   busyAction.value = 'file'
   try {
-    const count = await store.importFiles()
+    const count = await openImportedFiles(await openMarkdownFile())
     if (count) { view.value = 'reader'; await nextTick(); restoreScroll(); notify(`已打开 ${count} 个 Markdown 文档`) }
   } catch (error) {
     notify(error instanceof Error ? error.message : '打开文档失败')
@@ -5661,7 +5689,7 @@ async function importOfficeDocument() {
   try {
     const file = await importDocumentWithPandoc(advancedSettings.value.defaultExtension)
     if (!file) return
-    await store.addOpenedFiles([file])
+    await openImportedFiles([file])
     view.value = 'reader'
     await nextTick()
     restoreScroll()
@@ -5678,10 +5706,10 @@ async function openFolder() {
     if (isTauriRuntime()) {
       const folder = await selectMarkdownFolder()
       if (!folder) return
-      count = await store.addOpenedFiles(await openMarkdownFolderAt(folder))
+      count = await openImportedFiles(await openMarkdownFolderAt(folder))
       rememberFolder(folder)
     } else {
-      count = await store.importFolder()
+      count = await openImportedFiles(await openMarkdownFolder())
     }
     if (count) { view.value = 'reader'; await nextTick(); restoreScroll(); notify(`已载入 ${count} 个 Markdown 文档`) }
   } catch (error) {
@@ -5694,7 +5722,7 @@ async function openSavedRecentFolder(folder: RecentFolder) {
   try {
     const files = await openMarkdownFolderAt(folder.path)
     if (!files.length) { notify('该文件夹没有 Markdown 文档'); return }
-    const count = await store.addOpenedFiles(files)
+    const count = await store.addOpenedFiles(files, { activate: false })
     rememberFolder(folder.path)
     const firstDocument = files.map((file) => store.documents.find((document) => normalizedPath(document.path).toLowerCase() === normalizedPath(file.path).toLowerCase())).find(Boolean)
     if (firstDocument) await chooseDocument(firstDocument.id)
@@ -5732,7 +5760,7 @@ async function importNativeDroppedPaths(paths: string[]) {
   busyAction.value = 'drop'
   try {
     const files = await Promise.all(markdownPaths.map(async (path) => ({ path, source: await readMarkdownPath(path) })))
-    const count = await store.addOpenedFiles(files)
+    const count = await openImportedFiles(files)
     if (count) { view.value = 'reader'; notify(`已导入 ${count} 个 Markdown 文档`) }
   } catch (error) {
     notify(error instanceof Error ? error.message : '导入文档失败')
@@ -5747,7 +5775,7 @@ async function onDrop(event: DragEvent) {
   busyAction.value = 'drop'
   try {
     const assets = createBrowserAssetMap(droppedFiles)
-    const count = await store.addOpenedFiles(await Promise.all(files.map(async (file) => ({ path: file.webkitRelativePath || file.name, source: await file.text(), assets }))))
+    const count = await openImportedFiles(await Promise.all(files.map(async (file) => ({ path: file.webkitRelativePath || file.name, source: await file.text(), assets }))))
     if (count) { view.value = 'reader'; notify(`已导入 ${count} 个 Markdown 文档`) }
   } catch (error) {
     notify(error instanceof Error ? error.message : '导入文档失败')
@@ -5758,11 +5786,7 @@ async function openAssociatedMarkdown(path: string) {
   const existing = store.documents.find(document => filePathKey(document.path) === filePathKey(path))
   if (existing) { await chooseDocument(existing.id); return }
   const source = await readMarkdownPath(path)
-  if (editorOpen.value) {
-    if (!(await persistEditorDraft())) throw new Error(editorBackupError.value)
-    editorOpen.value = false
-  }
-  await store.addOpenedFiles([{ path, source }])
+  await openImportedFiles([{ path, source }])
   view.value = 'reader'
   await nextTick()
   restoreScroll()
@@ -5785,24 +5809,30 @@ async function bindNativeFileDrop() {
   }
 }
 
+function openImportedFiles(files: OpenedFile[], options: { persist?: boolean } = {}) {
+  return store.addOpenedFiles(files, {
+    ...options,
+    activate: id => editorOpen.value ? chooseDocument(id) : store.openDocument(id),
+  })
+}
+
 async function chooseDocument(id: string) {
   const continueEditing = editorOpen.value && id !== editorDocumentId.value
-  if (continueEditing) {
-    if (!(await persistEditorDraft())) { notify(editorBackupError.value); return }
-    editorOpen.value = false
-  }
+  if (continueEditing && !(await closeEditor())) return false
   const keepFocusMode = store.mode === 'focus'
   await store.openDocument(id)
+  if (store.currentDocumentId !== id) return false
   if (keepFocusMode) store.setMode('focus')
   view.value = 'reader'
   await nextTick()
   invalidateRegionLayout()
   observeReaderLayout()
   restoreScroll()
-  if (continueEditing) await openEditor()
+  if (continueEditing && store.currentDocumentId === id) await openEditor()
+  return store.currentDocumentId === id
 }
 async function chooseSearchResult(documentId: string, regionId: string) {
-  await chooseDocument(documentId)
+  if (!(await chooseDocument(documentId))) return
   closeSearch()
   leftPanelTab.value = 'outline'
   store.activeRegionId = regionId
@@ -5995,7 +6025,7 @@ async function openFileTreeEntry(file: { path: string; name: string; documentId?
   busyAction.value = 'file'
   try {
     const source = await readMarkdownPath(file.path)
-    const count = await store.addOpenedFiles([{ path: file.path, source }])
+    const count = await openImportedFiles([{ path: file.path, source }])
     if (count) { view.value = 'reader'; await nextTick(); restoreScroll(); notify(`已打开 ${file.name}`) }
   } catch (error) {
     notify(error instanceof Error ? error.message : '打开文件失败')
@@ -6060,7 +6090,7 @@ async function deleteLocalEntry(file: FileTreeEntry, cleanupImages: boolean) {
   const matches = (path: string) => entryKey(path) === target || (folder && entryKey(path).startsWith(`${target}/`))
   if (editorOpen.value && matches(editorDocumentPath.value)) {
     if (editorDirty.value || editorSaving.value) throw new Error('此文件或文件夹内有正在编辑的草稿，请先保存再删除')
-    await closeEditor()
+    if (!(await closeEditor())) throw new Error('请先退出编辑再删除文件')
   }
 
   const parent = parentFilesystemPath(file.path)!
@@ -6087,11 +6117,7 @@ async function deleteLocalEntry(file: FileTreeEntry, cleanupImages: boolean) {
   }
 }
 async function closeDocument(id: string) {
-  if (editorOpen.value && editorDocumentId.value === id) {
-    if (!(await persistEditorDraft())) { notify(editorBackupError.value); return }
-    editorOpen.value = false
-    clearEditorInlineAssets()
-  }
+  if (editorOpen.value && editorDocumentId.value === id && !(await closeEditor())) return
   if (store.openDocumentIds.includes(id)) recentlyClosedTabs.value = [id, ...recentlyClosedTabs.value.filter((item) => item !== id)].slice(0, 8)
   await store.closeDocument(id)
   if (!store.currentDocument) { view.value = 'library'; return }
