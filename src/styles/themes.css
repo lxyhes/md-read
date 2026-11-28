@@ -2895,7 +2895,6 @@ body.is-resizing-outline * {
 .tree-summary-markdown ul,
 .tree-summary-markdown ol,
 .tree-summary-markdown blockquote,
-.tree-summary-markdown pre,
 .tree-summary-markdown .table-scroll,
 .tree-summary-markdown .markdown-callout { margin: 7px 0; }
 .tree-summary-markdown h1,
@@ -2926,11 +2925,25 @@ body.is-resizing-outline * {
 }
 .tree-summary-markdown pre {
   max-width: 100%;
-  padding: 8px 10px;
+  margin: 12px 0 18px;
+  padding: 10px 12px;
   overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--accent) 46%, transparent) transparent;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--code-bg);
+}
+@supports selector(::-webkit-scrollbar) {
+  .tree-summary-markdown pre {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+  }
+  .tree-summary-markdown pre::-webkit-scrollbar { height: 6px; }
+  .tree-summary-markdown pre::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 46%, transparent);
+  }
 }
 .tree-summary-markdown pre code { padding: 0; color: var(--ink); }
 .tree-summary-markdown .table-scroll { max-width: 100%; overflow-x: auto; }
