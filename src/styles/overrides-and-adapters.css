@@ -3988,6 +3988,38 @@ body .app-shell.is-editor-studio .reader-layout {
   color: var(--reader-status-color, var(--muted));
 }
 
+/* Give small labels more room on displays with roughly one device pixel per CSS pixel. */
+@media (max-resolution: 1.25dppx) {
+  .app-shell :is(
+    .rail-item > span:not(.app-icon),
+    .rail-item > span > small,
+    .nav-section-label,
+    .file-badge,
+    .reader-tab small,
+    .editor-subtitle
+  ) {
+    font-size: 12px;
+  }
+
+  .app-shell:not(.is-editor-studio) .reader-main-column > .reader-tabbar :is(.reader-tab strong, .reader-tab-status),
+  .app-shell .reader-meta-document :is(.reader-path-value, .reader-stat),
+  .app-shell .editor-section-nav button,
+  .app-shell:not(.is-focus) .settings-tabs button {
+    font-size: 13px;
+  }
+
+  .app-shell .reader-tab-status:not([data-tone="error"], [data-tone="syncing"]) {
+    --reader-status-color: color-mix(in srgb, var(--ink) 55%, var(--muted));
+    font-weight: 500;
+  }
+
+  .app-shell .reader-tab-word-count,
+  .app-shell .reader-meta-document .reader-stat {
+    color: color-mix(in srgb, var(--ink) 55%, var(--muted));
+    font-weight: 500;
+  }
+}
+
 .reader-tab-word-count {
   color: var(--muted);
   font-size: inherit;

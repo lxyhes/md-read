@@ -521,10 +521,10 @@
 .viewer-shell,
 .search-dialog,
 .note-dialog {
-  animation: surface-in .28s cubic-bezier(.2, .8, .2, 1) both;
+  animation: surface-in .28s cubic-bezier(.2, .8, .2, 1) backwards;
 }
 .selection-toolbar {
-  animation: selection-pop .18s cubic-bezier(.2, .8, .2, 1) both;
+  animation: selection-pop .18s cubic-bezier(.2, .8, .2, 1) backwards;
 }
 .selection-toolbar button,
 .focus-hud button,
@@ -542,11 +542,11 @@
 }
 @keyframes surface-in {
   from { opacity: 0; transform: translateY(8px) scale(.985); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 1; transform: none; }
 }
 @keyframes selection-pop {
   from { opacity: 0; transform: translateY(5px) scale(.97); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 1; transform: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

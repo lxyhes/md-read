@@ -137,6 +137,12 @@
   color: #3b4148;
   font-weight: 400;
 }
+@media (max-resolution: 1.25dppx) {
+  .app-shell.theme-paper-white .reader-content .region-content p {
+    color: var(--ink);
+    font-weight: 500;
+  }
+}
 .app-shell.theme-paper-white:not(.is-focus) .reader-content .code-frame,
 .app-shell.theme-paper-white:not(.is-focus) .reader-content .table-scroll {
   box-shadow: 0 10px 24px color-mix(in srgb, var(--accent) 7%, transparent);
