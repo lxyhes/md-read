@@ -439,10 +439,22 @@
   min-width: 0;
 }
 .reader-mindmap-heading {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   display: flex;
-  flex-direction: column;
-  gap: 5px;
-  margin: 14px 0 18px;
+  align-items: center;
+  gap: 12px;
+  overflow-x: auto;
+  padding: 4px 8px;
+  margin: 14px 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  white-space: nowrap;
+}
+.reader-mindmap-heading > * {
+  flex-shrink: 0;
 }
 .reader-mindmap-heading h2 {
   margin: 0;
@@ -451,9 +463,8 @@
 }
 .reader-mindmap-title-row {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 8px 12px;
+  gap: 8px;
 }
 .reader-mindmap-title-row [aria-pressed="true"] {
   color: var(--accent);
@@ -461,28 +472,17 @@
 }
 .reader-mindmap-flows {
   display: flex;
-  flex-wrap: wrap;
   gap: 6px;
-  margin-top: 4px;
 }
-.reader-mindmap-heading small,
+.reader-mindmap-heading > small,
 .reader-mindmap-empty {
   color: var(--muted);
   font: 12px/1.6 var(--ui-font);
 }
 .reader-mindmap-tools {
-  position: sticky;
-  top: 0;
-  z-index: 2;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 4px 14px;
-  padding: 6px 8px;
-  margin-bottom: 8px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-raised);
+  gap: 8px;
 }
 .reader-mindmap-search,
 .reader-mindmap-actions {
@@ -491,7 +491,7 @@
   gap: 4px;
 }
 .reader-mindmap-search input {
-  width: clamp(110px, 15vw, 210px);
+  width: clamp(96px, 11vw, 160px);
 }
 .reader-mindmap-search small {
   color: var(--muted);
@@ -521,8 +521,7 @@
     max-height: max(0px, calc(var(--reader-viewport-height, 70dvh) - var(--split-mindmap-inset) - 24px));
     overflow-anchor: none;
   }
-  .reader-display-split .reader-mindmap-heading,
-  .reader-display-split .reader-mindmap-tools {
+  .reader-display-split .reader-mindmap-heading {
     flex-shrink: 0;
   }
   .reader-split-mindmap-scroll {
@@ -3025,7 +3024,7 @@ body.is-resizing-outline * {
   font-size: .82em;
 }
 .reader-display-split .reader-mindmap-heading {
-  margin: 12px 0 14px;
+  margin-top: 12px;
 }
 .reader-mindmap .tree-diagram {
   --map-line: color-mix(in srgb, var(--accent) 34%, var(--border));

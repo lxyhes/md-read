@@ -28,6 +28,7 @@ import WebPreviewPanel, { hideNativeWebPreviews } from './components/WebPreviewP
 import WebPreviewDock from './components/WebPreviewDock.vue'
 import MermaidBlock from './components/MermaidBlock.vue'
 import TreeDiagram from './components/TreeDiagram.vue'
+import TextSelectionSurface from './components/TextSelectionSurface.vue'
 import { isMermaidFlowchart } from './flowchart'
 import AppIcon from './components/AppIcon.vue'
 import AppDialog from './components/AppDialog.vue'
@@ -6733,7 +6734,7 @@ function focusHeading(regionId: string) { scrollToHeading(regionId) }
 function copyableSelectionHtml(range: Range) {
   const host = document.createElement('div')
   host.append(range.cloneContents())
-  host.querySelectorAll('.inline-view-action, .region-more, .code-toolbar').forEach((element) => element.remove())
+  host.querySelectorAll('.inline-view-action, .region-more, .code-toolbar, .text-selection-overlay').forEach((element) => element.remove())
   host.querySelectorAll<HTMLElement>('*').forEach((element) => {
     for (const attribute of [...element.attributes]) {
       if (attribute.name === 'style' || attribute.name === 'class' || attribute.name === 'contenteditable' || attribute.name.startsWith('data-') || attribute.name.startsWith('on')) element.removeAttribute(attribute.name)
@@ -7723,39 +7724,40 @@ async function requestFullscreen() {
                   <iframe v-else-if="readerHtmlPreview" ref="readerHtmlFrame" :srcdoc="readerHtmlPreview"
                     title="HTML 网页预览" sandbox="allow-same-origin" @load="onReaderHtmlLoad" />
                 </div>
-                <div v-if="readerDisplayMode === 'markdown' || readerDisplayMode === 'split'" class="reader-markdown">
+                <TextSelectionSurface v-if="readerDisplayMode === 'markdown' || readerDisplayMode === 'split'" class="reader-markdown">
                 <div class="regions-stack" :class="{ virtualized: virtualizedReader }">
                 <div v-if="virtualRange.before" class="virtual-spacer" :style="{ height: `${virtualRange.before}px` }" aria-hidden="true" />
                 <div class="virtual-regions">
                   <RegionBlock v-for="region in virtualRange.regions" v-memo="[region, store.currentDocument?.sourceHash, store.activeRegionId === region.id, store.focusedRegionId === region.id, focusDistanceByRegion.get(region.id), store.mode, store.activeThemeId, currentAnnotationsByRegion.get(region.id), readerTreeExpansionRequest]" :key="region.id" :region="region" :annotations="currentAnnotationsByRegion.get(region.id)" :focused="store.focusedRegionId === region.id" :active="store.activeRegionId === region.id" :focus-distance="focusDistanceByRegion.get(region.id)" :theme-mode="store.activeTheme?.manifest.mode" :theme-key="`${store.mode}-${store.activeThemeId}`" :tree-expansion-request="readerTreeExpansionRequest" @focus="focusRegion(region)" @open-viewer="openViewer($event ?? region)" @open-link="openExternalLink" @code-copied="notify('代码已复制')" @math-copied="notify('MathML 已复制')" @math-copy-failed="notify('复制 MathML 失败，请检查剪贴板权限')" @copy-image="copyRegionAsImage(region)" @toggle-task="toggleTask(region)" />
                 </div>
                 <div v-if="virtualRange.after" class="virtual-spacer" :style="{ height: `${virtualRange.after}px` }" aria-hidden="true" />
-                </div></div>
+                </div>
+                </TextSelectionSurface>
                 <div v-if="readerDisplayMode === 'mindmap' || readerDisplayMode === 'split'" ref="mindmapPanel" class="reader-mindmap">
                   <div class="reader-mindmap-heading">
                     <div class="reader-mindmap-title-row">
                       <h2>章节脉络</h2>
                       <Button v-if="currentMindmap?.children.length && readerDisplayMode === 'mindmap'" type="secondary" size="small" :aria-pressed="mindmapMotion" @click="mindmapMotion = !mindmapMotion">连线动效</Button>
                     </div>
-                    <small v-if="currentMindmap">点击节点展开一层，点击双箭头展开或收起整个分支</small>
+                    <div v-if="currentMindmap?.children.length" class="reader-mindmap-tools" role="group" aria-label="导图导航">
+                      <div class="reader-mindmap-search">
+                        <Input v-model:value="mindmapQuery" size="small" placeholder="搜索节点" aria-label="搜索节点" @keydown.enter="onMindmapSearchEnter" />
+                        <Button size="small" type="text" aria-label="上一个匹配节点" :disabled="!mindmapMatches.length" @click="navigateMindmapMatches(-1)"><AppIcon name="chevron-up" :size="14" /></Button>
+                        <Button size="small" type="text" aria-label="下一个匹配节点" :disabled="!mindmapMatches.length" @click="navigateMindmapMatches(1)"><AppIcon name="chevron-down" :size="14" /></Button>
+                        <small v-if="mindmapQuery.trim()" role="status">{{ mindmapMatchIndex >= 0 ? `${mindmapMatchIndex + 1} / ${mindmapMatches.length}` : mindmapMatches.length ? `${mindmapMatches.length} 个匹配` : '无匹配节点' }}</small>
+                      </div>
+                      <div class="reader-mindmap-actions">
+                        <Button size="small" type="text" :disabled="!mindmapSelectedNode?.regionId" @click="jumpFromMindmapToSource">定位原文</Button>
+                        <Button size="small" type="text" :disabled="!mindmapFocusedPath && (!mindmapSelectedNode || mindmapSelectedPath === '0')" @click="focusMindmapBranch">{{ mindmapFocusedPath ? '退出聚焦' : '聚焦分支' }}</Button>
+                        <Button size="small" type="text" @click="centerMindmap">回到中心</Button>
+                      </div>
+                    </div>
                     <div v-if="mindmapFlowcharts.length" class="reader-mindmap-flows">
                       <Button v-for="(chart, index) in mindmapFlowcharts" :key="chart.region.id" size="small" type="secondary" @click="openViewer(chart.region, true)">
                         {{ mindmapFlowcharts.length === 1 ? '播放数据流' : `播放数据流 ${index + 1}${chart.heading ? ` · ${chart.heading}` : ''}` }}
                       </Button>
                     </div>
-                  </div>
-                  <div v-if="currentMindmap?.children.length" class="reader-mindmap-tools" role="group" aria-label="导图导航">
-                    <div class="reader-mindmap-search">
-                      <Input v-model:value="mindmapQuery" size="small" placeholder="搜索节点" aria-label="搜索节点" @keydown.enter="onMindmapSearchEnter" />
-                      <Button size="small" type="text" aria-label="上一个匹配节点" :disabled="!mindmapMatches.length" @click="navigateMindmapMatches(-1)"><AppIcon name="chevron-up" :size="14" /></Button>
-                      <Button size="small" type="text" aria-label="下一个匹配节点" :disabled="!mindmapMatches.length" @click="navigateMindmapMatches(1)"><AppIcon name="chevron-down" :size="14" /></Button>
-                      <small v-if="mindmapQuery.trim()" role="status">{{ mindmapMatchIndex >= 0 ? `${mindmapMatchIndex + 1} / ${mindmapMatches.length}` : mindmapMatches.length ? `${mindmapMatches.length} 个匹配` : '无匹配节点' }}</small>
-                    </div>
-                    <div class="reader-mindmap-actions">
-                      <Button size="small" type="text" :disabled="!mindmapSelectedNode?.regionId" @click="jumpFromMindmapToSource">定位原文</Button>
-                      <Button size="small" type="text" :disabled="!mindmapFocusedPath && (!mindmapSelectedNode || mindmapSelectedPath === '0')" @click="focusMindmapBranch">{{ mindmapFocusedPath ? '退出聚焦' : '聚焦分支' }}</Button>
-                      <Button size="small" type="text" @click="centerMindmap">回到中心</Button>
-                    </div>
+                    <small v-if="currentMindmap">点击节点展开一层，点击双箭头展开或收起整个分支</small>
                   </div>
                   <div v-if="currentMindmap && readerDisplayMode === 'mindmap'" class="reader-mindmap-scroll" :class="{ 'has-animated-branches': mindmapMotion }" role="region" aria-label="思维导图画布" tabindex="0">
                     <TreeDiagram :node="currentMindmap" root horizontal node-path="0" :navigation="mindmapNavigation" :resolve-url="resolveMindmapUrl" @select-node="selectMindmapNode" @open-link="openExternalLink" @open-image="openDocumentImage" />

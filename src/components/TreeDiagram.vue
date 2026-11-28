@@ -5,6 +5,7 @@ import type { MarkdownUrlResolver } from '../markdown/shared'
 import { writeTextToClipboard } from '../nativeClipboard'
 import AppIcon from './AppIcon.vue'
 import MarkdownContent from './MarkdownContent.vue'
+import TextSelectionSurface from './TextSelectionSurface.vue'
 
 type BranchExpansion = { open: boolean }
 type MindmapNavigation = { selected: string; focused: string; reveal?: { path: string; openTarget?: boolean } }
@@ -249,9 +250,9 @@ watch(summaryOpen, (open, _, onCleanup) => {
           <span>完整内容</span>
           <button type="button" class="tree-summary-close" aria-label="关闭全文" @click="closeSummary"><AppIcon name="close" :size="15" /></button>
         </header>
-        <div class="tree-summary-scroll" tabindex="0" role="region" aria-label="正文">
+        <TextSelectionSurface class="tree-summary-scroll" tabindex="0" role="region" aria-label="正文">
           <MarkdownContent class="tree-summary-markdown" :source="node.detail || summaryText(node.label)" :resolve-url="resolveUrl" preview-images @open-image="openSummaryImage" />
-        </div>
+        </TextSelectionSurface>
       </div>
     </Teleport>
   </li>

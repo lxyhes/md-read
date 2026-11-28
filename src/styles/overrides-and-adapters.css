@@ -111,6 +111,39 @@ a:active > .app-icon-vector { transform: scale(.92); }
   background: color-mix(in srgb, var(--accent) 24%, transparent);
   color: var(--ink);
 }
+.text-selection-surface { position: relative; }
+.text-selection-surface::selection,
+.text-selection-surface ::selection {
+  background-color: color-mix(in srgb, var(--accent) 22%, var(--surface-raised));
+  color: var(--ink);
+}
+.text-selection-overlay {
+  position: absolute;
+  inset: 0 auto auto 0;
+  z-index: 1;
+  width: 1px;
+  height: 1px;
+  overflow: visible;
+  pointer-events: none;
+  user-select: none;
+  fill: var(--accent);
+  stroke: var(--accent);
+  stroke-width: 6px;
+  stroke-linejoin: round;
+  opacity: .22;
+}
+.text-selection-surface.has-selection-boxes::selection,
+.text-selection-surface.has-selection-boxes ::selection {
+  background-color: transparent;
+}
+@media (forced-colors: active) {
+  .text-selection-overlay { display: none; }
+  .text-selection-surface.has-selection-boxes::selection,
+  .text-selection-surface.has-selection-boxes ::selection {
+    background-color: Highlight;
+    color: HighlightText;
+  }
+}
 .app-shell:is(:not(*), .theme-bamboo-shadow, :not(*), :not(*)) :is(button, a, input:not(.ant-input, .ant-select-selection-search-input), select, textarea:not(.moyue-textarea)):focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent) 66%, transparent);
   outline-offset: 3px;
