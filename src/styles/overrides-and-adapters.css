@@ -3529,9 +3529,45 @@ body .app-shell.is-editor-studio .reader-layout {
   }
 }
 
+.app-shell .reader-viewport.reader-mindmap-scroll,
+#reader-mindmap-toolbar {
+  width: calc(100% - 16px);
+  margin-inline: auto;
+}
+
+.app-shell .reader-viewport.reader-mindmap-scroll {
+  margin-bottom: 8px;
+  border-top: 0;
+  border-start-start-radius: 0;
+  border-start-end-radius: 0;
+  background: color-mix(in srgb, var(--accent) 3%, var(--surface)) !important;
+}
+
 .app-shell .reader-viewport .reader-content.reader-display-mindmap {
-  width: calc(100% - clamp(24px, 4vw, 64px)) !important;
-  padding-block: 12px 28px !important;
+  width: 100% !important;
+  padding: 0 !important;
+}
+
+#reader-mindmap-toolbar {
+  flex: 0 0 auto;
+}
+
+#reader-mindmap-toolbar > .reader-mindmap-heading {
+  position: static;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  padding: 7px 12px;
+  margin: 12px 0 0;
+  border-radius: 12px 12px 0 0;
+}
+
+#reader-mindmap-toolbar h2 {
+  font-size: 16px;
+}
+
+#reader-mindmap-toolbar :is(.reader-mindmap-tools, .reader-mindmap-flows, .reader-mindmap-search) {
+  flex-wrap: wrap;
+  max-width: 100%;
 }
 
 /* Two-row reader header: title, search, and reading tools on row one; the

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, getCurrentInstance, h, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
-import { Alert, ConfigProvider, Modal, theme as antTheme, SelectOption as Option } from 'ant-design-vue'
+import { Alert, ConfigProvider, Modal, Popover, theme as antTheme, SelectOption as Option } from 'ant-design-vue'
 import { Bubble } from 'ant-design-x-vue'
 import zhCN from 'ant-design-vue/es/locale/zh_CN'
 import Select from './components/AppSelect.vue'
@@ -7644,7 +7644,10 @@ async function requestFullscreen() {
           </Alert>
           <div class="reader-document-panes" :class="{ 'has-second-document': showSecondDocument }">
           <div class="reader-column">
-            <div ref="readerViewport" class="reader-viewport" @scroll="onReaderScroll" @wheel="onReaderWheel" @pointerdown="onReaderPointerDown" @mouseup="captureSelection">
+            <div id="reader-mindmap-toolbar"></div>
+            <div ref="readerViewport" class="reader-viewport"
+              v-bind="!editorOpen && readerDisplayMode === 'mindmap' ? { class: ['reader-mindmap-scroll', { 'has-animated-branches': mindmapMotion }], role: 'region', 'aria-label': '思维导图画布', tabindex: 0 } : {}"
+              @scroll="onReaderScroll" @wheel="onReaderWheel" @pointerdown="onReaderPointerDown" @mouseup="captureSelection">
               <div v-if="exporting" class="editor-safety-notice" role="status">正在生成完整导出文件…</div>
               <div v-if="editorOpen" class="editor-surface" :class="{ 'editor-typewriter-mode': advancedSettings.typewriterMode, 'is-course-outline': editorCourseOutline }" @contextmenu="openEditorContextMenu">
                 <div v-if="editorPreviewResult.failed" class="editor-safety-notice" role="alert">正文解析失败，草稿仍保留；请切换源码查看并重新打开文档。</div>
@@ -7734,10 +7737,10 @@ async function requestFullscreen() {
                 </div>
                 </TextSelectionSurface>
                 <div v-if="readerDisplayMode === 'mindmap' || readerDisplayMode === 'split'" ref="mindmapPanel" class="reader-mindmap">
+                  <Teleport to="#reader-mindmap-toolbar" :disabled="readerDisplayMode !== 'mindmap'">
                   <div class="reader-mindmap-heading">
                     <div class="reader-mindmap-title-row">
                       <h2>章节脉络</h2>
-                      <Button v-if="currentMindmap?.children.length && readerDisplayMode === 'mindmap'" type="secondary" size="small" :aria-pressed="mindmapMotion" @click="mindmapMotion = !mindmapMotion">连线动效</Button>
                     </div>
                     <div v-if="currentMindmap?.children.length" class="reader-mindmap-tools" role="group" aria-label="导图导航">
                       <div class="reader-mindmap-search">
@@ -7757,11 +7760,16 @@ async function requestFullscreen() {
                         {{ mindmapFlowcharts.length === 1 ? '播放数据流' : `播放数据流 ${index + 1}${chart.heading ? ` · ${chart.heading}` : ''}` }}
                       </Button>
                     </div>
-                    <small v-if="currentMindmap">点击节点展开一层，点击双箭头展开或收起整个分支</small>
+                    <div v-if="readerDisplayMode === 'mindmap' && currentMindmap?.children.length" class="reader-mindmap-options">
+                      <Button type="text" size="small" :aria-pressed="mindmapMotion" @click="mindmapMotion = !mindmapMotion">连线动效</Button>
+                      <Popover trigger="click" placement="bottomRight" content="点击节点展开一层，点击双箭头展开或收起整个分支。">
+                        <Button type="text" size="small" aria-label="导图操作说明"><AppIcon name="info" :size="16" /></Button>
+                      </Popover>
+                    </div>
+                    <small v-else-if="readerDisplayMode === 'split' && currentMindmap">点击节点展开一层，点击双箭头展开或收起整个分支</small>
                   </div>
-                  <div v-if="currentMindmap && readerDisplayMode === 'mindmap'" class="reader-mindmap-scroll" :class="{ 'has-animated-branches': mindmapMotion }" role="region" aria-label="思维导图画布" tabindex="0">
-                    <TreeDiagram :node="currentMindmap" root horizontal node-path="0" :navigation="mindmapNavigation" :resolve-url="resolveMindmapUrl" @select-node="selectMindmapNode" @open-link="openExternalLink" @open-image="openDocumentImage" />
-                  </div>
+                  </Teleport>
+                  <TreeDiagram v-if="currentMindmap && readerDisplayMode === 'mindmap'" :node="currentMindmap" root horizontal node-path="0" :navigation="mindmapNavigation" :resolve-url="resolveMindmapUrl" @select-node="selectMindmapNode" @open-link="openExternalLink" @open-image="openDocumentImage" />
                   <div v-else-if="currentMindmap" ref="splitMindmapViewport" class="reader-split-mindmap-scroll" role="region" aria-label="并排思维导图" tabindex="0">
                     <TreeDiagram :node="currentMindmap" root compact node-path="0" :navigation="mindmapNavigation" :resolve-url="resolveMindmapUrl" @select-node="selectMindmapNode" @open-link="openExternalLink" @open-image="openDocumentImage" />
                   </div>

@@ -36,7 +36,8 @@ it.each([
     await nextTick()
     if (tab === '思维导图') {
       const canvas = host.querySelector('.reader-mindmap-scroll')!
-      const motion = host.querySelector<HTMLButtonElement>('.reader-mindmap-title-row button')!
+      const motion = host.querySelector<HTMLButtonElement>('.reader-mindmap-options [aria-pressed]')!
+      expect(canvas).toBe(host.querySelector('.reader-viewport'))
       expect(canvas.classList.contains('has-animated-branches')).toBe(true)
       expect(motion.getAttribute('aria-pressed')).toBe('true')
       motion.click()
@@ -144,6 +145,9 @@ it('reveals folded matches and returns to the exact node after reading its sourc
     await vi.waitFor(() => expect(button('思维导图')).toBeDefined())
     button('思维导图').click()
     await nextTick()
+    const toolbar = host.querySelector('.reader-mindmap-heading')
+    const viewport = host.querySelector('.reader-viewport')!
+    expect(toolbar?.parentElement?.nextElementSibling).toBe(viewport)
     const search = host.querySelector<HTMLInputElement>('input[aria-label="搜索节点"]')!
     search.value = '当前受理额度'
     search.dispatchEvent(new Event('input', { bubbles: true }))
@@ -166,12 +170,14 @@ it('reveals folded matches and returns to the exact node after reading its sourc
     await nextTick()
     expect(button('并排').getAttribute('aria-selected')).toBe('true')
     const splitMap = host.querySelector('[role="region"][aria-label="并排思维导图"]')
+    expect(splitMap?.previousElementSibling).toBe(toolbar)
     expect(splitMap?.querySelector('.is-mindmap-selected')?.getAttribute('data-mindmap-node')).toBe('0.1.0')
     expect(store.activeHeadingId).toBe(store.currentDocument?.headings.filter(heading => heading.text === '当前受理额度')[1]?.id)
 
     button('回到导图节点').click()
     await nextTick()
     expect(button('思维导图').getAttribute('aria-selected')).toBe('true')
+    expect(toolbar?.parentElement?.nextElementSibling).toBe(viewport)
     expect(selected()?.dataset.mindmapNode).toBe('0.1.0')
     button('回到中心').click()
     await nextTick()

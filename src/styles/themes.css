@@ -466,9 +466,15 @@
   align-items: center;
   gap: 8px;
 }
-.reader-mindmap-title-row [aria-pressed="true"] {
+.reader-mindmap-options {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-inline-start: auto;
+}
+.reader-mindmap-options [aria-pressed="true"] {
   color: var(--accent);
-  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 .reader-mindmap-flows {
   display: flex;
@@ -3076,12 +3082,9 @@ body.is-resizing-outline * {
 }
 .reader-mindmap-scroll {
   container-type: inline-size;
-  overflow-x: auto;
   overflow-anchor: none;
   border: 1px solid var(--border);
   border-radius: 12px;
-  background: color-mix(in srgb, var(--accent) 3%, var(--surface));
-  scrollbar-color: var(--accent-soft) transparent;
 }
 .reader-mindmap .tree-diagram.is-horizontal {
   --map-padding: clamp(12px, 2cqi, 28px);
@@ -3199,8 +3202,8 @@ body.is-resizing-outline * {
   content: "";
 }
 @media (prefers-reduced-motion: no-preference) {
-  .reader-mindmap .has-animated-branches .is-horizontal .tree-children::before,
-  .reader-mindmap .has-animated-branches .is-horizontal .tree-children > .tree-item::after {
+  .has-animated-branches .is-horizontal .tree-children::before,
+  .has-animated-branches .is-horizontal .tree-children > .tree-item::after {
     height: 5px;
     margin-top: -2px;
     border: 0;
@@ -3210,10 +3213,10 @@ body.is-resizing-outline * {
     animation: mindmap-flow-across 1.8s linear infinite;
     pointer-events: none;
   }
-  .reader-mindmap .has-animated-branches .is-horizontal .tree-children > .tree-item::after {
+  .has-animated-branches .is-horizontal .tree-children > .tree-item::after {
     animation-delay: -.7s;
   }
-  .reader-mindmap .has-animated-branches .is-horizontal .tree-children > .tree-item::before {
+  .has-animated-branches .is-horizontal .tree-children > .tree-item::before {
     width: 5px;
     margin-left: -2px;
     border: 0;
@@ -3280,7 +3283,8 @@ body.is-resizing-outline * {
 .is-horizontal .tree-timestamp-link {
   margin: 0 6px 0 0;
 }
-.reader-mindmap :is(.reader-mindmap-scroll, .tree-branch-toggle, .tree-expand-all):focus-visible {
+.reader-mindmap-scroll:focus-visible,
+.reader-mindmap :is(.tree-branch-toggle, .tree-expand-all):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }

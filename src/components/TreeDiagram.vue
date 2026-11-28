@@ -96,11 +96,10 @@ const captureNodePosition = (event: MouseEvent) => {
   if (!props.horizontal || !(button instanceof HTMLElement)) return
   const canvas = button.closest<HTMLElement>('.reader-mindmap-scroll')
   if (!canvas) return
-  const viewport = canvas.closest<HTMLElement>('.reader-viewport')
   const top = button.getBoundingClientRect().top
   return () => nextTick(() => {
     const shift = button.getBoundingClientRect().top - top
-    if (viewport && Math.abs(shift) >= 1) viewport.scrollBy({ top: shift, behavior: 'instant' })
+    if (Math.abs(shift) >= 1) canvas.scrollBy({ top: shift, behavior: 'instant' })
 
     const firstNode = horizontalChildren.value?.querySelector(':scope > li > :is(.tree-node-row, .tree-leaf-row)')
     if (!firstNode) return
