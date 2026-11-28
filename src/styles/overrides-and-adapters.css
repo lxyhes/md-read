@@ -2642,8 +2642,8 @@ a:active > .app-icon-vector { transform: scale(.92); }
 .app-shell:not(.is-focus) .global-nav {
   width: 68px !important;
   flex: 0 0 68px !important;
-  flex-direction: row;
-  align-items: stretch;
+  flex-direction: column;
+  align-items: center;
   gap: 0;
   padding: 0 !important;
   overflow: visible;
@@ -2653,13 +2653,13 @@ a:active > .app-icon-vector { transform: scale(.92); }
 }
 .workspace-rail {
   display: flex;
-  width: 68px;
+  width: 100%;
   min-height: 0;
-  flex: 0 0 68px;
+  flex: 1 1 auto;
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  padding: 14px 3px 10px;
+  padding: 4px 3px 10px;
   overflow-y: auto;
   scrollbar-width: thin;
   background: transparent;
@@ -2690,7 +2690,7 @@ a:active > .app-icon-vector { transform: scale(.92); }
   color: color-mix(in srgb, var(--ink) 58%, var(--muted));
   transition: background-color .18s ease, border-color .18s ease, color .18s ease, box-shadow .18s ease, transform .18s ease;
 }
-.rail-item .app-icon-vector {
+.rail-item:not(.rail-collapse) .app-icon-vector {
   width: 20px;
   height: 20px;
 }
@@ -2720,9 +2720,6 @@ a:active > .app-icon-vector { transform: scale(.92); }
   background: color-mix(in srgb, var(--ink) 6%, transparent);
   color: var(--ink);
 }
-.rail-collapse { margin-top: 2px; }
-.app-shell:not(.nav-collapsed) .rail-collapse { transform: rotate(180deg); }
-.app-shell:not(.nav-collapsed) .rail-collapse:hover { transform: rotate(180deg) translateY(-1px); }
 .rail-spacer { flex: 1 1 auto; }
 .workspace-drawer {
   position: relative;
@@ -2919,14 +2916,11 @@ a:active > .app-icon-vector { transform: scale(.92); }
 .workspace-drawer .profile-chip b { color: var(--ink); font: 600 11px var(--ui-font); }
 .workspace-drawer .profile-chip small { color: var(--muted); font: 12px var(--ui-font); }
 .workspace-drawer .nav-motto { display: none; }
-.app-shell.nav-collapsed:not(.is-focus) .global-nav,
-.app-shell.nav-collapsed:not(.is-focus) .global-nav:hover {
-  width: 68px !important;
-  flex-basis: 68px !important;
+.app-shell.nav-collapsed:not(.is-focus, .is-editor-studio) .global-nav {
+  width: 36px !important;
+  flex-basis: 36px !important;
 }
 .app-shell.nav-collapsed .workspace-drawer { display: none; }
-.app-shell.nav-collapsed .rail-collapse { transform: none; }
-.app-shell.nav-collapsed .rail-collapse:hover { transform: translateY(-1px); }
 .app-shell.is-focus .global-nav {
   width: 0 !important;
   flex-basis: 0 !important;
@@ -3090,18 +3084,6 @@ html:has(.reader-page), body:has(.reader-page), #app:has(.reader-page) { min-wid
 }
 .reader-layout > .outline-panel.is-collapsed {
   display: none;
-}
-.outline-panel-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 6px;
-  border-radius: 5px;
-  white-space: nowrap;
-}
-.outline-panel-toggle:hover,
-.outline-panel-toggle:focus-visible {
-  background: color-mix(in srgb, var(--accent) 9%, transparent);
 }
 @media (max-width: 1080px) {
   .app-shell:not(.is-focus) .reader-layout.outline-panel-collapsed.context-open:not(.focus-layout):not(.clean-layout) {
@@ -3449,15 +3431,24 @@ body .app-shell.is-editor-studio .reader-layout {
 
 .app-shell:not(.is-editor-studio):not(.is-focus) .panel-switcher {
   min-height: 34px;
+  gap: 6px;
   border-bottom: 1px solid var(--border);
 }
 
+.panel-switcher .panel-tabs { gap: 4px; }
+
 .app-shell:not(.is-editor-studio):not(.is-focus) .panel-tabs button {
+  display: inline-flex;
   min-height: 34px;
-  padding-inline: 8px;
+  align-items: center;
+  gap: 4px;
+  padding-inline: 5px;
   color: var(--muted);
   font-size: 12px;
+  white-space: nowrap;
 }
+
+.panel-switcher .panel-tabs button span { margin-inline-start: 0; }
 
 .app-shell:not(.is-editor-studio):not(.is-focus) .panel-tabs button.active {
   color: var(--ink);
@@ -3546,6 +3537,10 @@ body .app-shell.is-editor-studio .reader-layout {
 .app-shell .reader-viewport .reader-content.reader-display-mindmap {
   width: 100% !important;
   padding: 0 !important;
+}
+
+.app-shell .reader-viewport .reader-content.reader-display-split {
+  width: min(1600px, calc(100% - 2 * clamp(14px, 3cqi, 40px))) !important;
 }
 
 #reader-mindmap-toolbar {
@@ -4125,25 +4120,6 @@ body .app-shell.is-editor-studio .reader-layout {
   background: var(--surface);
   box-shadow: 10px 0 28px color-mix(in srgb, var(--ink) 12%, transparent);
 }
-.outline-panel.is-previewing .panel-tabs button {
-  white-space: nowrap;
-}
-
-.app-shell .reader-meta-topbar .reader-edit-actions > .outline-panel-expand {
-  display: inline-flex;
-  flex: 0 0 30px;
-  align-items: center;
-  justify-content: center;
-  padding-inline: 0;
-  color: var(--muted);
-}
-
-.app-shell .reader-meta-topbar .outline-panel-expand:is(:hover, :focus-visible, [aria-expanded="true"]) {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-  background: color-mix(in srgb, var(--accent) 9%, transparent);
-  color: var(--accent);
-}
-
 @media (max-width: 1180px) {
   .app-shell:not(.is-editor-studio):not(.is-focus) .topbar > .command-trigger {
     flex-basis: 34px;
@@ -4574,6 +4550,36 @@ body .app-shell.is-editor-studio .reader-layout {
   padding-inline: 8px;
   background: transparent;
 }
+
+.app-shell :is(.global-nav, .panel-switcher, .reader-meta-topbar .reader-edit-actions) > button:is(.rail-collapse, .outline-panel-toggle, .outline-panel-expand) {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--surface-raised) 62%, transparent);
+  color: color-mix(in srgb, var(--ink) 68%, var(--muted));
+}
+
+.app-shell :is(.global-nav, .panel-switcher, .reader-meta-topbar .reader-edit-actions) > button:is(.rail-collapse, .outline-panel-toggle, .outline-panel-expand):is(:hover, :focus-visible),
+.app-shell .reader-meta-topbar .outline-panel-expand[aria-expanded="true"] {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  color: var(--accent);
+  box-shadow: none;
+  transform: none;
+}
+
+.app-shell :is(.rail-collapse, .outline-panel-toggle, .outline-panel-expand):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.rail-collapse { margin-top: 8px; }
+.outline-panel-toggle { margin-inline-start: auto; }
 
 .app-shell:not(.is-editor-studio) .reader-reading-actions {
   min-height: 34px;

@@ -6982,8 +6982,11 @@ async function requestFullscreen() {
   <div class="app-shell" :aria-busy="booting || busyAction !== null" :class="{ 'is-focus': store.mode === 'focus', 'is-clean': store.mode === 'clean', 'is-editor-studio': editorOpen, 'is-region-focus': store.mode === 'region-focus', 'has-focus-region': Boolean(store.focusedRegionId), 'is-dragging': draggingFiles, 'nav-collapsed': navCollapsed, [`theme-${store.activeThemeId}`]: true }" :style="store.mode === 'focus' ? focusThemeStyles : undefined" @dragover.prevent @dragenter.prevent="onDragEnter" @dragleave.prevent="onDragLeave" @drop.prevent="onDrop">
     <datalist id="editor-code-languages"><option v-for="language in ['text', 'typescript', 'javascript', 'python', 'rust', 'go', 'java', 'sql', 'bash', 'json', 'yaml', 'mermaid', 'gas', 'url']" :key="language" :value="language" /></datalist>
     <AppDialog />
-    <aside class="global-nav">
-      <div class="workspace-rail" aria-label="阅读工具栏">
+    <aside class="global-nav" :inert="store.mode === 'focus' || editorOpen">
+      <button class="rail-item rail-collapse" type="button" :title="navCollapsed ? '展开工具栏' : '收起工具栏'" :aria-label="navCollapsed ? '展开工具栏' : '收起工具栏'" :aria-expanded="!navCollapsed" aria-controls="workspace-rail" @click="toggleNavCollapsed">
+        <AppIcon :name="navCollapsed ? 'sidebar-expand' : 'sidebar-collapse'" :size="16" />
+      </button>
+      <div v-show="!navCollapsed" id="workspace-rail" class="workspace-rail" role="navigation" aria-label="阅读工具栏">
         <button class="rail-item" :class="{ active: view === 'library' }" type="button" title="阅读空间" aria-label="阅读空间" @click="openLibrary('all')"><AppIcon name="home" :size="20" /><span>文档</span></button>
         <button class="rail-item" :class="{ active: view === 'reader' }" type="button" title="当前阅读" aria-label="当前阅读" @click="view = 'reader'"><AppIcon name="reader" :size="20" /><span>阅读</span></button>
         <button class="rail-item" type="button" title="搜索文档" aria-label="搜索文档" @click="openSearch('all')"><AppIcon name="search" :size="20" /><span>搜索</span></button>
@@ -7436,11 +7439,11 @@ async function requestFullscreen() {
             <button type="button" :class="{ active: leftPanelTab === 'files' }" @click="leftPanelTab = 'files'">文件 <span>{{ currentDirectoryFiles.length }}</span></button>
                 <button type="button" :class="{ active: leftPanelTab === 'outline' }" @click="leftPanelTab = 'outline'">大纲</button>
               </div>
-              <button ref="outlinePanelToggleButton" class="text-button outline-panel-toggle" type="button"
+              <button ref="outlinePanelToggleButton" class="outline-panel-toggle" type="button"
                 :title="outlinePanelPreview ? '固定阅读侧栏' : '收起阅读侧栏'"
                 :aria-label="outlinePanelPreview ? '固定阅读侧栏' : '收起阅读侧栏'"
                 aria-expanded="true" aria-controls="reader-sidebar" @click="toggleOutlinePanel">
-                <AppIcon :name="outlinePanelPreview ? 'pin' : 'sidebar-layout'" :size="14" />{{ outlinePanelPreview ? '固定' : '收起' }}
+                <AppIcon :name="outlinePanelPreview ? 'pin' : 'sidebar-collapse'" :size="16" />
               </button>
             </div>
             <div v-if="leftPanelTab === 'files'" class="file-browser-panel">
@@ -7560,7 +7563,7 @@ async function requestFullscreen() {
                     <button v-if="readerSidebarAvailable && outlinePanelCollapsed" ref="outlinePanelExpandButton" class="outline-panel-expand" type="button"
                       title="悬停预览，点击展开阅读侧栏" aria-label="展开阅读侧栏" :aria-expanded="outlinePanelPreview" aria-controls="reader-sidebar"
                       @pointerenter="scheduleOutlinePanelPreview" @pointerleave="leaveOutlinePanel" @click="toggleOutlinePanel">
-                      <AppIcon name="sidebar-layout" :size="16" />
+                      <AppIcon name="sidebar-expand" :size="16" />
                     </button>
                     <button type="button" :class="{ active: editorOpen }" @click="editorOpen ? closeEditor() : openEditor()">{{ editorOpen ? '阅读' : '编辑' }}</button>
                     <button v-if="hasReaderDirectoryTrees && (readerDisplayMode === 'markdown' || readerDisplayMode === 'split')" type="button" @click="readerTreeExpansionRequest = { open: false }">折叠全部目录树</button>
